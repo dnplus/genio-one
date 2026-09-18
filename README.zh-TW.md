@@ -26,6 +26,12 @@ GenioOne 是可自行架設的 AI 代理、MCP 工具與模型存取管理平台
 準備 macOS 或 Linux、Docker 與 Compose、Git、Node.js、pnpm **10.32.1** 及 Bun **1.4.0**。
 
 ```sh
+curl -fsSL https://genio.sh/install.sh | sh
+```
+
+這個指令會 clone repo、安裝依賴、準備 `.env.local`，但不會啟動服務，最後一步 `pnpm dev` 需要你自己執行。選項可用 `install.sh --help` 查看，或手動安裝：
+
+```sh
 git clone https://github.com/dnplus/genio-one.git
 cd genio-one
 pnpm install --frozen-lockfile
