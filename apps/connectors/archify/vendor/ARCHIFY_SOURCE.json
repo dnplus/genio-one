@@ -1,0 +1,27 @@
+{
+  "name": "archify",
+  "repository": "https://github.com/tt-a1i/archify",
+  "sourceVersion": "2.17.0-dev.1",
+  "skillVersion": "2.17",
+  "sourceTreeSha256": "5aee633870d9ba0ca7cee1ed6b785c2d71a4ad3aa39616b2071964bdd3f4625d",
+  "digestFormat": "sha256 of sorted relative path, NUL, file bytes, NUL for every vendored file",
+  "included": [
+    "bin/archify.mjs",
+    "scripts/check-render-output.mjs",
+    "assets/template.html",
+    "assets/JetBrainsMono-OFL.txt",
+    "schemas",
+    "examples",
+    "renderers",
+    "brand-marks",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "excluded": [
+    "node_modules",
+    "test",
+    "gallery",
+    "docs",
+    "development scripts other than check-render-output.mjs"
+  ]
+}

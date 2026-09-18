@@ -1,0 +1,7 @@
+{
+  "repository": "https://github.com/anthropics/knowledge-work-plugins",
+  "commit": "56026c70281ffd504d65c9bb8ca71f5ba6b8fd34",
+  "path": "product-management",
+  "license": "Apache-2.0",
+  "adaptation": "Codex manifest added; optional external MCP registrations omitted. Upstream skills and license retained."
+}

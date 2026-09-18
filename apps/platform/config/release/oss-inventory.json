@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "components": [
+    {
+      "name": "PostgreSQL",
+      "version": "18.6-alpine",
+      "image": "postgres@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2",
+      "license": "PostgreSQL",
+      "source": "https://www.postgresql.org/about/licence/"
+    },
+    {
+      "name": "Valkey",
+      "version": "9.1.2-alpine",
+      "image": "valkey/valkey@sha256:a0dbf4c1d5708782907c10e2c72deff317518518b5288a58416981d9db95d30b",
+      "license": "BSD-3-Clause",
+      "source": "https://github.com/valkey-io/valkey"
+    },
+    {
+      "name": "OpenTelemetry Collector Contrib",
+      "version": "0.154.0",
+      "image": "otel/opentelemetry-collector-contrib@sha256:b3079f45e19bdb7326bf49cdddce6cf60dfd865138db39f2733ea48ab17bc4cb",
+      "license": "Apache-2.0",
+      "source": "https://github.com/open-telemetry/opentelemetry-collector-contrib"
+    },
+    {
+      "name": "Keycloak",
+      "version": "26.7.3",
+      "image": "quay.io/keycloak/keycloak@sha256:ff4257d0d64efbe99ed1ddfaf07765cc3c36dc7518bf8324d41961327f441c54",
+      "license": "Apache-2.0",
+      "source": "https://github.com/keycloak/keycloak"
+    },
+    {
+      "name": "ClickHouse",
+      "version": "26.7",
+      "image": "clickhouse/clickhouse-server@sha256:5a94a6cc2005af20844c31aa49906d55c3c48b0e0fb9f29bf0d6c29e52692f3a",
+      "license": "Apache-2.0",
+      "source": "https://github.com/ClickHouse/ClickHouse"
+    },
+    {
+      "name": "Gravitee APIM Management API",
+      "version": "4.9.0",
+      "image": "graviteeio/apim-management-api@sha256:134afe31e65dbaaa977f3870682dd5dbac8d0314ac9ecce220c5ea960352a20b",
+      "license": "Apache-2.0",
+      "source": "https://github.com/gravitee-io/gravitee-api-management"
+    },
+    {
+      "name": "Gravitee APIM Gateway",
+      "version": "4.9.0",
+      "image": "graviteeio/apim-gateway@sha256:26382f7697e5d4a621f4ba21cd60e7dc12d66e05235d725d402318688077bb1e",
+      "license": "Apache-2.0",
+      "source": "https://github.com/gravitee-io/gravitee-api-management"
+    },
+    {
+      "name": "NGINX",
+      "version": "1.30.4-alpine",
+      "image": "nginx@sha256:dc5069ad14f19660b141b21236140b91656bf89bbc3e2417c70ae650cd66104c",
+      "license": "BSD-2-Clause",
+      "source": "https://github.com/nginx/nginx"
+    }
+  ]
+}

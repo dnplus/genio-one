@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "product": "genio-one",
+  "architecture": {
+    "context_path": "CONTEXT.md",
+    "topology_path": "../../docs/internal/platform/architecture/current-architecture.json",
+    "adr_directory": "../../docs/internal/platform/adr"
+  },
+  "bdd_releases": [
+    {
+      "release": "V1",
+      "authority": {
+        "kind": "notion_data_source",
+        "owner_page_id": "3be3be72-97e2-817c-be24-ec7d6de23a9e",
+        "owner_page_url": "https://app.notion.com/p/3be3be7297e2817cbe24ec7d6de23a9e",
+        "data_source_id": "955589dc-f9af-4a44-9071-62189865d0b8"
+      },
+      "normalization": {
+        "mode": "strict_gherkin_snapshot"
+      },
+      "local_snapshot": {
+        "path": "../../docs/internal/platform/traceability/v1-bdd-source.json",
+        "scope_path": "../../docs/internal/platform/traceability/v1-bdd-scope.json",
+        "hermes_selection_path": "spec/hermes-mission-selection.v1.json",
+        "classification": "historical"
+      }
+    },
+    {
+      "release": "V1.1",
+      "authority": {
+        "kind": "notion_page",
+        "owner_page_id": "39aa1664-cec0-42fb-9820-b61a61c70dab",
+        "owner_page_url": "https://app.notion.com/p/dnplus/GenioOne-V1-V1-5-Epic-US-BDD-39aa1664cec042fb9820b61a61c70dab",
+        "checklist_page_id": "3c63be72-97e2-8189-879b-c0a61a8e0a4b",
+        "checklist_page_url": "https://app.notion.com/p/3c63be7297e28189879bc0a61a8e0a4b"
+      },
+      "normalization": {
+        "mode": "grok_spec_steward"
+      }
+    },
+    {
+      "release": "V1.5",
+      "authority": {
+        "kind": "notion_page",
+        "owner_page_id": "3ce3be72-97e2-811b-906e-c27203d7fbc5",
+        "owner_page_url": "https://app.notion.com/p/3ce3be7297e2811b906ec27203d7fbc5"
+      },
+      "normalization": {
+        "mode": "strict_gherkin_snapshot"
+      },
+      "local_snapshot": {
+        "path": "../../docs/internal/platform/traceability/v1.5-core-bdd-source.json",
+        "scope_path": "../../docs/internal/platform/traceability/v1.5-core-bdd-scope.json",
+        "classification": "current"
+      }
+    }
+  ]
+}

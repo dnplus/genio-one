@@ -1,0 +1,56 @@
+extensions:
+  file_storage:
+    directory: /var/lib/otelcol/storage
+    create_directory: true
+    fsync: true
+    compaction:
+      on_start: true
+      on_rebound: true
+      directory: /var/lib/otelcol/compaction
+      cleanup_on_start: true
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+    spike_limit_mib: 64
+
+exporters:
+  otlphttp/analytics:
+    endpoint: http://otel-collector-analytics:4318
+    retry_on_failure:
+      enabled: true
+      max_elapsed_time: 2h
+    sending_queue:
+      enabled: true
+      storage: file_storage
+      sizer: bytes
+      queue_size: 268435456
+      num_consumers: 4
+      batch: { flush_timeout: 200ms, min_size: 65536, max_size: 0, sizer: bytes }
+
+service:
+  extensions: [health_check, file_storage]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter]
+      exporters: [otlphttp/analytics]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter]
+      exporters: [otlphttp/analytics]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter]
+      exporters: [otlphttp/analytics]

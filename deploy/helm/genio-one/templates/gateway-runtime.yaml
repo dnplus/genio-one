@@ -1,0 +1,272 @@
+{{- if .Values.aiMcpGateway.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "genio-one.fullname" . }}-gateway-runtime
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway-runtime
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "genio-one.fullname" . }}-ai-mcp-reconciler
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [gateway.networking.k8s.io]
+    resources: [gatewayclasses, gateways, httproutes]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [gateway.envoyproxy.io]
+    resources: [backends, envoyproxies, securitypolicies, clienttrafficpolicies, envoyextensionpolicies]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [aigateway.envoyproxy.io]
+    resources: [aigatewayroutes, aiservicebackends, backendsecuritypolicies, gatewayconfigs, mcproutes]
+    verbs: [get, list, watch, create, update, patch, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "genio-one.fullname" . }}-ai-mcp-reconciler
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "genio-one.fullname" . }}-ai-mcp-reconciler
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "genio-one.fullname" . }}-gateway-runtime
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "genio-one.fullname" . }}-gateway-provider-credentials
+  namespace: {{ .Release.Namespace }}
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get, create, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "genio-one.fullname" . }}-gateway-provider-credentials
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "genio-one.fullname" . }}-gateway-provider-credentials
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "genio-one.fullname" . }}-gateway-runtime
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "genio-one.fullname" . }}-gateway-runtime
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway-runtime
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector: { app.kubernetes.io/component: gateway-runtime, app.kubernetes.io/instance: {{ .Release.Name }} }
+  ports: []
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: genio-one-authorizer
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway-authorizer
+spec:
+  selector: { app.kubernetes.io/component: gateway-runtime, app.kubernetes.io/instance: {{ .Release.Name }} }
+  ports:
+    - { name: grpc, port: 8081, targetPort: authorizer-grpc }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: genio-one-processor
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway-processor
+spec:
+  selector: { app.kubernetes.io/component: gateway-runtime, app.kubernetes.io/instance: {{ .Release.Name }} }
+  ports:
+    - { name: grpc, port: 8082, targetPort: processor-grpc }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: genio-one-processor-http
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway-processor-http
+spec:
+  selector: { app.kubernetes.io/component: gateway-runtime, app.kubernetes.io/instance: {{ .Release.Name }} }
+  ports:
+    - { name: http, port: 8182, targetPort: processor-http }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: genio-one-detail-capture
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway-detail-capture
+spec:
+  selector: { app.kubernetes.io/component: gateway-runtime, app.kubernetes.io/instance: {{ .Release.Name }} }
+  ports:
+    - { name: grpc, port: 8083, targetPort: detail-capture }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "genio-one.fullname" . }}-gateway-runtime
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway-runtime
+spec:
+  serviceName: {{ include "genio-one.fullname" . }}-gateway-runtime
+  replicas: {{ .Values.gateway.replicas }}
+  podManagementPolicy: Parallel
+  selector: { matchLabels: { app.kubernetes.io/component: gateway-runtime, app.kubernetes.io/instance: {{ .Release.Name }} } }
+  template:
+    metadata: { labels: { app.kubernetes.io/component: gateway-runtime, app.kubernetes.io/instance: {{ .Release.Name }}, app.kubernetes.io/part-of: genio-one } }
+    spec:
+      serviceAccountName: {{ include "genio-one.fullname" . }}-gateway-runtime
+      {{- include "genio-one.imagePullSecrets" . | nindent 6 }}
+      automountServiceAccountToken: true
+      securityContext: { runAsNonRoot: true, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
+      initContainers:
+        - name: wait-for-gateway-bootstrap
+          image: {{ include "genio-one.image" (list .Values.images.gateway .) }}
+          imagePullPolicy: {{ .Values.images.gateway.pullPolicy }}
+          command: [/bin/sh, -c]
+          args:
+            - 'until [ -s "/var/run/secrets/genio-one/gateway-bootstrap/${POD_NAME}.json" ]; do sleep 1; done'
+          env:
+            - name: POD_NAME
+              valueFrom: { fieldRef: { fieldPath: metadata.name } }
+          resources: { requests: { cpu: 5m, memory: 8Mi }, limits: { cpu: 50m, memory: 32Mi } }
+          securityContext: { runAsUser: 1000, runAsGroup: 1000, allowPrivilegeEscalation: false, capabilities: { drop: [ALL] }, readOnlyRootFilesystem: true }
+          volumeMounts:
+            - { name: gateway-bootstrap, mountPath: /var/run/secrets/genio-one/gateway-bootstrap, readOnly: true }
+      containers:
+        - name: runtime
+          image: {{ include "genio-one.image" (list .Values.images.gateway .) }}
+          imagePullPolicy: {{ .Values.images.gateway.pullPolicy }}
+          command: ["bun", "server.js"]
+          env:
+            - { name: GENIO_ONE_OTEL_SPOOL_DIR, value: /var/lib/genio-one/gateway-runtime/otel-runtime }
+            - name: POD_NAME
+              valueFrom: { fieldRef: { fieldPath: metadata.name } }
+            - { name: GENIO_ONE_PLATFORM_ORIGIN, value: {{ printf "http://%s-platform:%v" (include "genio-one.fullname" .) .Values.platform.service.port | quote }} }
+            - { name: GENIO_ONE_TENANT_ID, value: {{ .Values.tenant.id | quote }} }
+            - { name: GENIO_ONE_RUNTIME_ID, value: "$(POD_NAME)" }
+            - { name: GENIO_ONE_GATEWAY_ID, value: {{ .Values.aiMcpGateway.enforcementPointId | quote }} }
+            - { name: GENIO_ONE_GATEWAY_APPLY_MODE, value: KUBERNETES }
+            - { name: GENIO_ONE_GATEWAY_BOOTSTRAP_FILE, value: "/var/run/secrets/genio-one/gateway-bootstrap/$(POD_NAME).json" }
+            - { name: GENIO_ONE_GATEWAY_RUNTIME_STATE, value: /var/lib/genio-one/gateway-runtime }
+            - { name: GENIO_ONE_GATEWAY_OBSERVATION_PORT, value: "9090" }
+            - { name: GENIO_ONE_GATEWAY_OTEL_HOST, value: {{ printf "%s-otel-ingress.%s.svc.cluster.local" (include "genio-one.fullname" .) .Release.Namespace | quote }} }
+            - { name: GENIO_ONE_GATEWAY_OTEL_PORT, value: "4317" }
+            - { name: GENIO_ONE_GATEWAY_OTEL_HTTP_PORT, value: "4318" }
+          resources: {{- toYaml .Values.gateway.resources | nindent 12 }}
+          securityContext: { runAsUser: 1000, runAsGroup: 1000, allowPrivilegeEscalation: false, capabilities: { drop: [ALL] }, readOnlyRootFilesystem: true }
+          volumeMounts:
+            - name: gateway-bootstrap
+              mountPath: /var/run/secrets/genio-one/gateway-bootstrap
+              readOnly: true
+            - { name: runtime-state, mountPath: /var/lib/genio-one/gateway-runtime }
+        - name: authorizer
+          image: {{ include "genio-one.image" (list .Values.images.gatewayServices .) }}
+          imagePullPolicy: {{ .Values.images.gatewayServices.pullPolicy }}
+          command: ["bun"]
+          args: ["authorizer.js"]
+          env:
+            - { name: GENIO_ONE_OTEL_SPOOL_DIR, value: /var/lib/genio-one/gateway-runtime/otel-authorizer }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: {{ printf "http://%s-otel-ingress:4318" (include "genio-one.fullname" .) | quote }} }
+            - { name: GENIO_ONE_AUTHORIZER_LISTEN, value: "0.0.0.0:8081" }
+            - { name: GENIO_ONE_AUTHORIZER_READINESS_LISTEN, value: "127.0.0.1:9081" }
+            - { name: GENIO_ONE_POLICY_ROOT, value: /var/lib/genio-one/gateway-runtime/policy }
+            - { name: GENIO_ONE_POLICY_RELEASE_ROOT_KEYRING, value: /var/run/secrets/genio-one/policy-release-root-keys.json }
+            - { name: GENIO_ONE_RUNTIME_COMMAND_KEYRING, value: /var/run/secrets/genio-one/runtime-command-verification-keys.json }
+            - { name: GENIO_ONE_TENANT_ID, value: {{ .Values.tenant.id | quote }} }
+            - name: GENIO_ONE_RUNTIME_ID
+              valueFrom: { fieldRef: { fieldPath: metadata.name } }
+            - { name: GENIO_ONE_GATEWAY_ID, value: {{ .Values.aiMcpGateway.enforcementPointId | quote }} }
+            - { name: GENIO_ONE_GATEWAY_OBSERVATION_ORIGIN, value: http://127.0.0.1:9090 }
+          ports:
+            - { name: authorizer-grpc, containerPort: 8081 }
+          startupProbe: { tcpSocket: { port: authorizer-grpc }, periodSeconds: 2, failureThreshold: 60 }
+          readinessProbe: { tcpSocket: { port: authorizer-grpc }, periodSeconds: 5, failureThreshold: 6 }
+          livenessProbe: { tcpSocket: { port: authorizer-grpc }, periodSeconds: 10, failureThreshold: 3 }
+          resources: {{- toYaml .Values.gateway.resources | nindent 12 }}
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] }, readOnlyRootFilesystem: true, runAsUser: 65532, runAsGroup: 65532 }
+          volumeMounts:
+            - { name: product-secrets, mountPath: /var/run/secrets/genio-one, readOnly: true }
+            - { name: runtime-state, mountPath: /var/lib/genio-one/gateway-runtime }
+        - name: processor
+          image: {{ include "genio-one.image" (list .Values.images.gatewayServices .) }}
+          imagePullPolicy: {{ .Values.images.gatewayServices.pullPolicy }}
+          command: [/bin/sh, -c]
+          args:
+            - |
+              set -eu
+              export GENIO_ONE_VALKEY_ORIGIN="$(bun -e 'process.stdout.write("redis://:" + encodeURIComponent(process.env.GENIO_ONE_VALKEY_PASSWORD ?? "") + "@{{ include "genio-one.fullname" . }}-valkey:6379")')"
+              unset GENIO_ONE_VALKEY_PASSWORD
+              exec bun processor.js
+          env:
+            - { name: GENIO_ONE_OTEL_SPOOL_DIR, value: /var/lib/genio-one/gateway-runtime/otel-processor }
+            - { name: GENIO_ONE_AI_PROCESSOR_LISTEN, value: "0.0.0.0:8082" }
+            - { name: GENIO_ONE_AI_PROCESSOR_READINESS_LISTEN, value: "127.0.0.1:9082" }
+            - { name: GENIO_ONE_AI_PROCESSOR_HTTP_LISTEN, value: "0.0.0.0:8182" }
+            - { name: GENIO_ONE_DETAIL_CAPTURE_LISTEN, value: "0.0.0.0:8083" }
+            - { name: GENIO_ONE_POLICY_ROOT, value: /var/lib/genio-one/gateway-runtime/policy }
+            - { name: GENIO_ONE_POLICY_RELEASE_ROOT_KEYRING, value: /var/run/secrets/genio-one/policy-release-root-keys.json }
+            - { name: GENIO_ONE_RUNTIME_COMMAND_KEYRING, value: /var/run/secrets/genio-one/runtime-command-verification-keys.json }
+            - { name: GENIO_ONE_TENANT_ID, value: {{ .Values.tenant.id | quote }} }
+            - name: GENIO_ONE_RUNTIME_ID
+              valueFrom: { fieldRef: { fieldPath: metadata.name } }
+            - { name: GENIO_ONE_GATEWAY_ID, value: {{ .Values.aiMcpGateway.enforcementPointId | quote }} }
+            - { name: GENIO_ONE_GATEWAY_OBSERVATION_ORIGIN, value: http://127.0.0.1:9090 }
+            - { name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, value: {{ printf "http://%s-otel-ingress:4318/v1/traces" (include "genio-one.fullname" .) | quote }} }
+            - name: GENIO_ONE_VALKEY_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: valkey-password } }
+            - name: GENIO_ONE_TOKEN_VAULT_KEY
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: token-vault-key } }
+          ports:
+            - { name: processor-grpc, containerPort: 8082 }
+            - { name: processor-http, containerPort: 8182 }
+            - { name: detail-capture, containerPort: 8083 }
+          startupProbe: { tcpSocket: { port: processor-grpc }, periodSeconds: 2, failureThreshold: 60 }
+          readinessProbe: { tcpSocket: { port: processor-grpc }, periodSeconds: 5, failureThreshold: 6 }
+          livenessProbe: { tcpSocket: { port: processor-grpc }, periodSeconds: 10, failureThreshold: 3 }
+          resources: {{- toYaml .Values.gateway.resources | nindent 12 }}
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] }, readOnlyRootFilesystem: true, runAsUser: 65532, runAsGroup: 65532 }
+          volumeMounts:
+            - { name: product-secrets, mountPath: /var/run/secrets/genio-one, readOnly: true }
+            - { name: runtime-state, mountPath: /var/lib/genio-one/gateway-runtime }
+      volumes:
+        - { name: product-secrets, secret: { secretName: {{ include "genio-one.secretName" . }} } }
+        - { name: gateway-bootstrap, secret: { secretName: {{ include "genio-one.fullname" . }}-gateway-bootstrap } }
+  volumeClaimTemplates:
+    - metadata: { name: runtime-state }
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- include "genio-one.storageClass" . | nindent 8 }}
+        resources: { requests: { storage: {{ .Values.gateway.stateStorage }} } }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: {{ include "genio-one.fullname" . }}-gateway-runtime }
+spec:
+  minAvailable: 1
+  selector: { matchLabels: { app.kubernetes.io/component: gateway-runtime, app.kubernetes.io/instance: {{ .Release.Name }} } }
+{{- end }}

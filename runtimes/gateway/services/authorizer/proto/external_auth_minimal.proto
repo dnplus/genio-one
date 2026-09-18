@@ -1,0 +1,83 @@
+syntax = "proto3";
+
+// Wire-compatible subset of Envoy's v3 external authorization service.
+//
+// The production authorizer uses the gRPC Check RPC.  This intentionally keeps
+// only the fields GenioOne consumes and returns, while preserving Envoy's
+// package names, message names, and field numbers so it can be loaded by
+// Envoy without generating a second product-specific protocol.
+package envoy.service.auth.v3;
+
+service Authorization {
+  rpc Check(CheckRequest) returns (CheckResponse);
+}
+
+message CheckRequest {
+  AttributeContext attributes = 1;
+}
+
+message AttributeContext {
+  message HttpRequest {
+    string id = 1;
+    string method = 2;
+    map<string, string> headers = 3;
+    string path = 4;
+    string host = 5;
+    string scheme = 6;
+    string query = 7;
+    string fragment = 8;
+    int64 size = 9;
+    string protocol = 10;
+    string body = 11;
+    bytes raw_body = 12;
+  }
+
+  message Request {
+    HttpRequest http = 2;
+  }
+
+  Request request = 4;
+  map<string, string> context_extensions = 10;
+}
+
+message Status {
+  int32 code = 1;
+  string message = 2;
+}
+
+message HttpStatus {
+  int32 code = 1;
+}
+
+message HeaderValue {
+  string key = 1;
+  string value = 2;
+  bytes raw_value = 3;
+}
+
+message HeaderValueOption {
+  HeaderValue header = 1;
+  bool append = 2;
+  int32 append_action = 3;
+  bool keep_empty_value = 4;
+}
+
+message DeniedHttpResponse {
+  HttpStatus status = 1;
+  repeated HeaderValueOption headers = 2;
+  string body = 3;
+}
+
+message OkHttpResponse {
+  repeated HeaderValueOption headers = 2;
+  repeated string headers_to_remove = 5;
+}
+
+message CheckResponse {
+  Status status = 1;
+  oneof http_response {
+    DeniedHttpResponse denied_response = 2;
+    OkHttpResponse ok_response = 3;
+    DeniedHttpResponse error_response = 5;
+  }
+}

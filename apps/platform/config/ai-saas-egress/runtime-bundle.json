@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "config_revision": "ai-saas-egress-v1",
+  "provider_resource_id": "genio-one-system/genio-ai-saas-egress",
+  "namespace": "genio-one-system",
+  "resources": [
+    {
+      "apiVersion": "gateway.networking.k8s.io/v1",
+      "kind": "GatewayClass",
+      "metadata": {
+        "name": "genio-one-ai-saas-egress"
+      },
+      "spec": {
+        "controllerName": "gateway.envoyproxy.io/gatewayclass-controller"
+      }
+    },
+    {
+      "apiVersion": "gateway.envoyproxy.io/v1",
+      "kind": "Gateway",
+      "metadata": {
+        "name": "genio-one-ai-saas-egress",
+        "namespace": "genio-one-system"
+      },
+      "spec": {
+        "gatewayClassName": "genio-one-ai-saas-egress",
+        "listeners": [
+          {
+            "name": "official-provider-http",
+            "protocol": "HTTP",
+            "port": 1976
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "gateway.networking.k8s.io/v1",
+      "kind": "HTTPRoute",
+      "metadata": {
+        "name": "genio-one-official-provider",
+        "namespace": "genio-one-system"
+      },
+      "spec": {
+        "parentRefs": [
+          {
+            "name": "genio-one-ai-saas-egress",
+            "kind": "Gateway",
+            "group": "gateway.networking.k8s.io"
+          }
+        ],
+        "rules": [
+          {
+            "matches": [
+              {
+                "path": {
+                  "type": "PathPrefix",
+                  "value": "/v1/"
+                }
+              }
+            ],
+            "backendRefs": [
+              {
+                "name": "genio-one-ai-saas-egress-processor",
+                "port": 8081
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

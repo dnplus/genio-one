@@ -1,0 +1,78 @@
+{{- if .Values.connectors.enabled }}
+{{- $name := printf "%s-connectors" (include "genio-one.fullname" .) }}
+{{- $existing := lookup "v1" "Secret" .Release.Namespace $name }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+type: Opaque
+data:
+  configuration-key: {{ if and $existing $existing.data }}{{ index $existing.data "configuration-key" | quote }}{{ else }}{{ randAlphaNum 64 | b64enc | quote }}{{ end }}
+{{- range $connector := list "servicenow-csm" "mail2000" }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}-{{ $connector }}
+  labels:
+    {{- include "genio-one.labels" $ | nindent 4 }}
+spec:
+  serviceName: {{ $name }}-{{ $connector }}
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ $.Release.Name }}
+      app.kubernetes.io/component: connector-{{ $connector }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ $.Release.Name }}
+        app.kubernetes.io/component: connector-{{ $connector }}
+    spec:
+      {{- include "genio-one.imagePullSecrets" $ | nindent 6 }}
+      securityContext: { runAsNonRoot: true, fsGroup: 1000, runAsUser: 1000, runAsGroup: 1000, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: connector
+          image: {{ include "genio-one.image" (list $.Values.images.connectors $) }}
+          imagePullPolicy: {{ $.Values.images.connectors.pullPolicy }}
+          command: [bun, {{ printf "%s.js" $connector | quote }}]
+          env:
+            - { name: GENIO_ONE_TENANT_ID, value: {{ $.Values.tenant.id | quote }} }
+            - { name: GENIO_ONE_OTEL_SPOOL_DIR, value: /var/lib/otel-outbox }
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ printf "http://%s-otel-ingress:4318" (include "genio-one.fullname" $) | quote }}
+            - { name: CONNECTOR_HOST, value: "0.0.0.0" }
+            - { name: CONNECTOR_PORT, value: "8080" }
+            - name: GENIO_CONNECTOR_CONFIGURATION_KEY
+              valueFrom: { secretKeyRef: { name: {{ $name }}, key: configuration-key } }
+          volumeMounts: [{ name: telemetry, mountPath: /var/lib/otel-outbox }]
+          ports: [{ name: http, containerPort: 8080 }]
+          readinessProbe: { httpGet: { path: /health, port: http }, periodSeconds: 5 }
+          livenessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 10, periodSeconds: 10 }
+          resources: { requests: { cpu: 25m, memory: 64Mi }, limits: { cpu: 500m, memory: 256Mi } }
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+  volumeClaimTemplates:
+    - metadata: { name: telemetry }
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- if $.Values.global.storageClass }}
+        storageClassName: {{ $.Values.global.storageClass | quote }}
+        {{- end }}
+        resources: { requests: { storage: 1Gi } }
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-{{ $connector }}
+  labels:
+    {{- include "genio-one.labels" $ | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/component: connector-{{ $connector }}
+  ports: [{ name: http, port: 8080, targetPort: http }]
+{{- end }}
+{{- end }}

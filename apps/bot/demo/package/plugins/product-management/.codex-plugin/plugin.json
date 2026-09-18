@@ -1,0 +1,20 @@
+{
+  "name": "product-management",
+  "version": "1.2.0",
+  "description": "Write product requirements and synthesize user research from supplied project material.",
+  "author": {
+    "name": "Anthropic"
+  },
+  "skills": "./skills/",
+  "license": "Apache-2.0",
+  "repository": "https://github.com/anthropics/knowledge-work-plugins",
+  "interface": {
+    "displayName": "Product Management",
+    "shortDescription": "Product requirements and user research.",
+    "longDescription": "Anthropic Product Management skills packaged for the GenioOne CE starter project.",
+    "developerName": "Anthropic; GenioOne packaging",
+    "category": "Productivity",
+    "capabilities": ["Write"],
+    "defaultPrompt": ["Turn the activity-registration project brief into a concise PRD."]
+  }
+}

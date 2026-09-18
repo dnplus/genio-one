@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<clickhouse>
+  <!--
+    ClickHouse system logs are infrastructure diagnostics, not GenioOne Audit
+    or Usage records. Keep the logs needed to investigate query and storage
+    failures for a bounded period; OTel owns ongoing service telemetry.
+  -->
+  <query_log>
+    <ttl>event_date + INTERVAL 14 DAY DELETE</ttl>
+  </query_log>
+  <part_log>
+    <ttl>event_date + INTERVAL 7 DAY DELETE</ttl>
+  </part_log>
+  <error_log>
+    <ttl>event_date + INTERVAL 30 DAY DELETE</ttl>
+  </error_log>
+  <crash_log>
+    <ttl>event_date + INTERVAL 30 DAY DELETE</ttl>
+  </crash_log>
+  <asynchronous_insert_log>
+    <ttl>event_date + INTERVAL 14 DAY DELETE</ttl>
+  </asynchronous_insert_log>
+
+  <!-- Prometheus/OTel provides continuous metrics; enable these only for a
+       bounded deep-diagnostic session. -->
+  <metric_log remove="1" />
+  <asynchronous_metric_log remove="1" />
+  <text_log remove="1" />
+  <query_thread_log remove="1" />
+  <query_views_log remove="1" />
+  <trace_log remove="1" />
+  <processors_profile_log remove="1" />
+  <opentelemetry_span_log remove="1" />
+</clickhouse>

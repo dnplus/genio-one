@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "environment": "uat",
+  "resources": [
+    { "key": "discovery", "display_name": "GenioOne Discovery", "service_kind": "DISCOVERY", "installed": true },
+    { "key": "servicenow", "display_name": "ServiceNow CSM", "service_kind": "SERVICENOW_CSM", "installed": true },
+    { "key": "mail2000", "display_name": "Mail2000", "service_kind": "MAIL2000", "installed": true },
+    { "key": "genio-bot", "display_name": "Genio Bot", "service_kind": "GENIO_BOT", "installed": true },
+    { "key": "notion", "display_name": "Notion MCP", "kind": "MCP", "installed": false },
+    { "key": "vertex", "display_name": "GCP Vertex Model API", "kind": "LLM", "installed": false }
+  ],
+  "actors": [
+    { "username": "anrita", "display_name": "Anrita", "organization": "Executive", "bot": "Executive Agent", "purpose": "summarize-analyze", "resources": ["discovery", "mail2000", "notion", "vertex"], "personal_codex": false },
+    { "username": "kevin", "display_name": "Kevin", "organization": "Sales", "bot": "Sales Agent", "purpose": "research-draft-follow-up", "resources": ["discovery", "servicenow", "mail2000", "vertex"], "personal_codex": false },
+    { "username": "dylan", "display_name": "Dylan", "organization": "Engineering", "bot": "Engineering Agent", "purpose": "code-debug-document", "resources": ["discovery", "notion", "vertex"], "personal_codex": true }
+  ],
+  "scenarios": [
+    { "id": "UAT-01", "task": "安裝後固定 Connection、基本設定、啟用與停用，刪除被拒絕" },
+    { "id": "UAT-02", "task": "三角色 SSO 登入，只取得政策允許的模型與企業工具" },
+    { "id": "UAT-03", "task": "Dylan 申請 ServiceNow，管理員核准後取得存取，撤銷後拒絕" },
+    { "id": "UAT-04", "task": "Dylan 可連個人 Codex；Anrita 與 Kevin 被政策拒絕；停用 Genio Bot 後阻擋新操作" },
+    { "id": "UAT-05", "task": "Runtime 能力 exposure 與執行前授權一致，拒絕事件保留政策版本與原因" },
+    { "id": "UAT-06", "task": "Vertex 經 Gateway 真實模型回應，使用量與稽核關聯可追溯至角色與用途" },
+    { "id": "UAT-07", "task": "重啟及重跑 setup 保留設定、停用狀態和政策版本，固定資源不重複" }
+  ]
+}

@@ -1,0 +1,281 @@
+# Local-only Envoy AI Gateway configuration for an OpenAI-compatible provider.
+#
+# The endpoint defaults to an oMLX-compatible server.  The local smoke harness
+# renders the same document with its deterministic fixture port; no provider
+# credential is stored in this file.
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: genio-one-local
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: genio-one-local
+  namespace: default
+spec:
+  gatewayClassName: genio-one-local
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 1975
+  infrastructure:
+    parametersRef:
+      group: gateway.envoyproxy.io
+      kind: EnvoyProxy
+      name: genio-one-local
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: genio-one-local
+  namespace: default
+spec:
+  logging:
+    level:
+      default: error
+  telemetry:
+    accessLog:
+      settings:
+        - matches:
+            - "request.headers['x-ai-eg-model'] != ''"
+          sinks:
+            - type: File
+              file:
+                path: /dev/stdout
+          format:
+            type: JSON
+            json:
+              gen_ai.request.model: "%REQ(X-AI-EG-MODEL)%"
+              gen_ai.response.model: "%DYNAMIC_METADATA(io.envoy.ai_gateway:response_model)%"
+              gen_ai.provider.name: "%DYNAMIC_METADATA(io.envoy.ai_gateway:backend_name)%"
+              gen_ai.usage.input_tokens: "%DYNAMIC_METADATA(io.envoy.ai_gateway:llm_input_token)%"
+              gen_ai.usage.output_tokens: "%DYNAMIC_METADATA(io.envoy.ai_gateway:llm_output_token)%"
+              gen_ai.usage.reasoning_tokens: "%DYNAMIC_METADATA(io.envoy.ai_gateway:llm_reasoning_token)%"
+              response_code: "%RESPONSE_CODE%"
+              duration: "%DURATION%"
+              x-request-id: "%REQ(X-REQUEST-ID)%"
+---
+apiVersion: aigateway.envoyproxy.io/v1beta1
+kind: AIGatewayRoute
+metadata:
+  name: genio-one-local
+  namespace: default
+spec:
+  parentRefs:
+    - name: genio-one-local
+      kind: Gateway
+      group: gateway.networking.k8s.io
+  rules:
+    - matches:
+        - headers:
+            - type: Exact
+              name: x-ai-eg-model
+              value: genio-local
+      backendRefs:
+        - name: omlx
+          namespace: default
+          modelNameOverride: LFM2.5-1.2B-Instruct-MLX-8bit
+      timeouts:
+        request: 120s
+  llmRequestCosts:
+    - metadataKey: llm_input_token
+      type: InputToken
+    - metadataKey: llm_output_token
+      type: OutputToken
+    - metadataKey: llm_reasoning_token
+      type: ReasoningToken
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: omlx
+  namespace: default
+spec:
+  endpoints:
+    - ip:
+        address: 127.0.0.1
+        port: 8000
+---
+apiVersion: aigateway.envoyproxy.io/v1beta1
+kind: AIServiceBackend
+metadata:
+  name: omlx
+  namespace: default
+spec:
+  timeouts:
+    request: 3m
+  schema:
+    name: OpenAI
+    prefix: v1
+  backendRef:
+    name: omlx
+    kind: Backend
+    group: gateway.envoyproxy.io
+    namespace: default
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: local
+  namespace: default
+spec:
+  endpoints:
+    - ip:
+        address: 127.0.0.1
+        port: 19003
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: local-oauth
+  namespace: default
+spec:
+  endpoints:
+    - ip:
+        address: 127.0.0.1
+        port: 19003
+---
+apiVersion: aigateway.envoyproxy.io/v1beta1
+kind: MCPRoute
+metadata:
+  name: genio-one-local-mcp
+  namespace: default
+spec:
+  parentRefs:
+    - name: genio-one-local
+      kind: Gateway
+      group: gateway.networking.k8s.io
+  path: /mcp
+  backendRefs:
+    - name: local
+      kind: Backend
+      group: gateway.envoyproxy.io
+      path: /mcp
+    - name: local-oauth
+      kind: Backend
+      group: gateway.envoyproxy.io
+      path: /mcp-oauth
+      forwardHeaders:
+        - name: x-mcp-oauth-token
+          backendHeader: authorization
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: omlx-upstream-api-key
+  namespace: default
+type: Opaque
+stringData:
+  apiKey: fixture-only-not-a-secret
+---
+apiVersion: aigateway.envoyproxy.io/v1beta1
+kind: BackendSecurityPolicy
+metadata:
+  name: omlx-upstream-api-key
+  namespace: default
+spec:
+  targetRefs:
+    - group: aigateway.envoyproxy.io
+      kind: AIServiceBackend
+      name: omlx
+  type: APIKey
+  apiKey:
+    secretRef:
+      name: omlx-upstream-api-key
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: genio-one-local-ext-auth
+  namespace: default
+spec:
+  endpoints:
+    - ip:
+        address: 127.0.0.1
+        port: 19002
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: genio-one-local-ext-proc
+  namespace: default
+spec:
+  endpoints:
+    - ip:
+        address: 127.0.0.1
+        port: 19004
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: genio-one-local-ext-auth
+  namespace: default
+spec:
+  # AIGW translates AIGatewayRoute/MCPRoute into HTTPRoutes.  Attaching One
+  # Policy to the parent Gateway covers both generated routes without
+  # guessing controller-generated names.
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: genio-one-local
+  extAuth:
+    headersToExtAuth:
+      - authorization
+      - accept
+      - content-type
+      - x-request-id
+    http:
+      backendRefs:
+        - group: gateway.envoyproxy.io
+          kind: Backend
+          name: genio-one-local-ext-auth
+          port: 19002
+      pathOverride: /authorize
+      headersToBackend:
+        - x-genio-subject
+    timeout: 2s
+    failOpen: false
+    statusOnError: 503
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: ClientTrafficPolicy
+metadata:
+  name: genio-one-local-buffer-limit
+  namespace: default
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: genio-one-local
+  connection:
+    bufferLimit: 50Mi
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyExtensionPolicy
+metadata:
+  name: genio-one-local-ext-proc
+  namespace: default
+spec:
+  # AIGatewayRoute is translated to an HTTPRoute with the same name in
+  # standalone mode.  Targeting that generated route makes the custom filter
+  # explicit while leaving the MCP route's filter chain independent.  In
+  # product runtime CP should render this reference only after the extension
+  # revision has been validated and approved.
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: genio-one-local
+  extProc:
+    - backendRefs:
+        - group: gateway.envoyproxy.io
+          kind: Backend
+          name: genio-one-local-ext-proc
+          port: 19004
+      processingMode:
+        request: {}
+        response: {}
+      messageTimeout: 250ms
+      failOpen: false

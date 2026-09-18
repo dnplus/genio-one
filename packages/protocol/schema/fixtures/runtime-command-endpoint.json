@@ -1,0 +1,32 @@
+{
+  "schema_version": "genio.one.runtime.v1",
+  "message_type": "COMMAND",
+  "tenant_id": "tenant-acme",
+  "runtime_id": "endpoint-laptop-01",
+  "command_id": "command-endpoint-12",
+  "revision": "endpoint-revision-12",
+  "digest": "2222222222222222222222222222222222222222222222222222222222222222",
+  "signature": {
+    "algorithm": "Ed25519",
+    "key_id": "runtime-key-2026",
+    "value": "signed-endpoint-projection-12"
+  },
+  "runtime_kind": "ENDPOINT",
+  "desired_projection": {
+    "runtime_kind": "ENDPOINT",
+    "components": [
+      {
+        "component": "ENDPOINT_ROUTING",
+        "config_revision": "endpoint-routing-config-12",
+        "default_route": "DIRECT",
+        "rules": [
+          {
+            "host_suffix": "api.example.test",
+            "route": "MANAGED",
+            "enforcement_point": "gateway-primary"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,28 @@
+ARG GENIO_ONE_GRAVITEE_BASE_IMAGE=graviteeio/apim-gateway:4.9.0
+FROM ${GENIO_ONE_GRAVITEE_BASE_IMAGE}
+
+ARG GENIO_ONE_GRAVITEE_HOME
+
+USER root
+RUN mkdir -p "${GENIO_ONE_GRAVITEE_HOME}/plugins/ext/repository-jdbc"
+ADD --checksum=sha256:6e0e4cc2d8cae902084f8a2b18728b073a6fd9d1f87c9d8bff8f298c18185b93 \
+  https://repo.maven.apache.org/maven2/org/postgresql/postgresql/42.7.13/postgresql-42.7.13.jar \
+  /tmp/postgresql-42.7.13.jar
+RUN install -o 1001 -g 1000 -m 0644 \
+  /tmp/postgresql-42.7.13.jar \
+  "${GENIO_ONE_GRAVITEE_HOME}/plugins/ext/repository-jdbc/postgresql-42.7.13.jar" \
+  && rm /tmp/postgresql-42.7.13.jar
+
+# Management API only: retain Gravitee's native in-memory administrator
+# provider, but source its credential from the deployment Secret instead of
+# shipping the public default admin/admin credential. Gateway images do not
+# contain this configuration block, so the conditional is intentionally a no-op.
+RUN config="${GENIO_ONE_GRAVITEE_HOME}/config/gravitee.yml"; \
+  if grep -q 'password: \$2a\$10\$Ihk05VSds5rUSgMdsMVi9OKMIx2yUvMz7y9VP3rJmQeizZLrhLMyq' "${config}"; then \
+    sed -i \
+      -e 's/password-encoding-algo: bcrypt/password-encoding-algo: none/' \
+      -e 's|password: \$2a\$10\$[^[:space:]]*|password: ${GENIO_ONE_GRAVITEE_ADMIN_PASSWORD}|' \
+      "${config}"; \
+  fi
+
+USER 1001:1000

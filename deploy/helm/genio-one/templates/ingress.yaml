@@ -1,0 +1,164 @@
+{{- if .Values.ingress.enabled }}
+{{- $isTraefik := or (eq .Values.ingress.className "traefik") (not .Values.ingress.className) }}
+{{- $isNginx := eq .Values.ingress.className "nginx" }}
+{{- $sslRedirect := and .Values.ingress.tls (default true .Values.ingress.sslRedirect) }}
+{{- $rootRedirect := default "/management" .Values.ingress.rootRedirect }}
+{{- $hasPlatform := ne (default "" .Values.ingress.platformHost) "" }}
+{{- $hasKeycloak := ne (default "" .Values.ingress.keycloakHost) "" }}
+{{- $hasBot := and .Values.bot.enabled (ne (default "" .Values.ingress.botHost) "") }}
+{{- $hasAuxHosts := or $hasKeycloak $hasBot }}
+{{- /* Platform-only middlewares: ssl + optional root→/management (must not apply to bot/identity). */}}
+{{- $platformAnnotations := dict }}
+{{- $auxAnnotations := dict }}
+{{- if $isTraefik }}
+  {{- $platformMiddlewares := list }}
+  {{- $auxMiddlewares := list }}
+  {{- if $sslRedirect }}
+    {{- $mwHttps := printf "%s-%s-redirect-https@kubernetescrd" .Release.Namespace (include "genio-one.fullname" .) }}
+    {{- $platformMiddlewares = append $platformMiddlewares $mwHttps }}
+    {{- $auxMiddlewares = append $auxMiddlewares $mwHttps }}
+  {{- end }}
+  {{- if and $rootRedirect $hasPlatform }}
+    {{- $platformMiddlewares = append $platformMiddlewares (printf "%s-%s-redirect-root@kubernetescrd" .Release.Namespace (include "genio-one.fullname" .)) }}
+  {{- end }}
+  {{- if $platformMiddlewares }}
+    {{- $_ := set $platformAnnotations "traefik.ingress.kubernetes.io/router.middlewares" (join "," $platformMiddlewares) }}
+  {{- end }}
+  {{- if $auxMiddlewares }}
+    {{- $_ := set $auxAnnotations "traefik.ingress.kubernetes.io/router.middlewares" (join "," $auxMiddlewares) }}
+  {{- end }}
+{{- else if $isNginx }}
+  {{- if $sslRedirect }}
+    {{- $_ := set $platformAnnotations "nginx.ingress.kubernetes.io/ssl-redirect" "true" }}
+    {{- $_ := set $auxAnnotations "nginx.ingress.kubernetes.io/ssl-redirect" "true" }}
+  {{- end }}
+{{- end }}
+{{- $userAnnotations := deepCopy (default dict .Values.ingress.annotations) }}
+{{- $mergedPlatformAnnotations := merge (deepCopy $userAnnotations) $platformAnnotations }}
+{{- $mergedAuxAnnotations := merge (deepCopy $userAnnotations) $auxAnnotations }}
+{{- if $hasPlatform }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "genio-one.fullname" . }}
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+  {{- if $mergedPlatformAnnotations }}
+  annotations:
+    {{- toYaml $mergedPlatformAnnotations | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  {{- if .Values.ingress.tls }}
+  tls:
+    {{- toYaml .Values.ingress.tls | nindent 4 }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.platformHost | quote }}
+      http:
+        paths:
+          {{- if .Values.aiMcpGateway.enabled }}
+          # Longer prefix than / so Traefik/nginx send company MCP to AIGW, not Platform.
+          - path: /mcp
+            pathType: Prefix
+            backend:
+              service:
+                name: genio-one-aigw-internal
+                port:
+                  number: 1975
+          {{- range list "/v1/chat/completions" "/v1/models" }}
+          - path: {{ . }}
+            pathType: Prefix
+            backend:
+              service:
+                name: genio-one-aigw-internal
+                port:
+                  number: 1975
+          {{- end }}
+          {{- end }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "genio-one.fullname" . }}-platform
+                port:
+                  number: {{ .Values.platform.service.port }}
+{{- end }}
+{{- if $hasAuxHosts }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "genio-one.fullname" . }}-aux
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+  {{- if $mergedAuxAnnotations }}
+  annotations:
+    {{- toYaml $mergedAuxAnnotations | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  {{- if .Values.ingress.tls }}
+  tls:
+    {{- toYaml .Values.ingress.tls | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- if $hasKeycloak }}
+    - host: {{ .Values.ingress.keycloakHost | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "genio-one.fullname" . }}-keycloak
+                port:
+                  number: 8080
+    {{- end }}
+    {{- if $hasBot }}
+    - host: {{ .Values.ingress.botHost | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "genio-one.fullname" . }}-bot
+                port:
+                  number: {{ .Values.bot.service.port }}
+    {{- end }}
+{{- end }}
+{{- if and $sslRedirect $isTraefik }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "genio-one.fullname" . }}-redirect-https
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+{{- end }}
+{{- if and $rootRedirect $isTraefik $hasPlatform }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "genio-one.fullname" . }}-redirect-root
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+spec:
+  redirectRegex:
+    regex: ^https?://[^/]+/?$
+    replacement: {{ $rootRedirect | quote }}
+    permanent: false
+{{- end }}
+{{- end }}

@@ -1,0 +1,22 @@
+{
+  "name": "@genioone/policy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "bun": "1.4.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@genioone/protocol": "workspace:*",
+    "@genioone/telemetry": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.0",
+    "@types/node": "24.10.1",
+    "typescript": "7.0.2"
+  }
+}

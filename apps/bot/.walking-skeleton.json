@@ -1,0 +1,324 @@
+{
+  "version": 1,
+  "skeleton_id": "genio-bot-v3-servicenow-read-2026-09-03",
+  "scenario": {
+    "actor": "person-platform-admin via local-admin Keycloak OIDC",
+    "identity_provider": "GenioOne Keycloak OIDC",
+    "entrypoint": "Genio Bot V3 browser UI at http://127.0.0.1:5180",
+    "tenant_id": "tenant-keycloak-local",
+    "resource_id": "servicenow-csm",
+    "outcome": "The employee completes first-run Bot identity setup, asks to read one ServiceNow CSM Case, watches Codex work in a user-scoped self-hosted E2B Desktop, receives the Case result in chat, and can correlate the MCP invocation with GenioOne Activity and Audit evidence"
+  },
+  "git": {
+    "base_commit": "066a2ac15cc389e91997037851f984e735c0aea6",
+    "last_verified_code_commit": "a0a9045882e23cbe02285b5e6b1fad322653757f"
+  },
+  "current_checkpoint": "C5",
+  "last_observation": "V3 showcase implementation now has none/headless/desktop runtime leases, server-side Bot registry and sessions, EXTENSION Bot package metadata with fixture materialization, native skills/plugin installation hooks, and structured cross-owner invocation approval. Browser and live CP/E2E receipts remain pending.",
+  "current_blocker": "Authenticated browser and live provider control require an explicit runnable environment; source and focused contract evidence are available.",
+  "checkpoints": [
+    {
+      "id": "C1",
+      "title": "Render and exercise the Grok-referenced V3 onboarding and workspace journey",
+      "status": "verified",
+      "evidence": [
+        {
+          "type": "ui_journey",
+          "source": "Notion V3 spec plus five saved Grok Bot reference screenshots",
+          "url": "http://127.0.0.1:5180/?demo=1",
+          "bot_name": "Nova",
+          "bot_role": "營運夥伴",
+          "interaction": "onboarding -> workspace -> ServiceNow starter -> visible Case result -> desktop collapse -> desktop reopen",
+          "case_id": "CS001284",
+          "tool_activity": "servicenow.csm.read_case",
+          "console_errors": 0,
+          "console_warnings": 0,
+          "evidence_level": "rendered demo UI only"
+        }
+      ],
+      "receipt": {
+        "verified_commit": "e44900cf7eb6b58f692a8b4ea6824c244b9977ff",
+        "affected_paths": [
+          "src/**",
+          "design/grok-reference/**",
+          "index.html"
+        ],
+        "evidence_digest": "aee70e38a1d8432457a75d1098581a1768d5e2ec527d036be5842c8fb3fbb585"
+      }
+    },
+    {
+      "id": "C2",
+      "title": "Authenticate the real employee through GenioOne OIDC",
+      "status": "verified",
+      "evidence": [
+        {
+          "type": "oidc_identity",
+          "entrypoint": "http://127.0.0.1:5180",
+          "provider": "GenioOne Keycloak",
+          "client_id": "genio-one-bot",
+          "flow": "authorization_code_pkce_s256",
+          "login_actor": "local-admin",
+          "canonical_subject_id": "person-platform-admin",
+          "tenant_id": "tenant-keycloak-local",
+          "session_endpoint_status": 200,
+          "visible_outcome": "non-demo Genio Bot workspace rendered after callback"
+        }
+      ],
+      "receipt": {
+        "verified_commit": "6c403013b3a556f96d1fd21bd80700ad7e1a6a45",
+        "affected_paths": [
+          "../platform/config/keycloak/genio-one-realm.json",
+          "src/lib/genio-one.ts"
+        ],
+        "evidence_digest": "b31c9cb4c26c01d4ac0c2bd40042c15e5538add8fd862a97cbb3fe34da130fb4"
+      }
+    },
+    {
+      "id": "C3",
+      "title": "Provision and terminate a user-scoped self-hosted E2B Desktop through the T3 Runtime Broker",
+      "status": "verified",
+      "evidence": [
+        {
+          "type": "source_audit",
+          "infra_commit": "16bd4e3ccec5b9d1f4e8fb9b5c79c92ea49e193f",
+          "desktop_commit": "89a545e22343aa1c40f28338bf3281a6c04b1d4a",
+          "sdk_commit": "2dbd8e1dc26da5f50b9c14f00a75a645a64f7bff",
+          "sdk_version": "e2b@2.46.1",
+          "desktop_sdk_version": "@e2b/desktop@2.3.3",
+          "finding": "E2B API owns placement and supports Kubernetes discovery; official full self-host packaging remains Terraform and Nomad on AWS or GCP."
+        },
+        {
+          "type": "live_preflight",
+          "command": "pnpm --filter genio-one-bot test:e2b:live",
+          "result": "E2B_DOMAIN_REQUIRED",
+          "e2b_domain": "unset",
+          "e2b_api_key": "unset",
+          "runtime_template": "unset",
+          "kubernetes_context": "unset",
+          "cloud_target": "unset",
+          "evidence_level": "blocked before provider network call; not E2B runtime evidence"
+        },
+        {
+          "type": "self_host_install",
+          "provider": "gcp",
+          "project_id": "genioone-wif-e2e-20260902",
+          "zone": "asia-east1-b",
+          "machine_type": "n2-standard-8",
+          "nested_virtualization": true,
+          "orchestrator_limit_memlock": "infinity",
+          "hugepages_mb": 20480,
+          "api_health": 200,
+          "client_proxy_health": 200,
+          "cleanup_required": true
+        },
+        {
+          "type": "template_build",
+          "desktop_alias": "desktop",
+          "desktop_template_id": "q8fk7c3ii3jhidearssk",
+          "desktop_build_id": "244c25d8-f851-478a-9f61-0b6aac3d90c7",
+          "runtime_alias": "genio-bot-desktop",
+          "runtime_template_id": "pqlzmnl6slzehbrvgd5t",
+          "runtime_build_id": "59d3ea58-1513-4f91-bb8b-fe285ca87613",
+          "codex_version": "codex-cli 0.151.0"
+        },
+        {
+          "type": "e2b_desktop",
+          "command": "bun run test:e2b:desktop",
+          "sandbox_id": "i20zv7jk90jx4pax4j9g1",
+          "visible_outcome": "XFCE desktop and Google Chrome window rendered at 1440x900",
+          "screenshot": "artifacts/e2b-desktop-live.png",
+          "stream_authenticated": true,
+          "terminated": true
+        },
+        {
+          "type": "runtime_broker",
+          "command": "bun run test:e2b:live",
+          "runtime_session_id": "d8e9b702-c35f-42bf-a452-653c6755d7f8",
+          "sandbox_id": "ix8i94mgaijhky5cxkoy7",
+          "principal_tenant_id": "tenant-keycloak-local",
+          "principal_subject_id": "person-platform-admin",
+          "desktop_url_present": true,
+          "app_server_started": true,
+          "broker_stop_observed": true
+        }
+      ],
+      "receipt": {
+        "verified_commit": "9e3984507eff4d5f437ec0126b2cdf2d45dd3f95",
+        "affected_paths": [
+          "package.json",
+          "artifacts/e2b-desktop-live.png",
+          "deploy/e2b-self-host/gcp-pilot/**",
+          "scripts/build-e2b-template.ts",
+          "server/e2b-desktop-live.ts",
+          "server/e2b-self-host.ts",
+          "server/e2b-runtime-live.ts",
+          "server/runtime.ts",
+          "server/runtime-broker.ts"
+        ],
+        "evidence_digest": "86113abda4eb0a376f61bc08c860e47ad9d6e3233825cc498cadd980a4062e9d"
+      }
+    },
+    {
+      "id": "C4",
+      "title": "Start the pinned Codex app-server and Luna thread inside the Managed Hand",
+      "status": "verified",
+      "evidence": [
+        {
+          "type": "codex_luna_thread",
+          "entrypoint": "http://127.0.0.1:5180",
+          "identity_provider": "GenioOne Keycloak OIDC",
+          "subject_id": "person-platform-admin",
+          "runtime_session_id": "7ea50f0e-61d5-45ed-a5ef-ce3051c020b5",
+          "sandbox_id": "ikw2l2mue3ezzwx63h7bg",
+          "runtime_provider": "e2b-self-hosted",
+          "codex_version": "codex-cli 0.151.0",
+          "codex_auth_mode": "chatgpt_device_code",
+          "model": "gpt-5.6-luna",
+          "user_message": "請只回覆：Luna ready",
+          "assistant_message": "Luna ready",
+          "desktop_proxy_path": "/api/desktop/7ea50f0e-61d5-45ed-a5ef-ce3051c020b5/vnc.html",
+          "desktop_interactive": true,
+          "mcp_required_for_c4": false,
+          "visible_outcome": "Genio Bot showed Luna ready and 就緒 while the self-hosted Managed Desktop iframe remained active"
+        }
+      ],
+      "receipt": {
+        "verified_commit": "a0a9045882e23cbe02285b5e6b1fad322653757f",
+        "affected_paths": [
+          "server/desktop-proxy.ts",
+          "server/desktop-proxy.test.ts",
+          "server/index.ts",
+          "server/runtime-broker.ts",
+          "server/runtime.ts",
+          "server/runtime.test.ts"
+        ],
+        "evidence_digest": "84def563729c2674de9f1e8dc595f44e433aa5899f35612155cb7c2b73760e02"
+      }
+    },
+    {
+      "id": "C5",
+      "title": "Complete native MCP OAuth and discover the subject-filtered One MCP tool surface",
+      "status": "active",
+      "evidence": [
+        {
+          "type": "architecture_correction",
+          "finding": "Agent loop, Codex OAuth, thread, turn, and app-server persistence belong to the Genio Bot server; E2B owns only Desktop, files, processes, and codex exec-server.",
+          "prior_checkpoint_receipt": "C4 stale"
+        },
+        {
+          "type": "codex_remote_executor_source",
+          "tag": "rust-v0.151.0",
+          "commit": "78c290807ce710180111df227df3b7a4fe845452",
+          "interfaces": [
+            "codex exec-server",
+            "environment/add",
+            "thread/start.environments",
+            "turn/start.environments"
+          ]
+        },
+        {
+          "type": "runtime_bridge_live",
+          "command": "bun scripts/runtime-bridge-live.ts",
+          "runtime_session_id": "36566bf1-b6a9-446c-a5b7-1cca54939f1c",
+          "sandbox_id": "i4c87miiacwwyqty2xqfd",
+          "environment_id": "e2b-i4c87miiacwwyqty2xqfd",
+          "shell": "bash",
+          "cwd": "file:///home/user",
+          "agent_loop_placement": "server",
+          "executor_placement": "e2b",
+          "terminated": true
+        },
+        {
+          "type": "servicenow_connection_fixture",
+          "resource_id": "resource-afa9e1fa-2f69-45fd-872a-3b2a74985b29",
+          "connection_id": "connection-be52b865-2d41-45d0-95ed-b58f2b096db0",
+          "published_tool": "servicenow__read_case",
+          "gateway_revision": 370,
+          "runtime_entrypoint": "http://one.localhost:1975/mcp",
+          "upstream_fixture": "http://127.0.0.1:19003/mcp",
+          "evidence_level": "published connection and gateway release; no Bot turn yet"
+        }
+      ],
+      "next_action": "After explicit browser-control authorization, complete one server-side Codex OAuth login, prove ordinary Luna chat without MCP, create and open one simple presentation through the E2B exec-server environment, then call servicenow__read_case through one.localhost AI Gateway and correlate Activity/Audit."
+    },
+    {
+      "id": "C6",
+      "title": "Read one real ServiceNow CSM Case through One MCP",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "C7",
+      "title": "Show the Case result and reconstruct the correlated Activity and Audit in the UI",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "C8",
+      "title": "Show the none, headless, and desktop runtime split",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "C9",
+      "title": "Persist two independent Bot profiles, sessions, avatars, and bindings",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "C10",
+      "title": "Publish and install a Corp Bot package through the EXTENSION Resource contract",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "C11",
+      "title": "Share a Bot, approve an @ request, and return a bounded target-Agent result",
+      "status": "pending",
+      "evidence": []
+    }
+  ],
+  "completion_evidence": [
+    "ui_journey",
+    "oidc_identity",
+    "e2b_desktop",
+    "codex_luna_thread",
+    "one_mcp_oauth",
+    "servicenow_case_read",
+    "activity",
+    "audit"
+  ],
+  "correlation_evidence": [
+    "servicenow_case_read",
+    "activity",
+    "audit"
+  ],
+  "correlation_groups": [
+    "servicenow-case-read"
+  ],
+  "allowed_paths": [
+    "**",
+    "../platform/config/keycloak/genio-one-realm.json",
+    "../genio-one/gateway-runtime/**",
+    "../genio-one/gateway-services/**",
+    "../genio-one/platform-api/**",
+    "../genio-one/scripts/**",
+    "../platform/package.json",
+    ".env.example",
+    ".walking-skeleton.json",
+    "README.md",
+    "codex-upstream.json",
+    "deploy/**",
+    "design/**",
+    "docs/**",
+    "index.html",
+    "package.json",
+    "scripts/**",
+    "server/**",
+    "src/**",
+    "tsconfig.json",
+    "vite.config.ts"
+  ],
+  "state_revision": 13,
+  "state_digest": "3fb5c38a1effd06ef61c4dce2f0b8c1f923aa62e530b894a6460600ae77c5820"
+}

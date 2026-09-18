@@ -1,0 +1,282 @@
+{{- if .Values.analytics.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "genio-one.fullname" . }}-otel-config
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+data:
+  collector.yaml: |
+    extensions:
+      health_check: { endpoint: 0.0.0.0:13133 }
+      file_storage:
+        directory: /var/lib/otelcol/storage
+        create_directory: true
+        fsync: true
+        compaction: { on_start: true, on_rebound: true, directory: /var/lib/otelcol/compaction, cleanup_on_start: true }
+    receivers:
+      otlp:
+        protocols:
+          grpc: { endpoint: 0.0.0.0:4317 }
+          http: { endpoint: 0.0.0.0:4318 }
+    processors:
+      memory_limiter: { check_interval: 1s, limit_mib: 512, spike_limit_mib: 128 }
+      filter/keep_gateway_detail:
+        error_mode: propagate
+        trace_conditions: ['span.name != "gateway.message.detail"']
+    exporters:
+      clickhouse:
+        endpoint: {{ printf "tcp://%s-clickhouse:9000?dial_timeout=10s" (include "genio-one.fullname" .) }}
+        username: ${env:GENIO_ONE_CLICKHOUSE_USER}
+        password: ${env:GENIO_ONE_CLICKHOUSE_PASSWORD}
+        database: ${env:GENIO_ONE_CLICKHOUSE_DB}
+        create_schema: true
+        ttl: {{ .Values.analytics.retention.telemetry }}
+        async_insert: true
+        compress: lz4
+        timeout: 5s
+        sending_queue: { enabled: true, storage: file_storage, sizer: bytes, queue_size: 268435456, num_consumers: 4, batch: { flush_timeout: 200ms, min_size: 65536, max_size: 0, sizer: bytes } }
+        retry_on_failure: { enabled: true, initial_interval: 1s, max_interval: 5s, max_elapsed_time: 2h }
+      clickhouse/gateway_detail:
+        endpoint: {{ printf "tcp://%s-clickhouse:9000?dial_timeout=10s" (include "genio-one.fullname" .) }}
+        username: ${env:GENIO_ONE_CLICKHOUSE_USER}
+        password: ${env:GENIO_ONE_CLICKHOUSE_PASSWORD}
+        database: ${env:GENIO_ONE_CLICKHOUSE_DB}
+        create_schema: true
+        traces_table_name: otel_gateway_details
+        ttl: {{ .Values.analytics.retention.messageDetail }}
+        async_insert: true
+        compress: lz4
+        timeout: 5s
+        sending_queue: { enabled: true, storage: file_storage, sizer: bytes, queue_size: 268435456, num_consumers: 4, batch: { flush_timeout: 200ms, min_size: 65536, max_size: 0, sizer: bytes } }
+        retry_on_failure: { enabled: true, initial_interval: 1s, max_interval: 5s, max_elapsed_time: 2h }
+    service:
+      extensions: [health_check, file_storage]
+      pipelines:
+        traces: { receivers: [otlp], processors: [memory_limiter], exporters: [clickhouse] }
+        traces/gateway_detail: { receivers: [otlp], processors: [memory_limiter, filter/keep_gateway_detail], exporters: [clickhouse/gateway_detail] }
+        metrics: { receivers: [otlp], processors: [memory_limiter], exporters: [clickhouse] }
+        logs: { receivers: [otlp], processors: [memory_limiter], exporters: [clickhouse] }
+  gravitee-reporter.yaml: |
+    extensions:
+      health_check: { endpoint: 0.0.0.0:13133 }
+      file_storage:
+        directory: /var/lib/otelcol/storage
+        create_directory: true
+        fsync: true
+        compaction: { on_start: true, on_rebound: true, directory: /var/lib/otelcol/compaction, cleanup_on_start: true }
+    receivers:
+      filelog:
+        max_concurrent_files: 1
+        max_batches: 1
+        include: [/var/lib/genio-one/gravitee/*]
+        storage: file_storage
+        retry_on_failure: { enabled: true, max_elapsed_time: 2h }
+        start_at: beginning
+        include_file_name: true
+        operators: [{ type: json_parser, id: gravitee-json }]
+    processors:
+      memory_limiter: { check_interval: 1s, limit_mib: 128, spike_limit_mib: 32 }
+    exporters:
+      otlphttp:
+        endpoint: {{ printf "http://%s-otel-ingress:4318" (include "genio-one.fullname" .) }}
+        sending_queue: { enabled: true, storage: file_storage, sizer: bytes, queue_size: 268435456, num_consumers: 4, batch: { flush_timeout: 200ms, min_size: 65536, max_size: 0, sizer: bytes } }
+        retry_on_failure: { enabled: true, initial_interval: 1s, max_interval: 10s, max_elapsed_time: 2h }
+    service:
+      extensions: [health_check, file_storage]
+      pipelines:
+        logs: { receivers: [filelog], processors: [memory_limiter], exporters: [otlphttp] }
+  ingress.yaml: |
+    extensions:
+      file_storage:
+        directory: /var/lib/otelcol/storage
+        create_directory: true
+        fsync: true
+        compaction:
+          on_start: true
+          on_rebound: true
+          directory: /var/lib/otelcol/compaction
+          cleanup_on_start: true
+      health_check:
+        endpoint: 0.0.0.0:13133
+
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+    processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 256
+        spike_limit_mib: 64
+
+    exporters:
+      otlphttp/analytics:
+        endpoint: {{ printf "http://%s-otel-collector:4318" (include "genio-one.fullname" .) }}
+        retry_on_failure:
+          enabled: true
+          max_elapsed_time: 2h
+        sending_queue:
+          enabled: true
+          storage: file_storage
+          sizer: bytes
+          queue_size: 268435456
+          num_consumers: 4
+          batch: { flush_timeout: 200ms, min_size: 65536, max_size: 0, sizer: bytes }
+
+    service:
+      extensions: [health_check, file_storage]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter]
+          exporters: [otlphttp/analytics]
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter]
+          exporters: [otlphttp/analytics]
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter]
+          exporters: [otlphttp/analytics]
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "genio-one.fullname" . }}-otel-collector
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+spec:
+  selector: { app.kubernetes.io/component: otel-collector, app.kubernetes.io/instance: {{ .Release.Name }} }
+  ports:
+    - { name: otlp-grpc, port: 4317, targetPort: otlp-grpc }
+    - { name: otlp-http, port: 4318, targetPort: otlp-http }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "genio-one.fullname" . }}-otel-collector
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otel-collector
+spec:
+  serviceName: {{ include "genio-one.fullname" . }}-otel-collector
+  replicas: {{ .Values.analytics.collectorReplicas }}
+  selector: { matchLabels: { app.kubernetes.io/component: otel-collector, app.kubernetes.io/instance: {{ .Release.Name }} } }
+  template:
+    metadata: { labels: { app.kubernetes.io/component: otel-collector, app.kubernetes.io/instance: {{ .Release.Name }}, app.kubernetes.io/part-of: genio-one } }
+    spec:
+      {{- include "genio-one.imagePullSecrets" . | nindent 6 }}
+      securityContext: { runAsNonRoot: true, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+      initContainers:
+        - name: wait-for-clickhouse
+          image: {{ .Values.images.clickhouse }}
+          command: [/bin/sh, -c]
+          args:
+            - {{ printf "until clickhouse-client --host %s-clickhouse --user %s --password \"$GENIO_ONE_CLICKHOUSE_PASSWORD\" --query 'SELECT 1' >/dev/null 2>&1; do sleep 1; done" (include "genio-one.fullname" .) .Values.analytics.username | quote }}
+          env:
+            - name: GENIO_ONE_CLICKHOUSE_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: clickhouse-password } }
+          resources: { requests: { cpu: 5m, memory: 16Mi }, limits: { cpu: 100m, memory: 64Mi } }
+          securityContext: { runAsUser: 101, runAsGroup: 101, allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+      containers:
+        - name: collector
+          image: {{ .Values.images.otelCollector }}
+          args: [--config=/etc/genio-one/collector.yaml]
+          ports:
+            - { name: otlp-grpc, containerPort: 4317 }
+            - { name: otlp-http, containerPort: 4318 }
+            - { name: health, containerPort: 13133 }
+          env:
+            - { name: GENIO_ONE_CLICKHOUSE_DB, value: {{ .Values.analytics.database | quote }} }
+            - { name: GENIO_ONE_CLICKHOUSE_USER, value: {{ .Values.analytics.username | quote }} }
+            - name: GENIO_ONE_CLICKHOUSE_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: clickhouse-password } }
+          readinessProbe: { httpGet: { path: /, port: health }, periodSeconds: 5, failureThreshold: 20 }
+          livenessProbe: { httpGet: { path: /, port: health }, initialDelaySeconds: 15, periodSeconds: 10 }
+          resources: {{- toYaml .Values.analytics.collectorResources | nindent 12 }}
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] }, readOnlyRootFilesystem: true }
+          volumeMounts: [{ name: config, mountPath: /etc/genio-one, readOnly: true }, { name: telemetry, mountPath: /var/lib/otelcol }]
+      volumes: [{ name: config, configMap: { name: {{ include "genio-one.fullname" . }}-otel-config } }]
+  volumeClaimTemplates:
+    - metadata: { name: telemetry }
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- if .Values.global.storageClass }}
+        storageClassName: {{ .Values.global.storageClass | quote }}
+        {{- end }}
+        resources: { requests: { storage: 4Gi } }
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: {{ include "genio-one.fullname" . }}-otel-collector }
+spec:
+  minAvailable: 1
+  selector: { matchLabels: { app.kubernetes.io/component: otel-collector, app.kubernetes.io/instance: {{ .Release.Name }} } }
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "genio-one.fullname" . }}-otel-ingress
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+spec:
+  selector: { app.kubernetes.io/component: otel-ingress, app.kubernetes.io/instance: {{ .Release.Name }} }
+  ports:
+    - { name: otlp-grpc, port: 4317, targetPort: otlp-grpc }
+    - { name: otlp-http, port: 4318, targetPort: otlp-http }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "genio-one.fullname" . }}-otel-ingress
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otel-ingress
+spec:
+  serviceName: {{ include "genio-one.fullname" . }}-otel-ingress
+  replicas: {{ .Values.analytics.collectorReplicas }}
+  selector: { matchLabels: { app.kubernetes.io/component: otel-ingress, app.kubernetes.io/instance: {{ .Release.Name }} } }
+  template:
+    metadata: { labels: { app.kubernetes.io/component: otel-ingress, app.kubernetes.io/instance: {{ .Release.Name }}, app.kubernetes.io/part-of: genio-one } }
+    spec:
+      {{- include "genio-one.imagePullSecrets" . | nindent 6 }}
+      securityContext: { runAsNonRoot: true, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: collector
+          image: {{ .Values.images.otelCollector }}
+          args: [--config=/etc/genio-one/ingress.yaml]
+          ports:
+            - { name: otlp-grpc, containerPort: 4317 }
+            - { name: otlp-http, containerPort: 4318 }
+            - { name: health, containerPort: 13133 }
+          readinessProbe: { httpGet: { path: /, port: health }, periodSeconds: 5, failureThreshold: 20 }
+          livenessProbe: { httpGet: { path: /, port: health }, initialDelaySeconds: 15, periodSeconds: 10 }
+          resources: {{- toYaml .Values.analytics.collectorResources | nindent 12 }}
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] }, readOnlyRootFilesystem: true }
+          volumeMounts: [{ name: config, mountPath: /etc/genio-one, readOnly: true }, { name: telemetry, mountPath: /var/lib/otelcol }]
+      volumes: [{ name: config, configMap: { name: {{ include "genio-one.fullname" . }}-otel-config } }]
+  volumeClaimTemplates:
+    - metadata: { name: telemetry }
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- if .Values.global.storageClass }}
+        storageClassName: {{ .Values.global.storageClass | quote }}
+        {{- end }}
+        resources: { requests: { storage: 4Gi } }
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: {{ include "genio-one.fullname" . }}-otel-ingress }
+spec:
+  minAvailable: 1
+  selector: { matchLabels: { app.kubernetes.io/component: otel-ingress, app.kubernetes.io/instance: {{ .Release.Name }} } }
+{{- end }}

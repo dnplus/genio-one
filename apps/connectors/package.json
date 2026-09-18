@@ -1,0 +1,38 @@
+{
+  "name": "genio-connectors",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev:servicenow": "bun --watch servicenow-csm/main.ts",
+    "start:servicenow": "bun servicenow-csm/main.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "install:servicenow": "bun servicenow-csm/install.ts",
+    "start:mail2000": "bun mail2000/main.ts",
+    "dev:mail2000": "bun --watch mail2000/main.ts",
+    "start:archify": "bun archify/main.ts",
+    "dev:archify": "bun --watch archify/main.ts",
+    "install:mail2000": "bun mail2000/install.ts",
+    "start:breeze-asr": "cd breeze-asr && uv run --locked uvicorn server:app --host 127.0.0.1 --port 5192 --no-proxy-headers",
+    "install:breeze-asr": "bun breeze-asr/install.ts",
+    "test:breeze-asr": "cd breeze-asr && uv run --locked pytest -q",
+    "build": "bun build servicenow-csm/main.ts --target=bun --outfile=dist/servicenow-csm.js && bun build mail2000/main.ts --target=bun --outfile=dist/mail2000.js && bun build archify/main.ts --target=bun --outfile=dist/archify.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "imapflow": "1.2.17",
+    "mailparser": "3.9.6",
+    "nodemailer": "8.0.4",
+    "tsdav": "^2.3.1",
+    "typebox": "1.3.19",
+    "zod": "3.25.76",
+    "@genioone/telemetry": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.10",
+    "@types/mailparser": "^3.4.6",
+    "@types/nodemailer": "^8.0.1",
+    "typescript": "7.0.2"
+  }
+}

@@ -1,0 +1,78 @@
+# Development-cluster overlay. Expose these ClusterIP Services with kubectl port-forward:
+# platform 5173:8080, keycloak 58080:8080, bot 5180:5181.
+global:
+  publicOrigin: "http://127.0.0.1:5173"
+  keycloakPublicOrigin: "http://127.0.0.1:58080"
+  botPublicOrigin: "http://127.0.0.1:5180"
+  allowInsecureOidcHttp: true
+
+demo:
+  archify:
+    enabled: true
+
+platform:
+  connectionVerification:
+    # Keep the default HTTPS verifier for public upstreams such as DeepWiki.
+    allowHttp: false
+    allowedHosts: []
+  publicationDnsVerification:
+    allowLocalhost: true
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 1Gi }
+
+identity:
+  managementAgentRedirectUri: "http://127.0.0.1:8765/callback"
+  resources:
+    requests: { cpu: 100m, memory: 512Mi }
+    limits: { cpu: "1", memory: 1Gi }
+
+# Keep a fresh single-node Kind installation well below a 31 GiB host budget.
+postgresql:
+  storage: 5Gi
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 1Gi }
+
+valkey:
+  storage: 1Gi
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+analytics:
+  storage: 5Gi
+  # A local volume is a tenth of the default, so telemetry expires sooner to
+  # match it rather than filling the disk.
+  retention:
+    telemetry: 7d
+    messageDetail: 24h
+  collectorResources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+  resources:
+    requests: { cpu: 100m, memory: 512Mi }
+    limits: { cpu: "1", memory: 2Gi }
+
+gateway:
+  stateStorage: 1Gi
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+bot:
+  modelGatewayBaseUrl: "http://genio-one-aigw-internal:1976/v1"
+  modelGatewayModels:
+    - publicModelId: gemini-3.8-flash
+      displayName: Gemini 3.8 Flash
+      resourceId: genio.demo.gemini
+      capabilityId: model.invoke
+  persistence:
+    size: 1Gi
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 1Gi }
+
+ingress:
+  enabled: false
+  tls: []

@@ -1,0 +1,300 @@
+global:
+  storageClass: ""
+  # Applied to every product Pod template. Configure this for a private product registry.
+  imagePullSecrets: []
+  publicOrigin: "https://one.example.com"
+  keycloakPublicOrigin: "https://identity.one.example.com"
+  botPublicOrigin: ""
+  allowInsecureOidcHttp: false
+
+tenant:
+  bootstrapPeople: []
+  bootstrapPeopleSecret: ""
+  id: tenant-default
+  administratorSubjectId: person-platform-admin
+  administratorExternalSubjectId: "f912ed99-2c04-475f-8e21-ccb949ad1994"
+  administratorDisplayName: GenioOne Administrator
+  administratorEmail: admin@genio.internal
+  administratorUsername: admin
+
+images:
+  connectors:
+    repository: genio-connectors
+    tag: 0.1.0-dev.1
+    digest: ""
+    pullPolicy: IfNotPresent
+  platform:
+    repository: genio-one-platform-ts
+    tag: 0.1.0-dev.1
+    digest: ""
+    pullPolicy: IfNotPresent
+  gateway:
+    repository: genio-one-gateway
+    tag: 0.1.0-dev.8
+    digest: ""
+    pullPolicy: IfNotPresent
+  gatewayServices:
+    repository: genio-one-gateway-policy
+    tag: 0.1.0-dev.1
+    digest: ""
+    pullPolicy: IfNotPresent
+  installer:
+    repository: genio-one-installer
+    tag: 0.1.0-dev.1
+    digest: ""
+    pullPolicy: IfNotPresent
+  bot:
+    repository: genio-one-bot
+    tag: 0.1.0-dev.1
+    digest: ""
+    pullPolicy: IfNotPresent
+  archify:
+    repository: genio-one-archify
+    tag: 0.1.0-dev.1
+    digest: ""
+    pullPolicy: IfNotPresent
+  postgres: postgres@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2
+  valkey: valkey/valkey@sha256:a0dbf4c1d5708782907c10e2c72deff317518518b5288a58416981d9db95d30b
+  otelCollector: otel/opentelemetry-collector-contrib@sha256:b3079f45e19bdb7326bf49cdddce6cf60dfd865138db39f2733ea48ab17bc4cb
+  keycloak: quay.io/keycloak/keycloak@sha256:ff4257d0d64efbe99ed1ddfaf07765cc3c36dc7518bf8324d41961327f441c54
+  clickhouse: clickhouse/clickhouse-server@sha256:5a94a6cc2005af20844c31aa49906d55c3c48b0e0fb9f29bf0d6c29e52692f3a
+  graviteeManagement: genio-one/gravitee-management-api:4.9.0-postgresql-42.7.13
+  graviteeGateway: genio-one/gravitee-gateway:4.9.0-postgresql-42.7.13
+
+secrets:
+  existingSecret: ""
+  postgresPassword: ""
+  valkeyPassword: ""
+  tokenVaultKey: ""
+  mcpOAuthEncryptionKey: ""
+  keycloakDatabasePassword: ""
+  keycloakAdminPassword: ""
+  tenantAdministratorPassword: ""
+  productApiClientSecret: ""
+  # Optional bearer used by bot→platform AGENT subject registration fallback.
+  # Prefer Bot OIDC with genioone-management; set this when a stable service token is available.
+  agentSubjectServiceToken: ""
+  projectionSigningPrivateKeyPem: ""
+  runtimeCommandSigningPrivateKeyPem: ""
+  runtimeCommandVerificationKeysJson: ""
+  policyArtifactSigningPrivateKeyPem: ""
+  releaseRootSigningPrivateKeyPem: ""
+  releaseRootVerificationKeysJson: ""
+  egressAttributionKey: ""
+  graviteeDatabasePassword: ""
+  graviteeAdminPassword: ""
+  graviteeJwtSecret: ""
+  clickhousePassword: ""
+  authorizationReceiptKey: ""
+  enforcementPrivateKeyPem: ""
+  enforcementVerificationKeysJson: ""
+  downstreamCredentialsJson: ""
+  archifyConnectorBearerToken: ""
+  # Used only with runtimeReport.generatedKeyId and never shared with Gateway keys.
+  botRuntimeReportPrivateKeyPem: ""
+  botRuntimeReportPublicKeyPem: ""
+
+platform:
+  replicas: 2
+  connectionVerification:
+    allowHttp: false
+    allowedHosts: []
+  publicationDnsVerification:
+    allowLocalhost: false
+    gatewayTargets: {}
+  service:
+    type: ClusterIP
+    port: 8080
+  signingKeyId: bundle-key-1
+  runtimeCommandSigningKeyId: runtime-command-key-1
+  policyArtifactSigningKeyId: policy-artifact-key-1
+  releaseRootSigningKeyId: release-root-key-1
+  aigwRootPrefix: /
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 1Gi }
+
+gateway:
+  replicas: 2
+  displayName: Default Genio Gateway
+  siteId: default-site
+  region: default-region
+  stateStorage: 2Gi
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 1Gi }
+
+connectors:
+  enabled: false
+
+runtimeReport:
+  # Prefer an externally managed Secret with key-id, private-key.pem, and public-key.pem.
+  existingSecret: ""
+  # CE secret generation can provide this key ID with matching values above.
+  # Leave empty when no chart-managed Bot report signer is configured.
+  generatedKeyId: ""
+
+bot:
+  enabled: true
+  replicas: 1
+  service:
+    type: ClusterIP
+    port: 5181
+  runtime: local
+  persistence:
+    enabled: true
+    storageClass: ""
+    size: 5Gi
+    accessModes:
+      - ReadWriteOnce
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 1Gi }
+  modelGatewayBaseUrl: ""
+  modelGatewayModels: []
+  modelGatewayRelayOrigin: ""
+  mcpUrl: ""
+  mcpRelayOrigin: ""
+
+demo:
+  archify:
+    enabled: false
+    service:
+      type: ClusterIP
+      port: 5193
+    resources:
+      requests: { cpu: 25m, memory: 64Mi }
+      limits: { cpu: 500m, memory: 256Mi }
+
+ingress:
+  enabled: false
+  className: ""
+  sslRedirect: true
+  rootRedirect: "/management"  # Traefik: platformHost only (not bot/identity)
+  annotations: {}
+  platformHost: ""
+  keycloakHost: ""
+  botHost: ""
+  tls: []
+
+postgresql:
+  enabled: true
+  database: genio_one
+  username: genio_one
+  storage: 20Gi
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { cpu: "2", memory: 2Gi }
+
+valkey:
+  enabled: true
+  storage: 5Gi
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 1Gi }
+
+identity:
+  enabled: true
+  realm: genio-one
+  database: keycloak
+  databaseUser: keycloak
+  adminUser: admin
+  # Provider ids whose first sign-in may register a Person, written as
+  # "<identity provider id>:<Keycloak alias>", e.g. "keycloak:entra-id".
+  # Empty keeps every Person explicitly provisioned. Local password sign-in is
+  # unaffected, so the bootstrap administrator can always reach the console.
+  justInTimeProviderIds: []
+  managementAgentRedirectUri: "http://127.0.0.1:8765/callback"
+  loginBranding:
+    brandName: GenioOne
+    tagline: 企業 AI 存取治理控制平面
+    logoUrl: ""
+    primaryColor: "#425fea"
+    pageColor: "#f7f8fa"
+    customCss: ""
+  replicas: 2
+  resources:
+    requests: { cpu: 250m, memory: 768Mi }
+    limits: { cpu: "2", memory: 2Gi }
+
+analytics:
+  enabled: true
+  database: genio_one_analytics
+  username: genio_one
+  storage: 50Gi
+  # ClickHouse expires rows past these windows. The exporter default is no
+  # expiry, so telemetry would otherwise grow without bound into the fixed
+  # volume above. Raise these only alongside storage, and keep them at least as
+  # long as the evidence-retention period the deployment has committed to.
+  retention:
+    telemetry: 30d
+    # Captured request and response bodies are the most sensitive rows and are
+    # only needed while diagnosing, so they expire far sooner.
+    messageDetail: 24h
+  collectorReplicas: 2
+  collectorResources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 768Mi }
+  resources:
+    requests: { cpu: 250m, memory: 1Gi }
+    limits: { cpu: "2", memory: 3Gi }
+
+apiManagement:
+  enabled: true
+  database: gravitee
+  databaseUser: gravitee
+  organization: DEFAULT
+  environment: DEFAULT
+  initialApi:
+    crossId: genio-one-traditional-api
+    name: GenioOne Traditional API
+    contextPath: /genio-one-api
+    upstreamUrl: http://example.invalid
+  managementReplicas: 2
+  gatewayReplicas: 2
+  gatewayService:
+    type: LoadBalancer
+  resources:
+    requests: { cpu: 250m, memory: 768Mi }
+    limits: { cpu: "2", memory: 2Gi }
+
+aiMcpGateway:
+  gcpApplicationCredentialsSecret: ""
+  enabled: true
+  installCrds: false
+  configRevision: ai-mcp-gateway-v10
+  enforcementPointId: genio-ai-mcp-gateway
+
+envoy-gateway:
+  config:
+    envoyGateway:
+      extensionApis:
+        enableEnvoyPatchPolicy: true
+        enableBackend: true
+      extensionManager:
+        hooks:
+          xdsTranslator:
+            translation:
+              listener: { includeAll: true }
+              route: { includeAll: true }
+              cluster: { includeAll: true }
+              secret: { includeAll: true }
+            post: [Translation, Cluster, Route]
+        service:
+          fqdn:
+            hostname: ai-gateway-controller
+            port: 1063
+
+envoy-ai-gateway:
+  controller:
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+    # The Kubernetes extProc consumes header mappings from controller flags.
+    # Keep the request correlation on native AIGW spans and access logs so
+    # Activity detail can resolve the captured trace without forwarding
+    # caller-controlled identity headers.
+    requestHeaderAttributes: "x-request-id:genio.correlation.id,x-genio-correlation-id:genio.correlation.id,x-genio-trusted-tenant-id:genio.tenant.id"
+    # Keep the same correlation/tenant facts on GenAI spans, not only on
+    # access logs and metrics.  The controller passes this to extProc.
+    spanRequestHeaderAttributes: "x-request-id:genio.correlation.id,x-genio-correlation-id:genio.correlation.id,x-genio-trusted-tenant-id:genio.tenant.id"

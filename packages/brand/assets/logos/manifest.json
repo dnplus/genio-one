@@ -1,0 +1,178 @@
+[
+  {
+    "file": "genioone-horizontal-color-light.svg",
+    "layout": "horizontal",
+    "style": "color-light",
+    "viewBox": [
+      0,
+      0,
+      282,
+      80
+    ]
+  },
+  {
+    "file": "genioone-horizontal-color-dark.svg",
+    "layout": "horizontal",
+    "style": "color-dark",
+    "viewBox": [
+      0,
+      0,
+      282,
+      80
+    ]
+  },
+  {
+    "file": "genioone-horizontal-mono-black.svg",
+    "layout": "horizontal",
+    "style": "mono-black",
+    "viewBox": [
+      0,
+      0,
+      282,
+      80
+    ]
+  },
+  {
+    "file": "genioone-horizontal-mono-white.svg",
+    "layout": "horizontal",
+    "style": "mono-white",
+    "viewBox": [
+      0,
+      0,
+      282,
+      80
+    ]
+  },
+  {
+    "file": "genioone-stacked-color-light.svg",
+    "layout": "stacked",
+    "style": "color-light",
+    "viewBox": [
+      0,
+      0,
+      416.32,
+      412.51
+    ]
+  },
+  {
+    "file": "genioone-stacked-color-dark.svg",
+    "layout": "stacked",
+    "style": "color-dark",
+    "viewBox": [
+      0,
+      0,
+      416.32,
+      412.51
+    ]
+  },
+  {
+    "file": "genioone-stacked-mono-black.svg",
+    "layout": "stacked",
+    "style": "mono-black",
+    "viewBox": [
+      0,
+      0,
+      416.32,
+      412.51
+    ]
+  },
+  {
+    "file": "genioone-stacked-mono-white.svg",
+    "layout": "stacked",
+    "style": "mono-white",
+    "viewBox": [
+      0,
+      0,
+      416.32,
+      412.51
+    ]
+  },
+  {
+    "file": "genioone-icon-color-light.svg",
+    "layout": "icon",
+    "style": "color-light",
+    "viewBox": [
+      0,
+      0,
+      80,
+      80
+    ]
+  },
+  {
+    "file": "genioone-icon-color-dark.svg",
+    "layout": "icon",
+    "style": "color-dark",
+    "viewBox": [
+      0,
+      0,
+      80,
+      80
+    ]
+  },
+  {
+    "file": "genioone-icon-mono-black.svg",
+    "layout": "icon",
+    "style": "mono-black",
+    "viewBox": [
+      0,
+      0,
+      80,
+      80
+    ]
+  },
+  {
+    "file": "genioone-icon-mono-white.svg",
+    "layout": "icon",
+    "style": "mono-white",
+    "viewBox": [
+      0,
+      0,
+      80,
+      80
+    ]
+  },
+  {
+    "file": "genioone-wordmark-color-light.svg",
+    "layout": "wordmark",
+    "style": "color-light",
+    "viewBox": [
+      0,
+      0,
+      353,
+      72
+    ]
+  },
+  {
+    "file": "genioone-wordmark-color-dark.svg",
+    "layout": "wordmark",
+    "style": "color-dark",
+    "viewBox": [
+      0,
+      0,
+      353,
+      72
+    ]
+  },
+  {
+    "file": "genioone-wordmark-mono-black.svg",
+    "layout": "wordmark",
+    "style": "mono-black",
+    "viewBox": [
+      0,
+      0,
+      353,
+      72
+    ]
+  },
+  {
+    "file": "genioone-wordmark-mono-white.svg",
+    "layout": "wordmark",
+    "style": "mono-white",
+    "viewBox": [
+      0,
+      0,
+      353,
+      72
+    ]
+  }
+]

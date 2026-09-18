@@ -1,0 +1,24 @@
+apiVersion: v2
+name: genio-one
+description: Customer-installable GenioOne Platform and Genio Gateway release
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+annotations:
+  genio.one/release-surface: customer-kubernetes
+dependencies:
+  - name: gateway-helm
+    alias: envoy-gateway
+    version: v1.8.4
+    repository: oci://docker.io/envoyproxy
+    condition: aiMcpGateway.enabled
+  - name: ai-gateway-crds-helm
+    alias: envoy-ai-gateway-crds
+    version: v1.1.0
+    repository: oci://docker.io/envoyproxy
+    condition: aiMcpGateway.installCrds
+  - name: ai-gateway-helm
+    alias: envoy-ai-gateway
+    version: v1.1.0
+    repository: oci://docker.io/envoyproxy
+    condition: aiMcpGateway.enabled

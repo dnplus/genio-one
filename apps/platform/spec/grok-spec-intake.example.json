@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "product": "genio-one",
+  "task_id": "example-envoy-catalog-access",
+  "task_summary": "Formalize the settled Envoy enforcement boundary and Catalog access-request journey before implementation.",
+  "required_artifacts": ["normalized_bdd", "adr"],
+  "existing_artifacts": [],
+  "source_records": [
+    {
+      "source_id": "S1",
+      "kind": "architecture",
+      "locator": "Notion architecture decision",
+      "content": "GenioOne uses Envoy AI Gateway as the gateway implementation."
+    },
+    {
+      "source_id": "S2",
+      "kind": "policy",
+      "locator": "Gateway enforcement requirement",
+      "content": "Authorization uses Envoy external authorization and request quotas use Envoy rate-limit integration. Product services own policy data and do not replace proxy behavior."
+    },
+    {
+      "source_id": "S3",
+      "kind": "notion",
+      "locator": "Self-service access request requirement",
+      "content": "An authenticated user can find repository.search for live-engineering-repository in the self-service Catalog, choose TTL 1h, 8h, or 24h, submit an access request, and see a submitted result. The resource owner approves it."
+    }
+  ]
+}

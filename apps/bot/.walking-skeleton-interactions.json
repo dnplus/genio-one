@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "skeleton_id": "bot-interaction-lifecycle",
+  "git": {
+    "base_commit": "652a06506244ee248881c1e134c5aedea3b4f59d",
+    "last_verified_code_commit": "4d15db04f482e15b1a1b72c0e793050a84952dbb"
+  },
+  "actor": "local authenticated Bot owner",
+  "golden_path": "mention source reload and navigation, idle FYI reading, ask while working and durable answer continuation",
+  "allowed_paths": [
+    "apps/bot/**"
+  ],
+  "completion_evidence": [
+    "ui",
+    "runtime",
+    "regression"
+  ],
+  "correlation_evidence": [],
+  "current_checkpoint": "COMPLETE",
+  "last_observation": "Scoped local interaction implementation complete. Evidence and limitations recorded in docs/bot-interactions-implementation.md and docs/evidence/interactions/acceptance.json. Private verified checkpoint 4d15db04f482e15b1a1b72c0e793050a84952dbb; HEAD/staging unchanged; canonical local services ready.",
+  "current_blocker": null,
+  "checkpoints": [
+    {
+      "id": "C1",
+      "title": "Durable handoff source and navigation",
+      "status": "verified",
+      "evidence": [
+        {
+          "type": "regression",
+          "reference": "server/handoff-source.test.ts and server/bot-handoff.test.ts; 7 pass, 45 assertions"
+        },
+        {
+          "type": "ui",
+          "reference": "CUA local admin: source focus handoff-source:14b70620-29c0-411a-9813-402ffc74a419, recipient focus handoff:bot-handoff-2e32cba0-03f3-43ee-b9bf-592ac9d7835e; return Policy Bot"
+        }
+      ]
+    },
+    {
+      "id": "C2",
+      "title": "Unified Bot turn dispatch and idle FYI",
+      "status": "verified",
+      "evidence": [
+        {
+          "type": "runtime",
+          "reference": "FYI handoff bot-handoff-2e32cba0-03f3-43ee-b9bf-592ac9d7835e completed; no caller continuation"
+        },
+        {
+          "type": "runtime",
+          "reference": "docs/evidence/interactions/acceptance.json; busy FYI bot-handoff-1375e1ff-0712-4e09-9d5d-5e978e72df18 remained APPROVED until original turn completed, then completed with zero caller continuations"
+        }
+      ]
+    },
+    {
+      "id": "C3",
+      "title": "Durable asynchronous question and answer",
+      "status": "verified",
+      "evidence": [
+        {
+          "type": "ui",
+          "reference": "docs/evidence/interactions/acceptance.json; original-turn steer and late-answer new-turn delivery observed with real model, pending question survived real server restart and dismissed after reload"
+        }
+      ]
+    },
+    {
+      "id": "C4",
+      "title": "Real UI recovery acceptance",
+      "status": "verified",
+      "evidence": [
+        {
+          "type": "regression",
+          "reference": "349 tests / 98 files / 2032 assertions; tsc, Vite build and Bun server bundle passed"
+        },
+        {
+          "type": "ui",
+          "reference": "Final CUA screenshot: answered and dismissed question cards, read FYI and usable composer; source and recipient exact focus IDs verified"
+        }
+      ]
+    }
+  ],
+  "correlation_groups": [],
+  "state_revision": 4,
+  "state_digest": "ef33d774af8b7d98456a2979344eec64b3d462be75525a5ced75aa7646c5974b"
+}

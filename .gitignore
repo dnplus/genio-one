@@ -1,0 +1,54 @@
+node_modules/
+.pnpm-store/
+dist/
+.DS_Store
+*.log
+.omc/
+.env
+.env.*
+!.env.example
+target/
+data/
+archives/
+coverage/
+playwright-report/
+test-results/
+tokscale-export-*.json
+
+# Graphify outputs are reproducible from source by re-running Graphify, so the
+# whole directory stays local. `.graphifyignore` is input configuration and
+# remains tracked.
+graphify-out/
+
+# Playwright MCP session artifacts (console logs, page snapshots).
+.playwright-mcp/
+
+# Repo-local development tools and their downloaded runtime caches.
+apps/platform/.local/
+apps/bot/.local/
+
+# Generated Bun bundles; source and container builds recreate these artifacts.
+apps/platform/platform-api/dist/
+runtimes/gateway/services/dist/
+
+gha-creds-*.json
+
+# Local IDE and editor configurations
+.codex/
+.cursor/
+.lore.yaml
+.mcp.json
+.omp/
+
+# Local test and session artifacts
+internal/evidence/bot/artifacts/
+
+.local/
+**/.local/
+**/artifacts/
+scratch/
+
+# Raw design package delivered for the 2026-09 refresh. Brand output lives in
+# packages/brand; the source package and its reference images stay local.
+/GenioOne-Design-System/
+/GenioOne-Design-System.zip

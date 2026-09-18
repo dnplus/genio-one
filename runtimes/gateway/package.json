@@ -1,0 +1,31 @@
+{
+  "name": "@genioone/gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "bun": "1.4.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test ./controller ./services",
+    "build": "bun build controller/server.ts --target=bun --outfile=controller/dist/server.js && bun ../../apps/platform/scripts/build-gateway-services.mjs"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.14.4",
+    "@grpc/proto-loader": "^0.8.1",
+    "@modelcontextprotocol/client": "2.0.0",
+    "redis": "^6.2.1",
+    "typebox": "1.3.19",
+    "yaml": "^2.9.0",
+    "@genioone/protocol": "workspace:*",
+    "@genioone/policy": "workspace:*",
+    "@genioone/telemetry": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.0",
+    "@types/node": "24.10.1",
+    "typescript": "7.0.2"
+  }
+}

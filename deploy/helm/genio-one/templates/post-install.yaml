@@ -1,0 +1,201 @@
+{{- $gatewayRuntimeIds := list -}}
+{{- range $ordinal := until (int .Values.gateway.replicas) -}}
+{{- $gatewayRuntimeIds = append $gatewayRuntimeIds (printf "%s-gateway-runtime-%d" (include "genio-one.fullname" $) $ordinal) -}}
+{{- end -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "genio-one.fullname" . }}-post-install
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: post-install
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "genio-one.fullname" . }}-gateway-bootstrap
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: post-install
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [{{ printf "%s-gateway-bootstrap" (include "genio-one.fullname" .) | quote }}]
+    verbs: [get, patch, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "genio-one.fullname" . }}-gateway-bootstrap
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: post-install
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "genio-one.fullname" . }}-gateway-bootstrap
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "genio-one.fullname" . }}-post-install
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "genio-one.fullname" . }}-gateway-bootstrap
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway-bootstrap
+type: Opaque
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "genio-one.fullname" . }}-install-state
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- include "genio-one.storageClass" . | nindent 2 }}
+  resources: { requests: { storage: 1Gi } }
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "genio-one.fullname" . }}-install-state-volume-{{ .Release.Revision }}
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: install-state-volume
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata: { labels: { app.kubernetes.io/component: install-state-volume, app.kubernetes.io/instance: {{ .Release.Name }}, app.kubernetes.io/part-of: genio-one } }
+    spec:
+      {{- include "genio-one.imagePullSecrets" . | nindent 6 }}
+      restartPolicy: OnFailure
+      securityContext: { runAsNonRoot: true, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: initialize
+          image: {{ include "genio-one.image" (list .Values.images.installer .) }}
+          imagePullPolicy: {{ .Values.images.installer.pullPolicy }}
+          command: [/bin/sh, -c]
+          args: ["touch /var/lib/genio-one/.volume-ready"]
+          resources: { requests: { cpu: 5m, memory: 16Mi }, limits: { cpu: 100m, memory: 64Mi } }
+          securityContext: { runAsUser: 1000, runAsGroup: 1000, allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+          volumeMounts: [{ name: state, mountPath: /var/lib/genio-one }]
+      volumes: [{ name: state, persistentVolumeClaim: { claimName: {{ include "genio-one.fullname" . }}-install-state } }]
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "genio-one.fullname" . }}-post-install-{{ .Release.Revision }}
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: post-install
+spec:
+  backoffLimit: 12
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata: { labels: { app.kubernetes.io/component: post-install, app.kubernetes.io/instance: {{ .Release.Name }}, app.kubernetes.io/part-of: genio-one } }
+    spec:
+      serviceAccountName: {{ include "genio-one.fullname" . }}-post-install
+      {{- include "genio-one.imagePullSecrets" . | nindent 6 }}
+      restartPolicy: OnFailure
+      securityContext: { runAsNonRoot: true, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: reconcile
+          image: {{ include "genio-one.image" (list .Values.images.installer .) }}
+          imagePullPolicy: {{ .Values.images.installer.pullPolicy }}
+          env:
+            - { name: GENIO_ONE_DISABLE_DOTENV, value: "1" }
+            - { name: GENIO_ONE_PLATFORM_ORIGIN, value: {{ printf "http://%s-platform:%v" (include "genio-one.fullname" .) .Values.platform.service.port | quote }} }
+            - name: GENIO_ONE_DATABASE_URL
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: database-url } }
+            # PostgreSQL migrations are owned by the TypeScript platform init container.
+            - { name: GENIO_ONE_SKIP_SCHEMA_MIGRATION, value: "1" }
+            - { name: GENIO_ONE_DEPLOYMENT_DEPLOYABLES, value: "genio-one-platform,genio-gateway" }
+            {{- $capabilities := list "identity" "analytics" }}
+            {{- if .Values.apiManagement.enabled }}
+            {{- $capabilities = append $capabilities "api-management" }}
+            {{- end }}
+            - { name: GENIO_ONE_DEPLOYMENT_CAPABILITIES, value: {{ join "," $capabilities | quote }} }
+            - { name: GENIO_ONE_POST_INSTALL_STATE, value: /var/lib/genio-one/post-install-state.json }
+            - { name: GENIO_ONE_KEYCLOAK_PRODUCTION_BOOTSTRAP, value: "1" }
+            - { name: GENIO_ONE_KEYCLOAK_ORIGIN, value: {{ printf "http://%s-keycloak:8080" (include "genio-one.fullname" .) | quote }} }
+            - { name: GENIO_ONE_KEYCLOAK_ISSUER_ORIGIN, value: {{ .Values.global.keycloakPublicOrigin | quote }} }
+            - { name: GENIO_ONE_KEYCLOAK_REALM, value: {{ .Values.identity.realm | quote }} }
+            - { name: GENIO_ONE_KEYCLOAK_LOGIN_BRAND_NAME, value: {{ .Values.identity.loginBranding.brandName | quote }} }
+            - { name: GENIO_ONE_KEYCLOAK_LOGIN_TAGLINE, value: {{ .Values.identity.loginBranding.tagline | quote }} }
+            - { name: GENIO_ONE_KEYCLOAK_LOGIN_LOGO_URL, value: {{ .Values.identity.loginBranding.logoUrl | quote }} }
+            - { name: GENIO_ONE_KEYCLOAK_LOGIN_PRIMARY_COLOR, value: {{ .Values.identity.loginBranding.primaryColor | quote }} }
+            - { name: GENIO_ONE_KEYCLOAK_LOGIN_PAGE_COLOR, value: {{ .Values.identity.loginBranding.pageColor | quote }} }
+            - { name: GENIO_ONE_KEYCLOAK_LOGIN_CUSTOM_CSS, value: {{ .Values.identity.loginBranding.customCss | quote }} }
+            - { name: GENIO_ONE_KEYCLOAK_LOGIN_BRANDING_ENDPOINT, value: {{ printf "%s/v1/identity/login-branding" (trimSuffix "/" .Values.global.publicOrigin) | quote }} }
+            - { name: GENIO_ONE_KEYCLOAK_ADMIN, value: {{ .Values.identity.adminUser | quote }} }
+            - name: GENIO_ONE_KEYCLOAK_ADMIN_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: keycloak-admin-password } }
+            - { name: GENIO_ONE_KEYCLOAK_AUDIENCE, value: genio-one-product-api }
+            - { name: GENIO_ONE_KEYCLOAK_CLIENT_ID, value: genio-one-product-api }
+            - name: GENIO_ONE_KEYCLOAK_CLIENT_SECRET
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: product-api-client-secret } }
+            - { name: GENIO_ONE_KEYCLOAK_CONFIG_REVISION, value: keycloak-production-v5-https-redirects }
+            - { name: GENIO_ONE_SELF_SERVICE_ORIGIN, value: {{ .Values.global.publicOrigin | quote }} }
+            - { name: GENIO_ONE_BOT_ORIGIN, value: {{ .Values.global.botPublicOrigin | default (ternary (printf "https://%s" .Values.ingress.botHost) "" (ne (default "" .Values.ingress.botHost) "")) | quote }} }
+            - { name: GENIO_ONE_MANAGEMENT_AGENT_REDIRECT_URI, value: {{ .Values.identity.managementAgentRedirectUri | quote }} }
+            - { name: GENIO_ONE_BOOTSTRAP_TENANT_ID, value: {{ .Values.tenant.id | quote }} }
+            - { name: GENIO_ONE_BOOTSTRAP_ADMIN_SUBJECT_ID, value: {{ .Values.tenant.administratorSubjectId | quote }} }
+            - { name: GENIO_ONE_BOOTSTRAP_ADMIN_EXTERNAL_SUBJECT_ID, value: {{ .Values.tenant.administratorExternalSubjectId | quote }} }
+            - { name: GENIO_ONE_BOOTSTRAP_ADMIN_USERNAME, value: {{ .Values.tenant.administratorUsername | quote }} }
+            - name: GENIO_ONE_BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: tenant-administrator-password } }
+            - { name: GENIO_ONE_BOOTSTRAP_ADMIN_DISPLAY_NAME, value: {{ .Values.tenant.administratorDisplayName | quote }} }
+            - { name: GENIO_ONE_BOOTSTRAP_ADMIN_EMAIL, value: {{ .Values.tenant.administratorEmail | quote }} }
+            {{- if .Values.tenant.bootstrapPeople }}
+            - { name: GENIO_ONE_BOOTSTRAP_PEOPLE_JSON, value: {{ .Values.tenant.bootstrapPeople | toJson | quote }} }
+            - name: GENIO_ONE_BOOTSTRAP_PEOPLE_PASSWORDS_JSON
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "tenant.bootstrapPeopleSecret is required when bootstrapPeople is configured" .Values.tenant.bootstrapPeopleSecret | quote }}
+                  key: passwords.json
+            {{- end }}
+            - { name: GENIO_ONE_TENANT_BOOTSTRAP_REVISION, value: tenant-identity-v1 }
+            - { name: GENIO_ONE_GATEWAY_TENANT_ID, value: {{ .Values.tenant.id | quote }} }
+            - name: GENIO_ONE_GATEWAY_RUNTIME_IDS
+              value: {{ join "," $gatewayRuntimeIds | quote }}
+            - { name: GENIO_ONE_GATEWAY_DISPLAY_NAME, value: {{ .Values.gateway.displayName | quote }} }
+            - { name: GENIO_ONE_GATEWAY_ID, value: {{ .Values.aiMcpGateway.enforcementPointId | quote }} }
+            - { name: GENIO_ONE_GATEWAY_SITE_ID, value: {{ .Values.gateway.siteId | quote }} }
+            - { name: GENIO_ONE_GATEWAY_REGION, value: {{ .Values.gateway.region | quote }} }
+            - { name: GENIO_ONE_GATEWAY_BOOTSTRAP_FILE, value: /var/lib/genio-one/gateway-bootstrap.json }
+            - { name: GENIO_ONE_KUBERNETES_NAMESPACE, value: {{ .Release.Namespace | quote }} }
+            - { name: GENIO_ONE_KUBERNETES_GATEWAY_BOOTSTRAP_SECRET, value: {{ printf "%s-gateway-bootstrap" (include "genio-one.fullname" .) | quote }} }
+            - { name: GENIO_ONE_KUBECTL, value: /usr/local/bin/kubectl }
+            - { name: GENIO_ONE_KEYCLOAK_GATEWAY_RUNTIME_SCOPE, value: genioone-gateway-runtime }
+            - { name: GENIO_ONE_CLICKHOUSE_HTTP_ORIGIN, value: {{ printf "http://%s-clickhouse:8123" (include "genio-one.fullname" .) | quote }} }
+            - { name: GENIO_ONE_CLICKHOUSE_DB, value: {{ .Values.analytics.database | quote }} }
+            - { name: GENIO_ONE_CLICKHOUSE_USER, value: {{ .Values.analytics.username | quote }} }
+            - name: GENIO_ONE_CLICKHOUSE_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: clickhouse-password } }
+            {{- if .Values.apiManagement.enabled }}
+            - { name: GENIO_ONE_GRAVITEE_MANAGEMENT_API_ORIGIN, value: {{ printf "http://%s-gravitee-management:8083" (include "genio-one.fullname" .) | quote }} }
+            - { name: GENIO_ONE_GRAVITEE_ORGANIZATION, value: {{ .Values.apiManagement.organization | quote }} }
+            - { name: GENIO_ONE_GRAVITEE_ENVIRONMENT, value: {{ .Values.apiManagement.environment | quote }} }
+            - { name: GENIO_ONE_GRAVITEE_ADMIN_USERNAME, value: admin }
+            - name: GENIO_ONE_GRAVITEE_ADMIN_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: gravitee-admin-password } }
+            - { name: GENIO_ONE_GRAVITEE_API_CROSS_ID, value: {{ .Values.apiManagement.initialApi.crossId | quote }} }
+            - { name: GENIO_ONE_GRAVITEE_API_NAME, value: {{ .Values.apiManagement.initialApi.name | quote }} }
+            - { name: GENIO_ONE_GRAVITEE_API_CONTEXT_PATH, value: {{ .Values.apiManagement.initialApi.contextPath | quote }} }
+            - { name: GENIO_ONE_GRAVITEE_API_UPSTREAM_URL, value: {{ .Values.apiManagement.initialApi.upstreamUrl | quote }} }
+            {{- end }}
+          resources: { requests: { cpu: 100m, memory: 256Mi }, limits: { cpu: "1", memory: 1Gi } }
+          securityContext: { runAsUser: 1000, runAsGroup: 1000, allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+          volumeMounts:
+            - { name: state, mountPath: /var/lib/genio-one }
+            - { name: product-secrets, mountPath: /var/run/secrets/genio-one, readOnly: true }
+      volumes:
+        - { name: state, persistentVolumeClaim: { claimName: {{ include "genio-one.fullname" . }}-install-state } }
+        - { name: product-secrets, secret: { secretName: {{ include "genio-one.secretName" . }} } }

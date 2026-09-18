@@ -1,0 +1,103 @@
+syntax = "proto3";
+
+import "google/protobuf/struct.proto";
+
+// Wire-compatible subset of Envoy v1.38.1 ext_proc. The service and field
+// numbers match envoy/service/ext_proc/v3/external_processor.proto. Fields not
+// used by GenioOne remain unknown fields and are ignored by protobuf decoders.
+package envoy.service.ext_proc.v3;
+
+service ExternalProcessor {
+  rpc Process(stream ProcessingRequest) returns (stream ProcessingResponse);
+}
+
+message ProcessingRequest {
+  oneof request {
+    HttpHeaders request_headers = 2;
+    HttpHeaders response_headers = 3;
+    HttpBody request_body = 4;
+    HttpBody response_body = 5;
+  }
+  bool observability_mode = 10;
+}
+
+message ProcessingResponse {
+  oneof response {
+    HeadersResponse request_headers = 1;
+    HeadersResponse response_headers = 2;
+    BodyResponse request_body = 3;
+    BodyResponse response_body = 4;
+    ImmediateResponse immediate_response = 7;
+  }
+  google.protobuf.Struct dynamic_metadata = 8;
+}
+
+message HttpHeaders {
+  HeaderMap headers = 1;
+  bool end_of_stream = 3;
+}
+
+message HttpBody {
+  bytes body = 1;
+  bool end_of_stream = 2;
+}
+
+message HeaderMap {
+  repeated HeaderValue headers = 1;
+}
+
+message HeaderValue {
+  string key = 1;
+  string value = 2;
+  bytes raw_value = 3;
+}
+
+message HeaderValueOption {
+  HeaderValue header = 1;
+  int32 append_action = 3;
+  bool keep_empty_value = 4;
+}
+
+message HeadersResponse {
+  CommonResponse response = 1;
+}
+
+message BodyResponse {
+  CommonResponse response = 1;
+}
+
+message CommonResponse {
+  int32 status = 1;
+  HeaderMutation header_mutation = 2;
+  BodyMutation body_mutation = 3;
+  bool clear_route_cache = 5;
+}
+
+message HeaderMutation {
+  repeated HeaderValueOption set_headers = 1;
+  repeated string remove_headers = 2;
+}
+
+message BodyMutation {
+  oneof mutation {
+    bytes body = 1;
+    bool clear_body = 2;
+    StreamedBodyResponse streamed_response = 3;
+  }
+}
+
+message StreamedBodyResponse {
+  bytes body = 1;
+  bool end_of_stream = 2;
+}
+
+message ImmediateResponse {
+  HttpStatus status = 1;
+  HeaderMutation headers = 2;
+  bytes body = 3;
+  string details = 5;
+}
+
+message HttpStatus {
+  int32 code = 1;
+}

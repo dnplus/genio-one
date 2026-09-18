@@ -1,0 +1,67 @@
+[
+  {
+    "package_type": "BOT",
+    "version": "1.0.0",
+    "source": {
+      "kind": "UPLOAD",
+      "ref": "ce-demo-bundle",
+      "path": "package"
+    },
+    "resource_bindings": [],
+    "default_runtime_tier": "none",
+    "artifact_digest": "e8a2db5680d9100ce48643762f5c5f3826c7b6e97a4b47053b01ded2e473bd75",
+    "resource_id": "genio.demo.bot",
+    "profile": {
+      "title": "CE 文件與規格 Bot",
+      "description": "查詢技術文件、整理產品規格並建立架構圖。",
+      "avatar": {
+        "shape": "cercle",
+        "color": "turquoise",
+        "expression": "neutre"
+      }
+    },
+    "skills": [
+      {
+        "id": "archify",
+        "path": "skills/archify",
+        "digest": "b144762d4978d1f16d515c5b868147b7f8a5d92a419569410b0f2181327b16b0"
+      }
+    ],
+    "plugins": [
+      {
+        "name": "product-management",
+        "marketplace": "personal",
+        "marketplace_path": ".agents/plugins/marketplace.json",
+        "digest": "577e0f6dcc9e49b151f4bb2422d695b081ebf7e8628a7a7c4ee359679ba2d8ed"
+      }
+    ],
+    "model_route": "codex-subscription",
+    "manifest_digest": "1ab73d4dc75dd3a796237e9b47173acbf55e446327f15f03b14207c3dba78740"
+  },
+  {
+    "package_type": "BOT",
+    "version": "1.0.0",
+    "source": {
+      "kind": "UPLOAD",
+      "ref": "ce-demo-bundle",
+      "path": "package"
+    },
+    "resource_bindings": [],
+    "default_runtime_tier": "none",
+    "artifact_digest": "e8a2db5680d9100ce48643762f5c5f3826c7b6e97a4b47053b01ded2e473bd75",
+    "resource_id": "genio.demo.gemini-bot",
+    "profile": {
+      "title": "CE 訪談整理 Bot",
+      "description": "用受管 Gemini 路線整理訪談，保留未知事項。",
+      "avatar": {
+        "shape": "cercle",
+        "color": "violet",
+        "expression": "neutre"
+      }
+    },
+    "skills": [],
+    "plugins": [],
+    "model_route": "genio-gateway",
+    "manifest_digest": "7f9b9a800440d29dad7fdd42faf49405c5b3cabe4562fc2dd981a03f98d02332"
+  }
+]

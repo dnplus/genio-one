@@ -1,0 +1,256 @@
+name: genio-one-dev
+
+services:
+  postgres:
+    image: ${GENIO_ONE_POSTGRES_IMAGE:?copy .env.example to .env.local}
+    mem_limit: ${GENIO_ONE_POSTGRES_MEMORY_LIMIT:-1g}
+    environment:
+      POSTGRES_DB: ${GENIO_ONE_POSTGRES_DB}
+      POSTGRES_USER: ${GENIO_ONE_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${GENIO_ONE_POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:${GENIO_ONE_POSTGRES_PORT}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  valkey:
+    image: ${GENIO_ONE_VALKEY_IMAGE:?copy .env.example to .env.local}
+    mem_limit: ${GENIO_ONE_VALKEY_MEMORY_LIMIT:-512m}
+    command: ["valkey-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    ports:
+      - "127.0.0.1:${GENIO_ONE_VALKEY_PORT}:6379"
+    volumes:
+      - valkey-data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  otel-storage-init:
+    image: ${GENIO_ONE_POSTGRES_IMAGE:?copy .env.example to .env.local}
+    user: "0:0"
+    entrypoint: [/bin/sh, -c]
+    command: ["chown -R 10001:10001 /forwarder /analytics && chmod 750 /forwarder /analytics"]
+    volumes:
+      - otel-forwarder-data:/forwarder
+      - otel-analytics-data:/analytics
+
+  otel-collector:
+    image: ${GENIO_ONE_OTEL_COLLECTOR_IMAGE:?copy .env.example to .env.local}
+    mem_limit: ${GENIO_ONE_OTEL_COLLECTOR_MEMORY_LIMIT:-256m}
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    ports:
+      - "127.0.0.1:${GENIO_ONE_OTEL_GRPC_PORT}:4317"
+      - "127.0.0.1:${GENIO_ONE_OTEL_HTTP_PORT}:4318"
+      - "127.0.0.1:${GENIO_ONE_OTEL_HEALTH_PORT}:13133"
+    volumes:
+      - ./config/otel-collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+      - otel-forwarder-data:/var/lib/otelcol
+    depends_on:
+      otel-storage-init:
+        condition: service_completed_successfully
+
+  otel-collector-analytics:
+    profiles: ["analytics"]
+    image: ${GENIO_ONE_OTEL_COLLECTOR_IMAGE:?copy .env.example to .env.local}
+    mem_limit: ${GENIO_ONE_OTEL_ANALYTICS_MEMORY_LIMIT:-512m}
+    restart: "on-failure:5"
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    environment:
+      GENIO_ONE_CLICKHOUSE_DB: ${GENIO_ONE_CLICKHOUSE_DB}
+      GENIO_ONE_CLICKHOUSE_USER: ${GENIO_ONE_CLICKHOUSE_USER}
+      GENIO_ONE_CLICKHOUSE_PASSWORD: ${GENIO_ONE_CLICKHOUSE_PASSWORD}
+    ports:
+      - "127.0.0.1:${GENIO_ONE_OTEL_ANALYTICS_GRPC_PORT}:4317"
+      - "127.0.0.1:${GENIO_ONE_OTEL_ANALYTICS_HTTP_PORT}:4318"
+      - "127.0.0.1:${GENIO_ONE_OTEL_ANALYTICS_HEALTH_PORT}:13133"
+    volumes:
+      - ./config/otel-collector-clickhouse.yaml:/etc/otelcol-contrib/config.yaml:ro
+      - otel-analytics-data:/var/lib/otelcol
+      - gravitee-reporter-data:/var/lib/genio-one/gravitee:ro
+    depends_on:
+      otel-storage-init:
+        condition: service_completed_successfully
+      clickhouse:
+        condition: service_healthy
+
+  keycloak-postgres-bootstrap:
+    profiles: ["identity"]
+    image: ${GENIO_ONE_POSTGRES_IMAGE:?copy .env.example to .env.local}
+    mem_limit: ${GENIO_ONE_KEYCLOAK_BOOTSTRAP_MEMORY_LIMIT:-256m}
+    environment:
+      GENIO_ONE_POSTGRES_DB: ${GENIO_ONE_POSTGRES_DB}
+      GENIO_ONE_POSTGRES_USER: ${GENIO_ONE_POSTGRES_USER}
+      GENIO_ONE_POSTGRES_PASSWORD: ${GENIO_ONE_POSTGRES_PASSWORD}
+      GENIO_ONE_KEYCLOAK_POSTGRES_DB: ${GENIO_ONE_KEYCLOAK_POSTGRES_DB}
+      GENIO_ONE_KEYCLOAK_POSTGRES_USER: ${GENIO_ONE_KEYCLOAK_POSTGRES_USER}
+      GENIO_ONE_KEYCLOAK_POSTGRES_PASSWORD: ${GENIO_ONE_KEYCLOAK_POSTGRES_PASSWORD}
+    entrypoint: ["/bin/sh", "/opt/genio-one/bootstrap-keycloak.sh"]
+    volumes:
+      - ./config/postgres/bootstrap-keycloak.sh:/opt/genio-one/bootstrap-keycloak.sh:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  keycloak:
+    profiles: ["identity"]
+    image: ${GENIO_ONE_KEYCLOAK_IMAGE:?copy .env.example to .env.local}
+    mem_limit: ${GENIO_ONE_KEYCLOAK_MEMORY_LIMIT:-2g}
+    labels:
+      genio.one/config-revision: ${GENIO_ONE_KEYCLOAK_BOOTSTRAP_REVISION:-keycloak-v1}
+    command: ["start-dev", "--http-port=8080", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${GENIO_ONE_KEYCLOAK_ADMIN}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${GENIO_ONE_KEYCLOAK_ADMIN_PASSWORD}
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+      KC_HOSTNAME: ${GENIO_ONE_KEYCLOAK_ISSUER_ORIGIN:-http://127.0.0.1:58080}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${GENIO_ONE_KEYCLOAK_POSTGRES_DB}
+      KC_DB_USERNAME: ${GENIO_ONE_KEYCLOAK_POSTGRES_USER}
+      KC_DB_PASSWORD: ${GENIO_ONE_KEYCLOAK_POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:${GENIO_ONE_KEYCLOAK_PORT}:8080"
+    volumes:
+      - ./config/keycloak/genio-one-realm.json:/opt/keycloak/data/import/genio-one-realm.json:ro
+      - ../../deploy/helm/genio-one/files/keycloak-theme/genio-one:/opt/keycloak/themes/genio-one:ro
+    depends_on:
+      keycloak-postgres-bootstrap:
+        condition: service_completed_successfully
+
+  clickhouse:
+    profiles: ["analytics"]
+    image: ${GENIO_ONE_CLICKHOUSE_IMAGE:?copy .env.example to .env.local}
+    mem_limit: ${GENIO_ONE_CLICKHOUSE_MEMORY_LIMIT:-2g}
+    environment:
+      CLICKHOUSE_DB: ${GENIO_ONE_CLICKHOUSE_DB}
+      CLICKHOUSE_USER: ${GENIO_ONE_CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${GENIO_ONE_CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ports:
+      - "127.0.0.1:${GENIO_ONE_CLICKHOUSE_HTTP_PORT}:8123"
+      - "127.0.0.1:${GENIO_ONE_CLICKHOUSE_NATIVE_PORT}:9000"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./config/clickhouse/system-logs.xml:/etc/clickhouse-server/config.d/genio-one-system-logs.xml:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          clickhouse-client --user "$${CLICKHOUSE_USER}"
+          --password "$${CLICKHOUSE_PASSWORD}" --query "SELECT 1"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+
+  gravitee-postgres-bootstrap:
+    profiles: ["api-management"]
+    image: ${GENIO_ONE_POSTGRES_IMAGE:?copy .env.example to .env.local}
+    mem_limit: ${GENIO_ONE_GRAVITEE_BOOTSTRAP_MEMORY_LIMIT:-256m}
+    environment:
+      GENIO_ONE_POSTGRES_DB: ${GENIO_ONE_POSTGRES_DB}
+      GENIO_ONE_POSTGRES_USER: ${GENIO_ONE_POSTGRES_USER}
+      GENIO_ONE_POSTGRES_PASSWORD: ${GENIO_ONE_POSTGRES_PASSWORD}
+      GENIO_ONE_GRAVITEE_POSTGRES_DB: ${GENIO_ONE_GRAVITEE_POSTGRES_DB}
+      GENIO_ONE_GRAVITEE_POSTGRES_USER: ${GENIO_ONE_GRAVITEE_POSTGRES_USER}
+      GENIO_ONE_GRAVITEE_POSTGRES_PASSWORD: ${GENIO_ONE_GRAVITEE_POSTGRES_PASSWORD}
+    entrypoint: ["/bin/sh", "/opt/genio-one/bootstrap-gravitee.sh"]
+    volumes:
+      - ./config/postgres/bootstrap-gravitee.sh:/opt/genio-one/bootstrap-gravitee.sh:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  gravitee-management-api:
+    profiles: ["api-management"]
+    image: ${GENIO_ONE_GRAVITEE_MANAGEMENT_API_JDBC_IMAGE:?copy .env.example to .env.local}
+    mem_limit: ${GENIO_ONE_GRAVITEE_MANAGEMENT_MEMORY_LIMIT:-1536m}
+    build:
+      context: .
+      dockerfile: config/gravitee/Dockerfile.jdbc
+      args:
+        GENIO_ONE_GRAVITEE_BASE_IMAGE: ${GENIO_ONE_GRAVITEE_MANAGEMENT_API_IMAGE}
+        GENIO_ONE_GRAVITEE_HOME: /opt/graviteeio-management-api
+    environment:
+      gravitee_management_type: jdbc
+      gravitee_management_jdbc_url: jdbc:postgresql://postgres:5432/${GENIO_ONE_GRAVITEE_POSTGRES_DB}
+      gravitee_management_jdbc_username: ${GENIO_ONE_GRAVITEE_POSTGRES_USER}
+      gravitee_management_jdbc_password: ${GENIO_ONE_GRAVITEE_POSTGRES_PASSWORD}
+      gravitee_analytics_type: none
+      GENIO_ONE_GRAVITEE_ADMIN_PASSWORD: ${GENIO_ONE_GRAVITEE_ADMIN_PASSWORD:?copy .env.example to .env.local}
+    ports:
+      - "127.0.0.1:${GENIO_ONE_GRAVITEE_MANAGEMENT_API_PORT}:8083"
+    depends_on:
+      gravitee-postgres-bootstrap:
+        condition: service_completed_successfully
+
+  gravitee-gateway:
+    profiles: ["api-management"]
+    image: ${GENIO_ONE_GRAVITEE_GATEWAY_JDBC_IMAGE:?copy .env.example to .env.local}
+    mem_limit: ${GENIO_ONE_GRAVITEE_GATEWAY_MEMORY_LIMIT:-1536m}
+    build:
+      context: .
+      dockerfile: config/gravitee/Dockerfile.jdbc
+      args:
+        GENIO_ONE_GRAVITEE_BASE_IMAGE: ${GENIO_ONE_GRAVITEE_GATEWAY_IMAGE}
+        GENIO_ONE_GRAVITEE_HOME: /opt/graviteeio-gateway
+    environment:
+      gravitee_management_type: jdbc
+      gravitee_management_jdbc_url: jdbc:postgresql://postgres:5432/${GENIO_ONE_GRAVITEE_POSTGRES_DB}
+      gravitee_management_jdbc_username: ${GENIO_ONE_GRAVITEE_POSTGRES_USER}
+      gravitee_management_jdbc_password: ${GENIO_ONE_GRAVITEE_POSTGRES_PASSWORD}
+      gravitee_ratelimit_type: redis
+      gravitee_ratelimit_redis_host: valkey
+      gravitee_ratelimit_redis_port: "6379"
+      gravitee_policy_apikey_header: x-api-key
+      gravitee_policy_apikey_param: ""
+      gravitee_http_secured: "true"
+      gravitee_http_ssl_clientAuth: request
+      gravitee_http_ssl_keystore_type: self-signed
+      gravitee_reporters_elasticsearch_enabled: "false"
+      gravitee_reporters_file_enabled: "true"
+      gravitee_reporters_file_fileName: /opt/graviteeio-gateway/metrics/%s-yyyy_mm_dd
+      gravitee_reporters_file_output: json
+      gravitee_reporters_file_flushInterval: "1000"
+      gravitee_reporters_file_retainDays: "1"
+    ports:
+      - "127.0.0.1:${GENIO_ONE_GRAVITEE_GATEWAY_PORT}:8082"
+    volumes:
+      - gravitee-reporter-data:/opt/graviteeio-gateway/metrics
+    depends_on:
+      gravitee-postgres-bootstrap:
+        condition: service_completed_successfully
+      valkey:
+        condition: service_healthy
+
+  api-fixture:
+    profiles: ["api-management"]
+    image: ${GENIO_ONE_API_FIXTURE_IMAGE:?copy .env.example to .env.local}
+    mem_limit: ${GENIO_ONE_API_FIXTURE_MEMORY_LIMIT:-128m}
+    ports:
+      - "127.0.0.1:${GENIO_ONE_API_FIXTURE_PORT}:8080"
+    volumes:
+      - ./config/api-fixture/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8080/healthz"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  postgres-data:
+  valkey-data:
+  clickhouse-data:
+  gravitee-reporter-data:
+  otel-forwarder-data:
+  otel-analytics-data:

@@ -1,0 +1,178 @@
+{{- if .Values.apiManagement.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "genio-one.fullname" . }}-gravitee-management
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+spec:
+  selector: { app.kubernetes.io/component: gravitee-management, app.kubernetes.io/instance: {{ .Release.Name }} }
+  ports: [{ name: http, port: 8083, targetPort: http }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "genio-one.fullname" . }}-gravitee-management-headless
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector: { app.kubernetes.io/component: gravitee-management, app.kubernetes.io/instance: {{ .Release.Name }} }
+  ports: [{ name: http, port: 8083, targetPort: http }]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "genio-one.fullname" . }}-gravitee-management
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "genio-one.fullname" . }}-gravitee-management-headless
+  podManagementPolicy: OrderedReady
+  replicas: {{ .Values.apiManagement.managementReplicas }}
+  selector: { matchLabels: { app.kubernetes.io/component: gravitee-management, app.kubernetes.io/instance: {{ .Release.Name }} } }
+  template:
+    metadata: { labels: { app.kubernetes.io/component: gravitee-management, app.kubernetes.io/instance: {{ .Release.Name }}, app.kubernetes.io/part-of: genio-one } }
+    spec:
+      {{- include "genio-one.imagePullSecrets" . | nindent 6 }}
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      initContainers:
+        - name: wait-for-gravitee-database
+          image: {{ .Values.images.postgres }}
+          command: [/bin/sh, -c]
+          args:
+            - {{ printf "until psql --host=%s-postgres --username=%s --dbname=%s --no-password --tuples-only --command='SELECT 1' >/dev/null 2>&1; do sleep 1; done" (include "genio-one.fullname" .) .Values.apiManagement.databaseUser .Values.apiManagement.database | quote }}
+          env:
+            - name: PGPASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: gravitee-database-password } }
+          resources: { requests: { cpu: 5m, memory: 16Mi }, limits: { cpu: 100m, memory: 64Mi } }
+          securityContext: { runAsUser: 70, runAsGroup: 70, allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+      containers:
+        - name: management-api
+          image: {{ .Values.images.graviteeManagement }}
+          ports: [{ name: http, containerPort: 8083 }]
+          env:
+            - { name: gravitee_management_type, value: jdbc }
+            - { name: gravitee_management_jdbc_url, value: {{ printf "jdbc:postgresql://%s-postgres:5432/%s" (include "genio-one.fullname" .) .Values.apiManagement.database | quote }} }
+            - { name: gravitee_management_jdbc_username, value: {{ .Values.apiManagement.databaseUser | quote }} }
+            - name: gravitee_management_jdbc_password
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: gravitee-database-password } }
+            - { name: gravitee_analytics_type, value: none }
+            - name: gravitee_jwt_secret
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: gravitee-jwt-secret } }
+            - name: GENIO_ONE_GRAVITEE_ADMIN_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: gravitee-admin-password } }
+          readinessProbe: { tcpSocket: { port: http }, initialDelaySeconds: 20, periodSeconds: 10, failureThreshold: 18 }
+          resources: {{- toYaml .Values.apiManagement.resources | nindent 12 }}
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: {{ include "genio-one.fullname" . }}-gravitee-management }
+spec:
+  minAvailable: 1
+  selector: { matchLabels: { app.kubernetes.io/component: gravitee-management, app.kubernetes.io/instance: {{ .Release.Name }} } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "genio-one.fullname" . }}-gravitee-gateway
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.apiManagement.gatewayService.type }}
+  selector: { app.kubernetes.io/component: gravitee-gateway, app.kubernetes.io/instance: {{ .Release.Name }} }
+  ports: [{ name: https, port: 443, targetPort: https }]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "genio-one.fullname" . }}-gravitee-gateway
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "genio-one.fullname" . }}-gravitee-gateway
+  replicas: {{ .Values.apiManagement.gatewayReplicas }}
+  selector: { matchLabels: { app.kubernetes.io/component: gravitee-gateway, app.kubernetes.io/instance: {{ .Release.Name }} } }
+  template:
+    metadata: { labels: { app.kubernetes.io/component: gravitee-gateway, app.kubernetes.io/instance: {{ .Release.Name }}, app.kubernetes.io/part-of: genio-one } }
+    spec:
+      {{- include "genio-one.imagePullSecrets" . | nindent 6 }}
+      securityContext: { runAsNonRoot: true, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+      initContainers:
+        - name: wait-for-gravitee-database
+          image: {{ .Values.images.postgres }}
+          command: [/bin/sh, -c]
+          args:
+            - {{ printf "until psql --host=%s-postgres --username=%s --dbname=%s --no-password --tuples-only --command='SELECT 1' >/dev/null 2>&1; do sleep 1; done" (include "genio-one.fullname" .) .Values.apiManagement.databaseUser .Values.apiManagement.database | quote }}
+          env:
+            - name: PGPASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: gravitee-database-password } }
+          resources: { requests: { cpu: 5m, memory: 16Mi }, limits: { cpu: 100m, memory: 64Mi } }
+          securityContext: { runAsUser: 70, runAsGroup: 70, allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+      containers:
+        - name: gateway
+          image: {{ .Values.images.graviteeGateway }}
+          ports: [{ name: https, containerPort: 8082 }]
+          env:
+            - { name: gravitee_management_type, value: jdbc }
+            - { name: gravitee_management_jdbc_url, value: {{ printf "jdbc:postgresql://%s-postgres:5432/%s" (include "genio-one.fullname" .) .Values.apiManagement.database | quote }} }
+            - { name: gravitee_management_jdbc_username, value: {{ .Values.apiManagement.databaseUser | quote }} }
+            - name: gravitee_management_jdbc_password
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: gravitee-database-password } }
+            - { name: gravitee_ratelimit_type, value: redis }
+            - { name: gravitee_ratelimit_redis_host, value: {{ printf "%s-valkey" (include "genio-one.fullname" .) | quote }} }
+            - { name: gravitee_ratelimit_redis_port, value: "6379" }
+            - name: gravitee_ratelimit_redis_password
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: valkey-password } }
+            - { name: gravitee_http_secured, value: "true" }
+            - { name: gravitee_http_ssl_clientAuth, value: request }
+            - { name: gravitee_http_ssl_keystore_type, value: self-signed }
+            - { name: gravitee_reporters_elasticsearch_enabled, value: "false" }
+            - { name: gravitee_reporters_file_enabled, value: "true" }
+            - { name: gravitee_reporters_file_fileName, value: "/var/lib/genio-one/gravitee/%s-yyyy_mm_dd" }
+            - { name: gravitee_reporters_file_output, value: json }
+            - { name: gravitee_reporters_file_flushInterval, value: "1000" }
+            - { name: gravitee_reporters_file_retainDays, value: "1" }
+          readinessProbe: { tcpSocket: { port: https }, initialDelaySeconds: 20, periodSeconds: 10, failureThreshold: 18 }
+          resources: {{- toYaml .Values.apiManagement.resources | nindent 12 }}
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+          volumeMounts: [{ name: reporter, mountPath: /var/lib/genio-one/gravitee }]
+        - name: reporter-exporter
+          image: {{ .Values.images.otelCollector }}
+          args: [--config=/etc/genio-one/gravitee-reporter.yaml]
+          ports: [{ name: otel-health, containerPort: 13133 }]
+          readinessProbe: { httpGet: { path: /, port: otel-health }, periodSeconds: 5, failureThreshold: 20 }
+          resources: { requests: { cpu: 25m, memory: 64Mi }, limits: { cpu: 250m, memory: 256Mi } }
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] }, readOnlyRootFilesystem: true }
+          volumeMounts:
+            - { name: reporter, mountPath: /var/lib/genio-one/gravitee, readOnly: true }
+            - { name: otel-config, mountPath: /etc/genio-one, readOnly: true }
+            - { name: telemetry, mountPath: /var/lib/otelcol }
+      volumes:
+        - { name: otel-config, configMap: { name: {{ include "genio-one.fullname" . }}-otel-config } }
+  volumeClaimTemplates:
+    - metadata: { name: telemetry }
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- if .Values.global.storageClass }}
+        storageClassName: {{ .Values.global.storageClass | quote }}
+        {{- end }}
+        resources: { requests: { storage: 2Gi } }
+    - metadata: { name: reporter }
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- if .Values.global.storageClass }}
+        storageClassName: {{ .Values.global.storageClass | quote }}
+        {{- end }}
+        resources: { requests: { storage: 4Gi } }
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: {{ include "genio-one.fullname" . }}-gravitee-gateway }
+spec:
+  minAvailable: 1
+  selector: { matchLabels: { app.kubernetes.io/component: gravitee-gateway, app.kubernetes.io/instance: {{ .Release.Name }} } }
+{{- end }}

@@ -1,0 +1,47 @@
+{
+  "schema_version": "genio.one.runtime.v1",
+  "message_type": "REPORT",
+  "tenant_id": "tenant-acme",
+  "runtime_id": "gateway-primary",
+  "report_id": "report-gateway-7",
+  "command_id": "command-gateway-7",
+  "revision": "7",
+  "digest": "1111111111111111111111111111111111111111111111111111111111111111",
+  "signature": {
+    "algorithm": "Ed25519",
+    "key_id": "runtime-key-2026",
+    "value": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  },
+  "runtime_kind": "GATEWAY",
+  "observed_status": {
+    "state": "READY",
+    "applied_release": {
+      "schema_version": "genio.one.gateway-release-ref.v1",
+      "release_id": "release-gateway-7",
+      "gateway_id": "gateway-primary",
+      "head_revision": 7,
+      "package_digest": "4444444444444444444444444444444444444444444444444444444444444444",
+      "projection_count": 1
+    },
+    "components": [
+      {
+        "component": "AI_GATEWAY",
+        "state": "READY",
+        "observed_revision": "7",
+        "payload": {
+          "active_routes": 1
+        }
+      },
+      {
+        "component": "AUTHORIZER",
+        "state": "READY",
+        "observed_revision": "7"
+      },
+      {
+        "component": "PROCESSOR",
+        "state": "READY",
+        "observed_revision": "7"
+      }
+    ]
+  }
+}

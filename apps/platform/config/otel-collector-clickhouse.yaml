@@ -1,0 +1,123 @@
+extensions:
+  file_storage:
+    directory: /var/lib/otelcol/storage
+    create_directory: true
+    fsync: true
+    compaction:
+      on_start: true
+      on_rebound: true
+      directory: /var/lib/otelcol/compaction
+      cleanup_on_start: true
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+  filelog/gravitee:
+    max_concurrent_files: 1
+    max_batches: 1
+    include:
+      - /var/lib/genio-one/gravitee/*
+    storage: file_storage
+    retry_on_failure:
+      enabled: true
+      max_elapsed_time: 2h
+    start_at: beginning
+    include_file_name: true
+    operators:
+      - type: json_parser
+        id: gravitee-json
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+    spike_limit_mib: 64
+  filter/keep_gateway_detail:
+    error_mode: propagate
+    trace_conditions:
+      - span.name != "gateway.message.detail"
+  transform/gravitee_decision:
+    error_mode: propagate
+    log_statements:
+      - context: log
+        statements:
+          - set(attributes["genio.decision.reason"], "JWT_REQUIRED") where attributes["errorKey"] == "JWT_MISSING_TOKEN"
+          - set(attributes["genio.missing_obligation"], "JWT") where attributes["errorKey"] == "JWT_MISSING_TOKEN"
+          - set(attributes["genio.decision.reason"], "CLIENT_CERTIFICATE_BINDING_REQUIRED") where attributes["errorKey"] == "JWT_INVALID_CERTIFICATE_BOUND_THUMBPRINT"
+          - set(attributes["genio.missing_obligation"], "CLIENT_CERTIFICATE_BINDING") where attributes["errorKey"] == "JWT_INVALID_CERTIFICATE_BOUND_THUMBPRINT"
+          - set(attributes["genio.decision.reason"], "JWT_CLAIMS_INVALID") where attributes["errorKey"] == "REQUEST_VALIDATION_INVALID"
+          - set(attributes["genio.missing_obligation"], "JWT_CLAIMS") where attributes["errorKey"] == "REQUEST_VALIDATION_INVALID"
+
+exporters:
+  debug:
+    verbosity: basic
+  clickhouse:
+    endpoint: tcp://clickhouse:9000?dial_timeout=10s
+    username: ${env:GENIO_ONE_CLICKHOUSE_USER}
+    password: ${env:GENIO_ONE_CLICKHOUSE_PASSWORD}
+    database: ${env:GENIO_ONE_CLICKHOUSE_DB}
+    create_schema: true
+    async_insert: true
+    compress: lz4
+    timeout: 5s
+    sending_queue:
+      enabled: true
+      storage: file_storage
+      sizer: bytes
+      queue_size: 268435456
+      num_consumers: 4
+      batch: { flush_timeout: 200ms, min_size: 65536, max_size: 0, sizer: bytes }
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 5s
+      max_elapsed_time: 2h
+  clickhouse/gateway_detail:
+    endpoint: tcp://clickhouse:9000?dial_timeout=10s
+    username: ${env:GENIO_ONE_CLICKHOUSE_USER}
+    password: ${env:GENIO_ONE_CLICKHOUSE_PASSWORD}
+    database: ${env:GENIO_ONE_CLICKHOUSE_DB}
+    create_schema: true
+    traces_table_name: otel_gateway_details
+    ttl: 24h
+    async_insert: true
+    compress: lz4
+    timeout: 5s
+    sending_queue:
+      enabled: true
+      storage: file_storage
+      sizer: bytes
+      queue_size: 268435456
+      num_consumers: 4
+      batch: { flush_timeout: 200ms, min_size: 65536, max_size: 0, sizer: bytes }
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 5s
+      max_elapsed_time: 2h
+
+service:
+  extensions: [health_check, file_storage]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter]
+      exporters: [debug, clickhouse]
+    traces/gateway_detail:
+      receivers: [otlp]
+      processors: [memory_limiter, filter/keep_gateway_detail]
+      exporters: [debug, clickhouse/gateway_detail]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter]
+      exporters: [debug, clickhouse]
+    logs:
+      receivers: [otlp, filelog/gravitee]
+      processors: [memory_limiter, transform/gravitee_decision]
+      exporters: [debug, clickhouse]

@@ -1,0 +1,3 @@
+- 新增或修改 `platform-web` 的產品 UI 行為時，使用 [genio-one-ui-design](../../.agents/skills/genio-one-ui-design/SKILL.md) 定義使用者任務、狀態轉換與可見完成條件；將操作路徑與驗證集中於這份技能。
+- 以受影響功能與既有設計系統為起點：重用 `platform-web/src/components/ui/` 和既有產品組合，將可見文案留在現有 i18n 層。新增互動前核對 `components.json`、元件實作與使用處；元件組合、無障礙或 API 細節需要時，按需讀 [shadcn](.agents/skills/shadcn/SKILL.md)。
+- 優先使用已安裝的 primitive 與支援的 variant；缺少元件時依 shadcn 指引先檢視 preview 或 diff，再最小化加入並保留本地修改。現有組合無法表達可重用的 GenioOne 領域行為時，從既有 primitive 建立公開 API 狹窄的元件。依變更範圍完成 typecheck、focused test 與已渲染畫面驗證；i18n 文案或導覽標籤改動另跑 `bun run test:i18n`。

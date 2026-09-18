@@ -1,0 +1,247 @@
+{{- $gatewayRuntimeIds := list -}}
+{{- range $ordinal := until (int .Values.gateway.replicas) -}}
+{{- $gatewayRuntimeIds = append $gatewayRuntimeIds (printf "%s-gateway-runtime-%d" (include "genio-one.fullname" $) $ordinal) -}}
+{{- end -}}
+{{- $archifyServiceHost := printf "%s-archify" (include "genio-one.fullname" .) -}}
+{{- $archifyCredentialRef := printf "%s-demo-archify" (include "genio-one.fullname" .) -}}
+{{- $connectionVerifierAllowedHosts := .Values.platform.connectionVerification.allowedHosts -}}
+{{- if .Values.demo.archify.enabled -}}
+{{- $connectionVerifierAllowedHosts = append $connectionVerifierAllowedHosts $archifyServiceHost -}}
+{{- end -}}
+{{- $oidcOrigin := trimSuffix "/" (required "global.keycloakPublicOrigin is required" .Values.global.keycloakPublicOrigin) -}}
+{{- $oidcIssuer := printf "%s/realms/%s" $oidcOrigin .Values.identity.realm -}}
+{{- $oidcJwksUri := printf "http://%s-keycloak:8080/realms/%s/protocol/openid-connect/certs" (include "genio-one.fullname" .) .Values.identity.realm -}}
+{{- $browserIdentity := dict
+  "tenant_id" .Values.tenant.id
+  "issuer" $oidcIssuer
+  "authorization_endpoint" (printf "%s/protocol/openid-connect/auth" $oidcIssuer)
+  "token_endpoint" (printf "%s/protocol/openid-connect/token" $oidcIssuer)
+  "client_id" "genio-one-self-service"
+  "scopes" (list "openid" "genioone-invocation")
+  "management_client_id" "genio-one-management-console"
+  "management_scopes" (list "openid" "genioone-management")
+-}}
+{{- $oidcTenants := list (dict
+  "tenant_id" .Values.tenant.id
+  "identity_provider_id" "keycloak"
+  "issuer" $oidcIssuer
+  "audiences" (list "genio-one-product-api")
+  "jwks_uri" $oidcJwksUri
+  "algorithms" (list "RS256")
+  "claims" (dict
+    "subject" "sub"
+    "client" "azp"
+    "role" "realm_access.roles"
+    "organizations" "groups"
+  )
+  "principal_mappings" (list (dict
+    "external_subject_id" .Values.tenant.administratorExternalSubjectId
+    "subject_id" .Values.tenant.administratorSubjectId
+    "role" "TENANT_ADMINISTRATOR"
+    "organization_ids" (list)
+  ))
+) -}}
+{{- $bootstrapSubjects := list (dict
+  "tenant_id" .Values.tenant.id
+  "subject_id" .Values.tenant.administratorSubjectId
+  "kind" "PERSON"
+  "display_name" .Values.tenant.administratorDisplayName
+  "email" .Values.tenant.administratorEmail
+  "department" "Platform"
+  "role" "TENANT_ADMINISTRATOR"
+  "external_identities" (list (dict
+    "provider_id" "keycloak"
+    "external_subject_id" .Values.tenant.administratorExternalSubjectId
+  ))
+) -}}
+{{- range .Values.tenant.bootstrapPeople -}}
+{{- $bootstrapSubjects = append $bootstrapSubjects (dict
+  "tenant_id" $.Values.tenant.id
+  "subject_id" .subjectId
+  "kind" "PERSON"
+  "display_name" .displayName
+  "email" .email
+  "department" .department
+  "role" "USER"
+  "external_identities" (list (dict "provider_id" "keycloak" "external_subject_id" .externalSubjectId))
+) -}}
+{{- end -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "genio-one.fullname" . }}-platform
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.platform.service.type }}
+  selector: { app.kubernetes.io/component: platform, app.kubernetes.io/instance: {{ .Release.Name }} }
+  ports: [{ name: http, port: {{ .Values.platform.service.port }}, targetPort: http }]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "genio-one.fullname" . }}-platform
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: platform
+spec:
+  serviceName: {{ include "genio-one.fullname" . }}-platform
+  replicas: {{ .Values.platform.replicas }}
+  selector: { matchLabels: { app.kubernetes.io/component: platform, app.kubernetes.io/instance: {{ .Release.Name }} } }
+  template:
+    metadata: { labels: { app.kubernetes.io/component: platform, app.kubernetes.io/instance: {{ .Release.Name }}, app.kubernetes.io/part-of: genio-one } }
+    spec:
+      {{- include "genio-one.imagePullSecrets" . | nindent 6 }}
+      securityContext: { runAsNonRoot: true, fsGroup: 1000, seccompProfile: { type: RuntimeDefault } }
+      initContainers:
+        - name: wait-for-postgres
+          image: {{ .Values.images.postgres }}
+          command: [/bin/sh, -c]
+          args:
+            - {{ printf "until psql --host=%s-postgres --username=%s --dbname=%s --no-password --tuples-only --command='SELECT 1' >/dev/null 2>&1; do sleep 1; done" (include "genio-one.fullname" .) .Values.postgresql.username .Values.postgresql.database | quote }}
+          env:
+            - name: PGPASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: postgres-password } }
+          resources: { requests: { cpu: 5m, memory: 16Mi }, limits: { cpu: 100m, memory: 64Mi } }
+          securityContext: { runAsUser: 70, runAsGroup: 70, allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+        - name: migrate
+          image: {{ include "genio-one.image" (list .Values.images.platform .) }}
+          imagePullPolicy: {{ .Values.images.platform.pullPolicy }}
+          command: ["bun", "/app/dist/migrate.js"]
+          env:
+            - name: GENIO_ONE_DATABASE_URL
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: database-url } }
+            - { name: GENIO_ONE_PLATFORM_MIGRATIONS_DIR, value: /app/migrations }
+          resources: { requests: { cpu: 25m, memory: 64Mi }, limits: { cpu: 500m, memory: 256Mi } }
+          securityContext: { runAsUser: 1000, runAsGroup: 1000, allowPrivilegeEscalation: false, capabilities: { drop: [ALL] }, readOnlyRootFilesystem: true }
+      containers:
+        - name: platform
+          image: {{ include "genio-one.image" (list .Values.images.platform .) }}
+          imagePullPolicy: {{ .Values.images.platform.pullPolicy }}
+          command: [/bin/sh, -c]
+          args:
+            - |
+              set -eu
+              export GENIO_ONE_VALKEY_URL="$(bun -e 'process.stdout.write("redis://:" + encodeURIComponent(process.env.GENIO_ONE_VALKEY_PASSWORD ?? "") + "@{{ include "genio-one.fullname" . }}-valkey:6379")')"
+              unset GENIO_ONE_VALKEY_PASSWORD
+              exec bun /app/dist/server.js
+          ports: [{ name: http, containerPort: {{ .Values.platform.service.port }} }]
+          env:
+            - { name: GENIO_ONE_DISABLE_DOTENV, value: "1" }
+            - { name: NODE_ENV, value: production }
+            - { name: GENIO_ONE_PLATFORM_API_MODE, value: postgres }
+            {{- if .Values.bot.enabled }}
+            - name: GENIO_BOT_SERVICE_ENDPOINT
+              value: {{ printf "http://%s-bot:%d" (include "genio-one.fullname" .) (int .Values.bot.service.port) | quote }}
+            {{- end }}
+            {{- if .Values.global.botPublicOrigin }}
+            - name: GENIO_ONE_BOT_ORIGIN
+              value: {{ trimSuffix "/" .Values.global.botPublicOrigin | quote }}
+            {{- end }}
+            {{- if .Values.demo.archify.enabled }}
+            - name: GENIO_DEMO_ARCHIFY_ENDPOINT
+              value: {{ printf "http://%s:%d/mcp" $archifyServiceHost (int .Values.demo.archify.service.port) | quote }}
+            - name: GENIO_DEMO_ARCHIFY_CREDENTIAL_REF
+              value: {{ $archifyCredentialRef | quote }}
+            - name: GENIO_DEMO_ARCHIFY_VERIFIER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $archifyCredentialRef }}
+                  key: apiKey
+            {{- end }}
+            {{- if .Values.connectors.enabled }}
+            - name: GENIO_CONNECTOR_CONFIGURATION_KEY
+              valueFrom: { secretKeyRef: { name: {{ printf "%s-connectors" (include "genio-one.fullname" .) }}, key: configuration-key } }
+            - name: GENIO_CONNECTOR_SERVICENOW_ENDPOINT
+              value: {{ printf "http://%s-connectors-servicenow-csm:8080/mcp" (include "genio-one.fullname" .) | quote }}
+            - name: GENIO_CONNECTOR_MAIL2000_ENDPOINT
+              value: {{ printf "http://%s-connectors-mail2000:8080/mcp" (include "genio-one.fullname" .) | quote }}
+            {{- end }}
+            - name: GENIO_ONE_DATABASE_URL
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: database-url } }
+            - name: GENIO_ONE_VALKEY_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: valkey-password } }
+            - { name: GENIO_ONE_OTEL_SPOOL_DIR, value: /var/lib/otel-outbox }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: {{ printf "http://%s-otel-ingress:4318" (include "genio-one.fullname" .) | quote }} }
+            - { name: GENIO_ONE_CLICKHOUSE_HTTP_ORIGIN, value: {{ printf "http://%s-clickhouse:8123" (include "genio-one.fullname" .) | quote }} }
+            - { name: GENIO_ONE_CLICKHOUSE_DB, value: {{ .Values.analytics.database | quote }} }
+            - { name: GENIO_ONE_CLICKHOUSE_USER, value: {{ .Values.analytics.username | quote }} }
+            - name: GENIO_ONE_CLICKHOUSE_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: clickhouse-password } }
+            - { name: GENIO_ONE_MANAGEMENT_API_HOST, value: "0.0.0.0" }
+            - { name: GENIO_ONE_MANAGEMENT_API_PORT, value: {{ .Values.platform.service.port | quote }} }
+            - { name: GENIO_ONE_PLATFORM_ORIGIN, value: {{ printf "http://%s-platform:%v" (include "genio-one.fullname" .) .Values.platform.service.port | quote }} }
+            - { name: GENIO_ONE_CONTROL_PLANE_PUBLIC_ORIGIN, value: {{ trimSuffix "/" .Values.global.publicOrigin | quote }} }
+            - { name: GENIO_ONE_MCP_OAUTH_PUBLIC_ORIGIN, value: {{ trimSuffix "/" .Values.global.publicOrigin | quote }} }
+            - { name: GENIO_ONE_MANAGEMENT_UI_ORIGIN, value: {{ trimSuffix "/" .Values.global.publicOrigin | quote }} }
+            - name: GENIO_ONE_MCP_OAUTH_ENCRYPTION_KEY
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: mcp-oauth-encryption-key } }
+            - { name: GENIO_ONE_PLATFORM_MIGRATIONS_DIR, value: /app/migrations }
+            - { name: GENIO_ONE_WEB_HTML_FILE, value: /app/dist/web/management.html }
+            - { name: GENIO_ONE_GATEWAY_SIGNING_PRIVATE_KEY_FILE, value: /var/run/secrets/genio-one/projection-signing-private-key.pem }
+            - { name: GENIO_ONE_GATEWAY_SIGNING_KEY_ID, value: {{ .Values.platform.signingKeyId | quote }} }
+            - { name: GENIO_ONE_RUNTIME_COMMAND_SIGNING_PRIVATE_KEY_FILE, value: /var/run/secrets/genio-one/runtime-command-signing-private-key.pem }
+            - { name: GENIO_ONE_RUNTIME_COMMAND_SIGNING_KEY_ID, value: {{ .Values.platform.runtimeCommandSigningKeyId | quote }} }
+            - { name: GENIO_ONE_POLICY_ARTIFACT_SIGNING_PRIVATE_KEY_FILE, value: /var/run/secrets/genio-one/policy-artifact-signing-private-key.pem }
+            - { name: GENIO_ONE_POLICY_ARTIFACT_SIGNING_KEY_ID, value: {{ .Values.platform.policyArtifactSigningKeyId | quote }} }
+            - { name: GENIO_ONE_RELEASE_ROOT_SIGNING_PRIVATE_KEY_FILE, value: /var/run/secrets/genio-one/release-root-signing-private-key.pem }
+            - { name: GENIO_ONE_RELEASE_ROOT_SIGNING_KEY_ID, value: {{ .Values.platform.releaseRootSigningKeyId | quote }} }
+            - { name: GENIO_ONE_GATEWAY_NAMESPACE, value: {{ .Release.Namespace | quote }} }
+            - { name: GENIO_ONE_GATEWAY_RUNTIME_IDS, value: {{ join "," $gatewayRuntimeIds | quote }} }
+            - { name: GENIO_ONE_AIGW_ROOT_PREFIX, value: {{ .Values.platform.aigwRootPrefix | quote }} }
+            - { name: GENIO_ONE_GATEWAY_JWT_REMOTE_JWKS_URI, value: {{ printf "http://%s-keycloak:8080/realms/%s/protocol/openid-connect/certs" (include "genio-one.fullname" .) .Values.identity.realm | quote }} }
+            - { name: GENIO_ONE_GATEWAY_OTEL_HOST, value: {{ printf "%s-otel-ingress.%s.svc.cluster.local" (include "genio-one.fullname" .) .Release.Namespace | quote }} }
+            - { name: GENIO_ONE_GATEWAY_OTEL_PORT, value: "4317" }
+            - { name: GENIO_ONE_DEFAULT_GATEWAY_ID, value: {{ .Values.aiMcpGateway.enforcementPointId | quote }} }
+            {{- if .Values.runtimeReport.existingSecret }}
+            - name: GENIO_ONE_RUNTIME_REPORT_KEY_ID
+              valueFrom: { secretKeyRef: { name: {{ .Values.runtimeReport.existingSecret | quote }}, key: key-id } }
+            - name: GENIO_ONE_RUNTIME_REPORT_PUBLIC_KEY_PEM
+              valueFrom: { secretKeyRef: { name: {{ .Values.runtimeReport.existingSecret | quote }}, key: public-key.pem } }
+            {{- else if .Values.runtimeReport.generatedKeyId }}
+            - name: GENIO_ONE_RUNTIME_REPORT_KEY_ID
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: bot-runtime-report-key-id } }
+            - name: GENIO_ONE_RUNTIME_REPORT_PUBLIC_KEY_PEM
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: bot-runtime-report-public-key.pem } }
+            {{- end }}
+            - { name: GENIO_ONE_KEYCLOAK_ORIGIN, value: {{ printf "http://%s-keycloak:8080" (include "genio-one.fullname" .) | quote }} }
+            - { name: GENIO_ONE_KEYCLOAK_ISSUER_ORIGIN, value: {{ trimSuffix "/" .Values.global.keycloakPublicOrigin | quote }} }
+            - { name: GENIO_ONE_KEYCLOAK_REALM, value: {{ .Values.identity.realm | quote }} }
+            - { name: GENIO_ONE_KEYCLOAK_ADMIN, value: {{ .Values.identity.adminUser | quote }} }
+            - name: GENIO_ONE_KEYCLOAK_ADMIN_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: keycloak-admin-password } }
+            - { name: GENIO_ONE_KEYCLOAK_AUDIENCE, value: genio-one-product-api }
+            - { name: GENIO_ONE_IDENTITY_JIT_PROVIDER_IDS, value: {{ join "," .Values.identity.justInTimeProviderIds | quote }} }
+            - { name: GENIO_ONE_KEYCLOAK_GATEWAY_RUNTIME_SCOPE, value: genioone-gateway-runtime }
+            - { name: GENIO_ONE_CONNECTION_VERIFIER_ALLOW_HTTP, value: {{ ternary "1" "0" .Values.platform.connectionVerification.allowHttp | quote }} }
+            - { name: GENIO_ONE_CONNECTION_VERIFIER_ALLOWED_HOSTS, value: {{ join "," $connectionVerifierAllowedHosts | quote }} }
+            - { name: GENIO_ONE_PUBLICATION_DNS_TARGETS, value: {{ default dict .Values.platform.publicationDnsVerification.gatewayTargets | toJson | quote }} }
+            - { name: GENIO_ONE_PUBLICATION_DNS_ALLOW_LOCALHOST, value: {{ ternary "1" "0" .Values.platform.publicationDnsVerification.allowLocalhost | quote }} }
+            - { name: GENIO_ONE_MANAGEMENT_API_AUTH_MODE, value: oidc }
+            - { name: GENIO_ONE_MANAGEMENT_API_OIDC_ALLOW_INSECURE_HTTP, value: {{ .Values.global.allowInsecureOidcHttp | quote }} }
+            - { name: GENIO_ONE_MANAGEMENT_API_OIDC_TENANTS_JSON, value: {{ $oidcTenants | toJson | quote }} }
+            - { name: GENIO_ONE_BROWSER_IDENTITY_JSON, value: {{ $browserIdentity | toJson | quote }} }
+            - { name: GENIO_ONE_BOOTSTRAP_SUBJECTS_JSON, value: {{ $bootstrapSubjects | toJson | quote }} }
+            - { name: GENIO_ONE_SWAGGER_UI_STATIC_DIR, value: /app/swagger-ui-static }
+          readinessProbe: { httpGet: { path: /healthz, port: http }, periodSeconds: 5, failureThreshold: 12 }
+          livenessProbe: { httpGet: { path: /healthz, port: http }, initialDelaySeconds: 15, periodSeconds: 10 }
+          resources: {{- toYaml .Values.platform.resources | nindent 12 }}
+          securityContext: { runAsUser: 1000, runAsGroup: 1000, allowPrivilegeEscalation: false, capabilities: { drop: [ALL] }, readOnlyRootFilesystem: true }
+          volumeMounts: [{ name: telemetry, mountPath: /var/lib/otel-outbox }, { name: product-secrets, mountPath: /var/run/secrets/genio-one, readOnly: true }]
+      volumes: [{ name: product-secrets, secret: { secretName: {{ include "genio-one.secretName" . }} } }]
+  volumeClaimTemplates:
+    - metadata: { name: telemetry }
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- if .Values.global.storageClass }}
+        storageClassName: {{ .Values.global.storageClass | quote }}
+        {{- end }}
+        resources: { requests: { storage: 1Gi } }
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: {{ include "genio-one.fullname" . }}-platform }
+spec:
+  minAvailable: 1
+  selector: { matchLabels: { app.kubernetes.io/component: platform, app.kubernetes.io/instance: {{ .Release.Name }} } }

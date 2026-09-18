@@ -1,0 +1,78 @@
+{{- if .Values.demo.archify.enabled }}
+{{- $credentialSecretName := printf "%s-demo-archify" (include "genio-one.fullname" .) -}}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $credentialSecretName }}
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: archify
+type: Opaque
+stringData:
+  apiKey: {{ required "secrets.archifyConnectorBearerToken is required when demo.archify.enabled is configured" .Values.secrets.archifyConnectorBearerToken | quote }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "genio-one.fullname" . }}-archify
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: archify
+spec:
+  type: {{ .Values.demo.archify.service.type }}
+  selector:
+    app.kubernetes.io/component: archify
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: http
+      port: {{ .Values.demo.archify.service.port }}
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "genio-one.fullname" . }}-archify
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: archify
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: archify
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: archify
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/part-of: genio-one
+    spec:
+      {{- include "genio-one.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: archify
+          image: {{ include "genio-one.image" (list .Values.images.archify .) }}
+          imagePullPolicy: {{ .Values.images.archify.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.demo.archify.service.port }}
+          env:
+            - { name: CONNECTOR_HOST, value: "0.0.0.0" }
+            - { name: CONNECTOR_PORT, value: {{ .Values.demo.archify.service.port | quote }} }
+            - { name: ARCHIFY_NODE_EXECUTABLE, value: "/usr/bin/node" }
+            - name: ARCHIFY_CONNECTOR_BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $credentialSecretName }}
+                  key: apiKey
+          readinessProbe: { httpGet: { path: /health, port: http }, periodSeconds: 5, failureThreshold: 6 }
+          livenessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 10, periodSeconds: 10 }
+          resources: {{- toYaml .Values.demo.archify.resources | nindent 12 }}
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+{{- end }}

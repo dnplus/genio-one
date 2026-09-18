@@ -1,0 +1,48 @@
+/* GenioOne brand foundations. Keep these values aligned with DESIGN.md. */
+:root {
+  --go-bg: #fff;
+  --go-surface: #f7f8fa;
+  --go-fg: #111;
+  --go-muted: #6b7280;
+  --go-border: #d9dee7;
+  --go-accent: #425fea;
+  --go-accent-hover: #3a54d4;
+  --go-accent-active: #2d42c4;
+  --go-link: #425fea;
+  --go-link-hover: #3a54d4;
+  --go-link-active: #2d42c4;
+  --go-accent-secondary: #ced6f2;
+  --go-surface-hover: #eef0f4;
+  --go-focus-ring: 0 0 0 2px #fff, 0 0 0 4px #425fea;
+
+  --go-font-display: Inter, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --go-font-body: Inter, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --go-font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+
+  --go-radius-sm: 4px;
+  --go-radius: 8px;
+  --go-radius-pill: 999px;
+  --go-control-height: 44px;
+  --go-content-max: 1280px;
+}
+
+.dark {
+  --go-bg: #141414;
+  --go-surface: #1f1f1f;
+  --go-fg: #f5f5f5;
+  --go-muted: #9aa1ad;
+  --go-border: #303030;
+  /* Solid controls keep the accessible white-on-blue pair in dark mode. */
+  --go-accent: #425fea;
+  --go-accent-hover: #3a54d4;
+  --go-accent-active: #2d42c4;
+  /* Text links need a brighter blue on the near-black canvas. */
+  --go-link: #6b82e2;
+  --go-link-hover: #6b82e2;
+  --go-link-active: #6b82e2;
+  /* Signal Tint as a dark-canvas backdrop: the light #ced6f2 would invert the
+     surface, so this keeps the accent hue at a legible depth for selected rows. */
+  --go-accent-secondary: #26304f;
+  --go-surface-hover: #292929;
+  --go-focus-ring: 0 0 0 2px #141414, 0 0 0 4px #6077d5;
+}

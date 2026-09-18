@@ -1,0 +1,38 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "genio-one.fullname" . }}-pricing-sync
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: pricing-sync
+spec:
+  schedule: "17 */6 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/component: pricing-sync
+            app.kubernetes.io/instance: {{ .Release.Name }}
+            app.kubernetes.io/part-of: genio-one
+        spec:
+          {{- include "genio-one.imagePullSecrets" . | nindent 10 }}
+          restartPolicy: OnFailure
+          securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+          containers:
+            - name: sync
+              image: {{ include "genio-one.image" (list .Values.images.platform .) }}
+              imagePullPolicy: {{ .Values.images.platform.pullPolicy }}
+              command: ["bun", "/app/dist/pricing-sync.js"]
+              env:
+                - { name: GENIO_ONE_DISABLE_DOTENV, value: "1" }
+                - name: GENIO_ONE_DATABASE_URL
+                  valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: database-url } }
+                - { name: GENIO_ONE_PLATFORM_MIGRATIONS_DIR, value: /app/migrations }
+              resources: { requests: { cpu: 25m, memory: 64Mi }, limits: { cpu: 500m, memory: 256Mi } }
+              securityContext: { runAsUser: 1000, runAsGroup: 1000, allowPrivilegeEscalation: false, capabilities: { drop: [ALL] }, readOnlyRootFilesystem: true }

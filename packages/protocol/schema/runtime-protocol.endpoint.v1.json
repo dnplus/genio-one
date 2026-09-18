@@ -1,0 +1,375 @@
+{
+  "$id": "https://genio.one/schemas/runtime-protocol.endpoint.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "command_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        "desired_projection": {
+          "additionalProperties": false,
+          "properties": {
+            "components": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "component": {
+                    "const": "ENDPOINT_ROUTING",
+                    "type": "string"
+                  },
+                  "config_revision": {
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "default_route": {
+                    "anyOf": [
+                      {
+                        "const": "DIRECT",
+                        "type": "string"
+                      },
+                      {
+                        "const": "MANAGED",
+                        "type": "string"
+                      },
+                      {
+                        "const": "BLOCK",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "rules": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "enforcement_point": {
+                          "maxLength": 256,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "host_suffix": {
+                          "maxLength": 256,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "route": {
+                          "anyOf": [
+                            {
+                              "const": "DIRECT",
+                              "type": "string"
+                            },
+                            {
+                              "const": "MANAGED",
+                              "type": "string"
+                            },
+                            {
+                              "const": "BLOCK",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "host_suffix",
+                        "route"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "component",
+                  "config_revision",
+                  "default_route",
+                  "rules"
+                ],
+                "type": "object"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "runtime_kind": {
+              "const": "ENDPOINT",
+              "type": "string"
+            }
+          },
+          "required": [
+            "runtime_kind",
+            "components"
+          ],
+          "type": "object"
+        },
+        "digest": {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        "message_type": {
+          "const": "COMMAND",
+          "type": "string"
+        },
+        "revision": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "runtime_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        "runtime_kind": {
+          "const": "ENDPOINT",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "genio.one.runtime.v1",
+          "type": "string"
+        },
+        "signature": {
+          "additionalProperties": false,
+          "properties": {
+            "algorithm": {
+              "const": "Ed25519",
+              "type": "string"
+            },
+            "key_id": {
+              "maxLength": 256,
+              "minLength": 1,
+              "type": "string"
+            },
+            "value": {
+              "maxLength": 4096,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "algorithm",
+            "key_id",
+            "value"
+          ],
+          "type": "object"
+        },
+        "tenant_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "message_type",
+        "tenant_id",
+        "runtime_id",
+        "command_id",
+        "revision",
+        "digest",
+        "signature",
+        "runtime_kind",
+        "desired_projection"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "command_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        "digest": {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        "message_type": {
+          "const": "REPORT",
+          "type": "string"
+        },
+        "observed_status": {
+          "additionalProperties": false,
+          "properties": {
+            "applied_digest": {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            "applied_revision": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "components": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "component": {
+                    "const": "ENDPOINT_ROUTING",
+                    "type": "string"
+                  },
+                  "detail": {
+                    "maxLength": 2048,
+                    "type": "string"
+                  },
+                  "observed_revision": {
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "payload": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "active_rules": {
+                        "minimum": 0,
+                        "type": "integer"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "state": {
+                    "anyOf": [
+                      {
+                        "const": "READY",
+                        "type": "string"
+                      },
+                      {
+                        "const": "DEGRADED",
+                        "type": "string"
+                      },
+                      {
+                        "const": "UNKNOWN",
+                        "type": "string"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "component",
+                  "state",
+                  "observed_revision"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "error": {
+              "additionalProperties": false,
+              "properties": {
+                "code": {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "message": {
+                  "maxLength": 2048,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "code",
+                "message"
+              ],
+              "type": "object"
+            },
+            "state": {
+              "anyOf": [
+                {
+                  "const": "READY",
+                  "type": "string"
+                },
+                {
+                  "const": "DEGRADED",
+                  "type": "string"
+                },
+                {
+                  "const": "UNKNOWN",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "required": [
+            "state",
+            "applied_revision",
+            "applied_digest",
+            "components"
+          ],
+          "type": "object"
+        },
+        "report_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        "revision": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "runtime_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        "runtime_kind": {
+          "const": "ENDPOINT",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "genio.one.runtime.v1",
+          "type": "string"
+        },
+        "signature": {
+          "additionalProperties": false,
+          "properties": {
+            "algorithm": {
+              "const": "Ed25519",
+              "type": "string"
+            },
+            "key_id": {
+              "maxLength": 256,
+              "minLength": 1,
+              "type": "string"
+            },
+            "value": {
+              "maxLength": 4096,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "algorithm",
+            "key_id",
+            "value"
+          ],
+          "type": "object"
+        },
+        "tenant_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "message_type",
+        "tenant_id",
+        "runtime_id",
+        "report_id",
+        "command_id",
+        "revision",
+        "digest",
+        "signature",
+        "runtime_kind",
+        "observed_status"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "GenioOne Endpoint Runtime Protocol v1"
+}

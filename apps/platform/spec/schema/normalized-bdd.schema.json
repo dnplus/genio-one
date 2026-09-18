@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genio.one/schema/normalized-bdd-v1.json",
+  "title": "GenioOne normalized BDD",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["release", "source", "stories"],
+  "properties": {
+    "release": { "type": "string", "minLength": 1 },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["classification", "authority_kind", "owner_page_id", "owner_page_url", "fetched_at"],
+      "properties": {
+        "classification": { "enum": ["current", "historical"] },
+        "authority_kind": { "enum": ["notion_data_source", "notion_page"] },
+        "owner_page_id": { "type": "string", "minLength": 1 },
+        "owner_page_url": { "type": "string", "format": "uri" },
+        "data_source_id": { "type": "string", "minLength": 1 },
+        "fetched_at": { "type": "string", "format": "date-time" },
+        "last_edited_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "stories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["story_id", "title", "epic", "scenarios"],
+        "properties": {
+          "story_id": { "type": "string", "pattern": "^US-" },
+          "title": { "type": "string", "minLength": 1 },
+          "epic": { "type": "string", "minLength": 1 },
+          "scenarios": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["scenario_id", "title", "gate", "given", "when", "then"],
+              "properties": {
+                "scenario_id": { "type": "string", "pattern": "^US-.+-S[0-9]+$" },
+                "title": { "type": "string", "minLength": 1 },
+                "gate": { "enum": ["tier1", "tier2", "non_blocking"] },
+                "given": { "$ref": "#/$defs/steps" },
+                "when": { "$ref": "#/$defs/steps" },
+                "then": { "$ref": "#/$defs/steps" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["keyword", "text"],
+        "properties": {
+          "keyword": { "enum": ["Given", "When", "Then", "And", "But"] },
+          "text": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

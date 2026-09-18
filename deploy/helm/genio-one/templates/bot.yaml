@@ -1,0 +1,159 @@
+{{- if .Values.bot.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "genio-one.fullname" . }}-bot
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: bot
+spec:
+  type: {{ .Values.bot.service.type }}
+  selector:
+    app.kubernetes.io/component: bot
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: http
+      port: {{ .Values.bot.service.port }}
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "genio-one.fullname" . }}-bot
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: bot
+spec:
+  serviceName: {{ include "genio-one.fullname" . }}-bot
+  replicas: {{ .Values.bot.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: bot
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: bot
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/part-of: genio-one
+    spec:
+      {{- include "genio-one.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        runAsNonRoot: false
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: bot
+          image: {{ include "genio-one.image" (list .Values.images.bot .) }}
+          imagePullPolicy: {{ .Values.images.bot.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 5181
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: GENIO_BOT_HOST
+              value: "0.0.0.0"
+            - name: GENIO_BOT_PORT
+              value: "5181"
+            - name: GENIO_BOT_RUNTIME
+              value: {{ .Values.bot.runtime | default "local" | quote }}
+            - name: GENIO_BOT_CODEX_HOME
+              value: "/var/lib/genio-one-bot/codex-home"
+            - name: GENIO_BOT_REGISTRY_DB
+              value: "/var/lib/genio-one-bot/bot-registry.sqlite"
+            - name: GENIO_BOT_ARTIFACT_STORE
+              value: "/var/lib/genio-one-bot/artifacts"
+            - name: GENIO_BOT_PACKAGE_STORE
+              value: "/var/lib/genio-one-bot/bot-packages"
+            - name: GENIO_ONE_PLATFORM_ORIGIN
+              value: {{ printf "http://%s-platform:%d" (include "genio-one.fullname" .) (int .Values.platform.service.port) | quote }}
+            - name: GENIO_ONE_AGENT_SUBJECT_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "genio-one.secretName" . }}
+                  key: agent-subject-service-token
+                  optional: true
+            - name: GENIO_ONE_KEYCLOAK_ORIGIN
+              value: {{ trimSuffix "/" .Values.global.keycloakPublicOrigin | quote }}
+            {{- if .Values.runtimeReport.existingSecret }}
+            - name: GENIO_ONE_RUNTIME_REPORT_KEY_ID
+              valueFrom: { secretKeyRef: { name: {{ .Values.runtimeReport.existingSecret | quote }}, key: key-id } }
+            - name: GENIO_ONE_RUNTIME_REPORT_PRIVATE_KEY_PEM
+              valueFrom: { secretKeyRef: { name: {{ .Values.runtimeReport.existingSecret | quote }}, key: private-key.pem } }
+            {{- else if .Values.runtimeReport.generatedKeyId }}
+            - name: GENIO_ONE_RUNTIME_REPORT_KEY_ID
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: bot-runtime-report-key-id } }
+            - name: GENIO_ONE_RUNTIME_REPORT_PRIVATE_KEY_PEM
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: bot-runtime-report-private-key.pem } }
+            {{- end }}
+            {{- if .Values.bot.modelGatewayBaseUrl }}
+            {{- if not .Values.bot.modelGatewayModels }}
+            {{- fail "bot.modelGatewayModels is required when bot.modelGatewayBaseUrl is configured" }}
+            {{- end }}
+            - name: GENIO_ONE_MODEL_GATEWAY_BASE_URL
+              value: {{ .Values.bot.modelGatewayBaseUrl | quote }}
+            - name: GENIO_BOT_GENIO_GATEWAY_MODELS_JSON
+              value: {{ .Values.bot.modelGatewayModels | toJson | quote }}
+            {{- end }}
+            {{- if .Values.analytics.enabled }}
+            - { name: GENIO_ONE_OTEL_SPOOL_DIR, value: /var/lib/genio-one-bot/otel-outbox }
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ printf "http://%s-otel-ingress:4318" (include "genio-one.fullname" .) | quote }}
+            {{- end }}
+            - name: GENIO_ONE_MCP_URL
+              {{- if .Values.bot.mcpUrl }}
+              value: {{ .Values.bot.mcpUrl | quote }}
+              {{- else if .Values.aiMcpGateway.enabled }}
+              value: "http://genio-one-aigw-internal:1975/mcp"
+              {{- else }}
+              {{- fail "bot.mcpUrl is required when aiMcpGateway.enabled is false" }}
+              {{- end }}
+            - name: GENIO_ONE_MCP_RELAY_ORIGIN
+              value: {{ .Values.bot.mcpRelayOrigin | default (printf "http://%s-bot:%d" (include "genio-one.fullname" .) (int .Values.bot.service.port)) | quote }}
+            - name: GENIO_ONE_MODEL_GATEWAY_RELAY_ORIGIN
+              value: {{ .Values.bot.modelGatewayRelayOrigin | default (printf "http://%s-bot:%d" (include "genio-one.fullname" .) (int .Values.bot.service.port)) | quote }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.bot.resources | nindent 12 }}
+          volumeMounts:
+            - name: bot-data
+              mountPath: /var/lib/genio-one-bot
+  {{- if .Values.bot.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: bot-data
+        labels:
+          app.kubernetes.io/component: bot
+          app.kubernetes.io/instance: {{ .Release.Name }}
+      spec:
+        accessModes:
+          {{- toYaml .Values.bot.persistence.accessModes | nindent 10 }}
+        {{- if .Values.bot.persistence.storageClass }}
+        storageClassName: {{ .Values.bot.persistence.storageClass | quote }}
+        {{- else if .Values.global.storageClass }}
+        storageClassName: {{ .Values.global.storageClass | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.bot.persistence.size | quote }}
+  {{- else }}
+      volumes:
+        - name: bot-data
+          emptyDir: {}
+  {{- end }}
+{{- end }}

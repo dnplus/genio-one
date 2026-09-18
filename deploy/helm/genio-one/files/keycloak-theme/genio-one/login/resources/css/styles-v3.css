@@ -1,0 +1,264 @@
+:root {
+    --genio-brand-primary: #425fea;
+    --genio-brand-ink: #111111;
+    --genio-brand-muted: #6b7280;
+    --genio-brand-page: #f7f8fa;
+    --genio-brand-surface: #ffffff;
+    --genio-brand-line: #d9dee7;
+    --genio-brand-danger: #b42318;
+}
+
+* { box-sizing: border-box; }
+
+html,
+body { min-height: 100%; }
+
+body#keycloak-bg {
+    margin: 0;
+    color: var(--genio-brand-ink);
+    background: var(--genio-brand-page);
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", "PingFang TC", "Noto Sans TC", sans-serif;
+}
+
+.pf-v5-c-login {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 100vh;
+    place-items: center;
+    padding: 32px;
+    background: var(--genio-brand-page);
+}
+
+.pf-v5-c-login__container {
+    display: block;
+    width: min(100%, 440px);
+    margin: 0;
+    overflow: hidden;
+    border: 1px solid var(--genio-brand-line);
+    border-radius: 8px;
+    background: var(--genio-brand-surface);
+    box-shadow: 0 18px 40px rgba(17, 17, 17, 0.08);
+}
+
+.pf-v5-c-login__header {
+    min-width: 0;
+    margin: 0;
+    padding: 28px 28px 24px;
+    border-bottom: 1px solid var(--genio-brand-line);
+    background: var(--genio-brand-surface);
+}
+
+#kc-header-wrapper.genio-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.genio-brand__default-logo,
+.genio-brand__logo {
+    display: block;
+    width: auto;
+    max-width: 190px;
+    height: 40px;
+    object-fit: contain;
+    object-position: left center;
+}
+
+.genio-brand__logo { max-width: 160px; }
+
+.genio-brand__default-icon {
+    display: block;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    object-fit: contain;
+}
+
+.genio-brand__default-logo[hidden],
+.genio-brand__default-icon[hidden],
+.genio-brand__logo[hidden],
+.genio-brand__name[hidden],
+.genio-brand__tagline[hidden] { display: none; }
+
+.genio-brand__name {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: var(--genio-brand-ink);
+    font-size: 1rem;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+}
+
+.genio-brand__tagline {
+    margin: 14px 0 0;
+    color: var(--genio-brand-muted);
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+.pf-v5-c-login__main {
+    min-width: 0;
+    margin: 0;
+    padding: 28px;
+    background: var(--genio-brand-surface);
+    box-shadow: none;
+}
+
+.pf-v5-c-login__main-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin: 0 0 24px;
+    padding: 0;
+    border: 0;
+}
+
+#kc-page-title {
+    margin: 0;
+    color: var(--genio-brand-ink);
+    font-size: 1.5rem;
+    font-weight: 650;
+    letter-spacing: -0.03em;
+    line-height: 1.2;
+}
+
+.pf-v5-c-login__main-header-utilities { margin: 0; }
+
+.pf-v5-c-login__main-header-utilities .pf-v5-c-form-control,
+#login-select-toggle {
+    width: 112px;
+    min-width: 112px;
+    max-width: 112px;
+}
+
+.pf-v5-c-login__main-header-utilities .pf-v5-c-form-control {
+    border-color: var(--genio-brand-line);
+    border-radius: 8px;
+}
+
+.pf-v5-c-login__main-body,
+#kc-form,
+#kc-form-wrapper,
+#kc-form-login {
+    width: 100%;
+    padding: 0;
+}
+
+.pf-v5-c-form { gap: 20px; }
+.pf-v5-c-form__group { margin: 0; }
+.pf-v5-c-form__group-label { padding-bottom: 6px !important; }
+
+.pf-v5-c-form__label,
+.pf-v5-c-form__label-text {
+    color: var(--genio-brand-ink);
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.pf-v5-c-form-control {
+    border: 1px solid var(--genio-brand-line);
+    border-color: var(--genio-brand-line);
+    border-radius: 8px;
+    background: var(--genio-brand-surface);
+    box-shadow: none;
+}
+
+.pf-v5-c-form-control::before,
+.pf-v5-c-form-control::after {
+    content: none;
+    border: 0;
+}
+
+.pf-v5-c-form-control:focus-within,
+.pf-v5-c-form-control:has(input:focus) {
+    border-color: var(--genio-brand-primary);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--genio-brand-primary) 18%, transparent);
+}
+
+.pf-v5-c-form-control input {
+    min-height: 44px;
+    color: var(--genio-brand-ink);
+    background: transparent;
+    font-size: 0.9375rem;
+}
+
+.pf-v5-c-form-control input::placeholder { color: #9ca3af; }
+.pf-v5-c-input-group { align-items: stretch; }
+.pf-v5-c-input-group .pf-v5-c-form-control { height: 100%; }
+
+.pf-v5-c-input-group__item:last-child .pf-v5-c-button {
+    height: 100%;
+    min-width: 44px;
+    border: 1px solid var(--genio-brand-line);
+    border-left: 0;
+    border-radius: 0 8px 8px 0;
+    color: var(--genio-brand-muted);
+    background: var(--genio-brand-surface);
+}
+
+.pf-v5-c-button.pf-m-primary {
+    min-height: 44px;
+    border: 0;
+    border-radius: 8px;
+    color: #ffffff;
+    background: var(--genio-brand-primary);
+    box-shadow: none;
+    font-weight: 650;
+}
+
+.pf-v5-c-button.pf-m-primary:hover,
+.pf-v5-c-button.pf-m-primary:focus-visible {
+    background: color-mix(in srgb, var(--genio-brand-primary) 88%, #000000);
+}
+
+.pf-v5-c-button.pf-m-primary:focus-visible,
+.pf-v5-c-button:focus-visible,
+a:focus-visible,
+select:focus-visible,
+input:focus-visible {
+    outline: 2px solid var(--genio-brand-primary);
+    outline-offset: 2px;
+}
+
+.pf-v5-c-form__actions {
+    display: grid;
+    gap: 14px;
+    margin: 16px 0 0;
+    padding-top: 0 !important;
+}
+
+.pf-v5-c-form__actions .pf-v5-c-button {
+    width: 100%;
+    margin: 0;
+}
+
+.pf-v5-c-login__main-footer,
+.pf-v5-c-login__main-footer-band { color: var(--genio-brand-muted); }
+
+.pf-v5-c-login__main-footer a,
+.pf-v5-c-login__main-footer-band a {
+    color: var(--genio-brand-primary);
+    font-weight: 600;
+}
+
+.pf-v5-c-alert {
+    margin-bottom: 18px;
+    border-radius: 8px;
+}
+
+.pf-m-error,
+.pf-m-danger { color: var(--genio-brand-danger); }
+.pf-v5-c-login__main-footer { margin: 0; }
+
+.pf-v5-c-login__main-footer > * { margin-top: 20px; }
+
+@media (max-width: 520px) {
+    .pf-v5-c-login { display: block; padding: 16px; }
+    .pf-v5-c-login__container { width: 100%; margin: 0 auto; }
+    .pf-v5-c-login__header,
+    .pf-v5-c-login__main { padding: 24px 20px; }
+    .pf-v5-c-login__main-header { display: block; }
+    .pf-v5-c-login__main-header-utilities { margin-top: 16px; }
+}

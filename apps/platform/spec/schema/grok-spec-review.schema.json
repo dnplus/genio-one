@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genio.one/schema/grok-spec-review-v1.json",
+  "title": "GenioOne Grok specification admission decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "task_id",
+    "input_sha256",
+    "status",
+    "summary",
+    "generated_artifacts",
+    "conflicts",
+    "blocking_questions",
+    "open_details",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "task_id": { "type": "string", "minLength": 1 },
+    "input_sha256": { "$ref": "#/$defs/digest" },
+    "status": {
+      "enum": ["READY", "GENERATED_READY", "BLOCKED_CONFLICT", "BLOCKED_DECISION"]
+    },
+    "summary": { "type": "string", "minLength": 1 },
+    "generated_artifacts": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "$ref": "#/$defs/generatedBdd" },
+          { "$ref": "#/$defs/generatedAdr" }
+        ]
+      }
+    },
+    "conflicts": { "$ref": "#/$defs/findings" },
+    "blocking_questions": { "$ref": "#/$defs/questions" },
+    "open_details": { "$ref": "#/$defs/findings" },
+    "provenance": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["claim", "source_ids"],
+        "properties": {
+          "claim": { "type": "string", "minLength": 1 },
+          "source_ids": { "$ref": "#/$defs/sourceIds" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "sourceIds": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["detail", "source_ids"],
+        "properties": {
+          "detail": { "type": "string", "minLength": 1 },
+          "source_ids": { "$ref": "#/$defs/sourceIds" }
+        }
+      }
+    },
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["question", "source_ids"],
+        "properties": {
+          "question": { "type": "string", "minLength": 1 },
+          "source_ids": { "$ref": "#/$defs/sourceIds" }
+        }
+      }
+    },
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scenario_id", "title", "role", "surface", "given", "when", "then", "hermes_candidate"],
+      "properties": {
+        "scenario_id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "role": { "type": "string", "minLength": 1 },
+        "surface": { "type": "string", "minLength": 1 },
+        "given": { "$ref": "#/$defs/textList" },
+        "when": { "$ref": "#/$defs/textList" },
+        "then": { "$ref": "#/$defs/textList" },
+        "hermes_candidate": { "type": "boolean" }
+      }
+    },
+    "textList": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "generatedBdd": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "artifact_id", "source_ids", "content"],
+      "properties": {
+        "kind": { "const": "normalized_bdd" },
+        "artifact_id": { "type": "string", "minLength": 1 },
+        "source_ids": { "$ref": "#/$defs/sourceIds" },
+        "content": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["feature", "scenarios", "explicitly_unspecified"],
+          "properties": {
+            "feature": { "type": "string", "minLength": 1 },
+            "scenarios": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/scenario" }
+            },
+            "explicitly_unspecified": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+    "generatedAdr": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "artifact_id", "source_ids", "content"],
+      "properties": {
+        "kind": { "const": "adr" },
+        "artifact_id": { "type": "string", "minLength": 1 },
+        "source_ids": { "$ref": "#/$defs/sourceIds" },
+        "content": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["title", "status", "context", "decision", "consequences", "explicitly_unspecified"],
+          "properties": {
+            "title": { "type": "string", "minLength": 1 },
+            "status": { "const": "proposed" },
+            "context": { "type": "string", "minLength": 1 },
+            "decision": { "type": "string", "minLength": 1 },
+            "consequences": { "$ref": "#/$defs/textList" },
+            "explicitly_unspecified": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,41 @@
+# Community Edition deployment profile. Supply public origins and image references
+# for the target cluster in an additional, untracked values file.
+platform:
+  replicas: 1
+
+gateway:
+  replicas: 1
+
+identity:
+  replicas: 1
+
+analytics:
+  collectorReplicas: 1
+
+bot:
+  replicas: 1
+  modelGatewayBaseUrl: "http://genio-one-aigw-internal:1976/v1"
+  modelGatewayModels:
+    - publicModelId: gemini-3.8-flash
+      displayName: Gemini 3.8 Flash
+      resourceId: genio.demo.gemini
+      capabilityId: model.invoke
+
+demo:
+  archify:
+    enabled: true
+
+connectors:
+  enabled: false
+
+apiManagement:
+  enabled: false
+
+aiMcpGateway:
+  enabled: true
+  # CRDs are cluster-scoped and must be installed by the cluster operator.
+  installCrds: false
+
+ingress:
+  enabled: false
+  tls: []

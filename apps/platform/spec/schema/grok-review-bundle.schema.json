@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genio.one/schema/grok-review-bundle-v1.json",
+  "title": "GenioOne Grok architecture and scope review bundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "product",
+    "release",
+    "source_registry_sha256",
+    "architecture",
+    "bdd",
+    "bundle_id"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "product": { "const": "genio-one" },
+    "release": { "type": "string", "minLength": 1 },
+    "source_registry_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "bundle_id": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "architecture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["context", "topology", "adrs"],
+      "properties": {
+        "context": { "$ref": "#/$defs/textDocument" },
+        "topology": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256", "model"],
+          "properties": {
+            "path": { "type": "string", "minLength": 1 },
+            "sha256": { "$ref": "#/$defs/digest" },
+            "model": { "type": "object" }
+          }
+        },
+        "adrs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["adr_id", "title", "status", "path", "sha256", "content"],
+            "properties": {
+              "adr_id": { "type": "string", "pattern": "^ADR-[0-9]{4}$" },
+              "title": { "type": "string", "minLength": 1 },
+              "status": { "enum": ["accepted", "proposed", "superseded", "deprecated", "rejected"] },
+              "path": { "type": "string", "minLength": 1 },
+              "sha256": { "$ref": "#/$defs/digest" },
+              "content": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+    "bdd": { "$ref": "normalized-bdd.schema.json" }
+  },
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "textDocument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "content"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/digest" },
+        "content": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

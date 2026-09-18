@@ -1,0 +1,890 @@
+import { describe, expect, test } from "bun:test"
+
+import { managedMcpServerName } from "../ce-demo-mcp"
+import { codexRoutes } from "./codex"
+
+const principal = {
+  tenant_id: "tenant-local",
+  subject_id: "person-dylan",
+  acting_client_id: "genio-one-bot",
+  scopes: ["genioone-invocation"],
+}
+
+class FakeSocket {
+  readonly OPEN = 1
+  readyState = this.OPEN
+  readonly sent: string[] = []
+  closeCode: number | null = null
+  closeReason = ""
+  private readonly listeners = new Map<string, Array<(value?: unknown) => unknown>>()
+
+  on(event: string, listener: (value?: unknown) => unknown) {
+    this.listeners.set(event, [...(this.listeners.get(event) ?? []), listener])
+  }
+
+  send(value: string) {
+    this.sent.push(value)
+  }
+
+  emit(event: string, value?: unknown) {
+    for (const listener of this.listeners.get(event) ?? []) void listener(value)
+  }
+
+  close(code = 1000, reason = "") {
+    this.readyState = 0
+    this.closeCode = code
+    this.closeReason = reason
+    this.emit("close")
+  }
+}
+
+function waitFor(check: () => boolean) {
+  return new Promise<void>((resolve, reject) => {
+    const deadline = Date.now() + 1_000
+    const tick = () => {
+      if (check()) return resolve()
+      if (Date.now() >= deadline) return reject(new Error("CODEX_ROUTE_TEST_TIMEOUT"))
+      setTimeout(tick, 1)
+    }
+    tick()
+  })
+}
+
+function runtimeDecision(input: { capabilityId: string; action: string; correlationId: string; decision?: "ALLOW" | "DENY"; constraints?: Array<{ kind: string; parameters: Record<string, unknown> }> }) {
+  return {
+    tenant_id: principal.tenant_id,
+    subject_id: principal.subject_id,
+    client_id: principal.acting_client_id,
+    bot_id: "bot-dylan",
+    runtime_id: "codex",
+    policy_id: "one-policy.runtime.capabilities",
+    policy_display_name: "Runtime capabilities",
+    policy_revision: 1,
+    capability_id: input.capabilityId,
+    action: input.action,
+    target: `runtime:codex:${input.capabilityId}`,
+    decision: input.decision ?? "ALLOW",
+    reason_code: input.decision === "DENY" ? "RULE_DENY:runtime" : "RULE_ALLOW:runtime",
+    constraints: input.constraints ?? [],
+    obligations: [{ kind: "audit", enforcement_point_id: "AGENT_RUNTIME", parameters: {} }],
+    correlation_id: input.correlationId,
+    session_id: "runtime-session",
+    evaluated_at: 1_757_000_000,
+  }
+}
+
+function createContext(
+  calls: Array<Record<string, unknown>>,
+  reports: Array<Record<string, unknown>>,
+  denyCodex = false,
+  deniedExposure: readonly string[] = [],
+  constrainedExposure: readonly string[] = [],
+  modelRoute: "codex-subscription" | "genio-gateway" = "codex-subscription",
+  modelError?: string,
+) {
+  let callbacks: { onMessage(line: string): void; onExit(reason: string): void } | null = null
+  const runtimeMessages: Record<string, unknown>[] = []
+  const runtime = {
+    async send(message: string) { runtimeMessages.push(JSON.parse(message)) },
+    async close() {},
+  }
+  const session = {
+    id: "runtime-session",
+    principal,
+    details: { kind: "local", tier: "none", cwd: "/srv/genio", desktopUrl: null, sandboxId: null, environmentId: null, execServerUrl: null, execReady: false },
+    runtimeDetails: {},
+    leases: {},
+    desktop: { details: { kind: "local", tier: "none", cwd: "/srv/genio", desktopUrl: null, sandboxId: null, environmentId: null, execServerUrl: null, execReady: false }, close: async () => {} },
+    accessToken: "token",
+    eventBuffer: [],
+  } as any
+  const bot = { id: "bot-dylan", name: "Dylan", modelRoute, skills: [], plugins: [], bindings: [] as Array<{ resourceId: string; capabilityId: string; state: string; kind: string }>, workspacePath: "/srv/genio" }
+  const botRegistry = {
+    getOwned: () => bot,
+    ownsThread: () => true,
+    materialize: () => ({ skillRoots: [], plugins: [] }),
+    timeline: { hasRunningTurns: () => false, revision: () => 1, readTurn: () => [], workContext: () => ({}) },
+    memory: { recall: () => ({ memories: [] }), workSummary: () => ({}) },
+    recordRuntimeEvent() {},
+    saveSession() {},
+    rememberThread(_botId?: string, _threadId?: string) {},
+    importRuntimeHistory() {},
+    setThreadHistoryStatus() {},
+  }
+  const runtimeBroker = {
+    claimBotTurn: () => () => {},
+    async start(_principal: unknown, nextCallbacks: typeof callbacks) {
+      callbacks = nextCallbacks
+      return session
+    },
+    channel: () => runtime,
+    async request(_sessionId: string, method: string, params: unknown) {
+      runtimeMessages.push({ method, params: params as Record<string, unknown> })
+      return {}
+    },
+    detach() {},
+    pendingInteractions: () => [],
+    async respondToInteraction() {},
+  }
+  let sequence = 0
+  const runtimePolicy = {
+    async authorize(input: { capabilityId: string; action: string }) {
+      const decision = runtimeDecision({ capabilityId: input.capabilityId, action: input.action, correlationId: `corr-${++sequence}` })
+      if ((denyCodex && input.capabilityId === "codex.subscription") || deniedExposure.includes(input.capabilityId)) decision.decision = "DENY"
+      calls.push(decision)
+      return decision
+    },
+    async report(input: Record<string, unknown>) { reports.push(input) },
+    async resolve() { throw new Error("UNUSED") },
+    async read(input: { botId: string }) {
+      const decisions = ["shell.exec", "filesystem.read", "filesystem.write", "browser.open", "web_search.query"].map((capabilityId) => runtimeDecision({
+        capabilityId,
+        action: "expose",
+        correlationId: `exposure-${capabilityId}`,
+        decision: deniedExposure.includes(capabilityId) ? "DENY" : "ALLOW",
+        ...(constrainedExposure.includes(capabilityId) ? { constraints: [{ kind: "path_allowlist", parameters: { paths: ["/srv/genio"] } }] } : {}),
+      }))
+      return {
+        tenant_id: principal.tenant_id,
+        subject_id: principal.subject_id,
+        client_id: principal.acting_client_id,
+        bot_id: input.botId,
+        runtime_id: "codex",
+        policy_id: "one-policy.runtime.capabilities",
+        policy_display_name: "Runtime capabilities",
+        policy_revision: 1,
+        decisions,
+      }
+    },
+  }
+  const modelDirectory = {
+    availableRoutes: () => ["codex-subscription"],
+    supports: () => true,
+    async resolve(_principal: unknown, _botId: string | undefined, route?: { kind: string }) {
+      if (modelError && route?.kind === "genio-gateway") throw new Error(modelError)
+      return [{ publicModelId: "*", displayName: "Codex", route: { kind: route?.kind ?? "codex-subscription" } }]
+    },
+  }
+  const capabilityGate = {
+    mode: "open",
+    async resolve() {
+      return { ...runtimeDecision({ capabilityId: "personal_bot.use", action: "use", correlationId: "bot-access" }), resource_id: "genio.personal-bot", capability_id: "personal_bot.use", policy_id: "bot-policy", model_route: modelRoute }
+    },
+    async require() { return "allow" },
+  }
+  return {
+    runtimeMessages,
+    getCallbacks: () => callbacks,
+    botRegistry,
+    runtimeBroker,
+    modelDirectory,
+    capabilityGate,
+    runtimePolicy,
+    session,
+    botToolSessions: { config: () => ({ url: "http://bot-tools", http_headers: { Authorization: "Bearer managed" }, required: false }) },
+  }
+}
+
+describe("Codex runtime policy route", () => {
+  test("uses the materialized local marketplace for native plugin installation", async () => {
+    const context = createContext([], [])
+    const testContext = context as { botRegistry: { materialize(): unknown } }
+    testContext.botRegistry.materialize = () => ({
+      root: "/srv/ce-package",
+      skillRoots: ["/srv/ce-package/skills/archify"],
+      plugins: [{ name: "product-management", marketplace: "personal", marketplacePath: "/srv/ce-package/.agents/plugins/marketplace.json" }],
+    })
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => Response.json(principal)) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: "bot-dylan" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
+      expect(context.runtimeMessages.find((message) => message.method === "skills/extraRoots/set")?.params).toEqual({ extraRoots: ["/srv/ce-package/skills/archify"] })
+      expect(context.runtimeMessages.find((message) => message.method === "plugin/install")?.params).toEqual({
+        pluginName: "product-management",
+        marketplacePath: "/srv/ce-package/.agents/plugins/marketplace.json",
+      })
+      expect(context.runtimeMessages.find((message) => message.method === "plugin/list")?.params).toEqual({ cwds: ["/srv/ce-package"] })
+      expect(context.runtimeMessages.find((message) => message.method === "skills/list")?.params).toEqual({
+        cwds: ["/srv/ce-package"],
+        forceReload: true,
+      })
+    } finally {
+      globalThis.fetch = originalFetch
+      socket.close()
+    }
+  })
+
+  test("adds fixed CE MCP relays only after selecting the CE documents Bot", async () => {
+    const context = createContext([], [])
+    const bot = context.botRegistry.getOwned()
+    context.botRegistry.getOwned = () => ({ ...bot, sourceResourceId: "genio.demo.bot" })
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalOrigin = process.env.GENIO_ONE_MCP_ORIGIN
+    const originalUrl = process.env.GENIO_ONE_MCP_URL
+    const originalRelay = process.env.GENIO_ONE_MCP_RELAY_ORIGIN
+    const originalFetch = globalThis.fetch
+    process.env.GENIO_ONE_MCP_ORIGIN = "https://old-context7.example.test"
+    process.env.GENIO_ONE_MCP_URL = "http://one.localhost:1975/mcp"
+    process.env.GENIO_ONE_MCP_RELAY_ORIGIN = "https://bot.example.test"
+    let catalogRequests = 0
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = new URL(String(input))
+      if (url.pathname.endsWith("/catalog")) {
+        catalogRequests++
+        return Response.json({ capabilities: [
+          {
+            resource_id: "genio.demo.context7",
+            access: "ENTITLED",
+            publication_endpoint: { hostname: "context7.stellar-freight.localhost", base_path: "/" },
+          },
+          {
+            resource_id: "genio.demo.archify",
+            access: "AUTO_GRANT",
+            publication_endpoint: { hostname: "archify.stellar-freight.localhost", base_path: "/" },
+          },
+        ] })
+      }
+      return Response.json(principal)
+    }) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: "bot-dylan" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
+      socket.emit("message", JSON.stringify({
+        id: 3,
+        method: "thread/start",
+        params: { model: "gpt-5.6-luna", environments: [] },
+      }))
+      await waitFor(() => context.runtimeMessages.some((message) => message.id === 3))
+      const forwarded = context.runtimeMessages.find((message) => message.id === 3) as { params: { config: Record<string, unknown> } }
+      expect(forwarded.params.config["mcp_servers.genio_context7"]).toMatchObject({
+        url: "https://bot.example.test/api/mcp-gateway/runtime-session/genio.demo.context7/mcp",
+      })
+      expect(forwarded.params.config["mcp_servers.genio_archify"]).toMatchObject({
+        url: "https://bot.example.test/api/mcp-gateway/runtime-session/genio.demo.archify/mcp",
+      })
+      expect(catalogRequests).toBe(1)
+      expect(context.session.managedMcpEndpoints).toEqual({
+        "genio.demo.context7": { hostname: "context7.stellar-freight.localhost", base_path: "/" },
+        "genio.demo.archify": { hostname: "archify.stellar-freight.localhost", base_path: "/" },
+      })
+    } finally {
+      globalThis.fetch = originalFetch
+      if (originalOrigin === undefined) delete process.env.GENIO_ONE_MCP_ORIGIN
+      else process.env.GENIO_ONE_MCP_ORIGIN = originalOrigin
+      if (originalUrl === undefined) delete process.env.GENIO_ONE_MCP_URL
+      else process.env.GENIO_ONE_MCP_URL = originalUrl
+      if (originalRelay === undefined) delete process.env.GENIO_ONE_MCP_RELAY_ORIGIN
+      else process.env.GENIO_ONE_MCP_RELAY_ORIGIN = originalRelay
+      socket.close()
+    }
+  })
+
+  test("mounts only installed generic MCP catalog endpoints after selecting a Bot", async () => {
+    const context = createContext([], [])
+    const bot = context.botRegistry.getOwned()
+    const notionResourceId = "resource-2a55a5d9-3d76-40af-b65e-04babfe93a8f"
+    context.botRegistry.getOwned = () => ({
+      ...bot,
+      sourceResourceId: "custom-notion-bot",
+      bindings: [{ resourceId: notionResourceId, capabilityId: "notion.search", state: "INSTALLED", kind: "MCP" }],
+    })
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalUrl = process.env.GENIO_ONE_MCP_URL
+    const originalRelay = process.env.GENIO_ONE_MCP_RELAY_ORIGIN
+    const originalFetch = globalThis.fetch
+    process.env.GENIO_ONE_MCP_URL = "http://one.localhost:1975/mcp"
+    process.env.GENIO_ONE_MCP_RELAY_ORIGIN = "https://bot.example.test"
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = new URL(String(input))
+      if (url.pathname.endsWith("/catalog")) return Response.json({ capabilities: [
+        {
+          resource_id: notionResourceId,
+          capability_id: "notion.search",
+          access: "ENTITLED",
+          publication_endpoint: { hostname: "notion.stellar-freight.localhost", base_path: "/mcp" },
+        },
+        {
+          resource_id: "resource-uninstalled",
+          capability_id: "mcp.invoke",
+          access: "AUTO_GRANT",
+          publication_endpoint: { hostname: "uninstalled.stellar-freight.localhost", base_path: "/mcp" },
+        },
+      ] })
+      return Response.json(principal)
+    }) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: "bot-dylan" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
+      socket.emit("message", JSON.stringify({
+        id: 3,
+        method: "thread/start",
+        params: { model: "gpt-5.6-luna", environments: [] },
+      }))
+      await waitFor(() => context.runtimeMessages.some((message) => message.id === 3))
+      const forwarded = context.runtimeMessages.find((message) => message.id === 3) as { params: { config: Record<string, unknown> } }
+      const serverName = managedMcpServerName("custom-notion-bot", notionResourceId)
+      expect(forwarded.params.config[`mcp_servers.${serverName}`]).toMatchObject({
+        url: `https://bot.example.test/api/mcp-gateway/runtime-session/${notionResourceId}/mcp`,
+      })
+      expect(forwarded.params.config[`mcp_servers.${managedMcpServerName("custom-notion-bot", "resource-uninstalled")}`]).toBeUndefined()
+      expect(context.session.managedMcpEndpoints).toEqual({
+        [notionResourceId]: {
+          hostname: "notion.stellar-freight.localhost",
+          base_path: "/mcp",
+          capabilityId: "notion.search",
+        },
+      })
+    } finally {
+      globalThis.fetch = originalFetch
+      if (originalUrl === undefined) delete process.env.GENIO_ONE_MCP_URL
+      else process.env.GENIO_ONE_MCP_URL = originalUrl
+      if (originalRelay === undefined) delete process.env.GENIO_ONE_MCP_RELAY_ORIGIN
+      else process.env.GENIO_ONE_MCP_RELAY_ORIGIN = originalRelay
+      socket.close()
+    }
+  })
+
+  test("binds a selected Bot, strips forged native config, forces sandbox policy, and reports completion", async () => {
+    const calls: Array<Record<string, unknown>> = []
+    const reports: Array<Record<string, unknown>> = []
+    const context = createContext(calls, reports, false, ["browser.open", "web_search.query"])
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => new Response(JSON.stringify(principal), { status: 200 })) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: "bot-dylan" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
+      socket.emit("message", JSON.stringify({
+        id: 3,
+        method: "thread/start",
+        params: {
+          model: "gpt-5.6-luna",
+          futureExecutionOverride: { unrestricted: true },
+          mockExperimentalField: "forged",
+          config: { "mcp_servers.evil": { url: "http://attacker" }, "features.memories": true },
+          modelProvider: "evil-provider",
+          approvalPolicy: "never",
+          sandbox: "danger-full-access",
+          cwd: "/etc",
+          runtimeWorkspaceRoots: ["/etc"],
+          environments: [],
+        },
+      }))
+      await waitFor(() => context.runtimeMessages.some((message) => message.id === 3))
+      const forwarded = context.runtimeMessages.find((message) => message.id === 3) as { params: Record<string, any> }
+      expect(forwarded.params.approvalPolicy).toBe("on-request")
+      expect(forwarded.params.sandbox).toBe("read-only")
+      expect(forwarded.params.cwd).toBe("/srv/genio")
+      expect(forwarded.params.runtimeWorkspaceRoots).toEqual([])
+      expect(forwarded.params.config["mcp_servers.evil"]).toBeUndefined()
+      expect(forwarded.params.config["features.memories"]).toBe(false)
+      expect(forwarded.params.config["features.shell_tool"]).toBe(false)
+      expect(forwarded.params.config["features.unified_exec"]).toBe(false)
+      expect(forwarded.params.config["features.browser_use"]).toBe(false)
+      expect(forwarded.params.config.web_search).toBe("disabled")
+      expect(forwarded.params.modelProvider).toBeUndefined()
+      expect(forwarded.params.futureExecutionOverride).toBeUndefined()
+      expect(forwarded.params.mockExperimentalField).toBeUndefined()
+      expect(calls.some((call) => call.capability_id === "codex.subscription" && call.action === "use")).toBe(true)
+
+      context.getCallbacks()!.onMessage(JSON.stringify({ id: 3, result: { thread: { id: "thread-dylan" } } }))
+      await waitFor(() => reports.some((report) => report.correlationId === "corr-2"))
+      expect(reports.find((report) => report.correlationId === "corr-2")?.outcome).toBe("ALLOW")
+      for (const [id, method] of [[4, "thread/resume"], [5, "turn/start"]] as const) {
+        const input = [{ type: "text", text: "Continue", text_elements: [] }]
+        socket.emit("message", JSON.stringify({ id, method, params: {
+          threadId: "thread-dylan", input, excludeTurns: true, effort: "high", serviceTier: "default",
+          futureExecutionOverride: { unrestricted: true }, permissions: "unrestricted", config: { unsafe: true },
+        } }))
+        await waitFor(() => context.runtimeMessages.some((message) => message.id === id))
+        const next = context.runtimeMessages.find((message) => message.id === id) as { params: Record<string, unknown> }
+        expect(next.params.threadId).toBe("thread-dylan")
+        expect(next.params.serviceTier).toBe("default")
+        expect(next.params.futureExecutionOverride).toBeUndefined()
+        expect(next.params.permissions).toBeUndefined()
+        if (method === "turn/start") {
+          expect(next.params.input).toEqual(input)
+          expect(next.params.effort).toBe("high")
+          expect(next.params.excludeTurns).toBeUndefined()
+          expect(next.params.config).toBeUndefined()
+          expect(next.params.sandboxPolicy).toEqual({ type: "readOnly", networkAccess: false })
+        } else {
+          expect(next.params.excludeTurns).toBe(true)
+          expect(next.params.input).toBeUndefined()
+          expect(next.params.effort).toBeUndefined()
+        }
+        context.getCallbacks()!.onMessage(JSON.stringify({ id, result: {} }))
+      }
+
+    } finally {
+      globalThis.fetch = originalFetch
+      socket.close()
+    }
+  })
+
+  test("denies a personal Codex Bot before materialization and reports the denial", async () => {
+    const calls: Array<Record<string, unknown>> = []
+    const reports: Array<Record<string, unknown>> = []
+    const context = createContext(calls, reports, true)
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => new Response(JSON.stringify(principal), { status: 200 })) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: "bot-dylan" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2 && JSON.parse(line).error?.code))
+      expect(reports.find((report) => report.correlationId === "corr-1")?.outcome).toBe("DENY")
+      expect(socket.sent.some((line) => JSON.parse(line).method === "genio/runtime/error")).toBe(true)
+      expect(socket.sent.some((line) => JSON.parse(line).method === "genio/runtimeError")).toBe(true)
+      expect(context.runtimeMessages.some((message) => message.method === "skills/extraRoots/set")).toBe(false)
+    } finally {
+      globalThis.fetch = originalFetch
+      socket.close()
+    }
+  })
+
+  test("surfaces a disabled personal Bot connection without treating it as session expiry", async () => {
+    const calls: Array<Record<string, unknown>> = []
+    const reports: Array<Record<string, unknown>> = []
+    const context = createContext(calls, reports)
+    context.capabilityGate.resolve = (async () => ({
+      ...runtimeDecision({ capabilityId: "personal_bot.use", action: "use", correlationId: "bot-access", decision: "DENY" }),
+      resource_id: "genio.personal-bot",
+      policy_id: "one-policy.first-party.bot-default",
+      policy_revision: 2,
+      model_route: null,
+      reason_code: "BOT_CONNECTION_DISABLED",
+    })) as never
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => new Response(JSON.stringify(principal), { status: 200 })) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/runtime/error"))
+      const error = socket.sent.map((line) => JSON.parse(line)).find((message) => message.method === "genio/runtime/error")
+      expect(error?.params.message).toBe("BOT_CONNECTION_DISABLED")
+      expect(socket.closeCode).toBe(1008)
+      expect(socket.closeReason).toBe("BOT_CONNECTION_DISABLED")
+      expect(socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady")).toBe(false)
+    } finally {
+      globalThis.fetch = originalFetch
+      socket.close()
+    }
+  })
+
+  test("keeps the session usable when the company model catalog has no entitlement", async () => {
+    const calls: Array<Record<string, unknown>> = []
+    const reports: Array<Record<string, unknown>> = []
+    const context = createContext(calls, reports, false, [], [], "genio-gateway", "BOT_MODEL_NOT_ENTITLED")
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => new Response(JSON.stringify(principal), { status: 200 })) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      const ready = socket.sent.map((line) => JSON.parse(line)).find((message) => message.method === "genio/codexReady")
+      expect(ready?.params.modelDirectory).toBe("genio-gateway")
+      expect(ready?.params.models).toEqual([])
+      expect(socket.closeCode).toBeNull()
+    } finally {
+      globalThis.fetch = originalFetch
+      socket.close()
+    }
+  })
+
+  test("refreshes the selected Bot company model catalog after subscription bootstrap", async () => {
+    const context = createContext([], [], false)
+    const bot = context.botRegistry.getOwned()
+    const lookups: Array<{ botId: string | undefined; route: string | undefined }> = []
+    context.modelDirectory.resolve = async (_principal, botId, route) => {
+      lookups.push({ botId, route: route?.kind })
+      return [{ publicModelId: "company-model", displayName: "Company model", route: { kind: "genio-gateway" } }]
+    }
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => Response.json(principal)) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      bot.modelRoute = "genio-gateway"
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: bot.id } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
+      const result = socket.sent.map((line) => JSON.parse(line)).find(message => message.id === 2).result
+      expect(result.modelDirectory).toBe("genio-gateway")
+      expect(result.models.map((model: { publicModelId: string }) => model.publicModelId)).toEqual(["company-model"])
+      expect(lookups).toEqual([{ botId: bot.id, route: "genio-gateway" }])
+      bot.modelRoute = "codex-subscription"
+      socket.emit("message", JSON.stringify({ id: 3, method: "genio/bot/select", params: { botId: bot.id } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 3))
+      const restored = socket.sent.map((line) => JSON.parse(line)).find(message => message.id === 3).result
+      expect(restored.models).toEqual([])
+    } finally { globalThis.fetch = originalFetch; socket.close() }
+  })
+
+  test.each([false, true])("late Bot selections cannot replace or clear the newer selection (old failure=%s)", async (failOld) => {
+    const context = createContext([], [], false)
+    const base = context.botRegistry.getOwned()
+    context.botRegistry.getOwned = ((id: string) => ({ ...base, id, modelRoute: "genio-gateway" })) as typeof context.botRegistry.getOwned
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    let waiting = false
+    context.modelDirectory.resolve = async (_principal, botId) => {
+      if (botId === "old-bot") {
+        waiting = true
+        await gate
+        if (failOld) throw new Error("CATALOG_UNAVAILABLE")
+      }
+      return [{ publicModelId: "company-model", displayName: "Company model", route: { kind: "genio-gateway" } }]
+    }
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => Response.json(principal)) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: "old-bot" } }))
+      await waitFor(() => waiting)
+      socket.emit("message", JSON.stringify({ id: 3, method: "genio/bot/select", params: { botId: "new-bot" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 3))
+      expect(context.session.selectedBotId).toBe("new-bot")
+      release()
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
+      expect(context.session.selectedBotId).toBe("new-bot")
+      const stale = socket.sent.map((line) => JSON.parse(line)).find(message => message.id === 2)
+      expect(stale.error.code).toBe("BOT_SELECTION_SUPERSEDED")
+      expect(socket.sent.some((line) => JSON.parse(line).method === "genio/runtime/error")).toBe(false)
+    } finally { release(); globalThis.fetch = originalFetch; socket.close() }
+  })
+
+  test("a stale Codex audit failure remains recorded without failing the newer Bot UI", async () => {
+    const context = createContext([], [], false)
+    const base = context.botRegistry.getOwned()
+    context.botRegistry.getOwned = ((id: string) => ({ ...base, id, modelRoute: id === "old-bot" ? "codex-subscription" : "genio-gateway" })) as typeof context.botRegistry.getOwned
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    let waiting = false
+    let oldReportAttempted = false
+    const authorize = context.runtimePolicy.authorize
+    context.runtimePolicy.authorize = async (input) => {
+      const decision = await authorize(input)
+      if (input.capabilityId === "codex.subscription") { waiting = true; await gate }
+      return decision
+    }
+    context.runtimePolicy.report = async input => {
+      if (input.botId === "old-bot") { oldReportAttempted = true; throw new Error("AUDIT_OFFLINE") }
+    }
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => Response.json(principal)) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some(line => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: "old-bot" } }))
+      await waitFor(() => waiting)
+      socket.emit("message", JSON.stringify({ id: 3, method: "genio/bot/select", params: { botId: "new-bot" } }))
+      await waitFor(() => socket.sent.some(line => JSON.parse(line).id === 3))
+      release()
+      await waitFor(() => socket.sent.some(line => JSON.parse(line).id === 2))
+      expect(oldReportAttempted).toBe(true)
+      expect(context.session.selectedBotId).toBe("new-bot")
+      expect(socket.sent.some(line => JSON.parse(line).method === "genio/runtime/error")).toBe(false)
+    } finally { release(); globalThis.fetch = originalFetch; socket.close() }
+  })
+
+  test("applies PDP exposure to a server-owned thread config for a provisioned runtime", async () => {
+    const calls: Array<Record<string, unknown>> = []
+    const reports: Array<Record<string, unknown>> = []
+    const context = createContext(calls, reports, false, ["browser.open", "web_search.query"])
+    context.session.details = { kind: "local", tier: "headless", cwd: "/srv/genio", desktopUrl: null, sandboxId: "sandbox-1", environmentId: "e2b-headless", execServerUrl: "ws://runtime", execReady: true }
+    context.session.runtimeDetails = {
+      headless: context.session.details,
+    }
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => new Response(JSON.stringify(principal), { status: 200 })) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: "bot-dylan" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
+      socket.emit("message", JSON.stringify({
+        id: 3,
+        method: "thread/start",
+        params: {
+          model: "gpt-5.6-luna",
+          environments: [{ environmentId: "e2b-headless", cwd: "/etc", runtimeWorkspaceRoots: ["/etc"] }],
+        },
+      }))
+      await waitFor(() => context.runtimeMessages.some((message) => message.id === 3))
+      const forwarded = context.runtimeMessages.find((message) => message.id === 3) as { params: Record<string, any> }
+      expect(forwarded.params.config["features.shell_tool"]).toBe(true)
+      expect(forwarded.params.config["features.unified_exec"]).toBe(true)
+      expect(forwarded.params.config["features.browser_use"]).toBe(false)
+      expect(forwarded.params.config.web_search).toBe("disabled")
+      expect(forwarded.params.sandbox).toBe("workspace-write")
+    } finally {
+      globalThis.fetch = originalFetch
+      socket.close()
+    }
+  })
+
+  test("denies a shell execution turn before forwarding when the PDP denies shell", async () => {
+    const calls: Array<Record<string, unknown>> = []
+    const reports: Array<Record<string, unknown>> = []
+    const context = createContext(calls, reports, false, ["shell.exec"])
+    context.session.details = { kind: "local", tier: "headless", cwd: "/srv/genio", desktopUrl: null, sandboxId: "sandbox-1", environmentId: "e2b-headless", execServerUrl: "ws://runtime", execReady: true }
+    context.session.runtimeDetails = {
+      headless: context.session.details,
+    }
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => new Response(JSON.stringify(principal), { status: 200 })) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: "bot-dylan" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
+      socket.emit("message", JSON.stringify({
+        id: 3,
+        method: "turn/start",
+        params: {
+          threadId: "thread-dylan",
+          input: [{ type: "text", text: "run a command" }],
+          environments: [{ environmentId: "e2b-headless", cwd: "/srv/genio", runtimeWorkspaceRoots: ["/srv/genio"] }],
+        },
+      }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 3 && JSON.parse(line).error?.code))
+      expect(calls.some((call) => call.capability_id === "shell.exec" && call.action === "invoke" && call.decision === "DENY")).toBe(true)
+      expect(context.runtimeMessages.some((message) => message.id === 3)).toBe(false)
+    } finally {
+      globalThis.fetch = originalFetch
+      socket.close()
+    }
+  })
+
+  test("keeps native exposure closed when the PDP returns an unsupported constraint", async () => {
+    const calls: Array<Record<string, unknown>> = []
+    const reports: Array<Record<string, unknown>> = []
+    const context = createContext(calls, reports, false, [], ["shell.exec"])
+    context.session.details = { kind: "local", tier: "headless", cwd: "/srv/genio", desktopUrl: null, sandboxId: "sandbox-1", environmentId: "e2b-headless", execServerUrl: "ws://runtime", execReady: true }
+    context.session.runtimeDetails = {
+      headless: context.session.details,
+    }
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => new Response(JSON.stringify(principal), { status: 200 })) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: "bot-dylan" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
+      socket.emit("message", JSON.stringify({ id: 3, method: "thread/start", params: { environments: [{ environmentId: "e2b-headless" }] } }))
+      await waitFor(() => context.runtimeMessages.some((message) => message.id === 3))
+      const forwarded = context.runtimeMessages.find((message) => message.id === 3) as { params: Record<string, any> }
+      expect(forwarded.params.config["features.shell_tool"]).toBe(false)
+      expect(forwarded.params.config["features.unified_exec"]).toBe(false)
+    } finally {
+      globalThis.fetch = originalFetch
+      socket.close()
+    }
+  })
+
+  test("does not restore a remote execution environment from an explicit null override", async () => {
+    const calls: Array<Record<string, unknown>> = []
+    const reports: Array<Record<string, unknown>> = []
+    const context = createContext(calls, reports)
+    context.session.details = { kind: "local", tier: "headless", cwd: "/srv/genio", desktopUrl: null, sandboxId: "sandbox-1", environmentId: "e2b-headless", execServerUrl: "ws://runtime", execReady: true }
+    context.session.runtimeDetails = {
+      headless: context.session.details,
+    }
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => new Response(JSON.stringify(principal), { status: 200 })) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: "bot-dylan" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
+      socket.emit("message", JSON.stringify({ id: 3, method: "thread/start", params: { environments: null } }))
+      await waitFor(() => context.runtimeMessages.some((message) => message.id === 3))
+      const forwarded = context.runtimeMessages.find((message) => message.id === 3) as { params: Record<string, any> }
+      expect(forwarded.params.config["features.shell_tool"]).toBe(false)
+      expect(forwarded.params.sandbox).toBe("read-only")
+    } finally {
+      globalThis.fetch = originalFetch
+      socket.close()
+    }
+  })
+
+  test("rejects unsupported RPCs and bootstrap queued execution messages", async () => {
+    const calls: Array<Record<string, unknown>> = []
+    const reports: Array<Record<string, unknown>> = []
+    const context = createContext(calls, reports)
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const beforeStart = new FakeSocket()
+    handler!(beforeStart)
+    beforeStart.emit("message", JSON.stringify({ id: 7, method: "thread/delete", params: { threadId: "foreign-thread" } }))
+    expect(beforeStart.closeCode).toBe(1008)
+    expect(beforeStart.closeReason).toBe("RUNTIME_BOOTSTRAP_METHOD_FORBIDDEN")
+
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => new Response(JSON.stringify(principal), { status: 200 })) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 8, method: "thread/delete", params: { threadId: "thread-dylan" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 8 && JSON.parse(line).error?.code))
+      expect(context.runtimeMessages.some((message) => message.id === 8)).toBe(false)
+    } finally {
+      globalThis.fetch = originalFetch
+      socket.close()
+    }
+  })
+
+  test("rejects a malformed runtime token refresh instead of forwarding it", async () => {
+    const calls: Array<Record<string, unknown>> = []
+    const reports: Array<Record<string, unknown>> = []
+    const context = createContext(calls, reports)
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => new Response(JSON.stringify(principal), { status: 200 })) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 9, method: "genio/runtime/start", params: { accessToken: 42 } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 9 && JSON.parse(line).error?.code))
+      expect(socket.sent.map((line) => JSON.parse(line)).find((message) => message.id === 9)?.error.code).toBe("GENIO_ONE_SESSION_TOKEN_REQUIRED")
+      expect(context.runtimeMessages.some((message) => message.id === 9)).toBe(false)
+    } finally {
+      globalThis.fetch = originalFetch
+      socket.close()
+    }
+  })
+
+  test("keeps a same-principal browser reauth token on the running Runtime Broker session", async () => {
+    const calls: Array<Record<string, unknown>> = []
+    const reports: Array<Record<string, unknown>> = []
+    const context = createContext(calls, reports)
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => new Response(JSON.stringify(principal), { status: 200 })) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "first-token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/runtime/start", params: { accessToken: "refreshed-token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
+      expect(context.session.accessToken).toBe("refreshed-token")
+      expect(context.runtimeMessages.some((message) => message.id === 2)).toBe(false)
+    } finally {
+      globalThis.fetch = originalFetch
+      socket.close()
+    }
+  })
+
+  test("allows thread/realtime/start and forwards thread/realtime/sdp notification to client", async () => {
+    const calls: Array<Record<string, unknown>> = []
+    const reports: Array<Record<string, unknown>> = []
+    const context = createContext(calls, reports)
+    context.botRegistry.rememberThread("bot-dylan", "thread-realtime-1")
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => new Response(JSON.stringify(principal), { status: 200 })) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: "bot-dylan" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
+
+      socket.emit("message", JSON.stringify({
+        id: 3,
+        method: "thread/realtime/start",
+        params: {
+          threadId: "thread-realtime-1",
+          outputModality: "audio",
+          transport: { type: "webrtc", sdp: "v=0\r\no=mock 1 1 IN IP4 127.0.0.1" },
+        },
+      }))
+      await waitFor(() => context.runtimeMessages.some((message) => message.id === 3))
+      const forwarded = context.runtimeMessages.find((message) => message.id === 3) as { method: string; params: { threadId: string } }
+      expect(forwarded.method).toBe("thread/realtime/start")
+      expect(forwarded.params.threadId).toBe("thread-realtime-1")
+
+      context.getCallbacks()?.onMessage(JSON.stringify({
+        method: "thread/realtime/sdp",
+        params: { threadId: "thread-realtime-1", sdp: "v=0\r\no=server 1 1 IN IP4 127.0.0.1" },
+      }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "thread/realtime/sdp"))
+      const sdpMessage = socket.sent.map((line) => JSON.parse(line)).find((m) => m.method === "thread/realtime/sdp")
+      expect(sdpMessage.params.sdp).toContain("o=server")
+    } finally {
+      globalThis.fetch = originalFetch
+      socket.close()
+    }
+  })
+})

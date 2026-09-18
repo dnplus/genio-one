@@ -1,0 +1,95 @@
+{{- if .Values.aiMcpGateway.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "genio-one.fullname" . }}-gateway-ownership-migration
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway-ownership-migration
+  annotations:
+    helm.sh/hook: pre-upgrade
+    helm.sh/hook-weight: "-30"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "genio-one.fullname" . }}-gateway-ownership-migration
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway-ownership-migration
+  annotations:
+    helm.sh/hook: pre-upgrade
+    helm.sh/hook-weight: "-20"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+rules:
+  - apiGroups: [gateway.envoyproxy.io]
+    resources: [envoyproxies]
+    resourceNames: [{{ .Values.aiMcpGateway.enforcementPointId | quote }}]
+    verbs: [get, patch]
+  - apiGroups: [aigateway.envoyproxy.io]
+    resources: [gatewayconfigs]
+    resourceNames: [{{ printf "%s-config" .Values.aiMcpGateway.enforcementPointId | quote }}]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "genio-one.fullname" . }}-gateway-ownership-migration
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway-ownership-migration
+  annotations:
+    helm.sh/hook: pre-upgrade
+    helm.sh/hook-weight: "-10"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "genio-one.fullname" . }}-gateway-ownership-migration
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "genio-one.fullname" . }}-gateway-ownership-migration
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "genio-one.fullname" . }}-gateway-ownership-migration-{{ .Release.Revision }}
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway-ownership-migration
+  annotations:
+    helm.sh/hook: pre-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        {{- include "genio-one.labels" . | nindent 8 }}
+        app.kubernetes.io/component: gateway-ownership-migration
+    spec:
+      serviceAccountName: {{ include "genio-one.fullname" . }}-gateway-ownership-migration
+      {{- include "genio-one.imagePullSecrets" . | nindent 6 }}
+      restartPolicy: OnFailure
+      securityContext: { runAsNonRoot: true, fsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: migrate
+          image: {{ include "genio-one.image" (list .Values.images.installer .) }}
+          imagePullPolicy: {{ .Values.images.installer.pullPolicy }}
+          command: [bun, /opt/genio-one/scripts/gateway-runtime-ownership-migration.mjs]
+          env:
+            - name: POD_NAMESPACE
+              valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
+            - name: HELM_RELEASE_NAME
+              value: {{ .Release.Name | quote }}
+            - name: GATEWAY_ID
+              value: {{ .Values.aiMcpGateway.enforcementPointId | quote }}
+            - name: GATEWAY_CONFIG_ID
+              value: {{ printf "%s-config" .Values.aiMcpGateway.enforcementPointId | quote }}
+          resources: { requests: { cpu: 5m, memory: 16Mi }, limits: { cpu: 100m, memory: 128Mi } }
+          securityContext: { runAsUser: 1000, runAsGroup: 1000, allowPrivilegeEscalation: false, capabilities: { drop: [ALL] }, readOnlyRootFilesystem: true }
+{{- end }}

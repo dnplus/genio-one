@@ -1,0 +1,213 @@
+@import "../../../../../packages/brand/foundations.css";
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --background: var(--go-bg);
+  --foreground: var(--go-fg);
+  --card: var(--go-bg);
+  --card-foreground: var(--go-fg);
+  --popover: var(--go-bg);
+  --popover-foreground: var(--go-fg);
+  --primary: var(--go-accent);
+  --primary-hover: var(--go-accent-hover);
+  --primary-active: var(--go-accent-active);
+  --link: var(--go-link);
+  --link-hover: var(--go-link-hover);
+  --link-active: var(--go-link-active);
+  --primary-foreground: #fff;
+  --secondary: var(--go-surface-hover);
+  --secondary-foreground: var(--go-fg);
+  --muted: var(--go-surface);
+  --muted-foreground: var(--go-muted);
+  --accent: var(--go-accent-secondary);
+  --accent-foreground: var(--go-fg);
+  --destructive: #b42318;
+  --destructive-foreground: #fff;
+  --border: var(--go-border);
+  --input: var(--go-border);
+  --ring: var(--go-accent);
+  --chart-1: var(--go-accent);
+  --chart-2: #6b7280;
+  --chart-3: #111;
+  --chart-4: #8a98cf;
+  --chart-5: #aab5d7;
+  --radius: var(--go-radius);
+  --sidebar: var(--go-surface);
+  --sidebar-foreground: var(--go-fg);
+  --sidebar-primary: var(--go-accent);
+  --sidebar-primary-foreground: #fff;
+  --sidebar-accent: var(--go-accent-secondary);
+  --sidebar-accent-foreground: var(--go-fg);
+  --sidebar-border: var(--go-border);
+  --sidebar-ring: var(--go-accent);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --shadow-border: 0 0 0 1px var(--go-border);
+  /* DESIGN.md: 浮層（下拉、對話框）才使用單層柔和陰影 */
+  --shadow-overlay: 0 12px 32px rgb(17 17 17 / 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+@theme inline {
+  --font-heading: var(--go-font-display);
+  --font-sans: var(--go-font-body);
+  --font-mono: var(--go-font-mono);
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.125rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.375rem;
+  --text-ui: 0.8125rem;
+  --text-ui--line-height: 1.25rem;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: var(--go-radius-sm);
+  --radius-md: var(--go-radius);
+  --radius-lg: var(--radius);
+  --radius-xl: var(--go-radius);
+  --radius-2xl: var(--go-radius);
+  --radius-3xl: var(--go-radius);
+  --radius-4xl: var(--go-radius);
+}
+
+.dark {
+  --background: var(--go-bg);
+  --foreground: var(--go-fg);
+  --card: var(--go-surface);
+  --card-foreground: var(--go-fg);
+  --popover: var(--go-surface);
+  --popover-foreground: var(--go-fg);
+  --primary: var(--go-accent);
+  --primary-hover: var(--go-accent-hover);
+  --primary-active: var(--go-accent-active);
+  --link: var(--go-link);
+  --link-hover: var(--go-link-hover);
+  --link-active: var(--go-link-active);
+  --primary-foreground: #fff;
+  --secondary: var(--go-surface-hover);
+  --secondary-foreground: var(--go-fg);
+  --muted: var(--go-surface);
+  --muted-foreground: var(--go-muted);
+  --accent: var(--go-accent-secondary);
+  --accent-foreground: var(--go-fg);
+  --destructive: #f97066;
+  --destructive-foreground: #111;
+  --border: var(--go-border);
+  --input: var(--go-border);
+  --ring: var(--go-accent);
+  --chart-1: var(--go-accent);
+  --chart-2: #9aa1ad;
+  --chart-3: #f5f5f5;
+  --chart-4: #8a98cf;
+  --chart-5: #5e6680;
+  --sidebar: var(--go-surface);
+  --sidebar-foreground: var(--go-fg);
+  --sidebar-primary: var(--go-accent);
+  --sidebar-primary-foreground: #fff;
+  --sidebar-accent: var(--go-accent-secondary);
+  --sidebar-accent-foreground: var(--go-fg);
+  --sidebar-border: var(--go-border);
+  --sidebar-ring: var(--go-accent);
+  --shadow-border: 0 0 0 1px var(--go-border);
+  /* DESIGN.md: 浮層（下拉、對話框）才使用單層柔和陰影 */
+  --shadow-overlay: 0 12px 32px rgb(0 0 0 / 0.48);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--go-font-body);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--go-font-display);
+  letter-spacing: -0.02em;
+}
+
+@layer base {
+  a { color: var(--link); }
+  a:hover { color: var(--link-hover); text-decoration: underline; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .animate-in,
+  .animate-out,
+  .animate-spin {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

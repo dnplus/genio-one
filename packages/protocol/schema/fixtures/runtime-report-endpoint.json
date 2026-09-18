@@ -1,0 +1,33 @@
+{
+  "schema_version": "genio.one.runtime.v1",
+  "message_type": "REPORT",
+  "tenant_id": "tenant-acme",
+  "runtime_id": "endpoint-laptop-01",
+  "report_id": "report-endpoint-12",
+  "command_id": "command-endpoint-12",
+  "revision": "endpoint-revision-12",
+  "digest": "2222222222222222222222222222222222222222222222222222222222222222",
+  "signature": {
+    "algorithm": "Ed25519",
+    "key_id": "runtime-key-2026",
+    "value": "signed-endpoint-projection-12"
+  },
+  "runtime_kind": "ENDPOINT",
+  "observed_status": {
+    "state": "DEGRADED",
+    "applied_revision": "endpoint-revision-12",
+    "applied_digest": "2222222222222222222222222222222222222222222222222222222222222222",
+    "components": [
+      {
+        "component": "ENDPOINT_ROUTING",
+        "state": "DEGRADED",
+        "observed_revision": "endpoint-routing-config-12",
+        "detail": "Managed gateway route is temporarily unavailable"
+      }
+    ],
+    "error": {
+      "code": "GATEWAY_UNAVAILABLE",
+      "message": "The endpoint retained its last verified routing projection"
+    }
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "product": "genio-one",
+  "task_id": "catalog-access-request-envoy-boundary",
+  "release": "V1.1",
+  "task_summary": "Preserve the Envoy-native enforcement boundary while ensuring an authenticated user can submit a self-service Catalog access request and see a visible submitted result.",
+  "grok_timeout_seconds": 360,
+  "required_artifacts": ["normalized_bdd", "adr"],
+  "existing_artifacts": [
+    {
+      "kind": "adr",
+      "artifact_id": "ADR-0016",
+      "source_id": "ADR0016"
+    }
+  ],
+  "sources": {
+    "notion_pages": [
+      {
+        "source_id": "NOTION_US_0_7",
+        "page_id": "39aa1664-cec0-42fb-9820-b61a61c70dab",
+        "locator": "GenioOne V1.1/V1.5 Epic/US/BDD — US-0.7",
+        "start_heading": "### US-0.7 Self-service Tenant Configuration〔V1.1〕",
+        "end_heading": "### US-0.8 Identity Source 與 Canonical Attribute Projection〔非 V1；歸 Epic 15／US-15.4〕"
+      }
+    ],
+    "notion_data_sources": [],
+    "local_files": [
+      {
+        "source_id": "ADR0016",
+        "kind": "adr",
+        "path": "../../docs/internal/platform/adr/0016-compile-one-policy-to-native-first-enforcement-chain.md",
+        "locator": "ADR 0016 native-first Enforcement Chain"
+      },
+      {
+        "source_id": "PRODUCT_CONTEXT",
+        "kind": "architecture",
+        "path": "CONTEXT.md",
+        "locator": "Canonical GenioOne product language and ownership"
+      }
+    ]
+  },
+  "checks": [
+    {
+      "check_id": "spec-pipeline-contracts",
+      "command": [
+        "{bun}",
+        "test",
+        "scripts/grok-spec-steward.test.mjs",
+        "scripts/spec-bundle.test.mjs",
+        "scripts/spec-pipeline.test.mjs",
+        "scripts/hermes-blind-runner.test.mjs"
+      ],
+      "timeout_seconds": 120
+    },
+    {
+      "check_id": "self-service-ui-contract",
+      "command": [
+        "{bun}",
+        "test",
+        "scripts/platform-web-v11-epics.test.mjs"
+      ],
+      "timeout_seconds": 120
+    }
+  ],
+  "hermes": {
+    "base_url": "http://127.0.0.1:58081",
+    "entry_path": "/self-service",
+    "oidc_discovery_url": "http://127.0.0.1:58080/realms/genio-one/.well-known/openid-configuration",
+    "tenant": "tenant-keycloak-local",
+    "credential_file": ".env.example",
+    "username_key": "GENIO_ONE_KEYCLOAK_TEST_USERNAME",
+    "password_key": "GENIO_ONE_KEYCLOAK_TEST_PASSWORD",
+    "fixture": {
+      "resource": "live-engineering-repository",
+      "capability": "repository.search",
+      "owner": "person-platform-admin"
+    },
+    "run_budget_seconds": 240
+  }
+}

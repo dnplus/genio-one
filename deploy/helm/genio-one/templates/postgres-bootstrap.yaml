@@ -1,0 +1,104 @@
+{{- if or .Values.identity.enabled .Values.apiManagement.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "genio-one.fullname" . }}-postgres-bootstrap
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+data:
+  bootstrap-database.sh: |
+    #!/bin/sh
+    set -eu
+    case "${TARGET_DATABASE}" in *[!a-zA-Z0-9_]*) echo "invalid target database" >&2; exit 2;; esac
+    case "${TARGET_USER}" in *[!a-zA-Z0-9_]*) echo "invalid target role" >&2; exit 2;; esac
+    export PGPASSWORD="${POSTGRES_PASSWORD}"
+    until pg_isready --host "${POSTGRES_HOST}" --username "${POSTGRES_USER}" --dbname "${POSTGRES_DB}"; do sleep 1; done
+    psql --host "${POSTGRES_HOST}" --username "${POSTGRES_USER}" --dbname "${POSTGRES_DB}" \
+      --set ON_ERROR_STOP=1 --set target_role="${TARGET_USER}" \
+      --set target_password="${TARGET_PASSWORD}" --set target_database="${TARGET_DATABASE}" <<'SQL'
+    SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'target_role', :'target_password')
+    WHERE NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = :'target_role')
+    \gexec
+    SELECT format('ALTER ROLE %I WITH LOGIN PASSWORD %L', :'target_role', :'target_password')
+    \gexec
+    SELECT format('CREATE DATABASE %I OWNER %I', :'target_database', :'target_role')
+    WHERE NOT EXISTS (SELECT FROM pg_catalog.pg_database WHERE datname = :'target_database')
+    \gexec
+    SELECT format('ALTER DATABASE %I OWNER TO %I', :'target_database', :'target_role')
+    \gexec
+    SQL
+{{- end }}
+{{- if .Values.identity.enabled }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "genio-one.fullname" . }}-keycloak-database-{{ .Release.Revision }}
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: keycloak-database-bootstrap
+spec:
+  backoffLimit: 12
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata: { labels: { app.kubernetes.io/component: keycloak-database-bootstrap, app.kubernetes.io/part-of: genio-one } }
+    spec:
+      {{- include "genio-one.imagePullSecrets" . | nindent 6 }}
+      restartPolicy: OnFailure
+      securityContext: { runAsNonRoot: true, runAsUser: 70, runAsGroup: 70, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: bootstrap
+          image: {{ .Values.images.postgres }}
+          command: [/bin/sh, /opt/genio-one/bootstrap-database.sh]
+          env:
+            - { name: POSTGRES_HOST, value: {{ printf "%s-postgres" (include "genio-one.fullname" .) | quote }} }
+            - { name: POSTGRES_DB, value: {{ .Values.postgresql.database | quote }} }
+            - { name: POSTGRES_USER, value: {{ .Values.postgresql.username | quote }} }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: postgres-password } }
+            - { name: TARGET_DATABASE, value: {{ .Values.identity.database | quote }} }
+            - { name: TARGET_USER, value: {{ .Values.identity.databaseUser | quote }} }
+            - name: TARGET_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: keycloak-database-password } }
+          resources: { requests: { cpu: 25m, memory: 64Mi }, limits: { cpu: 250m, memory: 256Mi } }
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+          volumeMounts: [{ name: script, mountPath: /opt/genio-one, readOnly: true }]
+      volumes: [{ name: script, configMap: { name: {{ include "genio-one.fullname" . }}-postgres-bootstrap, defaultMode: 365 } }]
+{{- end }}
+{{- if .Values.apiManagement.enabled }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "genio-one.fullname" . }}-gravitee-database-{{ .Release.Revision }}
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gravitee-database-bootstrap
+spec:
+  backoffLimit: 12
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata: { labels: { app.kubernetes.io/component: gravitee-database-bootstrap, app.kubernetes.io/part-of: genio-one } }
+    spec:
+      {{- include "genio-one.imagePullSecrets" . | nindent 6 }}
+      restartPolicy: OnFailure
+      securityContext: { runAsNonRoot: true, runAsUser: 70, runAsGroup: 70, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: bootstrap
+          image: {{ .Values.images.postgres }}
+          command: [/bin/sh, /opt/genio-one/bootstrap-database.sh]
+          env:
+            - { name: POSTGRES_HOST, value: {{ printf "%s-postgres" (include "genio-one.fullname" .) | quote }} }
+            - { name: POSTGRES_DB, value: {{ .Values.postgresql.database | quote }} }
+            - { name: POSTGRES_USER, value: {{ .Values.postgresql.username | quote }} }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: postgres-password } }
+            - { name: TARGET_DATABASE, value: {{ .Values.apiManagement.database | quote }} }
+            - { name: TARGET_USER, value: {{ .Values.apiManagement.databaseUser | quote }} }
+            - name: TARGET_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: gravitee-database-password } }
+          resources: { requests: { cpu: 25m, memory: 64Mi }, limits: { cpu: 250m, memory: 256Mi } }
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+          volumeMounts: [{ name: script, mountPath: /opt/genio-one, readOnly: true }]
+      volumes: [{ name: script, configMap: { name: {{ include "genio-one.fullname" . }}-postgres-bootstrap, defaultMode: 365 } }]
+{{- end }}

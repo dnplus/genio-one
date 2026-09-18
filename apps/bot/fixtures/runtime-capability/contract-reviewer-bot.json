@@ -1,0 +1,188 @@
+{
+  "schema_version": "genio.runtime.capability.v1",
+  "note": "Epic A-1 fixture: Contract Reviewer Bot — filesystem/shell allow, browser deny; unmanaged skill load fails (schema only, no enforcement).",
+  "runtime_identity": {
+    "runtime_id": "codex",
+    "adapter": "codex-app-server"
+  },
+  "capabilities": [
+    {
+      "id": "shell.exec",
+      "kind": "shell",
+      "runtime_identity": { "runtime_id": "codex", "adapter": "codex-app-server" },
+      "display_name": "Shell",
+      "description": "Execute shell commands inside the runtime sandbox"
+    },
+    {
+      "id": "filesystem.read",
+      "kind": "filesystem",
+      "runtime_identity": { "runtime_id": "codex", "adapter": "codex-app-server" },
+      "display_name": "Filesystem read",
+      "description": "Read files within allowlisted paths"
+    },
+    {
+      "id": "filesystem.write",
+      "kind": "filesystem",
+      "runtime_identity": { "runtime_id": "codex", "adapter": "codex-app-server" },
+      "display_name": "Filesystem write",
+      "description": "Write files within allowlisted paths"
+    },
+    {
+      "id": "browser.open",
+      "kind": "browser",
+      "runtime_identity": { "runtime_id": "codex", "adapter": "codex-app-server" },
+      "display_name": "Browser",
+      "description": "Open URLs in the desktop browser"
+    },
+    {
+      "id": "web_search.query",
+      "kind": "web_search",
+      "runtime_identity": { "runtime_id": "codex", "adapter": "codex-app-server" },
+      "display_name": "Web search",
+      "description": "Query web search providers"
+    },
+    {
+      "id": "remote_hands.desktop",
+      "kind": "remote_hands",
+      "runtime_identity": { "runtime_id": "codex", "adapter": "codex-app-server" },
+      "display_name": "Remote Hands desktop",
+      "description": "Desktop remote hands; E2B is a provider, not a Resource"
+    }
+  ],
+  "policy_draft": {
+    "allow": ["shell.exec", "filesystem.read", "filesystem.write", "web_search.query"],
+    "deny": ["browser.open"],
+    "unmanaged_extension_default": "deny"
+  },
+  "constraints": [
+    {
+      "kind": "path_allowlist",
+      "parameters": {
+        "capability_ids": ["filesystem.read", "filesystem.write"],
+        "paths": ["/workspace/contracts", "/tmp/genio-review"]
+      }
+    },
+    {
+      "kind": "command_deny",
+      "parameters": {
+        "capability_ids": ["shell.exec"],
+        "patterns": ["rm -rf /", "curl * | sh"]
+      }
+    },
+    {
+      "kind": "approval_required",
+      "parameters": {
+        "capability_ids": ["shell.exec"],
+        "when": "outside_allowlist"
+      }
+    }
+  ],
+  "obligations": [
+    {
+      "kind": "audit",
+      "enforcement_point_id": "agent-runtime-pep",
+      "parameters": { "retain_days": 90 }
+    },
+    {
+      "kind": "require_approval",
+      "enforcement_point_id": "agent-runtime-pep",
+      "parameters": { "capability_ids": ["shell.exec"], "mode": "interactive" }
+    }
+  ],
+  "audit_examples": [
+    {
+      "audit_event_id": "rae-expose-shell-001",
+      "kind": "expose",
+      "action": "expose",
+      "target": "runtime:codex:shell.exec",
+      "capability_id": "shell.exec",
+      "runtime_identity": { "runtime_id": "codex", "adapter": "codex-app-server", "session_id": "rt-sess-a1" },
+      "outcome": "ALLOW",
+      "reason": "bot_profile_allow",
+      "principal": {
+        "tenant_id": "tenant-fixture",
+        "subject_id": "person-reviewer",
+        "acting_client_id": "genio-one-bot"
+      },
+      "constraints": [
+        {
+          "kind": "command_deny",
+          "parameters": { "patterns": ["rm -rf /", "curl * | sh"] }
+        }
+      ],
+      "obligations": [
+        {
+          "kind": "audit",
+          "enforcement_point_id": "agent-runtime-pep",
+          "parameters": { "retain_days": 90 }
+        }
+      ],
+      "occurred_at": "2026-09-06T01:00:00.000Z",
+      "correlation_id": "corr-a1-expose"
+    },
+    {
+      "audit_event_id": "rae-invoke-fs-001",
+      "kind": "invoke",
+      "action": "invoke",
+      "target": "runtime:codex:filesystem.read",
+      "capability_id": "filesystem.read",
+      "runtime_identity": { "runtime_id": "codex", "adapter": "codex-app-server", "session_id": "rt-sess-a1" },
+      "outcome": "ALLOW",
+      "reason": "within_path_allowlist",
+      "principal": {
+        "tenant_id": "tenant-fixture",
+        "subject_id": "person-reviewer",
+        "acting_client_id": "genio-one-bot"
+      },
+      "constraints": [
+        {
+          "kind": "path_allowlist",
+          "parameters": { "paths": ["/workspace/contracts", "/tmp/genio-review"] }
+        }
+      ],
+      "obligations": [
+        {
+          "kind": "audit",
+          "enforcement_point_id": "agent-runtime-pep",
+          "parameters": {}
+        }
+      ],
+      "occurred_at": "2026-09-06T01:01:00.000Z",
+      "correlation_id": "corr-a1-invoke"
+    },
+    {
+      "audit_event_id": "rae-denied-browser-001",
+      "kind": "denied",
+      "action": "expose",
+      "target": "runtime:codex:browser.open",
+      "capability_id": "browser.open",
+      "runtime_identity": { "runtime_id": "codex", "adapter": "codex-app-server", "session_id": "rt-sess-a1" },
+      "outcome": "DENY",
+      "reason": "bot_profile_deny",
+      "principal": {
+        "tenant_id": "tenant-fixture",
+        "subject_id": "person-reviewer",
+        "acting_client_id": "genio-one-bot"
+      },
+      "occurred_at": "2026-09-06T01:02:00.000Z",
+      "correlation_id": "corr-a1-denied-browser"
+    },
+    {
+      "audit_event_id": "rae-denied-skill-001",
+      "kind": "denied",
+      "action": "load_extension",
+      "target": "runtime:codex:skill.unmanaged.contract-hack",
+      "capability_id": "skill.unmanaged.contract-hack",
+      "runtime_identity": { "runtime_id": "codex", "adapter": "codex-app-server", "session_id": "rt-sess-a1" },
+      "outcome": "DENY",
+      "reason": "unmanaged_extension_default_deny",
+      "principal": {
+        "tenant_id": "tenant-fixture",
+        "subject_id": "person-reviewer",
+        "acting_client_id": "genio-one-bot"
+      },
+      "occurred_at": "2026-09-06T01:03:00.000Z",
+      "correlation_id": "corr-a1-denied-skill"
+    }
+  ]
+}

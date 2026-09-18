@@ -1,0 +1,18 @@
+packages:
+  - "apps/bot"
+  - "apps/platform"
+  - "apps/connectors"
+  - "runtimes/gateway"
+  - "packages/*"
+
+allowBuilds:
+  '@google/genai': true
+  '@scarf/scarf': true
+  '@tree-sitter-grammars/tree-sitter-yaml': true
+  core-js-pure: true
+  edgedriver: true
+  esbuild: true
+  geckodriver: true
+  protobufjs: true
+  tree-sitter: true
+  tree-sitter-json: true

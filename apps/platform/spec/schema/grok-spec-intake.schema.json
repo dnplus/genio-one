@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genio.one/schema/grok-spec-intake-v1.json",
+  "title": "GenioOne Grok specification intake",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "product",
+    "task_id",
+    "task_summary",
+    "required_artifacts",
+    "existing_artifacts",
+    "source_records"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "product": { "const": "genio-one" },
+    "task_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+    "task_summary": { "type": "string", "minLength": 1 },
+    "required_artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "enum": ["normalized_bdd", "adr"] }
+    },
+    "existing_artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "artifact_id", "source_id"],
+        "properties": {
+          "kind": { "enum": ["normalized_bdd", "adr"] },
+          "artifact_id": { "type": "string", "minLength": 1 },
+          "source_id": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "source_records": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source_id", "kind", "locator", "content"],
+        "properties": {
+          "source_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+          "kind": { "enum": ["task", "notion", "adr", "architecture", "policy", "acceptance"] },
+          "locator": { "type": "string", "minLength": 1 },
+          "content": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

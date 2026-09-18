@@ -1,0 +1,8 @@
+# Never package generated or machine-local Helm values with a chart archive.
+generated-secrets.yaml
+generated-secrets*.yaml
+*.local.yaml
+*.secret.yaml
+*.pem
+*.key
+.local/

@@ -1,0 +1,27 @@
+{
+  "name": "genioone",
+  "private": true,
+  "version": "0.1.0",
+  "description": "GenioOne community edition: Control Plane, AI Gateway, and Genio Bot.",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "node tooling/local-dev.mjs",
+    "images:build": "node tooling/ce-build-images.mjs",
+    "helm:values": "node tooling/ce-helm-values.mjs",
+    "ce:verify": "node tooling/ce-verify.mjs",
+    "mcp:smoke": "node tooling/ce-mcp-smoke.mjs",
+    "dev:bot": "pnpm --filter genio-one-bot dev",
+    "dev:platform": "pnpm --filter genio-one dev:platform",
+    "env:down": "pnpm --filter genio-one env:down",
+    "env:status": "pnpm --filter genio-one env:status",
+    "env:logs": "pnpm --filter genio-one env:logs",
+    "check": "pnpm --filter genio-one typecheck && pnpm --filter genio-one-bot typecheck && pnpm --filter genio-connectors typecheck && pnpm check:packages && pnpm --filter @genioone/gateway typecheck",
+    "check:packages": "pnpm --filter @genioone/protocol --filter @genioone/policy --filter @genioone/telemetry typecheck",
+    "test:platform-api": "pnpm --filter genio-one test:api",
+    "test": "pnpm test:platform-api && pnpm --filter genio-one-bot test && pnpm --filter genio-connectors test && pnpm test:packages && pnpm --filter @genioone/gateway test",
+    "test:packages": "pnpm --filter @genioone/protocol --filter @genioone/policy --filter @genioone/telemetry test",
+    "build": "pnpm --filter genio-one build && pnpm --filter genio-one-bot build && pnpm --filter @genioone/gateway build",
+    "verify": "pnpm check && pnpm test && pnpm build"
+  },
+  "packageManager": "pnpm@10.32.1"
+}

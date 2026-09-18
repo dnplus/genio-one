@@ -1,0 +1,9 @@
+.voice-input { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.voice-input-button { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: inherit; cursor: pointer; flex-shrink: 0; }
+.voice-input-button:hover { background: rgba(128, 128, 128, .12); }
+.voice-input-button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.voice-input-button:disabled { opacity: .45; cursor: default; }
+.voice-input-button.is-recording, .voice-input-error { color: #b83333; }
+.voice-input-status, .voice-input-error { font-size: 12px; line-height: 1.5; max-width: 250px; overflow-wrap: anywhere; }
+.composer-footer:has(.voice-input) { flex-wrap: wrap; }
+.composer-footer-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; max-width: 100%; margin-left: auto; }

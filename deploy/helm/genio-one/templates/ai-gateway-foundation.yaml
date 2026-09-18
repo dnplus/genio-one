@@ -1,0 +1,135 @@
+{{- if .Values.aiMcpGateway.enabled }}
+{{- $gatewayConfig := dict }}
+{{- if .Release.IsUpgrade }}
+{{- $gatewayConfig = lookup "aigateway.envoyproxy.io/v1beta1" "GatewayConfig" .Release.Namespace (printf "%s-config" .Values.aiMcpGateway.enforcementPointId) }}
+{{- end }}
+{{- $runtimeGatewayManager := "genio-one-gateway-runtime" }}
+{{- $gatewayConfigRuntimeOwned := eq (include "genio-one.runtime-owns" (list $gatewayConfig $runtimeGatewayManager)) "true" }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: {{ include "genio-one.fullname" . }}-ai
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ .Values.aiMcpGateway.enforcementPointId }}
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    aigateway.envoyproxy.io/gateway-config: {{ printf "%s-config" .Values.aiMcpGateway.enforcementPointId | quote }}
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+spec:
+  gatewayClassName: {{ include "genio-one.fullname" . }}-ai
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 1975
+      allowedRoutes:
+        namespaces:
+          from: Same
+    - name: internal
+      protocol: HTTP
+      port: 1976
+      allowedRoutes:
+        namespaces:
+          from: Same
+  infrastructure:
+    parametersRef:
+      group: gateway.envoyproxy.io
+      kind: EnvoyProxy
+      name: {{ .Values.aiMcpGateway.enforcementPointId }}
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: {{ .Values.aiMcpGateway.enforcementPointId }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+{{- if .Values.aiMcpGateway.gcpApplicationCredentialsSecret }}
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyDeployment:
+        pod:
+          volumes:
+            - name: vertex-credentials
+              secret:
+                secretName: {{ .Values.aiMcpGateway.gcpApplicationCredentialsSecret | quote }}
+{{- else }}
+spec: {}
+{{- end }}
+---
+apiVersion: aigateway.envoyproxy.io/v1beta1
+kind: GatewayConfig
+metadata:
+  name: {{ printf "%s-config" .Values.aiMcpGateway.enforcementPointId }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+spec:
+  extProc:
+    kubernetes:
+      {{- if .Values.aiMcpGateway.gcpApplicationCredentialsSecret }}
+      volumeMounts:
+        - name: vertex-credentials
+          mountPath: /var/run/genio/vertex
+          readOnly: true
+      {{- end }}
+      {{- if not $gatewayConfigRuntimeOwned }}
+      env:
+        {{- if .Values.aiMcpGateway.gcpApplicationCredentialsSecret }}
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          value: /var/run/genio/vertex/credentials.json
+        {{- end }}
+        - name: AI_GATEWAY_TRACING_SEMCONV
+          value: gen_ai
+        - name: OTEL_AIGW_SPAN_REQUEST_HEADER_ATTRIBUTES
+          value: x-request-id:genio.correlation.id,x-genio-correlation-id:genio.correlation.id,x-genio-trusted-tenant-id:genio.tenant.id
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: {{ printf "http://%s-otel-ingress:4318" (include "genio-one.fullname" .) | quote }}
+        - name: OTEL_TRACES_EXPORTER
+          value: otlp
+        - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+          value: {{ printf "http://%s-otel-ingress:4318/v1/traces" (include "genio-one.fullname" .) | quote }}
+        - name: OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
+          value: http/protobuf
+        - name: OTEL_EXPORTER_OTLP_PROTOCOL
+          value: http/protobuf
+        - name: OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT
+          value: "false"
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: genio-one-aigw-internal
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/component: proxy
+    app.kubernetes.io/managed-by: envoy-gateway
+    app.kubernetes.io/name: envoy
+    gateway.envoyproxy.io/owning-gateway-name: {{ .Values.aiMcpGateway.enforcementPointId }}
+    gateway.envoyproxy.io/owning-gateway-namespace: {{ .Release.Namespace }}
+  ports:
+    # Public company AI/MCP listener (bot GENIO_ONE_MCP_URL → Ingress /mcp).
+    - name: aigw-http
+      protocol: TCP
+      port: 1975
+      targetPort: 1975
+    # Internal model / sidecar listener (bot GENIO_ONE_MODEL_GATEWAY_BASE_URL).
+    - name: aigw-internal
+      protocol: TCP
+      port: 1976
+      targetPort: 1976
+{{- end }}

@@ -1,0 +1,115 @@
+{{- if .Values.identity.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "genio-one.fullname" . }}-keycloak-theme
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: keycloak
+data:
+  login-theme-properties: |-
+{{ .Files.Get "files/keycloak-theme/genio-one/login/theme.properties" | nindent 4 }}
+  login-messages-en: |-
+{{ .Files.Get "files/keycloak-theme/genio-one/login/messages/messages_en.properties" | nindent 4 }}
+  login-messages-zh-tw: |-
+{{ .Files.Get "files/keycloak-theme/genio-one/login/messages/messages_zh_TW.properties" | nindent 4 }}
+  login-styles: |-
+{{ .Files.Get "files/keycloak-theme/genio-one/login/resources/css/styles-v3.css" | nindent 4 }}
+  login-horizontal-logo: |-
+{{ .Files.Get "files/keycloak-theme/genio-one/login/resources/img/genioone-horizontal-color-light.svg" | nindent 4 }}
+  login-icon-logo: |-
+{{ .Files.Get "files/keycloak-theme/genio-one/login/resources/img/genioone-icon-color-light.svg" | nindent 4 }}
+  login-template: |-
+{{ .Files.Get "files/keycloak-theme/genio-one/login/template.ftl" | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "genio-one.fullname" . }}-keycloak
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+spec:
+  selector: { app.kubernetes.io/component: keycloak, app.kubernetes.io/instance: {{ .Release.Name }} }
+  ports:
+    - { name: http, port: 8080, targetPort: http }
+    - { name: management, port: 9000, targetPort: management }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "genio-one.fullname" . }}-keycloak
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: keycloak
+spec:
+  replicas: {{ .Values.identity.replicas }}
+  selector: { matchLabels: { app.kubernetes.io/component: keycloak, app.kubernetes.io/instance: {{ .Release.Name }} } }
+  template:
+    metadata:
+      annotations:
+        checksum/keycloak-theme: {{ (.Files.Glob "files/keycloak-theme/genio-one/**").AsConfig | sha256sum }}
+      labels: { app.kubernetes.io/component: keycloak, app.kubernetes.io/instance: {{ .Release.Name }}, app.kubernetes.io/part-of: genio-one }
+    spec:
+      {{- include "genio-one.imagePullSecrets" . | nindent 6 }}
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      initContainers:
+        - name: wait-for-keycloak-database
+          image: {{ .Values.images.postgres }}
+          command: [/bin/sh, -c]
+          args:
+            - {{ printf "until psql --host=%s-postgres --username=%s --dbname=%s --no-password --tuples-only --command='SELECT 1' >/dev/null 2>&1; do sleep 1; done" (include "genio-one.fullname" .) .Values.identity.databaseUser .Values.identity.database | quote }}
+          env:
+            - name: PGPASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: keycloak-database-password } }
+          resources: { requests: { cpu: 5m, memory: 16Mi }, limits: { cpu: 100m, memory: 64Mi } }
+          securityContext: { runAsUser: 70, runAsGroup: 70, allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+      containers:
+        - name: keycloak
+          image: {{ .Values.images.keycloak }}
+          args:
+            - start
+            - --http-enabled=true
+            - --http-port=8080
+            - --hostname={{ .Values.global.keycloakPublicOrigin }}
+            - --proxy-headers=xforwarded
+          ports:
+            - { name: http, containerPort: 8080 }
+            - { name: management, containerPort: 9000 }
+          env:
+            - { name: KC_BOOTSTRAP_ADMIN_USERNAME, value: {{ .Values.identity.adminUser | quote }} }
+            - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: keycloak-admin-password } }
+            - { name: KC_DB, value: postgres }
+            - { name: KC_DB_URL, value: {{ printf "jdbc:postgresql://%s-postgres:5432/%s" (include "genio-one.fullname" .) .Values.identity.database | quote }} }
+            - { name: KC_DB_USERNAME, value: {{ .Values.identity.databaseUser | quote }} }
+            - name: KC_DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: keycloak-database-password } }
+            - { name: KC_HEALTH_ENABLED, value: "true" }
+            - { name: KC_METRICS_ENABLED, value: "true" }
+          startupProbe: { httpGet: { path: /health/started, port: management }, periodSeconds: 5, failureThreshold: 60 }
+          readinessProbe: { httpGet: { path: /health/ready, port: management }, periodSeconds: 5, failureThreshold: 12 }
+          livenessProbe: { httpGet: { path: /health/live, port: management }, initialDelaySeconds: 30, periodSeconds: 10 }
+          resources: {{- toYaml .Values.identity.resources | nindent 12 }}
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] }, readOnlyRootFilesystem: false }
+          volumeMounts:
+            - { name: keycloak-login-theme, mountPath: /opt/keycloak/themes/genio-one, readOnly: true }
+      volumes:
+        - name: keycloak-login-theme
+          configMap:
+            name: {{ include "genio-one.fullname" . }}-keycloak-theme
+            items:
+              - { key: login-theme-properties, path: login/theme.properties }
+              - { key: login-messages-en, path: login/messages/messages_en.properties }
+              - { key: login-messages-zh-tw, path: login/messages/messages_zh_TW.properties }
+              - { key: login-styles, path: login/resources/css/styles-v3.css }
+              - { key: login-horizontal-logo, path: login/resources/img/genioone-horizontal-color-light.svg }
+              - { key: login-icon-logo, path: login/resources/img/genioone-icon-color-light.svg }
+              - { key: login-template, path: login/template.ftl }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: {{ include "genio-one.fullname" . }}-keycloak }
+spec:
+  minAvailable: 1
+  selector: { matchLabels: { app.kubernetes.io/component: keycloak, app.kubernetes.io/instance: {{ .Release.Name }} } }
+{{- end }}

@@ -1,0 +1,13 @@
+{
+  "platformOrigin": "http://127.0.0.1:58082",
+  "tenantId": "<tenant-id>",
+  "ownerOrganizationId": "<organization-id>",
+  "environmentId": "<environment-id>",
+  "gatewayId": "<gateway-id>",
+  "upstreamEndpoint": "http://127.0.0.1:5192/v1",
+  "hostname": "breeze-asr.localhost",
+  "basePath": "/",
+  "dnsTarget": "127.0.0.1",
+  "identityIssuer": "http://127.0.0.1:58080/realms/<realm>",
+  "identityAudience": "<audience>"
+}

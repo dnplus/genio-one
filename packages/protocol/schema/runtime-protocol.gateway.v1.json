@@ -1,0 +1,500 @@
+{
+  "$id": "https://genio.one/schemas/runtime-protocol.gateway.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "command_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "pattern": "^[^\\u0000\\r\\n]+$",
+          "type": "string"
+        },
+        "desired_release": {
+          "additionalProperties": false,
+          "properties": {
+            "gateway_id": {
+              "maxLength": 256,
+              "minLength": 1,
+              "pattern": "^[^\\u0000\\r\\n]+$",
+              "type": "string"
+            },
+            "head_revision": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "package_digest": {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            "projection_count": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "release_id": {
+              "maxLength": 256,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+              "type": "string"
+            },
+            "schema_version": {
+              "const": "genio.one.gateway-release-ref.v1",
+              "type": "string"
+            }
+          },
+          "required": [
+            "schema_version",
+            "release_id",
+            "gateway_id",
+            "head_revision",
+            "package_digest",
+            "projection_count"
+          ],
+          "type": "object"
+        },
+        "digest": {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        "message_type": {
+          "const": "COMMAND",
+          "type": "string"
+        },
+        "revision": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[^\\u0000\\r\\n]+$",
+          "type": "string"
+        },
+        "runtime_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "pattern": "^[^\\u0000\\r\\n]+$",
+          "type": "string"
+        },
+        "runtime_kind": {
+          "const": "GATEWAY",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "genio.one.runtime.v1",
+          "type": "string"
+        },
+        "signature": {
+          "additionalProperties": false,
+          "properties": {
+            "algorithm": {
+              "const": "Ed25519",
+              "type": "string"
+            },
+            "key_id": {
+              "maxLength": 256,
+              "minLength": 1,
+              "pattern": "^[^\\u0000\\r\\n]+$",
+              "type": "string"
+            },
+            "value": {
+              "pattern": "^[A-Za-z0-9_-]{86}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "algorithm",
+            "key_id",
+            "value"
+          ],
+          "type": "object"
+        },
+        "tenant_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "pattern": "^[^\\u0000\\r\\n]+$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "message_type",
+        "tenant_id",
+        "runtime_id",
+        "command_id",
+        "revision",
+        "digest",
+        "signature",
+        "runtime_kind",
+        "desired_release"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "command_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "pattern": "^[^\\u0000\\r\\n]+$",
+          "type": "string"
+        },
+        "digest": {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        "message_type": {
+          "const": "REPORT",
+          "type": "string"
+        },
+        "observed_status": {
+          "additionalProperties": false,
+          "properties": {
+            "applied_release": {
+              "additionalProperties": false,
+              "properties": {
+                "gateway_id": {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "pattern": "^[^\\u0000\\r\\n]+$",
+                  "type": "string"
+                },
+                "head_revision": {
+                  "maximum": 9007199254740991,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "package_digest": {
+                  "pattern": "^[a-f0-9]{64}$",
+                  "type": "string"
+                },
+                "projection_count": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "release_id": {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+                  "type": "string"
+                },
+                "schema_version": {
+                  "const": "genio.one.gateway-release-ref.v1",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "schema_version",
+                "release_id",
+                "gateway_id",
+                "head_revision",
+                "package_digest",
+                "projection_count"
+              ],
+              "type": "object"
+            },
+            "components": {
+              "items": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "component": {
+                        "const": "AI_GATEWAY",
+                        "type": "string"
+                      },
+                      "detail": {
+                        "maxLength": 2048,
+                        "pattern": "^[^\\u0000\\r\\n]*$",
+                        "type": "string"
+                      },
+                      "observed_revision": {
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000\\r\\n]+$",
+                        "type": "string"
+                      },
+                      "payload": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "active_connections": {
+                            "maximum": 9007199254740991,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "active_routes": {
+                            "maximum": 9007199254740991,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "provider_health": {
+                            "anyOf": [
+                              {
+                                "const": "APPLYING",
+                                "type": "string"
+                              },
+                              {
+                                "const": "READY",
+                                "type": "string"
+                              },
+                              {
+                                "const": "DEGRADED",
+                                "type": "string"
+                              },
+                              {
+                                "const": "UNKNOWN",
+                                "type": "string"
+                              }
+                            ]
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "state": {
+                        "anyOf": [
+                          {
+                            "const": "APPLYING",
+                            "type": "string"
+                          },
+                          {
+                            "const": "READY",
+                            "type": "string"
+                          },
+                          {
+                            "const": "DEGRADED",
+                            "type": "string"
+                          },
+                          {
+                            "const": "UNKNOWN",
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "component",
+                      "state",
+                      "observed_revision"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "component": {
+                        "const": "AUTHORIZER",
+                        "type": "string"
+                      },
+                      "detail": {
+                        "maxLength": 2048,
+                        "pattern": "^[^\\u0000\\r\\n]*$",
+                        "type": "string"
+                      },
+                      "observed_revision": {
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000\\r\\n]+$",
+                        "type": "string"
+                      },
+                      "state": {
+                        "anyOf": [
+                          {
+                            "const": "APPLYING",
+                            "type": "string"
+                          },
+                          {
+                            "const": "READY",
+                            "type": "string"
+                          },
+                          {
+                            "const": "DEGRADED",
+                            "type": "string"
+                          },
+                          {
+                            "const": "UNKNOWN",
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "component",
+                      "state",
+                      "observed_revision"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "component": {
+                        "const": "PROCESSOR",
+                        "type": "string"
+                      },
+                      "detail": {
+                        "maxLength": 2048,
+                        "pattern": "^[^\\u0000\\r\\n]*$",
+                        "type": "string"
+                      },
+                      "observed_revision": {
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000\\r\\n]+$",
+                        "type": "string"
+                      },
+                      "state": {
+                        "anyOf": [
+                          {
+                            "const": "APPLYING",
+                            "type": "string"
+                          },
+                          {
+                            "const": "READY",
+                            "type": "string"
+                          },
+                          {
+                            "const": "DEGRADED",
+                            "type": "string"
+                          },
+                          {
+                            "const": "UNKNOWN",
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "component",
+                      "state",
+                      "observed_revision"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "error": {
+              "additionalProperties": false,
+              "properties": {
+                "code": {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "pattern": "^[^\\u0000\\r\\n]+$",
+                  "type": "string"
+                },
+                "message": {
+                  "maxLength": 2048,
+                  "minLength": 1,
+                  "pattern": "^[^\\u0000\\r\\n]+$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "code",
+                "message"
+              ],
+              "type": "object"
+            },
+            "state": {
+              "anyOf": [
+                {
+                  "const": "APPLYING",
+                  "type": "string"
+                },
+                {
+                  "const": "READY",
+                  "type": "string"
+                },
+                {
+                  "const": "DEGRADED",
+                  "type": "string"
+                },
+                {
+                  "const": "UNKNOWN",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "required": [
+            "state"
+          ],
+          "type": "object"
+        },
+        "report_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "pattern": "^[^\\u0000\\r\\n]+$",
+          "type": "string"
+        },
+        "revision": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[^\\u0000\\r\\n]+$",
+          "type": "string"
+        },
+        "runtime_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "pattern": "^[^\\u0000\\r\\n]+$",
+          "type": "string"
+        },
+        "runtime_kind": {
+          "const": "GATEWAY",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "genio.one.runtime.v1",
+          "type": "string"
+        },
+        "signature": {
+          "additionalProperties": false,
+          "properties": {
+            "algorithm": {
+              "const": "Ed25519",
+              "type": "string"
+            },
+            "key_id": {
+              "maxLength": 256,
+              "minLength": 1,
+              "pattern": "^[^\\u0000\\r\\n]+$",
+              "type": "string"
+            },
+            "value": {
+              "pattern": "^[A-Za-z0-9_-]{86}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "algorithm",
+            "key_id",
+            "value"
+          ],
+          "type": "object"
+        },
+        "tenant_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "pattern": "^[^\\u0000\\r\\n]+$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "message_type",
+        "tenant_id",
+        "runtime_id",
+        "report_id",
+        "command_id",
+        "revision",
+        "digest",
+        "signature",
+        "runtime_kind",
+        "observed_status"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "GenioOne Gateway Runtime Protocol v1"
+}

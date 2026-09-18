@@ -1,0 +1,7 @@
+{
+  "repository": "https://github.com/openai/codex.git",
+  "tag": "rust-v0.153.4",
+  "commit": "3d2ee51ca2d5db578f328aa75e20aa22c0197c9a",
+  "cliVersion": "0.153.4",
+  "protocolGeneration": "codex app-server generate-ts --experimental --out server/generated"
+}

@@ -1,0 +1,463 @@
+{
+  "version": 1,
+  "skeleton_id": "genio-bot-continuity-20260907",
+  "scenario": {
+    "actor": "Admin Administrator using local Keycloak identity",
+    "entrypoint": "http://127.0.0.1:5180/",
+    "tenant_id": "tenant-keycloak-local",
+    "outcome": "Every Bot has one durable timeline and managed context/memory. Mentions and model handoffs execute in the background and replies return to the originating Bot and resume its work. History and pending interactions restore across Bot switches, reloads, disconnects and runtime changes."
+  },
+  "git": {
+    "base_commit": "9a4f6cf7b1a2fafcc49478cb78974398368e1ab2",
+    "last_verified_code_commit": "9f24ffcccf294e8bda27c080dd61f5fbb5d8df46"
+  },
+  "current_checkpoint": "COMPLETE",
+  "last_observation": "Original local Bot continuity requirements verified. Cross-owner success and denial UI loops complete; policy restored revision 6, no draft, sharing private. Current typecheck and 277 tests passed. Limits recorded in completion report.",
+  "current_blocker": null,
+  "checkpoints": [
+    {
+      "id": "C1",
+      "title": "Restore one Bot timeline with correct native event ownership and durable history",
+      "status": "verified",
+      "evidence": [
+        {
+          "type": "focused_regression",
+          "command": "bun test server/codex-rpc-channels.test.ts src/components/chat/codex-event-scope.test.ts server/runtime-broker.test.ts",
+          "result": "12 passed; boundary tests only"
+        },
+        {
+          "type": "typecheck",
+          "command": "bun run typecheck",
+          "result": "passed"
+        },
+        {
+          "type": "local_chat_probe",
+          "actor": "Admin Administrator",
+          "url": "http://127.0.0.1:5180/",
+          "bot": "Policy Bot",
+          "input": "No-tool CONTINUITY-0907 echo",
+          "result": "actual reply CONTINUITY-0907 observed; same text remained after UI reload",
+          "limitation": "browser cache was not cleared; not full timeline restoration E2E"
+        },
+        {
+          "type": "focused_regression",
+          "command": "bun test server/codex-rpc-channels.test.ts server/runtime-broker.test.ts server/bot-registry.test.ts src/components/chat/codex-event-scope.test.ts src/components/chat/codex-session-recovery.test.ts src/components/chat/codex-history.test.ts",
+          "result": "27 passed; 0 failed; typecheck passed"
+        },
+        {
+          "type": "local_legacy_history_import",
+          "actor": "Admin Administrator",
+          "bot_id": "bot-88b5a45f-af9",
+          "archived_count": 15,
+          "visible_legacy_count": 13,
+          "native_matches": 2,
+          "screenshot": "docs/evidence/continuity/legacy-history-import.png",
+          "result": "Import, reload and expand observed; browser source retained."
+        },
+        {
+          "type": "focused_regression",
+          "result": "39 passed, 0 failed, 225 expectations; typecheck passed",
+          "scope": "12 focused files including legacy import, timeline HTTP, sessions, RPC isolation, history and handoff contracts"
+        },
+        {
+          "type": "focused_regression",
+          "result": "42 passed, 0 failed, 232 expectations; typecheck passed",
+          "scope": "Revisioned timeline, stale snapshots, completion replay, ownership and prior focused contracts"
+        },
+        {
+          "type": "local_runtime_correlation",
+          "bot_id": "bot-88b5a45f-af9",
+          "thread_id": "01a07a55-754f-7af2-97dd-a0e6ff4786f4",
+          "turn_id": "01a07a83-fa07-75b3-b91e-bb8c13902dd1",
+          "revision": 15,
+          "state": "completed",
+          "result": "Actual reply and reload observed; UI network reordering not artificially induced"
+        },
+        {
+          "type": "local_image_history",
+          "bot_id": "bot-88b5a45f-af9",
+          "thread_id": "01a07a55-754f-7af2-97dd-a0e6ff4786f4",
+          "turn_id": "01a07a9c-8c58-7613-b9e5-212403ea639d",
+          "revision": 17,
+          "screenshot": "docs/evidence/continuity/image-history-restored.png",
+          "result": "Selected image through file chooser; model identified red; reload restored image and reply."
+        },
+        {
+          "type": "focused_regression",
+          "result": "43 passed, 0 failed, 237 expectations; typecheck passed"
+        },
+        {
+          "type": "local_pending_question_recovery",
+          "bot_id": "bot-88b5a45f-af9",
+          "thread_id": "01a07a55-754f-7af2-97dd-a0e6ff4786f4",
+          "turn_id": "01a07aa7-4011-78b0-8083-37d3c5ec5e68",
+          "screenshot": "docs/evidence/continuity/pending-question-restored.png",
+          "result": "Reload and A-B-A restored question; actual response continued same turn."
+        },
+        {
+          "type": "local_multiple_questions",
+          "turn_id": "01a07aaa-3be3-7492-b878-c77b1d51730b",
+          "revision": 12,
+          "state": "completed",
+          "result": "First answer kept submit disabled; both answers enabled submission and model confirmed both."
+        },
+        {
+          "type": "focused_regression",
+          "result": "53 passed, 0 failed, 267 expectations; typecheck passed"
+        },
+        {
+          "type": "local_native_process_recovery",
+          "actor": "Admin Administrator",
+          "bot_id": "bot-88b5a45f-af9",
+          "runtime_id": "0cd14fb9-d6bc-4bac-8470-1d6ef47e10bd",
+          "interrupted_turn_id": "01a07b12-feeb-7970-a979-73a7dafd1b50",
+          "continued_turn_id": "01a07b14-425c-7173-a912-5778ea941438",
+          "result": "Verified native child SIGKILL; stale question removed, expiry visible, same-thread followup completed revision 16 and persisted after reload. 19 focused tests and typecheck passed.",
+          "limitation": "Not full Bot server restart or all approval types; response consumption after successful send remains uncertain across crashes."
+        },
+        {
+          "type": "local_server_restart",
+          "actor": "Admin Administrator",
+          "old_runtime_id": "07c3a8a9-94a8-4b9a-a8ac-6465af54ce66",
+          "interrupted_turn_id": "01a07b18-126f-78a3-9984-c3b817ae55fa",
+          "continued_turn_id": "01a07b19-485a-7851-b8e9-01af37e33354",
+          "result": "Server TERM and child exit verified; canonical pnpm dev restored only5181; reconnect expired old question and continued same native thread; reload retained completed response.21 focused tests/typecheck passed.",
+          "limitation": "Graceful server restart, not hard server kill or all invocation processes."
+        },
+        {
+          "type": "fresh_browser_history_and_continue",
+          "turn_id": "01a07bc9-1ba5-7030-be44-d19bd6ccb2af",
+          "result": "Empty storage authenticated via58080; five prior markers and red image restored; actual no-tool reply completed and persisted onreload; pageerror0.",
+          "limitation": "Old segment turns/list not-loaded error remains; current native segment resumed."
+        },
+        {
+          "type": "bot_timeline_ui",
+          "correlation_id": "bot-6448bc48-ebc",
+          "document": "docs/bot-continuity-completion-20260908.md",
+          "result": "Empty-browser history restoration and reload verified; server pointer reset creates a distinct native segment without losing the Bot timeline."
+        }
+      ]
+    },
+    {
+      "id": "C2",
+      "title": "Complete server-driven mention and model handoff with caller continuation",
+      "status": "verified",
+      "evidence": [
+        {
+          "type": "focused_contract",
+          "result": "Create alone starts target turn before process endpoint; repeated process starts no extra turn; caller reply once and target timeline saved. 54 focused tests and typecheck passed."
+        },
+        {
+          "type": "local_failure_path",
+          "handoff_id": "bot-handoff-f2ebc150-e801-473f-8221-dedcef41ea39",
+          "invocation_id": "bot-invocation-5cd889e7-004a-4cfa-a38a-25a698cb1a6c",
+          "state": "FAILED",
+          "result": "Target native request failed; original Bot displays failure after reload. Not successful handoff E2E."
+        },
+        {
+          "type": "local_successful_handoff",
+          "from_bot_id": "bot-88b5a45f-af9",
+          "to_bot_id": "bot-55ce1d4c-c9b",
+          "handoff_id": "bot-handoff-d612e2d5-e5cf-40c3-ba6e-a0e3887c4572",
+          "invocation_id": "bot-invocation-5c19fb39-04b3-4fd4-955e-52f4f2aeb165",
+          "state": "COMPLETED",
+          "screenshot": "docs/evidence/continuity/handoff-success.png",
+          "result": "Original Bot card displays actual target reply; caller model continuation not yet implemented."
+        },
+        {
+          "type": "focused_regression",
+          "result": "56 passed, 0 failed, 283 expectations; typecheck passed"
+        },
+        {
+          "type": "local_caller_continuation",
+          "invocation_id": "bot-invocation-11829ae1-f65b-4f1d-ae1e-56605eabb209",
+          "bot_id": "bot-88b5a45f-af9",
+          "thread_id": "01a07a55-754f-7af2-97dd-a0e6ff4786f4",
+          "turn_id": "01a07ac6-00ca-7c50-9298-f4b6b4eff0b5",
+          "state": "completed",
+          "screenshot": "docs/evidence/continuity/caller-model-continuation.png",
+          "result": "Original model continued after teammate result; reload retained system provenance and actual reply."
+        },
+        {
+          "type": "focused_regression",
+          "result": "58 passed, 0 failed, 296 expectations; typecheck passed",
+          "scope": "Added busy caller scheduling, once-only continuation, durable outbox reopen and native client ID reconciliation."
+        },
+        {
+          "type": "local_model_native_handoff",
+          "source_turn_id": "01a07ad1-6079-7e03-890c-d8fa23a78831",
+          "handoff_id": "bot-handoff-f714b033-6435-410c-bf07-b142bbcb216a",
+          "invocation_id": "bot-invocation-42c10d94-c09c-491f-bedc-20ea5a7cabdd",
+          "caller_turn_id": "01a07ad4-1ce9-7011-8c3d-8a5e4c714ed3",
+          "state": "completed",
+          "screenshot": "docs/evidence/continuity/model-native-handoff.png",
+          "result": "No @ parser; model used MCP tools, native approval accepted, teammate result resumed caller."
+        },
+        {
+          "type": "focused_regression",
+          "result": "59 passed, 0 failed, 302 expectations; typecheck passed"
+        },
+        {
+          "type": "completed_invocation_recovery",
+          "result": "Database reopen repairs completion once; wrong Bot and in-progress turn excluded. Injected outbox failure rolls back completion.15 focused tests/typecheck passed.",
+          "local_invocation_id": "bot-invocation-31502dd1-5fa1-45f2-b626-c024bb813eea",
+          "caller_turn_id": "01a07b1e-b947-78b3-b2dd-27ddf8b700c7",
+          "ui_result": "Actual target response followed by Policy Bot acknowledgement after native approval.",
+          "limitation": "UI normal path; precise crash window covered by storage tests, not Product E2E."
+        },
+        {
+          "type": "approved_dispatch_recovery_contract",
+          "result": "Reopened SQLite retains approval; no-session/denied-policy do not dispatch, current authority dispatches original client ID once; delivered event once; expired requests fail without execution.15 tests/103 expectations/typecheck pass; final approval-lag case rerun3 tests/22 expectations.",
+          "limitation": "Controlled runtime test, not Product E2E. Requires current caller session; offline service authority remains."
+        },
+        {
+          "type": "native_result_reconciliation_contract",
+          "result": "Owned target turn pagination only, no turn/start; inProgress waits, completed settles once; interrupted reports failure once.14 tests/101 expectations/typecheck pass.",
+          "limitation": "Controlled native RPC, not Product E2E; requires live owner session and terminal evidence."
+        },
+        {
+          "type": "failed_caller_continuation_contract",
+          "result": "FAILED/DENIED/EXPIRED durable outcomes; idle wait and one caller turn; explicit no-retry guidance; pending expiry once.21 tests/152 expectations/typecheck passed.",
+          "limitation": "Controlled tests, not fresh failed-handoff Product E2E."
+        },
+        {
+          "type": "local_failed_handoff_product_e2e",
+          "actor": "Admin Administrator",
+          "invocation_id": "bot-invocation-b995fcc8-026d-4a37-925c-ead30a47b8a6",
+          "caller_turn_id": "01a07b5d-8041-7a10-964d-c52bf24f6baf",
+          "result": "Nova unchanged genio-gateway failed BOT_MODEL_ROUTE_UNAVAILABLE; Policy explained unsuccessful outcome and next step. Caller completed with no tools; one invocation since test. Approval attention visible.",
+          "limitation": "Model-route failure only; other outcome variants remain."
+        },
+        {
+          "type": "invocation_runtime_shutdown_contract",
+          "result": "Preparing/running shutdown both wait for actual close completion, close once, persist FAILED/outbox, and leave later invocation APPROVED without spawning.20 tests/140 expectations/typecheck pass.",
+          "limitation": "Controlled runtime lifecycle, not real active-invocation server restart Product E2E."
+        },
+        {
+          "type": "invocation_turn_ownership",
+          "invocation_id": "bot-invocation-9b92e3cf-aa4d-4168-8a8e-b4af57fc3e3b",
+          "caller_turn_id": "01a07b6c-a9b4-77e1-a1b2-e43691d9e775",
+          "result": "Real target reply and caller continuation completed.12 tests/127 expectations/typecheck passed for ack/item/completion ordering and wrong-turn exclusion.",
+          "limitation": "Live normal ordering; injected race cases are contract tests."
+        },
+        {
+          "type": "invocation_setup_shutdown_checkpoint",
+          "result": "Delayed setup does not send work after closing; rejected turn send fails and releases. Real basic chat completed.88 focused tests/29 files/533 expectations/typecheck passed.",
+          "limitation": "Fault timing covered by controlled tests; normal chat live only."
+        },
+        {
+          "type": "long_invocation_runner",
+          "command": "bun scripts/verify-invocation-duration.ts",
+          "result": "Actual121006ms wait, RUNNING past120s with no close; completion produces one continuation and one close.7 related tests/typecheck passed.",
+          "limitation": "Controlled runtime and memory DB; not long-model Product E2E."
+        },
+        {
+          "type": "writer_and_dispatch_recovery",
+          "invocation_id": "bot-invocation-28a9f5e8-3dd4-486b-8024-2b019f6adb5d",
+          "result": "Real target/caller/reload completed on existing writer. Queue regression 15 tests / 138 expectations passed, typecheck passed.",
+          "limitation": "Cross-owner, offline startup race and native telemetry persistence remain unverified."
+        },
+        {
+          "type": "real_busy_queue_resume",
+          "invocation_id": "bot-invocation-b98cea6f-e69d-46a3-ac84-6b8d882d934f",
+          "result": "Admin UI original question restored after Bot switching; APPROVED while waiting; original completed before handoff; target and caller reply persisted after reload.",
+          "limitation": "Same-owner real path; cross-owner and offline startup races remain open."
+        },
+        {
+          "type": "integrated_checkpoint",
+          "result": "83 tests across17 files,476 expectations and typecheck passed. Offline writer now uses broker; synthetic concurrency test passes."
+        },
+        {
+          "type": "unified_broker_duration",
+          "result": "Real121008ms controlled runtime check passed; exec74986 exit0. One completion/continuation; close only on broker shutdown.",
+          "limitation": "Controlled runtime timer test, not121s model Product E2E."
+        },
+        {
+          "type": "full_module_checkpoint",
+          "result": "272 tests,83 files,1663 expectations,0 fail; typecheck passed. Automatic interruption and same-owner product paths verified.",
+          "limitation": "Cross-owner real UI/model loop not proven; authorization request remains unanswered."
+        },
+        {
+          "type": "handoff_reply_ui",
+          "correlation_id": "bot-6448bc48-ebc",
+          "document": "docs/bot-continuity-completion-20260908.md",
+          "result": "Real caller person-platform-admin and owner person-organization-admin UI approval executed target turn and completed exact caller continuation; denial path also verified."
+        }
+      ]
+    },
+    {
+      "id": "C3",
+      "title": "Persist and manage Bot-scoped memory and working context",
+      "status": "verified",
+      "evidence": [
+        {
+          "type": "local_memory_management",
+          "bot_id": "bot-88b5a45f-af9",
+          "manual_memory_id": "1cbabed0-443f-4a81-b628-da930c77ba2d",
+          "manual_revision": 4,
+          "model_memory_id": "a816274d-a564-4559-95c8-2ce0dd55bc53",
+          "model_turn_id": "01a07ae8-0dde-7a43-9e35-d8c822b3ae91",
+          "screenshot": "docs/evidence/continuity/bot-memory-management.png",
+          "result": "UI create/update/forget/restore, model recall, and model-owned working context write observed."
+        },
+        {
+          "type": "focused_regression",
+          "result": "61 passed, 0 failed, 322 expectations; typecheck passed; final native memory flag changes passed 10 related tests"
+        },
+        {
+          "type": "local_automatic_memory_context",
+          "actor": "Admin Administrator",
+          "bot_id": "bot-88b5a45f-af9",
+          "present_turn_id": "01a07b26-aa38-7052-8c51-0e1d0c187960",
+          "forgotten_turn_id": "01a07b27-4571-7961-9761-345d14cb787c",
+          "result": "Memory added only in UI panel answered without tool call; forgotten record absent on next turn. Native types userMessage/reasoning/agentMessage only.5 focused tests/typecheck passed.",
+          "limitation": "Normal Codex chat live verified; additionalContext grounded in installed schema. Other model routes/segments/handoff snapshots and automatic summary maintenance remain."
+        },
+        {
+          "type": "prior_segment_context_contract",
+          "result": "Current thread excluded; new thread gets4 bounded recent source turns with status/provenance; other Bot excluded and late-import order correct.11 tests/78 expectations/typecheck passed; final context file2 tests/18 expectations.",
+          "limitation": "No real native segment replacement E2E; excerpts are not semantic automatic summaries."
+        },
+        {
+          "type": "local_history_tool_retrieval",
+          "actor": "Admin Administrator",
+          "bot_id": "bot-88b5a45f-af9",
+          "turn_id": "01a07b30-35bd-75f2-8765-678f84f01e8e",
+          "result": "Native search_history then read_history, completed revision90; UI returned correct original text and source messageId.4 tests/44 expectations/typecheck passed.",
+          "limitation": "Text history retrieval; large-history index and cross-native-segment Product E2E not yet verified."
+        },
+        {
+          "type": "real_memory_sources",
+          "turn_id": "01a07bbb-762d-7553-b4fd-8f8e6fcab307",
+          "result": "Native recall/search/read/remember completed; source UI showed original answer/time after reload; dedicated memory forgotten revision2."
+        },
+        {
+          "type": "real_new_segment_context",
+          "bot_id": "bot-c27db27a-39f",
+          "old_thread_id": "01a07bd0-e9cf-7d50-8edb-0e7a3070d7cf",
+          "new_thread_id": "01a07bd2-0b7e-7c11-8708-d294666943cd",
+          "turn_id": "01a07bd2-0da9-7900-af43-398fd008cb8e",
+          "result": "Correct prior code/next step/preference, no tools, both native turns completed; history and lineage survive reload.",
+          "limitation": "Controlled pointer reset via public API, not naturally occurring runtime loss."
+        },
+        {
+          "type": "bot_memory_ui",
+          "correlation_id": "bot-6448bc48-ebc",
+          "document": "docs/bot-continuity-completion-20260908.md",
+          "result": "Natural work updates stored rolling summary revisions 1 to 3 with sources; after five trivial turns new segment recovered old decisions without tools."
+        }
+      ]
+    },
+    {
+      "id": "C4",
+      "title": "Restore pending interactions, drafts and navigation through runtime changes",
+      "status": "verified",
+      "evidence": [
+        {
+          "type": "local_draft_and_reading",
+          "bot_a": "bot-88b5a45f-af9",
+          "bot_b": "bot-55ce1d4c-c9b",
+          "anchor_id": "01a07a55-754f-7af2-97dd-a0e6ff4786f4:01a07a83-fcbf-7073-b0fd-096a206e3e7c",
+          "offset": -37.314453125,
+          "scroll_top": 1781.25,
+          "send_turn_id": "01a07afe-0dac-7f71-8db0-db2deb0be71f",
+          "screenshot": "docs/evidence/continuity/draft-reading-restored.png",
+          "result": "A-B-A and reload identical; accepted send clears A without affecting B; generated test drafts cleaned."
+        },
+        {
+          "type": "focused_regression",
+          "result": "64 passed, 0 failed, 331 expectations; typecheck passed"
+        },
+        {
+          "type": "local_image_draft_recovery",
+          "actor": "Admin Administrator",
+          "bot_id": "bot-88b5a45f-af9",
+          "thread_id": "01a07a55-754f-7af2-97dd-a0e6ff4786f4",
+          "turn_id": "01a07b0d-ff22-76a2-be14-8aaf7820a125",
+          "result": "A-B-A and reload preserved image/text; accepted send and reload retained history but cleared drafts; SQLite completed revision 15. Typecheck and 6 focused tests passed.",
+          "limitation": "No injected storage failure, cross-tab concurrency or delayed FileReader UI test."
+        },
+        {
+          "type": "local_server_roster_state",
+          "actor": "Admin Administrator",
+          "bot_id": "bot-88b5a45f-af9",
+          "turn_id": "01a07b34-771c-7a61-9067-ba4fd1f81056",
+          "result": "Working remained after Bot switch; question restored; completed revision16 became idle/unread; return cleared unread.8 tests/69 expectations/typecheck pass.",
+          "limitation": "Preview/time still stale browser cache; pending attention and simultaneous-turn state not yet fixed."
+        },
+        {
+          "type": "local_sidebar_server_summary",
+          "result": "Policy latest reply17:31 and target result17:06 displayed from server; Bot switches and reload do not replace timestamps with view time. Typecheck plus8 tests/65 expectations; final completion-time case7 tests/48 expectations.",
+          "limitation": "Pending attention, visible-read acknowledgement and concurrent-turn aggregation remain incomplete."
+        },
+        {
+          "type": "local_sidebar_attention",
+          "bot_id": "bot-88b5a45f-af9",
+          "turn_id": "01a07b42-7290-73b2-bea9-8d8ba3581531",
+          "result": "Waiting-for-answer shown across Bot switch, question answered after return, attention cleared on native completed revision15.15 tests/86 expectations/typecheck pass.",
+          "limitation": "Question UI live; approval classification via broker tests. Visible-read acknowledgement remains."
+        },
+        {
+          "type": "local_visible_read_receipt",
+          "actor": "Admin Administrator",
+          "visible_turn_id": "01a07b48-4191-7880-8515-2c92e4196726",
+          "scrolled_turn_id": "01a07b49-09b6-7763-989a-310263beb252",
+          "result": "Bottom auto-read; scrolled-up completion unread across Bot switches; jump latest cleared. Old/missing ETag and direct session writes rejected.8 tests/67 expectations/typecheck pass.",
+          "limitation": "UI visibility contract, not human comprehension; remaining continuity scope incomplete."
+        },
+        {
+          "type": "concurrent_bot_state_contract",
+          "result": "Two owned threads: one interrupted/completed cannot hide the other; replay does not restore unread; final completion idles.20 tests/131 expectations/typecheck passed.",
+          "limitation": "Synthetic native events, not concurrent Product E2E. Local DB residue check found none currently."
+        },
+        {
+          "type": "restored_work_state",
+          "result": "Completed/interrupted snapshot repairs working state, repeated read preserves unread=false, newer live turn protected.26 tests/160 expectations/typecheck pass. Real Policy reload ready and latest preview retained.",
+          "limitation": "Fault timing via controlled tests; actual normal reload only."
+        },
+        {
+          "type": "local_timeline_fetch_recovery",
+          "actor": "Admin Administrator",
+          "old_server_pid": 25674,
+          "new_server_pid": 17440,
+          "result": "TERM with no pending invocations; retry/error visible and history/draft retained; canonical startup restored only5181; error cleared and draft editable; test draft removed. Final reload ready.5 tests/26 expectations/typecheck pass.",
+          "limitation": "Whole-server outage, not isolated HTTP-only fault."
+        },
+        {
+          "type": "real_model_switch",
+          "bot_id": "bot-c27db27a-39f",
+          "turn_id": "01a07bdb-655a-79b3-8645-d00ae7dbb7ea",
+          "result": "Sol request completed, original context/preferences correct, same native thread; restored Luna/reload, pageerror0.",
+          "limitation": "Within Codex subscription route; company route/OAuth refresh not proven."
+        },
+        {
+          "type": "session_recovery_ui",
+          "correlation_id": "bot-6448bc48-ebc",
+          "document": "docs/bot-continuity-completion-20260908.md",
+          "result": "Real drafts, images, pending questions, server restart, model switch and Identity refresh verified in prior recorded scenarios; same-browser segment reset and latest reload return ready."
+        }
+      ]
+    }
+  ],
+  "completion_evidence": [
+    "bot_timeline_ui",
+    "handoff_reply_ui",
+    "bot_memory_ui",
+    "session_recovery_ui"
+  ],
+  "correlation_evidence": [],
+  "allowed_paths": [
+    "server/**",
+    "src/**",
+    "docs/**",
+    ".walking-skeleton.json",
+    "tests/**",
+    ".walking-skeleton-continuity.json",
+    "shared/**",
+    "scripts/verify-invocation-duration.ts",
+    "apps/bot/docs/bot-continuity-acceptance.md"
+  ],
+  "correlation_groups": [],
+  "state_revision": 44,
+  "state_digest": "6500c8892c86566aaedd0e97c7c4e5f80337da6212c64334d790597c584c5a04"
+}

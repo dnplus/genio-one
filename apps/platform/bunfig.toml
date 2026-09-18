@@ -1,0 +1,8 @@
+[run]
+bun = true
+
+# Component tests mount React into a DOM. The preload installs it before any
+# test module loads, so a bare `bun test` and a glob that reaches
+# platform-web/test both work, not only the test:components script.
+[test]
+preload = ["./platform-web/test/dom-setup.ts"]
