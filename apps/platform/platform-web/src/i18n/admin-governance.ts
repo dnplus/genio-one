@@ -1,4 +1,6 @@
 export const adminEnglish: Record<string, string> = {
+  "Copy API key": "Copy API key",
+  "Copy OAuth client secret": "Copy OAuth client secret",
   "SUCCESS": "Success",
   "POLICY_CHANGE": "Policy change",
   "ACCESS_GROUP_CHANGE": "Access group change",
@@ -289,6 +291,8 @@ export const adminEnglish: Record<string, string> = {
 }
 
 export const adminTraditionalChinese: Record<string, string> = {
+  "Copy API key": "複製 API 金鑰",
+  "Copy OAuth client secret": "複製 OAuth 用戶端密鑰",
   "SUCCESS": "成功",
   "POLICY_CHANGE": "政策變更",
   "ACCESS_GROUP_CHANGE": "群組變更",

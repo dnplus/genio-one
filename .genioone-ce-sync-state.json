@@ -7727,7 +7727,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/i18n/admin-governance.ts": {
-      "sha256": "3ae3dba266927861d5d7b78369faddb7b74877540420a812cf7a38a6f02a7aa4",
+      "sha256": "7d8b330f0e769acc3ab53fa47f94ec423b5a01f140872d96a68126d7cd5705b7",
       "mode": 420
     },
     "apps/platform/platform-web/src/lib/browser-oidc.test.ts": {
