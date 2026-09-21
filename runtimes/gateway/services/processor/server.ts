@@ -9,7 +9,12 @@ import { policyReleaseLoaderOptionsFromEnvironment } from "../shared/policy-rele
 import { startGatewaySidecarReadinessServer } from "../shared/release-readiness"
 import { startProcessorHttpBridge } from "./http"
 import { createOtlpGatewayDetailCapture } from "@genioone/telemetry/otlp-detail-capture"
+import { safetyBufferBytesFromEnvironment } from "./safety-buffer"
 import { createValkeyUsageCounterStore } from "../shared/usage-governance-valkey"
+import {
+  createProcessorAdapterRuntime,
+  loadProcessorAdapterRegistryFromEnvironment,
+} from "../shared/processor-adapters"
 
 const listen = process.env.GENIO_ONE_AI_PROCESSOR_LISTEN ?? "0.0.0.0:8082"
 const readinessListen =
@@ -25,6 +30,9 @@ const detailOtlpEndpoint = process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT?.trim(
 const detailCapture = detailOtlpEndpoint
   ? createOtlpGatewayDetailCapture({ endpoint: detailOtlpEndpoint })
   : undefined
+const adapterRegistry = loadProcessorAdapterRegistryFromEnvironment(process.env)
+const adapterRuntime = createProcessorAdapterRuntime(adapterRegistry, process.env)
+const safetyBufferBytes = safetyBufferBytesFromEnvironment()
 
 async function deliverActivity(event: Parameters<NonNullable<
   Parameters<typeof createExternalProcessorServer>[0]["onActivity"]
@@ -76,6 +84,8 @@ const server = createExternalProcessorServer({
   policySource: policyStore,
   tokenVault: vault,
   modelRouter,
+  adapterRuntime,
+  safetyBufferBytes,
   usageCounterStore,
   ...(detailCapture ? { detailCapture } : {}),
   ...(observationOrigin
@@ -89,6 +99,8 @@ const detailCaptureServer = createExternalProcessorServer({
   policySource: policyStore,
   tokenVault: vault,
   modelRouter,
+  adapterRuntime,
+  safetyBufferBytes,
   captureOnly: true,
   ...(detailCapture ? { detailCapture } : {}),
 })
@@ -97,6 +109,8 @@ const httpBridge = startProcessorHttpBridge({
   policySource: policyStore,
   tokenVault: vault,
   modelRouter,
+  adapterRuntime,
+  safetyBufferBytes,
   ...(observationOrigin ? { onActivity: deliverActivity } : {}),
 })
 

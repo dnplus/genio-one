@@ -33,6 +33,7 @@ import type { IdentityProviderRegistry } from "./capabilities/identity-providers
 import { createKeycloakApplicationOAuthClientProvisioner } from "./capabilities/applications/keycloak"
 import { createOidcWorkloadAssertionVerifier } from "./capabilities/federation/verifier"
 import type { DemoMcpGatewayIdentity, DemoMcpPublicationTarget } from "./capabilities/demo-project/provisioning"
+import { loadProcessorAdapterRegistryFromEnvironment } from "../../../../runtimes/gateway/services/shared/processor-adapters"
 
 export type PlatformApiMode = "postgres" | "memory-dev"
 
@@ -425,6 +426,7 @@ async function createMemoryDevApi(environment: NodeJS.ProcessEnv, logger: boolea
       modelRoutingDecisionProvider: semanticRouting.provider,
       modelRoutingDecisionMinimumConfidence: semanticRouting.minimumConfidence,
     } : {}),
+    processorAdapterRegistry: loadProcessorAdapterRegistryFromEnvironment(environment),
   })
   return createManagementApi({
     logger,
@@ -496,6 +498,7 @@ export async function createConfiguredManagementApi(
     "GENIO_ONE_RELEASE_ROOT_SIGNING_PRIVATE_KEY_FILE",
   )
   const principalAuthenticator = createEnvironmentPrincipalAuthenticator(environment)
+  const processorAdapterRegistry = loadProcessorAdapterRegistryFromEnvironment(environment)
   const migrationsDir =
     environment.GENIO_ONE_PLATFORM_MIGRATIONS_DIR ??
     fileURLToPath(new URL("../migrations", import.meta.url))
@@ -606,6 +609,7 @@ export async function createConfiguredManagementApi(
       applicationOAuthProvisioner: applicationOAuth,
       applicationTokenBroker: applicationOAuth,
       workloadAssertionVerifier: createOidcWorkloadAssertionVerifier(),
+      processorAdapterRegistry,
       subjectAliases: oidcSubjectAliasesFromEnvironment(environment),
       renderer: gatewayProjectionRendererOptionsFromEnvironment(environment),
       ...runtimeReportAttestationOptionsFromEnvironment(environment),

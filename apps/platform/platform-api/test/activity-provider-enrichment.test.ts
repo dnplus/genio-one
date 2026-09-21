@@ -48,6 +48,17 @@ test("Activity resolves the Provider from its trusted Resource Connection before
       trust_level: "RUNTIME_OBSERVED",
       step_id: "protect",
     }],
+    safety_decisions: [{
+      adapter_id: "safety-system-one",
+      provider: "JEV",
+      model: "jev-latest",
+      check_id: "prompt-injection",
+      score: 0.92,
+      threshold: 0.8,
+      decision: "BLOCK",
+      direction: "response",
+      step_id: "protect",
+    }],
     input_tokens: 10,
     output_tokens: 5,
     total_tokens: 15,
@@ -89,13 +100,16 @@ test("Activity resolves the Provider from its trusted Resource Connection before
     created_at: event.occurred_at,
   }
   let estimatorProvider: string | null | undefined
+  let statement = ""
   const sql: SqlAdapter = {
     async query<Row extends Record<string, unknown>>(
-      _text: string,
+      text: string,
       parameters: readonly unknown[] = [],
     ) {
+      statement = text
       assert.equal(parameters[25], "OLLAMA")
       assert.equal(parameters[57], JSON.stringify(event.data_classifications))
+      assert.equal(parameters[58], JSON.stringify(event.safety_decisions))
       return {
         rows: [{
           tenant_id: "tenant-1",
@@ -151,6 +165,12 @@ test("Activity resolves the Provider from its trusted Resource Connection before
   assert.equal(recorded.downstream_identity_mode, "NONE")
   assert.equal(recorded.cost_estimation_status, "UNPRICED")
   assert.deepEqual(recorded.data_classifications, event.data_classifications)
+  assert.deepEqual(recorded.safety_decisions, event.safety_decisions)
+  assert.match(statement, /jsonb_array_elements\(genio_one_gateway_activities\.safety_decisions\) with ordinality/)
+  assert.match(statement, /prior\.value ->> 'direction' = incoming\.value ->> 'direction'/)
+  assert.match(statement, /prior\.value ->> 'step_id' = incoming\.value ->> 'step_id'/)
+  assert.match(statement, /prior\.value ->> 'adapter_id' = incoming\.value ->> 'adapter_id'/)
+  assert.match(statement, /prior\.value ->> 'check_id' = incoming\.value ->> 'check_id'/)
 })
 
 test("Activity inventory projects a canonical Subject display without exposing the Identity directory", async () => {
@@ -198,6 +218,7 @@ test("Activity inventory projects a canonical Subject display without exposing t
           processor_request_steps: [],
           processor_response_steps: [],
           data_classifications: [],
+          safety_decisions: [],
           input_tokens: 10,
           output_tokens: 5,
           total_tokens: 15,

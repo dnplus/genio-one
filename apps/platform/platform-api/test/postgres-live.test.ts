@@ -86,6 +86,28 @@ async function jsonResponse(
   }
 }
 
+async function publishResourcePolicy(
+  app: Awaited<ReturnType<typeof createManagementApi>>,
+  draftPath: string,
+  definition: { one_policy_revision: number; steps: unknown[] },
+) {
+  const saved = await jsonResponse(app, "PUT", draftPath, {
+    expected_version: 0,
+    base_revision: definition.one_policy_revision - 1,
+    content: { kind: "RESOURCE_CAPABILITY", definition },
+  })
+  assert.equal(saved.response.statusCode, 200, saved.response.body)
+  const transition = {
+    expected_version: saved.body.version,
+    expected_content_digest: saved.body.content_digest,
+  }
+  for (const action of ["validate", "review"]) {
+    const result = await jsonResponse(app, "POST", `${draftPath}/${action}`, transition)
+    assert.equal(result.response.statusCode, 200, result.response.body)
+  }
+  return jsonResponse(app, "POST", `${draftPath}/publish`, transition)
+}
+
 const jwtAuthentication = {
   schema_version: "genio.one.auth.jwt.v1",
   provider: "test-oidc",
@@ -284,10 +306,9 @@ test(
       )
       assert.equal(routingPolicy.response.statusCode, 200, routingPolicy.response.body)
 
-      const chain = await jsonResponse(
+      const chain = await publishResourcePolicy(
         app,
-        "POST",
-        `/v1/tenants/${tenantId}/resources/${resource.body.resource_id}/capabilities/chat/enforcement-chain`,
+        `/v1/tenants/${tenantId}/resources/${resource.body.resource_id}/capabilities/chat/policy-draft`,
         {
           one_policy_revision: 1,
           steps: [
@@ -421,10 +442,9 @@ test(
       assert.equal(staleCandidate.response.statusCode, 201, staleCandidate.response.body)
       assert.notEqual(staleCandidate.body.request_id, requested.body.request_id)
 
-      const nextChain = await jsonResponse(
+      const nextChain = await publishResourcePolicy(
         app,
-        "POST",
-        `/v1/tenants/${tenantId}/resources/${resource.body.resource_id}/capabilities/chat/enforcement-chain`,
+        `/v1/tenants/${tenantId}/resources/${resource.body.resource_id}/capabilities/chat/policy-draft`,
         {
           one_policy_revision: 2,
           steps: [
@@ -592,70 +612,138 @@ test(
       assert.deepEqual(accountingDetail.body[0].valuations.map((value: any) => value.status), ["ESTIMATED", "ACTUAL"])
 
       const activityCorrelation = `usage-admission-live-${fixtureId}`
+      const activityPayload = {
+        correlation_id: activityCorrelation,
+        resource_id: resource.body.resource_id,
+        capability_id: "chat",
+        application_id: null,
+        subject_id: "person-live",
+        acting_client_id: "client-live",
+        entitlement_id: "entitlement-live",
+        usage_admission_id: `admission-live-${fixtureId}`,
+        usage_admission_disposition: "ADMIT",
+        usage_admission_reason: null,
+        consumer_organization_id: organization.body.organization_id,
+        resource_owner_organization_id: organization.body.organization_id,
+        use_case_id: "live-use-case",
+        enforcement_point_id: "AI_GATEWAY",
+        route: "MANAGED",
+        method: "POST",
+        path: "/v1/chat/completions",
+        status_code: 200,
+        outcome: "COMPLETED",
+        error_code: null,
+        latency_millis: 12,
+        upstream_attempted: true,
+        requested_model_id: model.body.model_id,
+        effective_model_id: "llama3.2:3b",
+        provider_id: "OLLAMA",
+        connection_id: connection.body.connection_id,
+        mcp_method: null,
+        mcp_tool: null,
+        mcp_backend: null,
+        processor_bundle_revision: "release-live",
+        processor_request_steps: [],
+        processor_response_steps: [],
+        data_classifications: [],
+        safety_decisions: [{
+          adapter_id: "semantic-safety",
+          provider: "HTTP",
+          model: "gateway-safety-model",
+          check_id: "prompt-injection",
+          score: 0.1,
+          threshold: 0.7,
+          decision: "ALLOW",
+          direction: "request",
+          step_id: "request-safety",
+        }],
+        input_tokens: 1,
+        output_tokens: 2,
+        total_tokens: 3,
+        route_mode: "DETERMINISTIC",
+        route_lease_id: null,
+        route_lease_reused: null,
+        routing_policy_id: null,
+        routing_revision: null,
+        candidate_set_digest: null,
+        candidate_connection_ids: [connection.body.connection_id],
+        release_id: null,
+        release_head_revision: null,
+        detail_availability: "NOT_CAPTURED",
+        detail_ref: null,
+        detail_expires_at: null,
+        occurred_at: accountingAt,
+      }
       const activityRecorded = await jsonResponse(
         app,
         "POST",
         `/v1/tenants/${tenantId}/runtime-control/GATEWAY/${runtimeId}/activities`,
-        {
-          correlation_id: activityCorrelation,
-          resource_id: resource.body.resource_id,
-          capability_id: "chat",
-          application_id: null,
-          subject_id: "person-live",
-          acting_client_id: "client-live",
-          entitlement_id: "entitlement-live",
-          usage_admission_id: `admission-live-${fixtureId}`,
-          usage_admission_disposition: "ADMIT",
-          usage_admission_reason: null,
-          consumer_organization_id: organization.body.organization_id,
-          resource_owner_organization_id: organization.body.organization_id,
-          use_case_id: "live-use-case",
-          enforcement_point_id: "AI_GATEWAY",
-          route: "MANAGED",
-          method: "POST",
-          path: "/v1/chat/completions",
-          status_code: 200,
-          outcome: "COMPLETED",
-          error_code: null,
-          latency_millis: 12,
-          upstream_attempted: true,
-          requested_model_id: model.body.model_id,
-          effective_model_id: "llama3.2:3b",
-          provider_id: "OLLAMA",
-          connection_id: connection.body.connection_id,
-          mcp_method: null,
-          mcp_tool: null,
-          mcp_backend: null,
-          processor_bundle_revision: "release-live",
-          processor_request_steps: [],
-          processor_response_steps: [],
-          data_classifications: [],
-          input_tokens: 1,
-          output_tokens: 2,
-          total_tokens: 3,
-          route_mode: "DETERMINISTIC",
-          route_lease_id: null,
-          route_lease_reused: null,
-          routing_policy_id: null,
-          routing_revision: null,
-          candidate_set_digest: null,
-          candidate_connection_ids: [connection.body.connection_id],
-          release_id: null,
-          release_head_revision: null,
-          detail_availability: "NOT_CAPTURED",
-          detail_ref: null,
-          detail_expires_at: null,
-          occurred_at: accountingAt,
-        },
+        activityPayload,
         "live-runtime-token",
       )
       assert.equal(activityRecorded.response.statusCode, 201, activityRecorded.response.body)
       assert.equal(activityRecorded.body.usage_admission_disposition, "ADMIT")
       assert.equal(activityRecorded.body.consumer_organization_id, organization.body.organization_id)
+      const activityResponseRecorded = await jsonResponse(
+        app,
+        "POST",
+        `/v1/tenants/${tenantId}/runtime-control/GATEWAY/${runtimeId}/activities`,
+        {
+          ...activityPayload,
+          status_code: 403,
+          outcome: "BLOCKED",
+          error_code: "DATA_PROTECTION_BLOCKED",
+          safety_decisions: [{
+            adapter_id: "semantic-safety",
+            provider: "HTTP",
+            model: "gateway-safety-model",
+            check_id: "prompt-injection",
+            score: 0.9,
+            threshold: 0.7,
+            decision: "BLOCK",
+            direction: "response",
+            step_id: "response-safety",
+          }],
+        },
+        "live-runtime-token",
+      )
+      assert.equal(activityResponseRecorded.response.statusCode, 201, activityResponseRecorded.response.body)
+      assert.deepEqual(
+        activityResponseRecorded.body.safety_decisions.map((receipt: { direction: string }) => receipt.direction),
+        ["request", "response"],
+      )
       const activityInventory = await jsonResponse(app, "GET", `/v1/tenants/${tenantId}/api-activities?limit=20`)
       const liveActivity = activityInventory.body.events.find((event: any) => event.correlation_id === activityCorrelation)
       assert.equal(liveActivity.usage_admission_id, `admission-live-${fixtureId}`)
       assert.equal(liveActivity.use_case_id, "live-use-case")
+      assert.deepEqual(liveActivity.safety_decisions.map((receipt: { direction: string }) => receipt.direction), ["request", "response"])
+
+      const boundedReceipts = Array.from({ length: 4094 }, (_, index) => ({
+        ...activityPayload.safety_decisions[0]!,
+        check_id: `bounded-${index}`,
+      }))
+      for (const batch of [boundedReceipts.slice(0, 2048), boundedReceipts.slice(2048)]) {
+        const recorded = await jsonResponse(app, "POST",
+          `/v1/tenants/${tenantId}/runtime-control/GATEWAY/${runtimeId}/activities`,
+          { ...activityPayload, safety_decisions: batch }, "live-runtime-token")
+        assert.equal(recorded.response.statusCode, 201, recorded.response.body)
+      }
+      const repeated = await jsonResponse(app, "POST",
+        `/v1/tenants/${tenantId}/runtime-control/GATEWAY/${runtimeId}/activities`,
+        { ...activityPayload, safety_decisions: [boundedReceipts[0], boundedReceipts[0]] }, "live-runtime-token")
+      assert.equal(repeated.response.statusCode, 201, repeated.response.body)
+      assert.equal(repeated.body.safety_decisions.length, 4096)
+      const overflow = await jsonResponse(app, "POST",
+        `/v1/tenants/${tenantId}/runtime-control/GATEWAY/${runtimeId}/activities`,
+        { ...activityPayload, status_code: 403, safety_decisions: [{ ...boundedReceipts[0], check_id: "overflow" }] }, "live-runtime-token")
+      assert.equal(overflow.response.statusCode, 422, overflow.response.body)
+      assert.equal(overflow.body.code, "SAFETY_DECISION_RECEIPT_LIMIT_EXCEEDED")
+      const preservedRows = await sql.query<{ status_code: number; safety_decisions: unknown[] }>(
+        "select status_code, safety_decisions from genio_one_gateway_activities where tenant_id = $1 and correlation_id = $2",
+        [tenantId, activityCorrelation])
+      assert.equal(preservedRows.rows[0]?.status_code, 200)
+      assert.equal(preservedRows.rows[0]?.safety_decisions.length, 4096)
+      assert.deepEqual(preservedRows.rows[0]?.safety_decisions, repeated.body.safety_decisions)
 
       const currencyPolicy = {
         usage_policy_id: `currency-live-${fixtureId}`,

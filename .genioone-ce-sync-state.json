@@ -5414,16 +5414,20 @@
       "sha256": "1b3162bf7202a0e671da14165fbfbdec1536a9a1b9519fa9096341f4a58245e5",
       "mode": 420
     },
+    "apps/platform/platform-api/migrations/002_gateway_activity_safety_decisions.sql": {
+      "sha256": "95ac097d26b97113680e5ff6dc15d74875fdb14ad3181ab2343876517481267d",
+      "mode": 420
+    },
     "apps/platform/platform-api/migrations/README.md": {
       "sha256": "f1fb0db514e78c51e220ed0728c1aa2d54a2af2dd10d24e95ca6a7d0c51c8679",
       "mode": 420
     },
     "apps/platform/platform-api/src/app.ts": {
-      "sha256": "77ae80f1d404d75369d2773b267607459c7f3b44d7983284745f0a6865a3e730",
+      "sha256": "38296b68cb38dc6ff725eaa84789eb4635d9f43c341714c118a545c0c3afec2c",
       "mode": 420
     },
     "apps/platform/platform-api/src/bootstrap.ts": {
-      "sha256": "a1e01e20a9f1ef37632753e9ab0cdad02883aaf562f86a1650e97b41e77993e7",
+      "sha256": "7f1718a716bae294f435dad412b1c8b639e5c7db4d3151866679be8c5f0bf672",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/access-groups/audit.ts": {
@@ -5471,7 +5475,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/activities/contract.ts": {
-      "sha256": "7e33b97646021156a64c97dfea292956cd1ab733abd49ff771d2a41403b0f8ee",
+      "sha256": "5035ca75249c6ce046dcac7233a5ab34a79f917c14eeb4ad7c731022c701c9fe",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/activities/detail-clickhouse.ts": {
@@ -5491,7 +5495,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/activities/memory.ts": {
-      "sha256": "321199b733d85929aa806223a3926591e7d29722ef0db9d2c48010b3c0e5f306",
+      "sha256": "b750066f0a640cb04c5bd8d4e68a476fdf14475c9f788acfd6c8249a79f5f54f",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/activities/module.ts": {
@@ -5499,11 +5503,11 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/activities/otel-clickhouse.ts": {
-      "sha256": "1725855ccb98d2b877e3c85e314c20ce722825ce74402ec221ca805be4048fce",
+      "sha256": "b5f7b69bb6d507998046b4f1d6792bd59405c14d5e833a8344da7c9c836eddf5",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/activities/postgres.ts": {
-      "sha256": "59f21ce87ed0e49b9bb31df2b408483f0c0519218138882949e95f6585bb368d",
+      "sha256": "27b5e0dd1727ee793733b05eb2fe855e72114006ddb9c216f6586b77dd88e341",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/activities/usage-summary.ts": {
@@ -5735,7 +5739,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/enforcement/compiler.ts": {
-      "sha256": "8f1b657a365744288e840b8c64181be33cfcab20f9fa17a21eb267cd454c87e8",
+      "sha256": "d729f0e26eba448914173bd57fd3d48d6b23e50d8ea9030d5118e7a6073d7705",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/enforcement/connection-eligibility.ts": {
@@ -5747,7 +5751,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/enforcement/http.ts": {
-      "sha256": "e4796321c5e7ad0f67c476e832821df07affa8baaf6f85c099c1a0b27020407d",
+      "sha256": "215a81bedcbd37bc41005a25ad9ac0b856c0ab8449e84add4e013b62e6266220",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/enforcement/memory.ts": {
@@ -5755,11 +5759,11 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/enforcement/module.ts": {
-      "sha256": "2b4c69e7605ddce9fb1851f640df9aa69b7be3bb9c672332847216501278bb7d",
+      "sha256": "2ba2bb758e07d91053773c465e96e7b2e2540893219b5aa5bd530393129044bc",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/enforcement/postgres.ts": {
-      "sha256": "c7d6f6be9b54a28ef5198d55296186474577173105b4c6a68fad0b08f469daf4",
+      "sha256": "1cd00fc54946b09bc3f1354d97d6573f2f1216a2315928c0a68831ab91ce883b",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/entitlements/contract.ts": {
@@ -5899,7 +5903,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/gateway-projection/memory.ts": {
-      "sha256": "486b4b46b99a8d4cd4ed48579713735802f195c90b4d50eaa9384678b50e087b",
+      "sha256": "a0bb8a9eee55517aa012ded96d20e3819c29cbd3a3e51dfe640929ca0bb2ff22",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/gateway-projection/module.ts": {
@@ -6019,7 +6023,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/management-authorization/module.ts": {
-      "sha256": "54608e5976175f786a15552c65cc99a0c43acec475a7b07479fdca8946366499",
+      "sha256": "d040318dbac87ed1572755645a5bb8a3e9cd8f67fa9e6d97e80972ef4322c56a",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/mcp-discovery/candidates.ts": {
@@ -6259,7 +6263,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/platform-modules-live.ts": {
-      "sha256": "94d96ffa333673c5949fbd0dad3e77373027eefb25646bad26aa50ad710f8ebc",
+      "sha256": "edd9e85fd49693a5fc69c8591052e4e75e4d4393edc9875158ac8e382556f922",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/platform-modules-postgres.ts": {
@@ -6267,7 +6271,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/platform-modules.ts": {
-      "sha256": "15eba79dab7845426f35cfe517a93ca201ee41ca274dd7d502de8521238ecec8",
+      "sha256": "9d04b955006369f9d79070e2c3d739f3efe43d8b779e762427a5a536e9ab957e",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/pricing-catalog/litellm.ts": {
@@ -6280,6 +6284,14 @@
     },
     "apps/platform/platform-api/src/capabilities/pricing-catalog/postgres.ts": {
       "sha256": "7234a438c34f217944597966680d27b8e034697a4323cd39008eff4b04c2ebf0",
+      "mode": 420
+    },
+    "apps/platform/platform-api/src/capabilities/processor-adapters/catalog.ts": {
+      "sha256": "be4dc7085087260b854b78746ade6c2a8dc71f46dcfb37f68980b44ad2a5db96",
+      "mode": 420
+    },
+    "apps/platform/platform-api/src/capabilities/processor-adapters/http.ts": {
+      "sha256": "075004b2988166fbf569d31ac752a7514fbe5e4a611cce77233d230ebb5a1a20",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/provider-credentials/contract.ts": {
@@ -6579,19 +6591,19 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/activity-http.test.ts": {
-      "sha256": "0e08a733e46652164bc74359af187c3499a98a7d0b7fb251227c5f2be8c9ba9d",
+      "sha256": "319466868e22dfa5f316d18d5a1f44c544d8ae7ce577c81aceae65aae698e309",
       "mode": 420
     },
     "apps/platform/platform-api/test/activity-otel-materializer.test.ts": {
-      "sha256": "9e5b67630c57da9cdfdf40145ae0cf9eb0427b8ae22824f1c2ed876b45e4744d",
+      "sha256": "e3e4a3f76b98c43a64d8a42256be1ea48ba95b0f488a02724f7a7cc21ced7a8a",
       "mode": 420
     },
     "apps/platform/platform-api/test/activity-provider-enrichment.test.ts": {
-      "sha256": "2ecf549036b36a4651c5427591f2721e2e76daebc5697a83a4b5bd4af1de00a1",
+      "sha256": "b85e05e8ad373cf88967f17436529e87ea0d56f163dd8fb5280275b3c9fac96a",
       "mode": 420
     },
     "apps/platform/platform-api/test/activity-usage-summary.test.ts": {
-      "sha256": "b660bd195a20fd6cfc1bb5b19d36e714a27f5c4e92ae7648e564e654e326ae29",
+      "sha256": "27c7988db9f1b2169448b95e7716aaa3251a8e07b1b69aad36f9acb41a3981b3",
       "mode": 420
     },
     "apps/platform/platform-api/test/admin-policy-authoring.test.ts": {
@@ -6635,7 +6647,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/bootstrap.test.ts": {
-      "sha256": "b3a21e22e926ce3aaa8bf4c19aa3b3e389146704cabaf609c535debd2a7f6e8f",
+      "sha256": "9cdff292ef62e73c21f6445b5f2e7dd6728afb0542005680e88f09a7d6488d09",
       "mode": 420
     },
     "apps/platform/platform-api/test/breeze-asr-install.test.ts": {
@@ -6723,11 +6735,11 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/enforcement-postgres-publish-draft.test.ts": {
-      "sha256": "2001a1382c33689217b7b7bb11084038df2c15b3d57743fddba17bcd757211d9",
+      "sha256": "8b3ebf3ef4b14edda3f4b751353965d12732f1f91ef8669f6de86c8209791bcb",
       "mode": 420
     },
     "apps/platform/platform-api/test/enforcement-postgres.test.ts": {
-      "sha256": "a885d8ebd770f97a58cb0ba0540b1b4128545dd62ac84a0b3c493b5b2bc290f8",
+      "sha256": "1b353554bc515a90b854ed51347d50746d931993a04b02ba71b01b06bf19342d",
       "mode": 420
     },
     "apps/platform/platform-api/test/enforcement.test.ts": {
@@ -6807,7 +6819,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/gateway-projection.test.ts": {
-      "sha256": "83c51a9972e865c7bc1ddd10cc4635b3b2943f04b8e44f1d7d8c3a4128c2acc6",
+      "sha256": "21f14376956f979ba4d1337003aac9c26afc9575cb9c46504f97da810c20588d",
       "mode": 420
     },
     "apps/platform/platform-api/test/gateway-registration-keycloak.test.ts": {
@@ -6951,7 +6963,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/persistence.test.ts": {
-      "sha256": "40cb65332f7fe5b13ba09c5cac0c0016137c3624b21e88c06cf644bf8257de47",
+      "sha256": "17543a696d4934079297a02aa5ebaef584b4b7b24b707f47d3181ed4f4bda38d",
       "mode": 420
     },
     "apps/platform/platform-api/test/personal-connections.test.ts": {
@@ -6987,11 +6999,15 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/postgres-live.test.ts": {
-      "sha256": "1d971a1f83079e36872bac85575bd585ec9b2de6d3de255fa7eac45cb4cd88ca",
+      "sha256": "68e13e2949c0e18074ec7658a8418aa4d3affe8928ffe0a7da4e53fb3d9549da",
       "mode": 420
     },
     "apps/platform/platform-api/test/pricing-catalog.test.ts": {
       "sha256": "8ae4534c156ed86fd9b3c409f3a7423dd7c6bbc81498d2d5d6146fecc057e2d5",
+      "mode": 420
+    },
+    "apps/platform/platform-api/test/processor-adapters.test.ts": {
+      "sha256": "2d4cc2092582cfdad6bdafb0e623e786d5ba1533f2b56714f93fef2dc179f491",
       "mode": 420
     },
     "apps/platform/platform-api/test/provider-credential-material-postgres.test.ts": {
@@ -7371,7 +7387,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/features/activity/api-gateway-transaction-sheet.tsx": {
-      "sha256": "de9a1b94f84d08dee53fdaab3be613e1733b0485bec6727c2cf610f8ac3c22fa",
+      "sha256": "03cae7bb4200c5aeeb477bc1be1887f6a345bafc40b71582d0fea63c6cf2146e",
       "mode": 420
     },
     "apps/platform/platform-web/src/features/activity/audit-decision-sheet.tsx": {
@@ -7555,11 +7571,11 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/features/policy/policy-process-draft.test.ts": {
-      "sha256": "4cf9e3b0e00a8a159d8b7065413ad276d1b6affa1f2230b25e0f9b685da8a5ef",
+      "sha256": "30a9c67ad16cf483f98da11eb0f23c145c50089d99f0c0864405684b06bdd4d2",
       "mode": 420
     },
     "apps/platform/platform-web/src/features/policy/policy-process-draft.ts": {
-      "sha256": "f3b254e45aa75d071c213493c2b12d02e09d084cf80b665114f257071a671a63",
+      "sha256": "96848eb49c1c98ecc85a7913383a872d93a303a97379539accad82d4e5471167",
       "mode": 420
     },
     "apps/platform/platform-web/src/features/policy/runtime-capability-groups.tsx": {
@@ -7647,7 +7663,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/features/resources/resource-enforcement-chain-card.tsx": {
-      "sha256": "5e75c7b6051b33c4e51b2842598b5c5685fdb6ebd1187c8c127a5f75febd8299",
+      "sha256": "88791b6edf4262007a6ef9aff4454f62bda3d723c05099d43a8732856b9fcf98",
       "mode": 420
     },
     "apps/platform/platform-web/src/features/resources/resource-model-routing-card.tsx": {
@@ -7699,7 +7715,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/generated/management-api.ts": {
-      "sha256": "bbeefc0e4058d6b442f1ba2c0f07327e62def2ffb07f09c5a5e64d009e1a29d6",
+      "sha256": "96c16c8d37bfae0017d23e914dcc03eb2f5be1e38cf4da9e34b56df216309110",
       "mode": 420
     },
     "apps/platform/platform-web/src/hooks/use-demo-mode.ts": {
@@ -7723,11 +7739,11 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/i18n.ts": {
-      "sha256": "6f0095af03770c55c3b9176f85a7f0a94f87154574b89a9faf64fc6d07e6e108",
+      "sha256": "dbcf317744de790a0c745e8d61e667521d14935b3c34c86c5a67bc62495c79c3",
       "mode": 420
     },
     "apps/platform/platform-web/src/i18n/admin-governance.ts": {
-      "sha256": "7d8b330f0e769acc3ab53fa47f94ec423b5a01f140872d96a68126d7cd5705b7",
+      "sha256": "9d6490fcb92a003ccbd6efb10921ecf9c73596a3053ebf7b69b05b4315f00f3e",
       "mode": 420
     },
     "apps/platform/platform-web/src/lib/browser-oidc.test.ts": {
@@ -7775,7 +7791,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/lib/product-api.ts": {
-      "sha256": "83c21f460a6ed49e733bdef8a6a93bcfae5913c0413ec129c5887c61a76a9627",
+      "sha256": "59594470211b9f933aaf42ae41fa1c75f10994afe8a1a962b15edb20041bd7ac",
       "mode": 420
     },
     "apps/platform/platform-web/src/lib/runtime-health.ts": {
@@ -7815,7 +7831,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/mocks/overview.ts": {
-      "sha256": "7e9d707d533795f3bc097f236571bf12c8852602c0d50274be98f427b270e48b",
+      "sha256": "1342bcdda4cc010e4f15496b1d1b4d382adeb482cae2d04e656b0821df392966",
       "mode": 420
     },
     "apps/platform/platform-web/src/styles/globals.css": {
@@ -7824,6 +7840,10 @@
     },
     "apps/platform/platform-web/src/vite-env.d.ts": {
       "sha256": "65996936fbb042915f7b74a200fcdde7e410f32a669b1ab9597cfaa4b0faddb5",
+      "mode": 420
+    },
+    "apps/platform/platform-web/test/api-gateway-transaction-sheet.dom.test.tsx": {
+      "sha256": "7babdf03f056741843a95e29b582ab7a88124d1c260d32c05ae144a6adea9751",
       "mode": 420
     },
     "apps/platform/platform-web/test/bot-policy-draft-lifecycle.dom.test.tsx": {
@@ -7862,8 +7882,12 @@
       "sha256": "5c9cd489d6ee8b3aeb3f7a5a9805c9952d89b9f8394b6afae153a66a9c100d1e",
       "mode": 420
     },
+    "apps/platform/platform-web/test/resource-enforcement-chain-card.dom.test.tsx": {
+      "sha256": "62ad1352aee5ba3ed4ef548c6ba6a5807063e328f76a5bf79120322feb0e4938",
+      "mode": 420
+    },
     "apps/platform/platform-web/test/resource-policy-draft-lifecycle.dom.test.tsx": {
-      "sha256": "59ace3e4bb4f7f0b6f61cb58d6ad3a8083ba74520eef6ec88d2e40b96012f37e",
+      "sha256": "029247d775a01379345b1bfd936ea70e3064cdc822ff4bb3d03babd290e2ffd9",
       "mode": 420
     },
     "apps/platform/platform-web/test/select.dom.test.tsx": {
@@ -8079,7 +8103,7 @@
       "mode": 420
     },
     "deploy/helm/genio-one/templates/gateway-runtime.yaml": {
-      "sha256": "54c175082f259e6bd45602b435bf2f1a2a4fcb43a62d38ed1cfe650e10f37a6a",
+      "sha256": "08eb15f23fca3df1cdd259b7b2a528d23a73dbf5b47ee76ad1bf40787529e8bf",
       "mode": 420
     },
     "deploy/helm/genio-one/templates/gravitee.yaml": {
@@ -8095,7 +8119,7 @@
       "mode": 420
     },
     "deploy/helm/genio-one/templates/platform.yaml": {
-      "sha256": "328be3b0bfcd3d721d7965d86051a2299a3112541601b85844f693ccacabcc32",
+      "sha256": "6c83ff9564403438c7a908889892feb42a75ecfb4a63e265f9aba995da7d6724",
       "mode": 420
     },
     "deploy/helm/genio-one/templates/post-install.yaml": {
@@ -8108,6 +8132,10 @@
     },
     "deploy/helm/genio-one/templates/pricing-sync.yaml": {
       "sha256": "efb522ff1ab5b113e112706f2fceaf5e7d2c0a6fae2f94d13f0049aa48b0d83d",
+      "mode": 420
+    },
+    "deploy/helm/genio-one/templates/processor-adapters-validation.tpl": {
+      "sha256": "e9b9b6edd04d887582048113e3c4a427adc1e56af3c36e3c146bfe5940e1f1a6",
       "mode": 420
     },
     "deploy/helm/genio-one/templates/secrets.yaml": {
@@ -8123,7 +8151,7 @@
       "mode": 420
     },
     "deploy/helm/genio-one/values.yaml": {
-      "sha256": "e42c86576bcd5f3621da3a753e771cfa86eeb4c49dc03b507939d6f64b27b97f",
+      "sha256": "3b04b06ec5d22611842d5b2478ab8814388bed3ea2e47d9bde02178e2beccf72",
       "mode": 420
     },
     "docs/public/ce/assets/resource-management.png": {
@@ -8583,11 +8611,11 @@
       "mode": 420
     },
     "runtimes/gateway/controller/local-aigw.test.ts": {
-      "sha256": "d3b356cf4e680a6a3bd8650d28a2cb44b9d67a49cb6765877032646d7a9523df",
+      "sha256": "f5355a1433c1d723265cd9cf63f6612970297c4ef976cebbe9d324e4dcbef939",
       "mode": 420
     },
     "runtimes/gateway/controller/local-aigw.ts": {
-      "sha256": "5920a39767b697a80d903e070b7ad1b8fe3a2f96b996b2727a6665fcc5c127dc",
+      "sha256": "f511b191e534bf17fd37fece8f152c60d9cbc266f3a5c9af9f5433d90fe89e45",
       "mode": 420
     },
     "runtimes/gateway/controller/local-dev.ts": {
@@ -8655,7 +8683,7 @@
       "mode": 420
     },
     "runtimes/gateway/services/authorizer/server.ts": {
-      "sha256": "48339fb28c7a08102d39a5fc64f7ea6bcb89d986df516a46d53c71c65ef579bd",
+      "sha256": "f80a67e82312f8a0eaaa133b7c0b852a91b217156e4ff5c5fa3b742833b00828",
       "mode": 420
     },
     "runtimes/gateway/services/authorizer/signed-bundle.ts": {
@@ -8671,15 +8699,15 @@
       "mode": 420
     },
     "runtimes/gateway/services/processor/contract.ts": {
-      "sha256": "fda618087531f5e15399c6de90e4e92d01e450b9f265fc47d82eefef6a7fc618",
+      "sha256": "a862be1790bb5a2e9164e06e888116a34cbc3c690917ad3217ecadd211042e55",
       "mode": 420
     },
     "runtimes/gateway/services/processor/grpc.ts": {
-      "sha256": "628182dd1b80873bbbef80cc59887fef1e9df5f1936e1cea6796e576d89e3422",
+      "sha256": "935277118c81f53476518b51eb94214ae1bf27dfff031a6f4113df2e623a6b4b",
       "mode": 420
     },
     "runtimes/gateway/services/processor/http.ts": {
-      "sha256": "e93bdc15a7a93e92af72ee5aad163bb5ae813590e1e409305461c2aa39e6c237",
+      "sha256": "9ec53aad473bd5bfe70bc7dc25fbcbe9c7d800d18a0b670f7674608bed10cd37",
       "mode": 420
     },
     "runtimes/gateway/services/processor/model-route-lease.test.ts": {
@@ -8691,23 +8719,35 @@
       "mode": 420
     },
     "runtimes/gateway/services/processor/module.ts": {
-      "sha256": "e49efa4ee77c5fdbca4dc5607519bb783ea1875ab6886d5a4cb6a0fb4fbcdb15",
+      "sha256": "9362d35bfd9565b1bc7c4ddd194e7537260afa50d51f02ceb4fd19ec3449b6af",
       "mode": 420
     },
     "runtimes/gateway/services/processor/policy-store.ts": {
-      "sha256": "9f7ea719b4e3ecc7cb490385956896e7dec5c53991aafbaf76ec7d4051e79f58",
+      "sha256": "eb60e6c9a8f117345c0cc376827e6923e7aa50d5bf9c36988059bf41d2b4ee73",
       "mode": 420
     },
     "runtimes/gateway/services/processor/processor.test.ts": {
-      "sha256": "bf3ebb8f6d219acfffc917d7a91eb45560c0da91af92a07ea84505820e38ff63",
+      "sha256": "df32a92596cfe14642bb23cdfaaed79108be5af3453657651a76167a2948f6b4",
       "mode": 420
     },
     "runtimes/gateway/services/processor/proto/external_processor_minimal.proto": {
-      "sha256": "dd8ca37b6914c338744b1bb158506c735c4ee0ff877a63ddb63df3e75382baeb",
+      "sha256": "586dec97545f605bace0982cf20d5deebfe5e4701ef32d74c732f9c1e6e16b8d",
+      "mode": 420
+    },
+    "runtimes/gateway/services/processor/safety-adapters.test.ts": {
+      "sha256": "f616c65c816f1f5f72a518418d58ab598fbb23cabd8e2b7b85d1e7aa07ec606f",
+      "mode": 420
+    },
+    "runtimes/gateway/services/processor/safety-adapters.ts": {
+      "sha256": "343a89c29dcb0166d62257d150e66f15aef406945165695ff87f699e65bb6cbb",
+      "mode": 420
+    },
+    "runtimes/gateway/services/processor/safety-buffer.ts": {
+      "sha256": "8903e8b0e531160d25951119ab175a23abae4454f5927de3d12677938e462209",
       "mode": 420
     },
     "runtimes/gateway/services/processor/server.ts": {
-      "sha256": "d1820914adfd551a02dc29e68e369e40a6b617cfb529bc7de179549740ba763d",
+      "sha256": "725896241b239968b288c42d34bf3e0351486b62a879b9cdfc6bf89f74bab788",
       "mode": 420
     },
     "runtimes/gateway/services/processor/token-vault.test.ts": {
@@ -8716,6 +8756,10 @@
     },
     "runtimes/gateway/services/processor/token-vault.ts": {
       "sha256": "ec06ca57237874344a0c24d59ec5e79af5d1f4a138d3462e871b1ed070f1b72f",
+      "mode": 420
+    },
+    "runtimes/gateway/services/processor/transport-safety.test.ts": {
+      "sha256": "28db17b2c7f0e635428fdc01e77e84a2c19c9816e89f7d448cdd7eeb6adb80a9",
       "mode": 420
     },
     "runtimes/gateway/services/shared/audio-transcription.test.ts": {
@@ -8735,7 +8779,7 @@
       "mode": 420
     },
     "runtimes/gateway/services/shared/data-classification.ts": {
-      "sha256": "8f8655b8fa0eeec660f3a862abf1ee5ce97fe4e8cb6ec78b3a667d368a289c9e",
+      "sha256": "462104f5c605fc1a0f4951388911e3a8a1e8ff762feb9937b7a00e12479e3ace",
       "mode": 420
     },
     "runtimes/gateway/services/shared/enforcement-headers.ts": {
@@ -8747,7 +8791,7 @@
       "mode": 420
     },
     "runtimes/gateway/services/shared/gateway-activity.ts": {
-      "sha256": "84f75fab5bd850bbea04e58589656c2859387c343ad7121e548a4c2b6ad9304c",
+      "sha256": "01a97e5ace2a9695d54cb48099b165ec33fba66df286c0ee6b329b2f330efd1d",
       "mode": 420
     },
     "runtimes/gateway/services/shared/gateway-bootstrap.ts": {
@@ -8790,6 +8834,14 @@
       "sha256": "e8396c69e1cb574a7485b1d9caab31d34f637d3afd8e7f501934308795f912dc",
       "mode": 420
     },
+    "runtimes/gateway/services/shared/processor-adapters.test.ts": {
+      "sha256": "71b28c542f9b13844e0ea92fdda9a17300aaa5fde32a719ff1370c85c19581d8",
+      "mode": 420
+    },
+    "runtimes/gateway/services/shared/processor-adapters.ts": {
+      "sha256": "4e1de4958c8d76023cb302982cfaf3c21f17244acf687cf7d197f8e1a6b67f22",
+      "mode": 420
+    },
     "runtimes/gateway/services/shared/provider-credential-reference.ts": {
       "sha256": "f6524fc24b1904a10e6f4357fd02b8c7d1dd4d4449d4000858ce55052dca5222",
       "mode": 420
@@ -8808,6 +8860,10 @@
     },
     "runtimes/gateway/services/shared/runtime-report-attestation.ts": {
       "sha256": "833cd484e1c2561820ed98e001b3fac4d1901d2caed8da3c23569abaf0bf30f0",
+      "mode": 420
+    },
+    "runtimes/gateway/services/shared/safety-decision.ts": {
+      "sha256": "22861373d372ea39a35fbc82e25e298823bdb3babc3485a0264c79b15ed5893d",
       "mode": 420
     },
     "runtimes/gateway/services/shared/usage-accounting.ts": {

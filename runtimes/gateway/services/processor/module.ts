@@ -2,6 +2,7 @@ import { observeOperation } from "@genioone/telemetry/operation-observability"
 import { randomBytes } from "node:crypto"
 
 import type {
+  DataProtectionDetectorMatch,
   DataProtectionResult,
   ModelClassifierConfig,
   ProcessingContext,
@@ -9,9 +10,22 @@ import type {
   ProcessorHook,
   ProcessorPolicy,
   ProcessorPolicyStep,
+  SafetyCheckConfig,
+  SafetyDecision,
 } from "./contract"
 import { validateExecutableProcessorSteps, validateProcessorPolicy } from "./contract"
 import type { TokenVault } from "./token-vault"
+import {
+  analyzePresidioText,
+  type PresidioDetection,
+  SafetyCheckProcessor,
+} from "./safety-adapters"
+import {
+  MAX_PRESIDIO_INSPECTED_BYTES,
+  MAX_PRESIDIO_INSPECTED_STRINGS,
+  PRESIDIO_PAYLOAD_TIMEOUT_MS,
+  type ProcessorAdapterRuntime,
+} from "../shared/processor-adapters"
 import {
   mergeDataClassificationReceipts,
   type DataClassificationReceipt,
@@ -88,6 +102,7 @@ export interface DataProcessorOptions {
   policy: ProcessorPolicy
   tokenVault: TokenVault
   tokenFactory?: (semanticType: string) => string
+  adapterRuntime?: ProcessorAdapterRuntime
 }
 
 export interface PayloadProcessor {
@@ -107,6 +122,7 @@ export interface PayloadProcessor {
     context: ProcessingContext,
     line: string,
   ): Promise<DataProtectionResult>
+  requiresBufferedResponse?(direction: "request" | "response"): boolean
 }
 
 function compilePatterns(policy: ProcessorPolicy): CompiledPattern[] {
@@ -164,6 +180,7 @@ function hookPolicy(
     action,
     patterns: builtinConfig.patterns,
     token_ttl_seconds: builtinConfig.token_ttl_seconds,
+    ...(builtinConfig.detector ? { detector: builtinConfig.detector } : {}),
   })
 }
 
@@ -236,7 +253,7 @@ function hookRuntime(
   stepId: string,
   bundleRevision: string,
   tokenVault: TokenVault,
-  processorFactory?: (policy: ProcessorPolicy, tokenVault: TokenVault) => PayloadProcessor,
+  options: ProcessorChainOptions,
 ): RuntimeHook | undefined {
   if (!hook) return undefined
   if (hook.action === "MODEL_CLASSIFIER") {
@@ -245,13 +262,36 @@ function hookRuntime(
       processor: createModelClassifier(hook.config as ModelClassifierConfig),
     }
   }
+  if (hook.action === "SAFETY_CHECK") {
+    return {
+      action: hook.action,
+      processor: new SafetyCheckProcessor(
+        hook.config as SafetyCheckConfig,
+        options.adapterRuntime,
+      ),
+    }
+  }
   const policy = hookPolicy(hook, bundleRevision, stepId)
   return {
     action: policy.action,
-    processor: processorFactory?.(policy, tokenVault) ??
-      new DataProcessor({ policy, tokenVault }),
+    processor: options.processorFactory?.(policy, tokenVault) ??
+      new DataProcessor({ policy, tokenVault, adapterRuntime: options.adapterRuntime }),
     sourceVersion: policy.revision,
   }
+}
+
+export interface ProcessorChainOptions {
+  processorFactory?: (policy: ProcessorPolicy, tokenVault: TokenVault) => PayloadProcessor
+  adapterRuntime?: ProcessorAdapterRuntime
+}
+
+type ProcessorChainOptionsInput = ProcessorChainOptions |
+  ((policy: ProcessorPolicy, tokenVault: TokenVault) => PayloadProcessor)
+
+function normalizeProcessorChainOptions(
+  options: ProcessorChainOptionsInput | undefined,
+): ProcessorChainOptions {
+  return typeof options === "function" ? { processorFactory: options } : options ?? {}
 }
 
 /**
@@ -263,12 +303,13 @@ export function createProcessorChain(
   steps: readonly ProcessorPolicyStep[],
   tokenVault: TokenVault,
   bundleRevision: string,
-  processorFactory?: (policy: ProcessorPolicy, tokenVault: TokenVault) => PayloadProcessor,
+  options?: ProcessorChainOptionsInput,
 ): PayloadProcessor {
   if (steps.length === 0) {
     throw new Error("processor policy scope must contain at least one step")
   }
   validateExecutableProcessorSteps(steps)
+  const chainOptions = normalizeProcessorChainOptions(options)
   const runtimeSteps: RuntimeStep[] = []
   for (const step of steps) {
     const request = hookRuntime(
@@ -276,16 +317,58 @@ export function createProcessorChain(
       step.step_id,
       bundleRevision,
       tokenVault,
-      processorFactory,
+      chainOptions,
     )
     const response = hookRuntime(
       step.hooks.response,
       step.step_id,
       bundleRevision,
       tokenVault,
-      processorFactory,
+      chainOptions,
     )
     runtimeSteps.push({ stepId: step.step_id, request, response })
+  }
+
+  const requiresBufferedResponse = (direction: "request" | "response"): boolean =>
+    runtimeSteps.some((step) => {
+      const hook = direction === "request" ? step.request : step.response
+      return hook?.processor.requiresBufferedResponse?.(direction) === true
+    })
+
+  const appendResult = (
+    direction: "request" | "response",
+    step: RuntimeStep,
+    hook: RuntimeHook,
+    result: DataProtectionResult,
+    matches: Set<string>,
+    dataClassifications: DataClassificationReceipt[],
+    safetyDecisions: Array<SafetyDecision & { direction: "request" | "response"; step_id: string }>,
+  ): void => {
+    result.matches.forEach((match) => matches.add(match))
+    if (hook.sourceVersion && hook.action !== "RESTORE") {
+      const detectorMatches: readonly DataProtectionDetectorMatch[] = result.detectorMatches ?? result.matches
+        .filter((match) => match !== "INVALID_JSON")
+        .map((classification) => ({ classification }))
+      for (const detectorMatch of detectorMatches) {
+        if (detectorMatch.classification === "INVALID_JSON") continue
+        const receipt = {
+          classification: detectorMatch.classification,
+          handling_action: hook.action as DataClassificationReceipt["handling_action"],
+          source: "DLP_DETECTOR" as const,
+          source_version: hook.sourceVersion,
+          trust_level: "RUNTIME_OBSERVED" as const,
+          step_id: step.stepId,
+          ...(detectorMatch.provider === "PRESIDIO" ? {
+            detector_adapter_id: detectorMatch.adapter_id,
+            detector_provider: "PRESIDIO" as const,
+          } : {}),
+        } as DataClassificationReceipt
+        mergeDataClassificationReceipts(dataClassifications, [receipt])
+      }
+    }
+    for (const decision of result.safetyDecisions ?? []) {
+      safetyDecisions.push({ ...decision, direction, step_id: step.stepId })
+    }
   }
 
   const run = async (
@@ -297,6 +380,7 @@ export function createProcessorChain(
     let current = body
     const matches = new Set<string>()
     const dataClassifications: DataClassificationReceipt[] = []
+    const safetyDecisions: Array<SafetyDecision & { direction: "request" | "response"; step_id: string }> = []
     const executedSteps: NonNullable<DataProtectionResult["executedSteps"]> = []
     for (const step of ordered) {
       const hook = direction === "request" ? step.request : step.response
@@ -304,26 +388,27 @@ export function createProcessorChain(
       executedSteps.push({ stepId: step.stepId, action: hook.action })
       const hookMethod = hook.action === "RESTORE" ? "restoreJson" : "protectJson"
       const result = await hook.processor[hookMethod](context, current)
-      result.matches.forEach((match) => matches.add(match))
-      if (hook.sourceVersion && hook.action !== "RESTORE") {
-        for (const classification of result.matches.filter((match) => match !== "INVALID_JSON")) {
-          const receipt: DataClassificationReceipt = {
-            classification,
-            handling_action: hook.action as DataClassificationReceipt["handling_action"],
-            source: "DLP_DETECTOR",
-            source_version: hook.sourceVersion,
-            trust_level: "RUNTIME_OBSERVED",
-            step_id: step.stepId,
-          }
-          mergeDataClassificationReceipts(dataClassifications, [receipt])
-        }
-      }
+      appendResult(direction, step, hook, result, matches, dataClassifications, safetyDecisions)
       current = result.body
       if (result.disposition === "BLOCK") {
-        return { ...result, body: current, matches: [...matches], executedSteps, dataClassifications }
+        return {
+          ...result,
+          body: current,
+          matches: [...matches],
+          executedSteps,
+          dataClassifications,
+          safetyDecisions,
+        }
       }
     }
-    return { disposition: "CONTINUE", body: current, matches: [...matches], executedSteps, dataClassifications }
+    return {
+      disposition: "CONTINUE",
+      body: current,
+      matches: [...matches],
+      executedSteps,
+      dataClassifications,
+      safetyDecisions,
+    }
   }
 
   const runSse = async (
@@ -331,10 +416,14 @@ export function createProcessorChain(
     context: ProcessingContext,
     line: string,
   ): Promise<DataProtectionResult> => {
+    if (requiresBufferedResponse(direction)) {
+      throw new Error("PROCESSOR_REQUIRES_BUFFERED_STREAM")
+    }
     const ordered = direction === "request" ? runtimeSteps : [...runtimeSteps].reverse()
     let current = Buffer.from(line)
     const matches = new Set<string>()
     const dataClassifications: DataClassificationReceipt[] = []
+    const safetyDecisions: Array<SafetyDecision & { direction: "request" | "response"; step_id: string }> = []
     const executedSteps: NonNullable<DataProtectionResult["executedSteps"]> = []
     for (const step of ordered) {
       const hook = direction === "request" ? step.request : step.response
@@ -342,26 +431,27 @@ export function createProcessorChain(
       executedSteps.push({ stepId: step.stepId, action: hook.action })
       const method = hook.action === "RESTORE" ? "restoreSseLine" : "protectSseLine"
       const result = await hook.processor[method](context, current.toString("utf8"))
-      result.matches.forEach((match) => matches.add(match))
-      if (hook.sourceVersion && hook.action !== "RESTORE") {
-        for (const classification of result.matches.filter((match) => match !== "INVALID_JSON")) {
-          const receipt: DataClassificationReceipt = {
-            classification,
-            handling_action: hook.action as DataClassificationReceipt["handling_action"],
-            source: "DLP_DETECTOR",
-            source_version: hook.sourceVersion,
-            trust_level: "RUNTIME_OBSERVED",
-            step_id: step.stepId,
-          }
-          mergeDataClassificationReceipts(dataClassifications, [receipt])
-        }
-      }
+      appendResult(direction, step, hook, result, matches, dataClassifications, safetyDecisions)
       current = Buffer.from(result.body)
       if (result.disposition === "BLOCK") {
-        return { ...result, body: current, matches: [...matches], executedSteps, dataClassifications }
+        return {
+          ...result,
+          body: current,
+          matches: [...matches],
+          executedSteps,
+          dataClassifications,
+          safetyDecisions,
+        }
       }
     }
-    return { disposition: "CONTINUE", body: current, matches: [...matches], executedSteps, dataClassifications }
+    return {
+      disposition: "CONTINUE",
+      body: current,
+      matches: [...matches],
+      executedSteps,
+      dataClassifications,
+      safetyDecisions,
+    }
   }
 
   return {
@@ -369,6 +459,7 @@ export function createProcessorChain(
     protectSseLine: (context, line) => observeOperation("genio-one-processor", "processor.request.sse", context, () => runSse("request", context, line)),
     restoreJson: (context, body) => observeOperation("genio-one-processor", "processor.response", context, () => run("response", context, body)),
     restoreSseLine: (context, line) => observeOperation("genio-one-processor", "processor.response.sse", context, () => runSse("response", context, line)),
+    requiresBufferedResponse,
   }
 }
 
@@ -388,6 +479,82 @@ async function replaceAsync(
     offset = index + match[0].length
   }
   return { value: result + value.slice(offset), count: matches.length }
+}
+
+class PresidioInspectionBudget {
+  private readonly deadline = Date.now() + PRESIDIO_PAYLOAD_TIMEOUT_MS
+  private strings = 0
+  private bytes = 0
+
+  consume(value: string): number {
+    this.strings += 1
+    this.bytes += Buffer.byteLength(value, "utf8")
+    const remaining = this.deadline - Date.now()
+    if (
+      this.strings > MAX_PRESIDIO_INSPECTED_STRINGS ||
+      this.bytes > MAX_PRESIDIO_INSPECTED_BYTES ||
+      remaining < 1
+    ) {
+      throw new Error("PRESIDIO_ADAPTER_UNAVAILABLE")
+    }
+    return remaining
+  }
+}
+
+interface ProtectionDetection {
+  start: number
+  end: number
+  classification: string
+  source: "PRESIDIO" | "REGEX"
+  adapterId?: string
+  score?: number
+  patternIndex?: number
+}
+
+interface ProtectionDetectionGroup {
+  start: number
+  end: number
+  primary: ProtectionDetection
+  detections: ProtectionDetection[]
+}
+
+function compareProtectionDetections(left: ProtectionDetection, right: ProtectionDetection): number {
+  const start = left.start - right.start
+  if (start !== 0) return start
+  const end = right.end - left.end
+  if (end !== 0) return end
+  if (left.source === "PRESIDIO" && right.source === "PRESIDIO") {
+    return left.classification.localeCompare(right.classification, "en") ||
+      (right.score ?? 0) - (left.score ?? 0) ||
+      (left.adapterId ?? "").localeCompare(right.adapterId ?? "", "en")
+  }
+  if (left.source !== right.source) return left.source === "PRESIDIO" ? -1 : 1
+  return (left.patternIndex ?? 0) - (right.patternIndex ?? 0) ||
+    left.classification.localeCompare(right.classification, "en")
+}
+
+function overlappingProtectionDetectionGroups(
+  detections: readonly ProtectionDetection[],
+): readonly ProtectionDetectionGroup[] {
+  const groups: ProtectionDetectionGroup[] = []
+  const ordered = [...detections].sort((left, right) =>
+    compareProtectionDetections(left, right)
+  )
+  for (const detection of ordered) {
+    const group = groups[groups.length - 1]
+    if (!group || detection.start >= group.end) {
+      groups.push({
+        start: detection.start,
+        end: detection.end,
+        primary: detection,
+        detections: [detection],
+      })
+      continue
+    }
+    group.end = Math.max(group.end, detection.end)
+    group.detections.push(detection)
+  }
+  return groups
 }
 
 export class DataProcessor {
@@ -422,14 +589,17 @@ export class DataProcessor {
       return { disposition: "BLOCK", body, matches: ["INVALID_JSON"] }
     }
     const matches = new Set<string>()
-    const transformed = await this.protectValue(context, value, matches)
+    const detectorMatches: DataProtectionDetectorMatch[] = []
+    const budget = this.options.policy.detector ? new PresidioInspectionBudget() : undefined
+    const transformed = await this.protectValue(context, value, matches, detectorMatches, budget)
     if (this.options.policy.action === "BLOCK" && matches.size > 0) {
-      return { disposition: "BLOCK", body, matches: [...matches] }
+      return { disposition: "BLOCK", body, matches: [...matches], detectorMatches }
     }
     return {
       disposition: "CONTINUE",
       body: Buffer.from(JSON.stringify(transformed)),
       matches: [...matches],
+      detectorMatches,
     }
   }
 
@@ -457,6 +627,9 @@ export class DataProcessor {
     context: ProcessingContext,
     line: string,
   ): Promise<DataProtectionResult> {
+    if (this.options.policy.detector) {
+      throw new Error("PRESIDIO_REQUIRES_BUFFERED_STREAM")
+    }
     if (!line.startsWith("data:") || line.trim() === "data: [DONE]") {
       return { disposition: "CONTINUE", body: Buffer.from(line), matches: [] }
     }
@@ -474,6 +647,9 @@ export class DataProcessor {
     context: ProcessingContext,
     line: string,
   ): Promise<DataProtectionResult> {
+    if (this.options.policy.detector) {
+      throw new Error("PRESIDIO_REQUIRES_BUFFERED_STREAM")
+    }
     if (line.trim() === "data: [DONE]") {
       if (!this.sseRestorePending) {
         return { disposition: "CONTINUE", body: Buffer.from(line), matches: [] }
@@ -528,41 +704,170 @@ export class DataProcessor {
     }
   }
 
+  requiresBufferedResponse(_direction: "request" | "response"): boolean {
+    return this.options.policy.detector !== undefined
+  }
+
+  private async replacement(
+    context: ProcessingContext,
+    semanticType: string,
+    value: string,
+  ): Promise<string> {
+    if (this.options.policy.action === "BLOCK") return value
+    if (this.options.policy.action === "REDACT") return `[REDACTED:${semanticType}]`
+    const token = this.tokenFactory(semanticType)
+    await this.options.tokenVault.store(
+      context,
+      token,
+      value,
+      this.options.policy.token_ttl_seconds,
+    )
+    return token
+  }
+
+  private async presidioDetections(
+    context: ProcessingContext,
+    value: string,
+    budget: PresidioInspectionBudget,
+  ): Promise<readonly ProtectionDetection[]> {
+    const detector = this.options.policy.detector
+    if (!detector || !value) return []
+    let detections: readonly PresidioDetection[]
+    try {
+      detections = await analyzePresidioText(
+        this.options.adapterRuntime,
+        context,
+        detector,
+        value,
+        budget.consume(value),
+      )
+    } catch {
+      throw new Error("PRESIDIO_ADAPTER_UNAVAILABLE")
+    }
+    return detections.map((detection) => ({
+      start: detection.start,
+      end: detection.end,
+      classification: detection.entity,
+      source: "PRESIDIO" as const,
+      adapterId: detection.adapterId,
+      score: detection.score,
+    }))
+  }
+
+  private regexDetections(value: string): ProtectionDetection[] {
+    const detections: ProtectionDetection[] = []
+    for (const [patternIndex, pattern] of this.patterns.entries()) {
+      for (const match of value.matchAll(pattern.expression)) {
+        const start = match.index ?? 0
+        detections.push({
+          start,
+          end: start + match[0].length,
+          classification: pattern.name,
+          source: "REGEX",
+          patternIndex,
+        })
+      }
+    }
+    return detections
+  }
+
+  private recordDetections(
+    detections: readonly ProtectionDetection[],
+    matches: Set<string>,
+    detectorMatches: DataProtectionDetectorMatch[],
+  ): void {
+    for (const detection of detections) {
+      matches.add(detection.classification)
+      detectorMatches.push(
+        detection.source === "PRESIDIO"
+          ? {
+              classification: detection.classification,
+              provider: "PRESIDIO",
+              adapter_id: detection.adapterId,
+            }
+          : { classification: detection.classification },
+      )
+    }
+  }
+
+  private async protectMixedValue(
+    context: ProcessingContext,
+    value: string,
+    matches: Set<string>,
+    detectorMatches: DataProtectionDetectorMatch[],
+    budget: PresidioInspectionBudget,
+  ): Promise<string> {
+    const presidio = await this.presidioDetections(context, value, budget)
+    if (presidio.length === 0) {
+      return this.protectRegexValue(context, value, matches, detectorMatches)
+    }
+    const groups = overlappingProtectionDetectionGroups([
+      ...presidio,
+      ...this.regexDetections(value),
+    ])
+    for (const group of groups) {
+      this.recordDetections(group.detections, matches, detectorMatches)
+    }
+    if (this.options.policy.action === "BLOCK") return value
+    let output = ""
+    let offset = 0
+    for (const group of groups) {
+      output += value.slice(offset, group.start)
+      output += await this.replacement(
+        context,
+        group.primary.classification,
+        value.slice(group.start, group.end),
+      )
+      offset = group.end
+    }
+    return output + value.slice(offset)
+  }
+
+  private async protectRegexValue(
+    context: ProcessingContext,
+    value: string,
+    matches: Set<string>,
+    detectorMatches: DataProtectionDetectorMatch[],
+  ): Promise<string> {
+    let current = value
+    for (const pattern of this.patterns) {
+      const replaced = await replaceAsync(current, pattern.expression, async (match) => {
+        matches.add(pattern.name)
+        detectorMatches.push({ classification: pattern.name })
+        return this.replacement(context, pattern.name, match)
+      })
+      current = replaced.value
+    }
+    return current
+  }
+
   private async protectValue(
     context: ProcessingContext,
     value: unknown,
     matches: Set<string>,
+    detectorMatches: DataProtectionDetectorMatch[],
+    budget: PresidioInspectionBudget | undefined,
   ): Promise<unknown> {
     if (typeof value === "string") {
-      let current = value
-      for (const pattern of this.patterns) {
-        const replaced = await replaceAsync(current, pattern.expression, async (match) => {
-          matches.add(pattern.name)
-          if (this.options.policy.action === "BLOCK") return match
-          if (this.options.policy.action === "REDACT") return `[REDACTED:${pattern.name}]`
-          const token = this.tokenFactory(pattern.name)
-          await this.options.tokenVault.store(
-            context,
-            token,
-            match,
-            this.options.policy.token_ttl_seconds,
-          )
-          return token
-        })
-        current = replaced.value
-      }
-      return current
+      return budget
+        ? this.protectMixedValue(context, value, matches, detectorMatches, budget)
+        : this.protectRegexValue(context, value, matches, detectorMatches)
     }
     if (Array.isArray(value)) {
-      return Promise.all(value.map((entry) => this.protectValue(context, entry, matches)))
+      const output: unknown[] = []
+      for (const entry of value) {
+        output.push(await this.protectValue(context, entry, matches, detectorMatches, budget))
+      }
+      return output
     }
     if (value && typeof value === "object") {
-      const entries = await Promise.all(
-        Object.entries(value).map(async ([key, entry]) => [
+      const entries: Array<[string, unknown]> = []
+      for (const [key, entry] of Object.entries(value)) {
+        entries.push([
           key,
-          await this.protectValue(context, entry, matches),
-        ] as const),
-      )
+          await this.protectValue(context, entry, matches, detectorMatches, budget),
+        ])
+      }
       return Object.fromEntries(entries)
     }
     return value
@@ -607,13 +912,18 @@ export class SseLineBuffer {
     if (endOfStream && parts.at(-1) === "") parts.pop()
     const matches = new Set<string>()
     const dataClassifications: DataClassificationReceipt[] = []
+    const safetyDecisions: NonNullable<DataProtectionResult["safetyDecisions"]> = []
     const executedSteps: NonNullable<DataProtectionResult["executedSteps"]> = []
     const output: string[] = []
     for (const line of parts) {
       const transformed = await transform(line)
       if (transformed.disposition === "BLOCK") return transformed
+      if (transformed.requiresBufferedResponse) {
+        throw new Error("PROCESSOR_REQUIRES_BUFFERED_STREAM")
+      }
       transformed.matches.forEach((match) => matches.add(match))
       mergeDataClassificationReceipts(dataClassifications, transformed.dataClassifications ?? [])
+      safetyDecisions.push(...(transformed.safetyDecisions ?? []))
       for (const step of transformed.executedSteps ?? []) {
         if (!executedSteps.some((existing) =>
           existing.stepId === step.stepId && existing.action === step.action
@@ -626,8 +936,12 @@ export class SseLineBuffer {
     if (endOfStream && this.buffered) {
       const transformed = await transform(this.buffered)
       if (transformed.disposition === "BLOCK") return transformed
+      if (transformed.requiresBufferedResponse) {
+        throw new Error("PROCESSOR_REQUIRES_BUFFERED_STREAM")
+      }
       transformed.matches.forEach((match) => matches.add(match))
       mergeDataClassificationReceipts(dataClassifications, transformed.dataClassifications ?? [])
+      safetyDecisions.push(...(transformed.safetyDecisions ?? []))
       for (const step of transformed.executedSteps ?? []) {
         if (!executedSteps.some((existing) =>
           existing.stepId === step.stepId && existing.action === step.action
@@ -645,6 +959,7 @@ export class SseLineBuffer {
       matches: [...matches],
       executedSteps,
       dataClassifications,
+      safetyDecisions,
     }
   }
 }

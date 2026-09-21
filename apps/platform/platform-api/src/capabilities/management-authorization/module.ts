@@ -567,6 +567,20 @@ export function createManagementAuthorization(
         return
       }
       if (
+        route.rest[0] === "processor-adapters" &&
+        request.method === "GET" &&
+        route.rest.length === 1
+      ) {
+        if (principal.role === "USER") {
+          throw new PlatformApiError(
+            "POLICY_ADMINISTRATOR_REQUIRED",
+            403,
+            "Processor adapter metadata is available only to policy administrators",
+          )
+        }
+        return
+      }
+      if (
         route.rest[0] === "activities" &&
         route.rest[2] === "outcomes" &&
         request.method === "POST"

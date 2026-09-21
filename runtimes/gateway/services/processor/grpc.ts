@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url"
 
 import grpc from "@grpc/grpc-js"
 import protoLoader from "@grpc/proto-loader"
+import { Value } from "typebox/value"
 
 import type {
   DataProtectionAction,
@@ -14,7 +15,10 @@ import type {
   ProcessorPolicy,
 } from "./contract"
 import { createProcessorChain, SseLineBuffer, type PayloadProcessor } from "./module"
-import type { ProcessorPolicySource } from "./policy-store"
+import {
+  assertProcessorPolicySnapshotTenant,
+  type ProcessorPolicySource,
+} from "./policy-store"
 import type { TokenVault } from "./token-vault"
 import {
   gatewayModelRouteLeaseEvent,
@@ -30,6 +34,15 @@ import {
   mergeDataClassificationReceipts,
   type DataClassificationReceipt,
 } from "../shared/data-classification"
+import type { ProcessorAdapterRuntime } from "../shared/processor-adapters"
+import {
+  MAX_SAFETY_DECISION_HANDOFF_BYTES,
+  PROCESSOR_SAFETY_DECISIONS_HEADER,
+  SafetyDecisionReceiptSchema,
+  mergeSafetyDecisionReceipts,
+  safetyDecisionReceipts,
+  type SafetyDecisionReceipt,
+} from "../shared/safety-decision"
 import type { CostValuation, InvocationAccounting, UsageQuantity } from "../shared/usage-accounting"
 import {
   gatewayDetailActivityReference,
@@ -80,6 +93,7 @@ import {
 } from "../shared/model-route-handoff"
 import { operationalError, writeOperationalEvent } from "@genioone/telemetry/operational-log"
 import type { UsageCounterStore } from "../shared/usage-governance"
+import { appendSafetyBuffer, safetyBufferByteLimit } from "./safety-buffer"
 
 interface HeaderValue {
   key?: string
@@ -120,6 +134,7 @@ const INTERNAL_HEADERS_TO_REMOVE = [
   USAGE_CONCURRENCY_LEASES_HEADER,
   USAGE_POLICY_REVISIONS_HEADER,
   USAGE_CURRENCY_ALLOCATIONS_HEADER,
+  PROCESSOR_SAFETY_DECISIONS_HEADER,
 ] as const
 
 function headerMap(values: HeaderValue[] | undefined): Map<string, string> {
@@ -152,6 +167,24 @@ function stringArrayHeader(headers: Map<string, string>, name: string): string[]
     throw new Error(`${name} is invalid`)
   }
   return [...new Set(parsed)]
+}
+
+function inheritedSafetyDecisions(headers: Map<string, string>): SafetyDecisionReceipt[] {
+  const serialized = headers.get(PROCESSOR_SAFETY_DECISIONS_HEADER)
+  if (!serialized) return []
+  if (new TextEncoder().encode(serialized).byteLength > MAX_SAFETY_DECISION_HANDOFF_BYTES) {
+    throw new Error("processor safety decision receipt is invalid")
+  }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(serialized)
+  } catch {
+    throw new Error("processor safety decision receipt is invalid")
+  }
+  if (!Array.isArray(parsed) || !parsed.every((value) => Value.Check(SafetyDecisionReceiptSchema, value))) {
+    throw new Error("processor safety decision receipt is invalid")
+  }
+  return parsed.map((value) => ({ ...value })) as SafetyDecisionReceipt[]
 }
 
 function currencyAllocationsHeader(
@@ -242,31 +275,44 @@ interface ProcessorExecutionReceipt {
   requestSteps: ExecutedProcessorStep[]
   responseSteps: ExecutedProcessorStep[]
   dataClassifications: DataClassificationReceipt[]
+  safetyDecisions: SafetyDecisionReceipt[]
 }
 
 const PROCESSOR_METADATA_NAMESPACE = "genio.one.processor"
+const MAX_PROCESSOR_RECEIPT_METADATA_BYTES = 48 * 1024
+
+function receiptMetadataFields(receipt: ProcessorExecutionReceipt) {
+  return {
+    bundle_revision: { stringValue: receipt.bundleRevision },
+    ...(receipt.requestSteps.length > 0
+      ? { request_steps: { stringValue: JSON.stringify(receipt.requestSteps) } }
+      : {}),
+    ...(receipt.responseSteps.length > 0
+      ? { response_steps: { stringValue: JSON.stringify(receipt.responseSteps) } }
+      : {}),
+    ...(receipt.dataClassifications.length > 0
+      ? { data_classifications: { stringValue: JSON.stringify(receipt.dataClassifications) } }
+      : {}),
+    ...(receipt.safetyDecisions.length > 0
+      ? { safety_decisions: { stringValue: JSON.stringify(receipt.safetyDecisions) } }
+      : {}),
+  }
+}
+
+function receiptFitsMetadata(receipt: ProcessorExecutionReceipt): boolean {
+  return Buffer.byteLength(JSON.stringify(receiptMetadataFields(receipt)), "utf8") <=
+    MAX_PROCESSOR_RECEIPT_METADATA_BYTES
+}
 
 function dynamicMetadata(receipt: ProcessorExecutionReceipt) {
+  if (!receiptFitsMetadata(receipt)) {
+    throw new Error("processor execution receipt exceeds metadata limit")
+  }
   return {
     fields: {
       [PROCESSOR_METADATA_NAMESPACE]: {
-        // google.protobuf.Value is loaded from the well-known type descriptor,
-        // whose JavaScript field names stay camelCase even though the local
-        // ext_proc messages use keepCase. Snake-case here serializes an empty
-        // Value and silently drops the receipt on the wire.
         structValue: {
-          fields: {
-            bundle_revision: { stringValue: receipt.bundleRevision },
-            ...(receipt.requestSteps.length > 0
-              ? { request_steps: { stringValue: JSON.stringify(receipt.requestSteps) } }
-              : {}),
-            ...(receipt.responseSteps.length > 0
-              ? { response_steps: { stringValue: JSON.stringify(receipt.responseSteps) } }
-              : {}),
-            ...(receipt.dataClassifications.length > 0
-              ? { data_classifications: { stringValue: JSON.stringify(receipt.dataClassifications) } }
-              : {}),
-          },
+          fields: receiptMetadataFields(receipt),
         },
       },
     },
@@ -312,6 +358,7 @@ function continueWithoutMutation(
 function continueResponseHeaders(
   receipt: ProcessorExecutionReceipt,
   correlationId: string,
+  bufferResponseBody = false,
 ) {
   return {
     response_headers: {
@@ -329,6 +376,7 @@ function continueResponseHeaders(
       },
     },
     dynamic_metadata: dynamicMetadata(receipt),
+    ...(bufferResponseBody ? { mode_override: { response_body_mode: 2 } } : {}),
   }
 }
 
@@ -366,10 +414,16 @@ function continueBody(
   }
 }
 
-function blocked(matches: string[], receipt: ProcessorExecutionReceipt) {
+function immediateResponse(
+  status: number,
+  matches: string[],
+  receipt: ProcessorExecutionReceipt,
+  code = "DATA_PROTECTION_BLOCKED",
+  includeMetadata = true,
+) {
   return {
     immediate_response: {
-      status: { code: 403 },
+      status: { code: status },
       headers: {
         set_headers: [
           {
@@ -378,10 +432,38 @@ function blocked(matches: string[], receipt: ProcessorExecutionReceipt) {
           },
         ],
       },
-      body: Buffer.from(JSON.stringify({ code: "DATA_PROTECTION_BLOCKED", matches })),
-      details: "genio_one_data_protection_blocked",
+      body: Buffer.from(JSON.stringify({ code, matches })),
+      details: code.toLowerCase(),
     },
-    dynamic_metadata: dynamicMetadata(receipt),
+    ...(includeMetadata ? { dynamic_metadata: dynamicMetadata(receipt) } : {}),
+  }
+}
+
+function blocked(
+  matches: string[],
+  receipt: ProcessorExecutionReceipt,
+  code = "DATA_PROTECTION_BLOCKED",
+) {
+  return immediateResponse(403, matches, receipt, code)
+}
+
+function appendSafetyDecisions(
+  receipt: ProcessorExecutionReceipt,
+  decisions: Parameters<typeof safetyDecisionReceipts>[0],
+  direction: "request" | "response",
+): void {
+  mergeSafetyDecisionReceipts(
+    receipt.safetyDecisions,
+    safetyDecisionReceipts(decisions, direction),
+  )
+}
+
+function requestsStreamingResponse(body: Uint8Array): boolean {
+  try {
+    const value = JSON.parse(Buffer.from(body).toString("utf8")) as { stream?: unknown }
+    return value.stream === true
+  } catch {
+    return false
   }
 }
 
@@ -399,6 +481,8 @@ export interface ExternalProcessorOptions {
   tokenVault: TokenVault
   modelRouter?: GatewayModelRouteResolver
   processorFactory?: (policy: ProcessorPolicy, tokenVault: TokenVault) => PayloadProcessor
+  adapterRuntime?: ProcessorAdapterRuntime
+  safetyBufferBytes?: number
   onActivity?: (event: GatewayActivityIngest) => void | Promise<void>
   detailCapture?: GatewayDetailCapture
   captureOnly?: boolean
@@ -451,10 +535,17 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
     publicModelName?: string
   } | undefined
     let executionReceipt: ProcessorExecutionReceipt | undefined
+    const safetyBufferBytes = safetyBufferByteLimit(options.safetyBufferBytes)
     const requestSse = new SseLineBuffer()
     const responseSse = new SseLineBuffer()
+    const requestJsonChunks: Buffer[] = []
     const responseJsonChunks: Buffer[] = []
+    let requestJsonBytes = 0
+    let responseJsonBytes = 0
+    let requestRequiresBufferedBody = false
+    let responseRequiresBufferedBody = false
     let bypassLocalResponse = false
+    let immediateResponseSent = false
     let failed = false
     let queue = Promise.resolve()
     let usageLeaseIds: string[] = []
@@ -517,6 +608,94 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
       })
     }
 
+    const emitBlockedActivity = (
+      code: string,
+      statusCode: number,
+      upstreamAttempted: boolean,
+      includeReceipt = true,
+    ) => {
+      if (!context || !executionReceipt || !options.onActivity) return
+      const occurredAt = Math.floor(Date.now() / 1_000)
+      const event: GatewayActivityIngest = {
+        correlation_id: context.correlationId,
+        resource_id: context.resourceId,
+        capability_id: context.capabilityId,
+        application_id: null,
+        subject_id: context.subjectId,
+        acting_client_id: context.clientId,
+        session_id: context.sessionId ?? null,
+        entitlement_id: null,
+        usage_admission_id: usageAdmissionId ?? null,
+        usage_admission_disposition: usageAdmissionId ? "ADMIT" : "NOT_APPLICABLE",
+        usage_admission_reason: null,
+        consumer_organization_id: consumerOrganizationId ?? null,
+        resource_owner_organization_id: resourceOwnerOrganizationId ?? null,
+        use_case_id: useCaseId ?? null,
+        enforcement_point_id: "AI_GATEWAY",
+        route: "MANAGED",
+        method: requestMethod,
+        path: requestPath,
+        status_code: statusCode,
+        outcome: "BLOCKED",
+        error_code: code,
+        latency_millis: Math.max(0, Date.now() - startedAt),
+        upstream_attempted: upstreamAttempted,
+        requested_model_id: requestedPublicModel ?? null,
+        effective_model_id: routeLease?.providerModel ?? null,
+        provider_id: null,
+        connection_id: routeLease?.connectionId ?? null,
+        mcp_method: null,
+        mcp_tool: null,
+        mcp_backend: null,
+        processor_bundle_revision: executionReceipt.bundleRevision,
+        processor_request_steps: includeReceipt ? executionReceipt.requestSteps : [],
+        processor_response_steps: includeReceipt ? executionReceipt.responseSteps : [],
+        data_classifications: includeReceipt ? executionReceipt.dataClassifications : [],
+        safety_decisions: includeReceipt ? executionReceipt.safetyDecisions : [],
+        input_tokens: null,
+        output_tokens: null,
+        total_tokens: null,
+        route_mode: routingScope?.route_mode ?? null,
+        route_lease_id: routeLease?.leaseId ?? null,
+        route_lease_reused: routeLease?.reused ?? null,
+        routing_policy_id: routingScope?.routing_policy_id ?? null,
+        routing_revision: routingScope?.routing_revision ?? null,
+        candidate_set_digest: routingScope?.candidate_set_digest ?? null,
+        candidate_connection_ids: routingScope
+          ? [...new Set(routingScope.candidates.flatMap((candidate) => candidate.mappings.map((mapping) => mapping.connection_id)))]
+          : [],
+        ...gatewayDetailActivityReference(
+          detailCaptureEnabled,
+          context.correlationId,
+          occurredAt,
+        ),
+        occurred_at: occurredAt,
+      }
+      void Promise.resolve(options.onActivity(event)).catch((error) => {
+        writeOperationalEvent("processor", "ERROR", "genio.one.activity-observation-failed", {
+          correlation_id: context?.correlationId ?? null,
+          ...operationalError(error),
+        })
+      })
+    }
+
+    const rejectOversizedReceipt = (
+      statusCode: number,
+      upstreamAttempted: boolean,
+    ): boolean => {
+      if (!executionReceipt || receiptFitsMetadata(executionReceipt)) return false
+      immediateResponseSent = true
+      call.write(immediateResponse(
+        503,
+        [],
+        executionReceipt,
+        "PROCESSOR_RECEIPT_LIMIT_EXCEEDED",
+        false,
+      ))
+      emitBlockedActivity("PROCESSOR_RECEIPT_LIMIT_EXCEEDED", statusCode, upstreamAttempted, false)
+      return true
+    }
+
     const observe = async (message: ProcessingRequest) => {
       if (message.request_headers) {
         const headers = headerMap(message.request_headers.headers?.headers)
@@ -530,8 +709,10 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
         if (!gatewayGroupReleaseReferencesEqual(snapshot.releaseReference, authorizedRelease)) {
           throw new Error("detail capture release does not match authorization release")
         }
+        const tenantId = required(headers, TRUSTED_TENANT_HEADER)
+        assertProcessorPolicySnapshotTenant(snapshot, tenantId)
         captureContext = {
-          tenantId: required(headers, TRUSTED_TENANT_HEADER),
+          tenantId,
           subjectId: required(headers, TRUSTED_SUBJECT_HEADER),
           clientId: required(headers, TRUSTED_CLIENT_HEADER),
           resourceId: required(headers, TRUSTED_RESOURCE_HEADER),
@@ -588,6 +769,7 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
             : "ext_proc message has multiple request variants",
         )
       }
+      if (immediateResponseSent) return
       if (message.request_headers) {
         if (context) throw new Error("request headers must be processed only once")
         const headers = headerMap(message.request_headers.headers?.headers)
@@ -636,6 +818,7 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
         if (!gatewayGroupReleaseReferencesEqual(snapshot.releaseReference, authorizedRelease)) {
           throw new Error("processor policy release does not match authorization release")
         }
+        assertProcessorPolicySnapshotTenant(snapshot, context.tenantId)
         const steps = snapshot.stepsFor(context.resourceId, context.capabilityId) ?? []
         requestProcessingConfigured = steps.some((step) => Boolean(step.hooks.request))
         responseProcessingConfigured = steps.some((step) => Boolean(step.hooks.response))
@@ -663,6 +846,7 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
             : []),
           responseSteps: [],
           dataClassifications: [],
+          safetyDecisions: inheritedSafetyDecisions(headers),
         }
         const baseRoutingScope = snapshot.routingScopeFor(context.resourceId, context.capabilityId)
         routingScope = baseRoutingScope
@@ -719,7 +903,10 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
               steps,
               options.tokenVault,
               snapshot.bundleRevision,
-              options.processorFactory,
+              {
+                processorFactory: options.processorFactory,
+                adapterRuntime: options.adapterRuntime,
+              },
             )
           : {
               protectJson: async (_context, body) => ({ disposition: "CONTINUE", body, matches: [] }),
@@ -747,6 +934,21 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
           requestedPublicModel = allowedPublicModels[0]
         }
         requestContentType = headers.get("content-type") ?? ""
+        requestRequiresBufferedBody = processor.requiresBufferedResponse?.("request") === true
+        responseRequiresBufferedBody = processor.requiresBufferedResponse?.("response") === true
+        if (
+          requestContentType.includes("text/event-stream") &&
+          (requestRequiresBufferedBody || responseRequiresBufferedBody)
+        ) {
+          const code = requestRequiresBufferedBody
+            ? "SAFETY_REQUEST_STREAM_UNSUPPORTED"
+            : "SAFETY_RESPONSE_STREAM_UNSUPPORTED"
+          immediateResponseSent = true
+          call.write(blocked([], executionReceipt, code))
+          emitBlockedActivity(code, 403, false)
+          return
+        }
+        if (rejectOversizedReceipt(503, false)) return
         call.write(continueHeaders(
           executionReceipt,
           routingScope?.route_mode === "SESSION_LEASE",
@@ -774,7 +976,18 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
         responseContentType = headers.get("content-type") ?? ""
         const parsedStatus = Number.parseInt(headers.get(":status") ?? "200", 10)
         responseStatus = Number.isInteger(parsedStatus) ? parsedStatus : 200
-        call.write(continueResponseHeaders(executionReceipt, context.correlationId))
+        if (responseContentType.includes("text/event-stream") && responseRequiresBufferedBody) {
+          immediateResponseSent = true
+          call.write(blocked([], executionReceipt, "SAFETY_RESPONSE_STREAM_UNSUPPORTED"))
+          emitBlockedActivity("SAFETY_RESPONSE_STREAM_UNSUPPORTED", 403, true)
+          return
+        }
+        if (rejectOversizedReceipt(503, true)) return
+        call.write(continueResponseHeaders(
+          executionReceipt,
+          context.correlationId,
+          responseRequiresBufferedBody,
+        ))
         return
       }
       if (message.response_body && bypassLocalResponse) {
@@ -793,7 +1006,36 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
       }
       if (message.request_body) {
         const originalBody = message.request_body.body ?? Buffer.alloc(0)
-        const prepared = await prepareTranscriptionRequest(originalBody, requestContentType, requestProcessingConfigured)
+        const endOfStream = Boolean(message.request_body.end_of_stream)
+        const requiresCompleteRequestBody = requestRequiresBufferedBody || responseRequiresBufferedBody
+        if (requiresCompleteRequestBody) {
+          try {
+            requestJsonBytes = appendSafetyBuffer(
+              requestJsonChunks,
+              requestJsonBytes,
+              originalBody,
+              safetyBufferBytes,
+            )
+          } catch {
+            immediateResponseSent = true
+            call.write(immediateResponse(
+              413,
+              [],
+              executionReceipt,
+              "SAFETY_BUFFER_LIMIT_EXCEEDED",
+            ))
+            emitBlockedActivity("SAFETY_BUFFER_LIMIT_EXCEEDED", 413, false)
+            return
+          }
+          if (!endOfStream) {
+            call.write(continueBody("request_body", Buffer.alloc(0), executionReceipt))
+            return
+          }
+        }
+        const sourceBody = requiresCompleteRequestBody
+          ? Buffer.concat(requestJsonChunks)
+          : originalBody
+        const prepared = await prepareTranscriptionRequest(sourceBody, requestContentType, requestProcessingConfigured)
         const body = prepared.body
         const requestedPublicModelName = routingScope
           ? requestPublicModelName(body)
@@ -803,13 +1045,32 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
           event: "genio.one.processor-request-body-received",
           correlation_id: context.correlationId,
           body_bytes: body.byteLength,
-          end_of_stream: Boolean(message.request_body.end_of_stream),
+          end_of_stream: endOfStream,
         })}\n`)
         const result = requestContentType.includes("text/event-stream")
           ? await requestSse.push(body, Boolean(message.request_body.end_of_stream), (line) =>
               processor!.protectSseLine(context!, line),
             )
           : await processor.protectJson(context, body)
+        for (const step of result.executedSteps ?? []) {
+          if (!executionReceipt.requestSteps.some((existing) =>
+            existing.step_id === step.stepId && existing.action === step.action
+          )) {
+            executionReceipt.requestSteps.push({ step_id: step.stepId, action: step.action })
+          }
+        }
+        mergeDataClassificationReceipts(
+          executionReceipt.dataClassifications,
+          result.dataClassifications ?? [],
+        )
+        appendSafetyDecisions(executionReceipt, result.safetyDecisions, "request")
+        if (rejectOversizedReceipt(503, false)) return
+        if (result.disposition === "CONTINUE" && responseRequiresBufferedBody && requestsStreamingResponse(result.body)) {
+          immediateResponseSent = true
+          call.write(blocked([], executionReceipt, "SAFETY_RESPONSE_STREAM_UNSUPPORTED"))
+          emitBlockedActivity("SAFETY_RESPONSE_STREAM_UNSUPPORTED", 403, false)
+          return
+        }
         let outputBody = result.body
         if (
           result.disposition === "CONTINUE" &&
@@ -836,17 +1097,6 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
           process.stdout.write(`${JSON.stringify(gatewayModelRouteLeaseEvent(context, resolution))}\n`)
         }
         if (result.disposition !== "BLOCK") outputBody = Buffer.from(prepared.restore(outputBody))
-        for (const step of result.executedSteps ?? []) {
-          if (!executionReceipt.requestSteps.some((existing) =>
-            existing.step_id === step.stepId && existing.action === step.action
-          )) {
-            executionReceipt.requestSteps.push({ step_id: step.stepId, action: step.action })
-          }
-        }
-        mergeDataClassificationReceipts(
-          executionReceipt.dataClassifications,
-          result.dataClassifications ?? [],
-        )
         process.stdout.write(`${JSON.stringify({
           event: "genio.one.processor-request-chain-completed",
           correlation_id: context.correlationId,
@@ -855,16 +1105,21 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
           request_steps: executionReceipt.requestSteps,
           match_names: result.matches,
           data_classifications: executionReceipt.dataClassifications,
+          safety_decisions: executionReceipt.safetyDecisions,
         })}\n`)
+        if (result.disposition === "BLOCK") {
+          immediateResponseSent = true
+          call.write(blocked(result.matches, executionReceipt))
+          emitBlockedActivity("DATA_PROTECTION_BLOCKED", 403, false)
+          return
+        }
         call.write(
-          result.disposition === "BLOCK"
-            ? blocked(result.matches, executionReceipt)
-            : continueBody(
-                "request_body",
-                outputBody,
-                executionReceipt,
-                routeLease?.publicModelName,
-              ),
+          continueBody(
+            "request_body",
+            outputBody,
+            executionReceipt,
+            routeLease?.publicModelName,
+          ),
         )
         return
       }
@@ -877,7 +1132,28 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
               processor!.restoreSseLine(context!, line),
             )
         } else {
-          responseJsonChunks.push(Buffer.from(body))
+          if (responseRequiresBufferedBody) {
+            try {
+              responseJsonBytes = appendSafetyBuffer(
+                responseJsonChunks,
+                responseJsonBytes,
+                body,
+                safetyBufferBytes,
+              )
+            } catch {
+              immediateResponseSent = true
+              call.write(immediateResponse(
+                413,
+                [],
+                executionReceipt,
+                "SAFETY_BUFFER_LIMIT_EXCEEDED",
+              ))
+              emitBlockedActivity("SAFETY_BUFFER_LIMIT_EXCEEDED", 413, true)
+              return
+            }
+          } else {
+            responseJsonChunks.push(Buffer.from(body))
+          }
           result = endOfStream
             ? await processor.restoreJson(context, Buffer.concat(responseJsonChunks))
             : {
@@ -893,12 +1169,22 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
             executionReceipt.responseSteps.push({ step_id: step.stepId, action: step.action })
           }
         }
+        mergeDataClassificationReceipts(
+          executionReceipt.dataClassifications,
+          result.dataClassifications ?? [],
+        )
+        appendSafetyDecisions(executionReceipt, result.safetyDecisions, "response")
+        if (rejectOversizedReceipt(503, true)) return
+        if (result.disposition === "BLOCK") {
+          immediateResponseSent = true
+          call.write(blocked(result.matches, executionReceipt))
+          emitBlockedActivity("DATA_PROTECTION_BLOCKED", responseStatus, true)
+          return
+        }
         call.write(
-          result.disposition === "BLOCK"
-            ? blocked(result.matches, executionReceipt)
-            : responseProcessingConfigured
-              ? continueBody("response_body", result.body, executionReceipt)
-              : continueWithoutMutation("response_body", executionReceipt),
+          responseProcessingConfigured
+            ? continueBody("response_body", result.body, executionReceipt)
+            : continueWithoutMutation("response_body", executionReceipt),
         )
         if (endOfStream && (options.onActivity || options.onAccounting)) {
           const occurredAt = Math.floor(Date.now() / 1_000)
@@ -1053,6 +1339,7 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
             processor_request_steps: executionReceipt.requestSteps,
             processor_response_steps: executionReceipt.responseSteps,
             data_classifications: executionReceipt.dataClassifications,
+            safety_decisions: executionReceipt.safetyDecisions,
             input_tokens: typeof usage?.prompt_tokens === "number" ? usage.prompt_tokens : null,
             output_tokens: typeof usage?.completion_tokens === "number" ? usage.completion_tokens : null,
             total_tokens: typeof usage?.total_tokens === "number" ? usage.total_tokens : null,

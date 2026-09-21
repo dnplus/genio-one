@@ -152,6 +152,7 @@ test("Resource policy draft uses server validation and review before publication
   globalThis.fetch = (async (input: string | URL | Request) => {
     const url = String(input)
     urls.push(url)
+    if (url.includes("/processor-adapters")) return json({ adapters: [] })
     if (url.endsWith("/policy-draft/validate")) {
       current = draft("VALIDATED")
       return json(current)

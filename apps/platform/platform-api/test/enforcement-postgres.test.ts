@@ -3,14 +3,22 @@ import { randomUUID } from "node:crypto"
 import test from "node:test"
 
 import { PlatformApiError } from "../src/capabilities/errors"
-import type { CompiledEnforcementChain } from "../src/capabilities/enforcement/contract"
+import {
+  canonicalEnforcementChainDigest,
+  compileValidatedEnforcementChain,
+} from "../src/capabilities/enforcement/compiler"
+import type {
+  CompiledEnforcementChain,
+  CompileEnforcementChainInput,
+} from "../src/capabilities/enforcement/contract"
 import {
   createPostgresEnforcementChainRevisionStore,
 } from "../src/capabilities/enforcement/postgres"
-import { canonicalEnforcementChainDigest } from "../src/capabilities/enforcement/compiler"
 import { lockGatewayPolicyRelease } from "../src/capabilities/gateway-policy-release/transaction-lock"
 import { createPostgresSqlAdapter } from "../src/persistence/sql-adapter"
 import type { SqlAdapter, SqlQueryResult, SqlTransaction } from "../src/persistence/sql-adapter"
+import { createProcessorAdapterCatalog } from "../src/capabilities/processor-adapters/catalog"
+import type { ProcessorAdapterRegistry } from "../../../../runtimes/gateway/services/shared/processor-adapters"
 
 type Row = Record<string, unknown>
 
@@ -56,6 +64,66 @@ const chain: CompiledEnforcementChain = {
   ],
   request_filter_order: ["authorize"],
   response_filter_order: [],
+}
+
+function safetySteps(
+  adapterId: string,
+  timeoutMs = 1_000,
+  copies = 1,
+): CompileEnforcementChainInput["steps"] {
+  const first = {
+    step_id: "safety-1",
+    kind: "PROCESS" as const,
+    implementation: "PROCESSOR" as const,
+    depends_on: ["authorize"],
+    hooks: {
+      request: {
+        action: "SAFETY_CHECK",
+        config: {
+          schema_version: 1,
+          adapter_id: adapterId,
+          checks: [{ id: "instruction-override", instructions: "Detect unsafe instructions.", threshold: 0.7 }],
+          timeout_ms: timeoutMs,
+        },
+      },
+    },
+  }
+  const second = copies === 2
+    ? {
+        ...first,
+        step_id: "safety-2",
+        depends_on: ["safety-1"],
+      }
+    : undefined
+  return [
+    { ...chain.steps[0]! },
+    { ...chain.steps[1]! },
+    first,
+    ...(second ? [second] : []),
+    {
+      ...chain.steps[2]!,
+      depends_on: [second ? "safety-2" : "safety-1"],
+    },
+  ]
+}
+
+function safetyChain(
+  adapterId: string,
+  capabilityId: string,
+  revision: number,
+  timeoutMs = 1_000,
+  copies = 1,
+): CompiledEnforcementChain {
+  return compileValidatedEnforcementChain({
+    tenantId: "tenant-acme",
+    value: {
+      resource_id: "resource-ai",
+      capability_id: capabilityId,
+      eligible_connection_ids: ["connection-openai"],
+      one_policy_revision: revision,
+      steps: safetySteps(adapterId, timeoutMs, copies),
+    },
+  })
 }
 
 function key(values: readonly unknown[]): string {
@@ -197,6 +265,84 @@ test("same chain identity and canonical digest is idempotent", async () => {
   assert.equal(canonicalEnforcementChainDigest(reordered), first.chain_digest)
   const replay = await store.save({ tenantId: "tenant-acme", chain: reordered })
   assert.deepEqual(replay, first)
+})
+
+test("Postgres Enforcement Chain store validates remote adapter configuration before every write", async () => {
+  const sql = new FakeSqlAdapter()
+  const registry: ProcessorAdapterRegistry = {
+    schema_version: 1,
+    adapters: [
+      { id: "jev-primary", tenant_id: "tenant-acme", kind: "JEV" },
+      {
+        id: "presidio-primary",
+        tenant_id: "tenant-acme",
+        kind: "PRESIDIO",
+        endpoint: "http://presidio.example.test/analyze",
+      },
+      { id: "other-tenant", tenant_id: "tenant-other", kind: "JEV" },
+    ],
+  }
+  const store = createPostgresEnforcementChainRevisionStore({
+    sql,
+    processorAdapters: createProcessorAdapterCatalog(registry),
+  })
+
+  const valid = await store.save({
+    tenantId: "tenant-acme",
+    chain: safetyChain("jev-primary", "safety-valid", 8),
+  })
+  assert.equal(valid.capability_id, "safety-valid")
+
+  await assert.rejects(
+    store.save({
+      tenantId: "tenant-acme",
+      chain: safetyChain("presidio-primary", "safety-wrong-kind", 9),
+    }),
+    (error: unknown) => errorCode(error) === "PROCESSOR_ADAPTER_KIND_INVALID",
+  )
+  await assert.rejects(
+    store.save({
+      tenantId: "tenant-acme",
+      chain: safetyChain("other-tenant", "safety-foreign", 10),
+    }),
+    (error: unknown) => errorCode(error) === "PROCESSOR_ADAPTER_NOT_FOUND",
+  )
+  await assert.rejects(
+    store.save({
+      tenantId: "tenant-acme",
+      chain: safetyChain("jev-primary", "safety-over-budget", 11, 20_000, 2),
+      provenance: {
+        publishedBySubjectId: "rollback",
+        reviewedBySubjectId: "reviewer",
+        rollbackSourceOnePolicyRevision: 8,
+      },
+    }),
+    (error: unknown) => errorCode(error) === "PROCESSOR_POLICY_INVALID",
+  )
+  assert.equal(
+    await store.getLatest({
+      tenantId: "tenant-acme",
+      resourceId: "resource-ai",
+      capabilityId: "safety-wrong-kind",
+    }),
+    null,
+  )
+  assert.equal(
+    await store.getLatest({
+      tenantId: "tenant-acme",
+      resourceId: "resource-ai",
+      capabilityId: "safety-foreign",
+    }),
+    null,
+  )
+  assert.equal(
+    await store.getLatest({
+      tenantId: "tenant-acme",
+      resourceId: "resource-ai",
+      capabilityId: "safety-over-budget",
+    }),
+    null,
+  )
 })
 
 test("published enforcement chain saves lock its Gateway before the Resource foreign-key insert", async () => {

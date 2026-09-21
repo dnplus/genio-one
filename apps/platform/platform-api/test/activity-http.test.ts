@@ -118,6 +118,17 @@ test("Activity HTTP ingest preserves false and null Session Lease reused values"
       trust_level: "RUNTIME_OBSERVED" as const,
       step_id: "protect-customer-data",
     }],
+    safety_decisions: [{
+      adapter_id: "safety-system-one",
+      provider: "JEV" as const,
+      model: "jev-latest",
+      check_id: "prompt-injection",
+      score: 0.92,
+      threshold: 0.8,
+      decision: "BLOCK" as const,
+      direction: "request" as const,
+      step_id: "safety-request",
+    }],
     input_tokens: null,
     output_tokens: null,
     total_tokens: null,
@@ -151,6 +162,7 @@ test("Activity HTTP ingest preserves false and null Session Lease reused values"
   assert.equal(response.json().usage_admission_disposition, "ADMIT")
   assert.equal(response.json().consumer_organization_id, "organization-consumer")
   assert.deepEqual(response.json().data_classifications, payload.data_classifications)
+  assert.deepEqual(response.json().safety_decisions, payload.safety_decisions)
 
   const nullResponse = await app.inject({
     method: "POST",
@@ -169,6 +181,67 @@ test("Activity HTTP ingest preserves false and null Session Lease reused values"
   assert.equal(nullResponse.statusCode, 201)
   assert.equal(received[1]!.route_lease_reused, null)
   assert.equal(nullResponse.json().route_lease_reused, null)
+
+  const legacyPayload = { ...payload, correlation_id: "correlation-legacy", session_id: null }
+  delete (legacyPayload as { safety_decisions?: unknown }).safety_decisions
+  const legacyResponse = await app.inject({
+    method: "POST",
+    url: "/v1/tenants/tenant-1/runtime-control/GATEWAY/runtime-1/activities",
+    payload: legacyPayload,
+  })
+  assert.equal(legacyResponse.statusCode, 201)
+
+  const normalizedStore = createInMemoryGatewayActivityStore()
+  await normalizedStore.record({
+    tenantId: "tenant-1",
+    event: legacyPayload as GatewayActivityIngest,
+  })
+  assert.deepEqual(
+    (await normalizedStore.get!({ tenantId: "tenant-1", correlationId: "correlation-legacy" }))?.safety_decisions,
+    [],
+  )
+
+  const receiptStore = createInMemoryGatewayActivityStore()
+  const requestSafetyDecision = payload.safety_decisions[0]!
+  const responseSafetyDecision = {
+    ...requestSafetyDecision,
+    direction: "response" as const,
+    step_id: "safety-response",
+    decision: "ALLOW" as const,
+    score: 0.1,
+  }
+  await receiptStore.record({ tenantId: "tenant-1", event: payload })
+  await receiptStore.record({
+    tenantId: "tenant-1",
+    event: { ...payload, safety_decisions: [responseSafetyDecision] },
+  })
+  await receiptStore.record({
+    tenantId: "tenant-1",
+    event: { ...payload, safety_decisions: [] },
+  })
+  assert.deepEqual(
+    (await receiptStore.get!({ tenantId: "tenant-1", correlationId: payload.correlation_id }))?.safety_decisions,
+    [requestSafetyDecision, responseSafetyDecision],
+  )
+
+  const fullReceipts = Array.from({ length: 4096 }, (_, index) => ({
+    ...requestSafetyDecision,
+    check_id: `bounded-${index}`,
+  }))
+  const boundedStore = createInMemoryGatewayActivityStore()
+  await boundedStore.record({ tenantId: "tenant-1", event: { ...payload, safety_decisions: fullReceipts } })
+  await boundedStore.record({ tenantId: "tenant-1", event: { ...payload, safety_decisions: [fullReceipts[0]!, fullReceipts[0]!] } })
+  await assert.rejects(
+    boundedStore.record({ tenantId: "tenant-1", event: {
+      ...payload,
+      status_code: 403,
+      safety_decisions: [{ ...responseSafetyDecision, check_id: "overflow" }],
+    } }),
+    /SAFETY_DECISION_RECEIPT_LIMIT_EXCEEDED/,
+  )
+  const preserved = await boundedStore.get!({ tenantId: "tenant-1", correlationId: payload.correlation_id })
+  assert.deepEqual(preserved?.safety_decisions, fullReceipts)
+  assert.equal(preserved?.status_code, payload.status_code)
 
   const timeline = await app.inject({
     method: "GET",
@@ -294,6 +367,7 @@ test("Routing Reconstruction returns ordered immutable attempts without upstream
       processor_request_steps: [],
       processor_response_steps: [],
       data_classifications: [],
+      safety_decisions: [],
       input_tokens: 10,
       output_tokens: 5,
       total_tokens: 15,
@@ -420,6 +494,7 @@ test("Session timeline aggregates execution stream into structured steps and sum
       processor_request_steps: [],
       processor_response_steps: [],
       data_classifications: [],
+      safety_decisions: [],
       input_tokens: 150,
       output_tokens: 50,
       total_tokens: 200,
@@ -480,6 +555,7 @@ test("Session timeline aggregates execution stream into structured steps and sum
         trust_level: "RUNTIME_OBSERVED",
         step_id: "scan",
       }],
+      safety_decisions: [],
       input_tokens: null,
       output_tokens: null,
       total_tokens: null,
@@ -533,6 +609,7 @@ test("Session timeline aggregates execution stream into structured steps and sum
       processor_request_steps: [],
       processor_response_steps: [],
       data_classifications: [],
+      safety_decisions: [],
       input_tokens: 30,
       output_tokens: 0,
       total_tokens: 30,

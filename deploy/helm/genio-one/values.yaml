@@ -124,6 +124,14 @@ gateway:
     requests: { cpu: 100m, memory: 256Mi }
     limits: { cpu: "1", memory: 1Gi }
 
+processorAdapters:
+  configMap:
+    name: ""
+    key: processor-adapters.json
+  credentials:
+    secretName: ""
+    env: []
+
 connectors:
   enabled: false
 

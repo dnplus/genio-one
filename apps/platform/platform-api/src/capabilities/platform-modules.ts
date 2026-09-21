@@ -104,6 +104,11 @@ import { createInMemoryRuntimePolicyStore } from "./one-policy/runtime-memory"
 import { PERSONAL_BOT_RESOURCE_ID } from "./one-policy/runtime"
 import { createInMemoryDemoInstallationStore } from "./demo-project/memory"
 import type { DemoInstallationStore } from "./demo-project/module"
+import { createProcessorAdapterCatalog, type ProcessorAdapterCatalog } from "./processor-adapters/catalog"
+import {
+  PROCESSOR_ADAPTERS_SCHEMA_VERSION,
+  type ProcessorAdapterRegistry,
+} from "../../../../../runtimes/gateway/services/shared/processor-adapters"
 
 /**
  * Complete aggregate-release transport dependencies.  The pair is optional
@@ -135,6 +140,7 @@ export interface PlatformModuleGraph {
   modelRouter: ModelRouter
   modelRoutingPolicies: ModelRoutingPolicyStore
   enforcementCompiler: EnforcementChainCompiler
+  processorAdapters: ProcessorAdapterCatalog
   policyDrafts: PolicyDraftStore
   enforcementRevisionStore: EnforcementChainRevisionReader
   gatewayProjector: GatewayProjector
@@ -175,6 +181,7 @@ export type InMemoryPlatformModules = PlatformModuleGraph
 
 export interface InMemoryPlatformOptions {
   now?: () => number
+  processorAdapterRegistry?: ProcessorAdapterRegistry
   /** Supplying this enables strict in-memory publication delivery for runtime tests. */
   runtimeRegistrations?: readonly RegisterGatewayRuntimeInput[]
   runtimeReportKeyId?: string
@@ -255,7 +262,17 @@ export function createInMemoryPlatformModules(
     organizations,
     now: options.now,
   })
-  const enforcementCompiler = createEnforcementChainCompiler({ resources, connections })
+  const processorAdapters = createProcessorAdapterCatalog(
+    options.processorAdapterRegistry ?? {
+      schema_version: PROCESSOR_ADAPTERS_SCHEMA_VERSION,
+      adapters: [],
+    },
+  )
+  const enforcementCompiler = createEnforcementChainCompiler({
+    resources,
+    connections,
+    processorAdapters,
+  })
   const policyDrafts = createPolicyDraftStore({ now: options.now, audit: auditEvents })
   const enforcementRevisionStore = createInMemoryEnforcementChainReader({
     drafts: policyDrafts,
@@ -425,6 +442,7 @@ export function createInMemoryPlatformModules(
     modelRouter,
     modelRoutingPolicies,
     enforcementCompiler,
+    processorAdapters,
     policyDrafts,
     enforcementRevisionStore,
     gatewayProjector,

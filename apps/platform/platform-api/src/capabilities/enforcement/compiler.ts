@@ -5,7 +5,13 @@ import { Check } from "typebox/value"
 import { canonicalJson } from "@genioone/protocol/canonical"
 
 import { PlatformApiError } from "../errors"
+import type { ProcessorAdapterCatalog } from "../processor-adapters/catalog"
 import { CompiledEnforcementChainSchema } from "./contract"
+import {
+  validateExecutableProcessorSteps,
+  type ProcessorPolicyStep,
+} from "../../../../../../runtimes/gateway/services/processor/contract"
+import type { ProcessorAdapterKind } from "../../../../../../runtimes/gateway/services/shared/processor-adapters"
 import type {
   CompileEnforcementChainInput,
   CompiledEnforcementChain,
@@ -271,6 +277,97 @@ function assertDraftDataProtectionConfigs(steps: readonly EnforcementStep[]): vo
   }
 }
 
+function requiresRemoteAdapterValidation(step: ProcessStep): boolean {
+  return [step.hooks.request, step.hooks.response].some((hook) =>
+    hook?.action === "SAFETY_CHECK" ||
+    (isRecord(hook?.config) && "detector" in hook.config),
+  )
+}
+
+function processorPolicySteps(steps: readonly ProcessStep[]): ProcessorPolicyStep[] {
+  return steps.map((step) => ({
+    step_id: step.step_id,
+    hooks: {
+      ...(step.hooks.request ? { request: step.hooks.request } : {}),
+      ...(step.hooks.response ? { response: step.hooks.response } : {}),
+    },
+  }))
+}
+
+function processorPolicyInvalid(error: unknown): never {
+  throw new PlatformApiError(
+    "PROCESSOR_POLICY_INVALID",
+    422,
+    error instanceof Error ? error.message : "Processor policy is invalid",
+  )
+}
+
+async function assertAdapter(
+  catalog: ProcessorAdapterCatalog | undefined,
+  tenantId: string,
+  adapterId: string,
+  kinds: readonly ProcessorAdapterKind[],
+): Promise<void> {
+  if (!catalog) {
+    throw new PlatformApiError("PROCESSOR_ADAPTER_CATALOG_UNAVAILABLE", 503)
+  }
+  const adapter = await catalog.get({ tenantId, adapterId })
+  if (!adapter) {
+    throw new PlatformApiError(
+      "PROCESSOR_ADAPTER_NOT_FOUND",
+      422,
+      `Processor adapter ${adapterId} is not configured for this tenant`,
+    )
+  }
+  if (!kinds.includes(adapter.kind)) {
+    throw new PlatformApiError(
+      "PROCESSOR_ADAPTER_KIND_INVALID",
+      422,
+      `Processor adapter ${adapterId} is not valid for this policy hook`,
+    )
+  }
+}
+
+export async function validateExecutableProcessorAdapterConfiguration(
+  catalog: ProcessorAdapterCatalog | undefined,
+  tenantId: string,
+  steps: readonly EnforcementStep[],
+): Promise<void> {
+  const processorSteps = processorPolicySteps(
+    steps.filter(isProcessStep).filter(requiresRemoteAdapterValidation),
+  )
+  if (processorSteps.length === 0) return
+  try {
+    validateExecutableProcessorSteps(processorSteps)
+  } catch (error) {
+    processorPolicyInvalid(error)
+  }
+  for (const step of processorSteps) {
+    for (const hook of [step.hooks.request, step.hooks.response]) {
+      if (!hook) continue
+      if (hook.action === "SAFETY_CHECK") {
+        await assertAdapter(
+          catalog,
+          tenantId,
+          (hook.config as { adapter_id: string }).adapter_id,
+          ["JEV", "HTTP"],
+        )
+      }
+      const detector = isRecord(hook.config) && isRecord(hook.config.detector)
+        ? hook.config.detector
+        : undefined
+      if (detector) {
+        await assertAdapter(
+          catalog,
+          tenantId,
+          detector.adapter_id as string,
+          ["PRESIDIO"],
+        )
+      }
+    }
+  }
+}
+
 type ObserveHook = "request" | "attempt" | "response"
 
 function observeOccurrences(steps: ObserveStep[]) {
@@ -521,6 +618,11 @@ export function createEnforcementChainCompiler(
       value: CompileEnforcementChainInput
     }): Promise<CompiledEnforcementChain> {
       await assertScope(scope, input)
+      await validateExecutableProcessorAdapterConfiguration(
+        scope.processorAdapters,
+        input.tenantId,
+        input.value.steps,
+      )
       return compileValidatedEnforcementChain(input)
     },
   }

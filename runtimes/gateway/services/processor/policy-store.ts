@@ -22,6 +22,7 @@ export interface ProcessorPolicyScope {
 }
 
 export interface ProcessorPolicySnapshot {
+  tenantId: string
   bundleRevision: string
   releaseId: string
   releaseReference: GatewayReleaseReference
@@ -44,6 +45,7 @@ function scopedSnapshot(release: LoadedPolicyRelease): ProcessorPolicySnapshot {
     steps: scope.steps,
   }))
   return {
+    tenantId: release.manifest.tenant_id,
     bundleRevision: bundle.revision,
     releaseId: release.releaseId,
     releaseReference: release.releaseReference,
@@ -60,6 +62,15 @@ function scopedSnapshot(release: LoadedPolicyRelease): ProcessorPolicySnapshot {
         (entry) => entry.resource_id === resourceId && entry.capability_id === capabilityId,
       )
     },
+  }
+}
+
+export function assertProcessorPolicySnapshotTenant(
+  snapshot: ProcessorPolicySnapshot,
+  tenantId: string,
+): void {
+  if (snapshot.tenantId !== tenantId) {
+    throw new Error("processor policy release does not match authorization tenant")
   }
 }
 

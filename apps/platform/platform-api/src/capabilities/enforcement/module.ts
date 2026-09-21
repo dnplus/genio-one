@@ -6,6 +6,7 @@ import type {
 } from "./contract"
 import type { ResourceConnectionRegistry } from "../connections/module"
 import type { ResourceRegistry } from "../resources/module"
+import type { ProcessorAdapterCatalog } from "../processor-adapters/catalog"
 import type { SqlTransaction } from "../../persistence/sql-adapter"
 
 /**
@@ -17,6 +18,7 @@ import type { SqlTransaction } from "../../persistence/sql-adapter"
 export interface EnforcementChainScope {
   resources: ResourceRegistry
   connections: ResourceConnectionRegistry
+  processorAdapters?: ProcessorAdapterCatalog
 }
 
 export interface EnforcementChainCompiler {

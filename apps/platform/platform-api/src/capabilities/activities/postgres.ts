@@ -1,3 +1,5 @@
+import { PlatformApiError } from "../errors"
+import { boundedActivitySafetyDecisions, MAX_ACTIVITY_SAFETY_DECISIONS } from "./contract"
 import type { SqlAdapter } from "../../persistence/sql-adapter"
 import type { GatewayActivityEvent, GatewayActivityTrendPoint, OutcomeAttribution, RoutingAttemptEvent } from "./contract"
 import type { GatewayActivityStore } from "./module"
@@ -45,6 +47,7 @@ interface GatewayActivityRow extends Record<string, unknown> {
   processor_request_steps: GatewayActivityEvent["processor_request_steps"]
   processor_response_steps: GatewayActivityEvent["processor_response_steps"]
   data_classifications?: GatewayActivityEvent["data_classifications"]
+  safety_decisions?: GatewayActivityEvent["safety_decisions"]
   input_tokens: number | string | null
   output_tokens: number | string | null
   total_tokens: number | string | null
@@ -109,6 +112,7 @@ function mapRow(row: GatewayActivityRow): GatewayActivityEvent {
       : integer(row.provider_credential_profile_revision),
     provider_credential_strategy_digest: row.provider_credential_strategy_digest ?? null,
     data_classifications: row.data_classifications ?? [],
+    safety_decisions: row.safety_decisions ?? [],
     candidate_connection_ids: row.candidate_connection_ids ?? [],
     release_id: row.release_id ?? null,
     release_head_revision: row.release_head_revision == null ? null : integer(row.release_head_revision),
@@ -190,6 +194,7 @@ export function createPostgresGatewayActivityStore(options: {
       return result.rows.map(mapAttempt)
     },
     async record({ tenantId, event }) {
+      const safetyDecisions = boundedActivitySafetyDecisions([], event.safety_decisions ?? [])
       const inferredConnection = !event.connection_id && event.mcp_backend
         ? (await options.connections.list({
             tenantId,
@@ -234,9 +239,9 @@ export function createPostgresGatewayActivityStore(options: {
           pricing_source, pricing_version,
           detail_availability, detail_ref, detail_expires_at,
           provider_credential_profile_id, provider_credential_profile_revision,
-          provider_credential_strategy_digest, data_classifications, session_id, occurred_at
+          provider_credential_strategy_digest, data_classifications, safety_decisions, session_id, occurred_at
         ) values (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33::text::jsonb,$34::text::jsonb,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44::text[],$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58::text::jsonb,$59,$60
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33::text::jsonb,$34::text::jsonb,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44::text[],$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58::text::jsonb,$59::text::jsonb,$60,$61
         ) on conflict (tenant_id, correlation_id) do update set
           capability_id = coalesce(excluded.capability_id, genio_one_gateway_activities.capability_id),
           application_id = coalesce(excluded.application_id, genio_one_gateway_activities.application_id),
@@ -283,6 +288,28 @@ export function createPostgresGatewayActivityStore(options: {
             when jsonb_array_length(excluded.data_classifications) > 0 then excluded.data_classifications
             else genio_one_gateway_activities.data_classifications
           end,
+          safety_decisions = case
+            when jsonb_array_length(excluded.safety_decisions) > 0 and jsonb_array_length(genio_one_gateway_activities.safety_decisions) > 0 then (
+              select coalesce(jsonb_agg(merged.decision order by merged.ordinality), '[]'::jsonb)
+              from (
+                select prior.value as decision, prior.ordinality
+                from jsonb_array_elements(genio_one_gateway_activities.safety_decisions) with ordinality as prior(value, ordinality)
+                union all
+                select incoming.value as decision, 4096 + incoming.ordinality
+                from jsonb_array_elements(excluded.safety_decisions) with ordinality as incoming(value, ordinality)
+                where not exists (
+                  select 1
+                  from jsonb_array_elements(genio_one_gateway_activities.safety_decisions) as prior(value)
+                  where prior.value ->> 'direction' = incoming.value ->> 'direction'
+                    and prior.value ->> 'step_id' = incoming.value ->> 'step_id'
+                    and prior.value ->> 'adapter_id' = incoming.value ->> 'adapter_id'
+                    and prior.value ->> 'check_id' = incoming.value ->> 'check_id'
+                )
+              ) as merged
+            )
+            when jsonb_array_length(excluded.safety_decisions) > 0 then excluded.safety_decisions
+            else genio_one_gateway_activities.safety_decisions
+          end,
           input_tokens = greatest(coalesce(excluded.input_tokens, 0), coalesce(genio_one_gateway_activities.input_tokens, 0)),
           output_tokens = greatest(coalesce(excluded.output_tokens, 0), coalesce(genio_one_gateway_activities.output_tokens, 0)),
           total_tokens = greatest(coalesce(excluded.total_tokens, 0), coalesce(genio_one_gateway_activities.total_tokens, 0)),
@@ -307,6 +334,18 @@ export function createPostgresGatewayActivityStore(options: {
           pricing_source = coalesce(excluded.pricing_source, genio_one_gateway_activities.pricing_source),
           pricing_version = coalesce(excluded.pricing_version, genio_one_gateway_activities.pricing_version),
           occurred_at = excluded.occurred_at
+        where jsonb_array_length(genio_one_gateway_activities.safety_decisions) + (
+          select count(*)
+          from jsonb_array_elements(excluded.safety_decisions) as incoming(value)
+          where not exists (
+            select 1
+            from jsonb_array_elements(genio_one_gateway_activities.safety_decisions) as prior(value)
+            where prior.value ->> 'direction' = incoming.value ->> 'direction'
+              and prior.value ->> 'step_id' = incoming.value ->> 'step_id'
+              and prior.value ->> 'adapter_id' = incoming.value ->> 'adapter_id'
+              and prior.value ->> 'check_id' = incoming.value ->> 'check_id'
+          )
+        ) <= ${MAX_ACTIVITY_SAFETY_DECISIONS}
         returning *`,
         [tenantId, event.correlation_id, event.resource_id, event.capability_id,
           event.application_id, event.subject_id, event.acting_client_id,
@@ -332,10 +371,12 @@ export function createPostgresGatewayActivityStore(options: {
           event.provider_credential_profile_revision ?? null,
           event.provider_credential_strategy_digest ?? null,
           JSON.stringify(event.data_classifications),
+          JSON.stringify(safetyDecisions),
           event.session_id ?? null,
           event.occurred_at],
       )
-      return mapRow(result.rows[0]!)
+      if (!result.rows[0]) throw new PlatformApiError("SAFETY_DECISION_RECEIPT_LIMIT_EXCEEDED", 422)
+      return mapRow(result.rows[0])
     },
     async list({ tenantId, limit }) {
       const result = await options.sql.query<GatewayActivityRow>(

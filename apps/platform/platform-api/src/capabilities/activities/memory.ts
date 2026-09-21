@@ -1,3 +1,4 @@
+import { boundedActivitySafetyDecisions } from "./contract"
 import type { GatewayActivityStore } from "./module"
 import { summarizeGatewayActivities } from "./usage-summary"
 
@@ -19,6 +20,7 @@ export function createInMemoryGatewayActivityStore(): GatewayActivityStore {
   return {
     async record({ tenantId, event }) {
       const previous = events.get(`${tenantId}:${event.correlation_id}`)
+      const safetyDecisions = boundedActivitySafetyDecisions(previous?.safety_decisions ?? [], event.safety_decisions ?? [])
       const value = {
         ...previous,
         ...structuredClone(event),
@@ -66,6 +68,7 @@ export function createInMemoryGatewayActivityStore(): GatewayActivityStore {
         data_classifications: event.data_classifications.length > 0
           ? structuredClone(event.data_classifications)
           : previous?.data_classifications ?? [],
+        safety_decisions: safetyDecisions,
         input_tokens: Math.max(event.input_tokens ?? 0, previous?.input_tokens ?? 0),
         output_tokens: Math.max(event.output_tokens ?? 0, previous?.output_tokens ?? 0),
         total_tokens: Math.max(event.total_tokens ?? 0, previous?.total_tokens ?? 0),

@@ -66,9 +66,11 @@ class FakeMigrationAdapter implements SqlAdapter {
   }
 }
 
-test("the clean-install baseline encodes the complete current Platform schema", async () => {
+test("the clean-install baseline and ordered migrations encode the current Platform schema", async () => {
   const migrations = await loadMigrations()
-  assert.equal(migrations.length, 1)
+  assert.deepEqual(migrations.map((migration) => migration.id), [1, 2])
+  assert.equal(migrations[1].name, "gateway_activity_safety_decisions")
+  assert.match(migrations[1].sql, /add column if not exists safety_decisions jsonb/i)
   assert.equal(migrations[0].id, 1)
   assert.equal(migrations[0].name, "platform_baseline")
   assert.match(migrations[0].checksum, /^[a-f0-9]{64}$/)

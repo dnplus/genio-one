@@ -11,6 +11,8 @@ export const DataClassificationReceiptSchema = Type.Object({
   ]),
   source: Type.Literal("DLP_DETECTOR"),
   source_version: Identifier,
+  detector_adapter_id: Type.Optional(Identifier),
+  detector_provider: Type.Optional(Type.Literal("PRESIDIO")),
   trust_level: Type.Literal("RUNTIME_OBSERVED"),
   step_id: Identifier,
 }, { additionalProperties: false })
@@ -23,6 +25,8 @@ function receiptKey(receipt: DataClassificationReceipt): string {
     receipt.handling_action,
     receipt.source,
     receipt.source_version,
+    receipt.detector_adapter_id ?? "",
+    receipt.detector_provider ?? "",
     receipt.trust_level,
     receipt.step_id,
   ].join("\u0000")

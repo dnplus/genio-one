@@ -5,7 +5,12 @@ import { PlatformApiError } from "../errors"
 import type { SqlAdapter, SqlTransaction } from "../../persistence/sql-adapter"
 import { lockGatewayPolicyRelease } from "../gateway-policy-release/transaction-lock"
 import { canonicalJson } from "@genioone/protocol/canonical"
-import { canonicalEnforcementChainDigest, compileValidatedEnforcementChain, validateCompiledEnforcementChainSemantics } from "./compiler"
+import {
+  canonicalEnforcementChainDigest,
+  compileValidatedEnforcementChain,
+  validateCompiledEnforcementChainSemantics,
+  validateExecutableProcessorAdapterConfiguration,
+} from "./compiler"
 import {
   CompiledEnforcementChainSchema,
   type CompileEnforcementChainInput,
@@ -22,6 +27,7 @@ import type {
   EnforcementChainRevision,
   EnforcementChainRevisionReader,
 } from "./module"
+import type { ProcessorAdapterCatalog } from "../processor-adapters/catalog"
 
 type DatabaseRow = Record<string, unknown>
 
@@ -30,6 +36,7 @@ export interface PostgresEnforcementChainRevisionOptions {
   now?: () => number
   releasePublisher?: EnforcementChainReleasePublisher
   audit?: GatewayAuthorizationAuditStore
+  processorAdapters?: ProcessorAdapterCatalog
 }
 
 export interface PostgresEnforcementChainRevisionStore
@@ -465,6 +472,11 @@ export function createPostgresEnforcementChainRevisionStore(
     },
   ): Promise<{ revision: EnforcementChainRevision; created: boolean }> {
     const key = validateSaveInput(tenantId, chain)
+    await validateExecutableProcessorAdapterConfiguration(
+      options.processorAdapters,
+      tenantId,
+      chain.steps,
+    )
     const digest = canonicalEnforcementChainDigest(chain)
     const chainJson = canonicalJson(chain)
     const gatewayBeforeWrite = lockedGateway === undefined

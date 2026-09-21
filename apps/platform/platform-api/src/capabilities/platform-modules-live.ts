@@ -83,6 +83,11 @@ import { createPostgresOnePolicySeedStore } from "./one-policy/postgres"
 import { createPostgresRuntimePolicyStore } from "./one-policy/runtime-postgres"
 import { PERSONAL_BOT_RESOURCE_ID } from "./one-policy/runtime"
 import { createPostgresDemoInstallationStore } from "./demo-project/postgres"
+import { createProcessorAdapterCatalog } from "./processor-adapters/catalog"
+import {
+  PROCESSOR_ADAPTERS_SCHEMA_VERSION,
+  type ProcessorAdapterRegistry,
+} from "../../../../../runtimes/gateway/services/shared/processor-adapters"
 
 /**
  * The complete production capability graph. Every stateful capability is
@@ -132,6 +137,7 @@ export interface LivePlatformModuleGraphOptions
   applicationOAuthProvisioner?: ApplicationOAuthClientProvisioner
   applicationTokenBroker: ApplicationTokenBroker
   workloadAssertionVerifier: WorkloadAssertionVerifier
+  processorAdapterRegistry?: ProcessorAdapterRegistry
 }
 
 /**
@@ -240,9 +246,16 @@ export function createPlatformModuleGraph(
     decisionProvider: options.modelRoutingDecisionProvider,
     decisionMinimumConfidence: options.modelRoutingDecisionMinimumConfidence,
   })
+  const processorAdapters = createProcessorAdapterCatalog(
+    options.processorAdapterRegistry ?? {
+      schema_version: PROCESSOR_ADAPTERS_SCHEMA_VERSION,
+      adapters: [],
+    },
+  )
   const enforcementCompiler = createEnforcementChainCompiler({
     resources: postgres.resources,
     connections: postgres.connections,
+    processorAdapters,
   })
   const auditEvents = createPostgresGatewayAuthorizationAuditStore({ sql: postgres.sql })
   const policyDrafts = createPolicyDraftStore({ sql: postgres.sql, now: options.now, audit: auditEvents })
@@ -251,6 +264,7 @@ export function createPlatformModuleGraph(
     now: options.now,
     releasePublisher: createAggregateGatewayLifecycleReleasePublisher(aggregateCoordinator),
     audit: auditEvents,
+    processorAdapters,
   })
   const publicationStore = createPostgresPublicationWorkflowStore({
     sql: postgres.sql,
@@ -408,6 +422,7 @@ export function createPlatformModuleGraph(
     modelRouter,
     modelRoutingPolicies: postgres.modelRoutingPolicies,
     enforcementCompiler,
+    processorAdapters,
     policyDrafts,
     enforcementRevisionStore,
     gatewayProjector,

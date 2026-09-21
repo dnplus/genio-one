@@ -241,6 +241,24 @@ spec:
               valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: valkey-password } }
             - name: GENIO_ONE_TOKEN_VAULT_KEY
               valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: token-vault-key } }
+            {{- if .Values.processorAdapters.configMap.name }}
+            - { name: GENIO_ONE_PROCESSOR_ADAPTERS_FILE, value: /var/run/genio-one/processor-adapters/registry.json }
+            {{- end }}
+            {{- $credentialEnvNames := list }}
+            {{- range .Values.processorAdapters.credentials.env }}
+            {{- $credentialEnvNames = append $credentialEnvNames .name }}
+            {{- end }}
+            {{- if gt (len $credentialEnvNames) 0 }}
+            - { name: GENIO_ONE_PROCESSOR_ADAPTER_CREDENTIAL_ENV_NAMES, value: {{ join "," $credentialEnvNames | quote }} }
+            {{- end }}
+            {{- range .Values.processorAdapters.credentials.env }}
+            {{- $secretKeyRef := default (dict) .secretKeyRef }}
+            - name: {{ .name | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ default $.Values.processorAdapters.credentials.secretName $secretKeyRef.name | quote }}
+                  key: {{ $secretKeyRef.key | quote }}
+            {{- end }}
           ports:
             - { name: processor-grpc, containerPort: 8082 }
             - { name: processor-http, containerPort: 8182 }
@@ -253,9 +271,20 @@ spec:
           volumeMounts:
             - { name: product-secrets, mountPath: /var/run/secrets/genio-one, readOnly: true }
             - { name: runtime-state, mountPath: /var/lib/genio-one/gateway-runtime }
+            {{- if .Values.processorAdapters.configMap.name }}
+            - { name: processor-adapters, mountPath: /var/run/genio-one/processor-adapters, readOnly: true }
+            {{- end }}
       volumes:
         - { name: product-secrets, secret: { secretName: {{ include "genio-one.secretName" . }} } }
         - { name: gateway-bootstrap, secret: { secretName: {{ include "genio-one.fullname" . }}-gateway-bootstrap } }
+        {{- if .Values.processorAdapters.configMap.name }}
+        - name: processor-adapters
+          configMap:
+            name: {{ .Values.processorAdapters.configMap.name | quote }}
+            items:
+              - key: {{ .Values.processorAdapters.configMap.key | quote }}
+                path: registry.json
+        {{- end }}
   volumeClaimTemplates:
     - metadata: { name: runtime-state }
       spec:

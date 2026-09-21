@@ -42,6 +42,7 @@ function event(overrides: Partial<GatewayActivityEvent>): GatewayActivityEvent {
     processor_request_steps: [],
     processor_response_steps: [],
     data_classifications: [],
+    safety_decisions: [],
     input_tokens: 22,
     output_tokens: 98,
     total_tokens: 120,

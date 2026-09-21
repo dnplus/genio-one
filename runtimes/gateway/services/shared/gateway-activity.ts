@@ -1,5 +1,8 @@
 import { Type, type Static } from "typebox"
 import { DataClassificationReceiptSchema } from "./data-classification"
+import { SafetyDecisionReceiptSchema } from "./safety-decision"
+
+export { mergeSafetyDecisionReceipts } from "./safety-decision"
 
 const Identifier = Type.String({ minLength: 1, maxLength: 256 })
 const DownstreamIdentityMode = Type.Unsafe<"NONE" | "SERVICE" | "USER_PASSTHROUGH" | "USER_OAUTH" | "USER_PASSWORD" | null>({
@@ -104,6 +107,7 @@ export const GatewayActivityEventSchema = Type.Object({
   processor_request_steps: Type.Array(ProcessorStepReceiptSchema, { maxItems: 4_096 }),
   processor_response_steps: Type.Array(ProcessorStepReceiptSchema, { maxItems: 4_096 }),
   data_classifications: Type.Array(DataClassificationReceiptSchema, { maxItems: 4_096 }),
+  safety_decisions: Type.Optional(Type.Array(SafetyDecisionReceiptSchema, { maxItems: 4_096 })),
   input_tokens: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
   output_tokens: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
   total_tokens: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),

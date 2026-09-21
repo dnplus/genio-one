@@ -1,5 +1,8 @@
 import assert from "node:assert/strict"
+import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { join } from "node:path"
 import test from "node:test"
+import { tmpdir } from "node:os"
 
 import {
   bootstrapSubjectsFromEnvironment,
@@ -105,6 +108,41 @@ test("memory development mode is explicit and never allowed in production", asyn
       }),
     /memory-dev mode is forbidden/,
   )
+})
+
+test("configured processor adapter registry is validated during memory API bootstrap", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "genio-one-processor-adapters-"))
+  const registryPath = join(directory, "registry.json")
+  try {
+    await writeFile(registryPath, JSON.stringify({
+      schema_version: 1,
+      adapters: [{ id: "jev", tenant_id: "tenant-local", kind: "JEV" }],
+    }))
+    const app = await createConfiguredManagementApi({
+      logger: false,
+      environment: {
+        GENIO_ONE_PLATFORM_API_MODE: "memory-dev",
+        NODE_ENV: "development",
+        GENIO_ONE_PROCESSOR_ADAPTERS_FILE: registryPath,
+      },
+    })
+    await app.close()
+
+    await writeFile(registryPath, JSON.stringify({ schema_version: 1, adapters: [{}] }))
+    await assert.rejects(
+      () => createConfiguredManagementApi({
+        logger: false,
+        environment: {
+          GENIO_ONE_PLATFORM_API_MODE: "memory-dev",
+          NODE_ENV: "development",
+          GENIO_ONE_PROCESSOR_ADAPTERS_FILE: registryPath,
+        },
+      }),
+      /processor adapter registry is invalid/,
+    )
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
 })
 
 test("durable mode fails before startup when required stores or signer are absent", async () => {

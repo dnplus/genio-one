@@ -575,10 +575,14 @@ test("projection emits native CRD shapes and a signed, secret-free policy bundle
   assert.equal(lua[0].inline.includes('handle:headers():get("x-genio-trusted-correlation-id")'), true)
   assert.equal(lua[0].inline.includes('handle:headers():remove("x-genio-correlation-id")'), true)
   assert.equal(lua[0].inline.includes('handle:headers():add("x-genio-correlation-id", correlation)'), true)
+  assert.equal(lua[0].inline.includes("handle:headers():remove(safety_decisions_header)"), true)
   assert.equal(lua[0].inline.includes("handle:headers():replace(name, value)"), true)
   assert.equal(lua[0].inline.includes('transformed = transformed or ""'), true)
   assert.equal(lua[0].inline.includes("/v1/process/response"), false)
+  assert.equal(processing.spec.extProc[0].messageTimeout, "35s")
+  assert.equal(lua[0].inline.includes("    35000\n"), true)
   assert.deepEqual(processing.spec.extProc[0].processingMode, {
+    allowModeOverride: true,
     request: {},
     response: { body: "Streamed" },
   })
@@ -1281,7 +1285,10 @@ test("projection mounts one processor bridge for the complete ordered process ch
   assert.equal(lua[0].type, "Inline")
   assert.equal(lua[0].inline.includes("/v1/process/request"), true)
   assert.equal(lua[0].inline.includes("/v1/process/response"), false)
+  assert.equal(processing.spec.extProc[0].messageTimeout, "35s")
+  assert.equal(lua[0].inline.includes("    35000\n"), true)
   assert.deepEqual(processing.spec.extProc[0].processingMode, {
+    allowModeOverride: true,
     request: {},
     response: { body: "Streamed" },
   })
@@ -1301,6 +1308,58 @@ test("projection mounts one processor bridge for the complete ordered process ch
     accessLogJson["genio.processor.data_classifications"],
     "%DYNAMIC_METADATA(genio.one.processor:data_classifications)%",
   )
+  assert.equal(
+    accessLogJson["genio.processor.safety_decisions"],
+    "%DYNAMIC_METADATA(genio.one.processor:safety_decisions)%",
+  )
+})
+
+test("response-only safety processing clears caller receipt handoff before ext_proc", async () => {
+  const responseSafetyChain = {
+    ...chain,
+    request_filter_order: ["authz", "response-safety"],
+    response_filter_order: ["response-safety"],
+    steps: [
+      ...chain.steps.slice(0, 2),
+      {
+        step_id: "response-safety",
+        kind: "PROCESS",
+        implementation: "PROCESSOR",
+        hooks: {
+          response: {
+            action: "SAFETY_CHECK",
+            config: {
+              schema_version: 1,
+              adapter_id: "semantic-safety",
+              checks: [{ id: "policy", instructions: "Block unsafe content", threshold: 0.7 }],
+              timeout_ms: 1_000,
+            },
+          },
+        },
+      },
+      ...chain.steps.slice(3),
+    ],
+  } as CompiledEnforcementChain
+  const projection = await projector(
+    publicationSnapshot({
+      one_policy_chain: responseSafetyChain,
+      connections: (connections as Array<Record<string, unknown>>).map((connection) => ({
+        ...connection,
+        supported_obligations: [...connection.supported_obligations as string[], "SAFETY_CHECK"],
+      })) as never,
+    }),
+  ).compile({ tenantId: "tenant-acme", value: request })
+  const processing = projection.resources.find(
+    (candidate) => candidate.kind === "EnvoyExtensionPolicy",
+  )!
+  const lua = (processing.spec.lua as Array<{ inline: string }>)[0]!.inline
+
+  assert.equal(lua.includes("function envoy_on_request(handle)"), true)
+  const receiptHeaderRemoval = lua.indexOf("handle:headers():remove(safety_decisions_header)")
+  const requestBridge = lua.indexOf('/v1/process/request')
+  assert.ok(receiptHeaderRemoval >= 0)
+  assert.ok(requestBridge > receiptHeaderRemoval)
+  assert.equal(processing.spec.extProc[0].processingMode.allowModeOverride, true)
 })
 
 test("projection accepts the versioned built-in processor pattern config", async () => {
@@ -1326,7 +1385,6 @@ test("projection accepts the versioned built-in processor pattern config", async
       },
     } : step),
   } as CompiledEnforcementChain
-
   const projection = await projector(
     publicationSnapshot({ one_policy_chain: configuredChain }),
   ).compile({ tenantId: "tenant-acme", value: request })
@@ -1337,6 +1395,133 @@ test("projection accepts the versioned built-in processor pattern config", async
   assert.equal(processStep?.kind, "PROCESS")
   assert.equal(processStep?.hooks.request?.config?.token_ttl_seconds, 600)
 
+})
+
+test("projection preserves Presidio and safety adapter policy config without credentials", async () => {
+  const configuredChain = {
+    ...chain,
+    request_filter_order: ["authz", "token-vault", "safety"],
+    response_filter_order: ["token-vault"],
+    steps: [
+      ...chain.steps.slice(0, 2),
+      {
+        ...chain.steps[2]!,
+        hooks: {
+          request: {
+            action: "TOKENIZE",
+            config: {
+              patterns: [{ name: "PERSON", expression: "Ada Lovelace" }],
+              token_ttl_seconds: 600,
+              detector: {
+                adapter_id: "presidio-primary",
+                language: "en",
+                entities: ["PERSON"],
+                score_threshold: 0.5,
+              },
+            },
+          },
+          response: {
+            action: "RESTORE",
+            config: {
+              patterns: [{ name: "PERSON", expression: "Ada Lovelace" }],
+              token_ttl_seconds: 600,
+            },
+          },
+        },
+      },
+      {
+        step_id: "safety",
+        kind: "PROCESS",
+        implementation: "PROCESSOR",
+        depends_on: ["token-vault"],
+        hooks: {
+          request: {
+            action: "SAFETY_CHECK",
+            config: {
+              schema_version: 1,
+              adapter_id: "jev-primary",
+              checks: [{ id: "policy", instructions: "Block unsafe content", threshold: 0.7 }],
+              timeout_ms: 1_000,
+            },
+          },
+        },
+      },
+      {
+        ...chain.steps[3]!,
+        depends_on: ["safety"],
+      },
+    ],
+  } as CompiledEnforcementChain
+  const safetyConnections = (connections as Array<Record<string, unknown>>).map((connection) => ({
+    ...connection,
+    supported_obligations: [...connection.supported_obligations as string[], "SAFETY_CHECK"],
+  }))
+
+  const projection = await projector(
+    publicationSnapshot({
+      one_policy_chain: configuredChain,
+      connections: safetyConnections as never,
+    }),
+  ).compile({ tenantId: "tenant-acme", value: request })
+  const processorSteps = projection.policy_bundle.enforcement_chain.steps.filter(
+    (step) => step.kind === "PROCESS",
+  )
+  assert.deepEqual(processorSteps[0]?.hooks.request?.config?.detector, {
+    adapter_id: "presidio-primary",
+    language: "en",
+    entities: ["PERSON"],
+    score_threshold: 0.5,
+  })
+  assert.deepEqual(processorSteps[1]?.hooks.request?.config, {
+    schema_version: 1,
+    adapter_id: "jev-primary",
+    checks: [{ id: "policy", instructions: "Block unsafe content", threshold: 0.7 }],
+    timeout_ms: 1_000,
+  })
+
+  const unsafeChain = {
+    ...configuredChain,
+    steps: configuredChain.steps.map((step) =>
+      step.step_id === "token-vault"
+        ? {
+            ...step,
+            hooks: {
+              request: {
+                action: "TOKENIZE",
+                config: {
+                  patterns: [{ name: "PERSON", expression: "Ada Lovelace" }],
+                  token_ttl_seconds: 600,
+                  detector: {
+                    adapter_id: "presidio-primary",
+                    language: "en",
+                    entities: ["PERSON"],
+                    score_threshold: 0.5,
+                    credential_env: "must-not-ship",
+                  },
+                },
+              },
+              response: {
+                action: "RESTORE",
+                config: {
+                  patterns: [{ name: "PERSON", expression: "Ada Lovelace" }],
+                  token_ttl_seconds: 600,
+                },
+              },
+            },
+          }
+        : step,
+    ),
+  } as unknown as CompiledEnforcementChain
+  await assert.rejects(
+    () => projector(
+      publicationSnapshot({
+        one_policy_chain: unsafeChain,
+        connections: safetyConnections as never,
+      }),
+    ).compile({ tenantId: "tenant-acme", value: request }),
+    (error: unknown) =>
+      error instanceof PlatformApiError && error.code === "UNSAFE_POLICY_CONFIG_SECRET",
+  )
 })
 
 test("projection preserves authorization obligations in the signed policy bundle", async () => {

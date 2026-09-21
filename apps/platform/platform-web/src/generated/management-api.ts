@@ -23261,6 +23261,24 @@ export type PreviewEnforcementChain200 = {
   response_filter_order: string[];
 };
 
+export const ListProcessorAdapters200AdaptersItemKind = {  JEV: 'JEV',
+  HTTP: 'HTTP',
+  PRESIDIO: 'PRESIDIO',
+} as const
+export type ListProcessorAdapters200AdaptersItem = {
+  /** @minLength 1 */
+  id: string;
+  kind: typeof ListProcessorAdapters200AdaptersItemKind[keyof typeof ListProcessorAdapters200AdaptersItemKind];
+  /** @minLength 1 */
+  endpoint: string;
+  /** @minLength 1 */
+  model?: string;
+};
+
+export type ListProcessorAdapters200 = {
+  adapters: ListProcessorAdapters200AdaptersItem[];
+};
+
 export type RequestResourcePublicationReviewBody = {
   /**
      * @minLength 1
@@ -24670,6 +24688,13 @@ export const RecordGatewayActivityBodyDataClassificationsItemSource = {
   DLP_DETECTOR: 'DLP_DETECTOR',
 } as const;
 
+export type RecordGatewayActivityBodyDataClassificationsItemDetectorProvider = typeof RecordGatewayActivityBodyDataClassificationsItemDetectorProvider[keyof typeof RecordGatewayActivityBodyDataClassificationsItemDetectorProvider];
+
+
+export const RecordGatewayActivityBodyDataClassificationsItemDetectorProvider = {
+  PRESIDIO: 'PRESIDIO',
+} as const;
+
 export type RecordGatewayActivityBodyDataClassificationsItemTrustLevel = typeof RecordGatewayActivityBodyDataClassificationsItemTrustLevel[keyof typeof RecordGatewayActivityBodyDataClassificationsItemTrustLevel];
 
 
@@ -24690,10 +24715,64 @@ export type RecordGatewayActivityBodyDataClassificationsItem = {
      * @maxLength 256
      */
   source_version: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  detector_adapter_id?: string;
+  detector_provider?: RecordGatewayActivityBodyDataClassificationsItemDetectorProvider;
   trust_level: RecordGatewayActivityBodyDataClassificationsItemTrustLevel;
   /**
      * @minLength 1
      * @maxLength 256
+     */
+  step_id: string;
+};
+
+export const RecordGatewayActivityBodySafetyDecisionsItemProvider = {  JEV: 'JEV',
+  HTTP: 'HTTP',
+} as const
+export const RecordGatewayActivityBodySafetyDecisionsItemDecision = {  ALLOW: 'ALLOW',
+  BLOCK: 'BLOCK',
+} as const
+export const RecordGatewayActivityBodySafetyDecisionsItemDirection = {  request: 'request',
+  response: 'response',
+} as const
+export type RecordGatewayActivityBodySafetyDecisionsItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  adapter_id: string;
+  provider: typeof RecordGatewayActivityBodySafetyDecisionsItemProvider[keyof typeof RecordGatewayActivityBodySafetyDecisionsItemProvider];
+  /**
+     * @minLength 1
+     * @maxLength 512
+     */
+  model: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  check_id: string;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  score: number;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  threshold: number;
+  decision: typeof RecordGatewayActivityBodySafetyDecisionsItemDecision[keyof typeof RecordGatewayActivityBodySafetyDecisionsItemDecision];
+  direction: typeof RecordGatewayActivityBodySafetyDecisionsItemDirection[keyof typeof RecordGatewayActivityBodySafetyDecisionsItemDirection];
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
      */
   step_id: string;
 };
@@ -24776,6 +24855,8 @@ export type RecordGatewayActivityBody = {
   processor_response_steps: RecordGatewayActivityBodyProcessorResponseStepsItem[];
   /** @maxItems 4096 */
   data_classifications: RecordGatewayActivityBodyDataClassificationsItem[];
+  /** @maxItems 4096 */
+  safety_decisions?: RecordGatewayActivityBodySafetyDecisionsItem[];
   input_tokens: number | null;
   output_tokens: number | null;
   total_tokens: number | null;
@@ -24907,6 +24988,13 @@ export const RecordGatewayActivity201DataClassificationsItemSource = {
   DLP_DETECTOR: 'DLP_DETECTOR',
 } as const;
 
+export type RecordGatewayActivity201DataClassificationsItemDetectorProvider = typeof RecordGatewayActivity201DataClassificationsItemDetectorProvider[keyof typeof RecordGatewayActivity201DataClassificationsItemDetectorProvider];
+
+
+export const RecordGatewayActivity201DataClassificationsItemDetectorProvider = {
+  PRESIDIO: 'PRESIDIO',
+} as const;
+
 export type RecordGatewayActivity201DataClassificationsItemTrustLevel = typeof RecordGatewayActivity201DataClassificationsItemTrustLevel[keyof typeof RecordGatewayActivity201DataClassificationsItemTrustLevel];
 
 
@@ -24927,10 +25015,64 @@ export type RecordGatewayActivity201DataClassificationsItem = {
      * @maxLength 256
      */
   source_version: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  detector_adapter_id?: string;
+  detector_provider?: RecordGatewayActivity201DataClassificationsItemDetectorProvider;
   trust_level: RecordGatewayActivity201DataClassificationsItemTrustLevel;
   /**
      * @minLength 1
      * @maxLength 256
+     */
+  step_id: string;
+};
+
+export const RecordGatewayActivity201SafetyDecisionsItemProvider = {  JEV: 'JEV',
+  HTTP: 'HTTP',
+} as const
+export const RecordGatewayActivity201SafetyDecisionsItemDecision = {  ALLOW: 'ALLOW',
+  BLOCK: 'BLOCK',
+} as const
+export const RecordGatewayActivity201SafetyDecisionsItemDirection = {  request: 'request',
+  response: 'response',
+} as const
+export type RecordGatewayActivity201SafetyDecisionsItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  adapter_id: string;
+  provider: typeof RecordGatewayActivity201SafetyDecisionsItemProvider[keyof typeof RecordGatewayActivity201SafetyDecisionsItemProvider];
+  /**
+     * @minLength 1
+     * @maxLength 512
+     */
+  model: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  check_id: string;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  score: number;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  threshold: number;
+  decision: typeof RecordGatewayActivity201SafetyDecisionsItemDecision[keyof typeof RecordGatewayActivity201SafetyDecisionsItemDecision];
+  direction: typeof RecordGatewayActivity201SafetyDecisionsItemDirection[keyof typeof RecordGatewayActivity201SafetyDecisionsItemDirection];
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
      */
   step_id: string;
 };
@@ -25045,6 +25187,8 @@ export type RecordGatewayActivity201 = {
   processor_response_steps: RecordGatewayActivity201ProcessorResponseStepsItem[];
   /** @maxItems 4096 */
   data_classifications: RecordGatewayActivity201DataClassificationsItem[];
+  /** @maxItems 4096 */
+  safety_decisions?: RecordGatewayActivity201SafetyDecisionsItem[];
   input_tokens: number | null;
   output_tokens: number | null;
   total_tokens: number | null;
@@ -25191,6 +25335,13 @@ export const ListGatewayActivities200EventsItemDataClassificationsItemSource = {
   DLP_DETECTOR: 'DLP_DETECTOR',
 } as const;
 
+export type ListGatewayActivities200EventsItemDataClassificationsItemDetectorProvider = typeof ListGatewayActivities200EventsItemDataClassificationsItemDetectorProvider[keyof typeof ListGatewayActivities200EventsItemDataClassificationsItemDetectorProvider];
+
+
+export const ListGatewayActivities200EventsItemDataClassificationsItemDetectorProvider = {
+  PRESIDIO: 'PRESIDIO',
+} as const;
+
 export type ListGatewayActivities200EventsItemDataClassificationsItemTrustLevel = typeof ListGatewayActivities200EventsItemDataClassificationsItemTrustLevel[keyof typeof ListGatewayActivities200EventsItemDataClassificationsItemTrustLevel];
 
 
@@ -25211,10 +25362,64 @@ export type ListGatewayActivities200EventsItemDataClassificationsItem = {
      * @maxLength 256
      */
   source_version: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  detector_adapter_id?: string;
+  detector_provider?: ListGatewayActivities200EventsItemDataClassificationsItemDetectorProvider;
   trust_level: ListGatewayActivities200EventsItemDataClassificationsItemTrustLevel;
   /**
      * @minLength 1
      * @maxLength 256
+     */
+  step_id: string;
+};
+
+export const ListGatewayActivities200EventsItemSafetyDecisionsItemProvider = {  JEV: 'JEV',
+  HTTP: 'HTTP',
+} as const
+export const ListGatewayActivities200EventsItemSafetyDecisionsItemDecision = {  ALLOW: 'ALLOW',
+  BLOCK: 'BLOCK',
+} as const
+export const ListGatewayActivities200EventsItemSafetyDecisionsItemDirection = {  request: 'request',
+  response: 'response',
+} as const
+export type ListGatewayActivities200EventsItemSafetyDecisionsItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  adapter_id: string;
+  provider: typeof ListGatewayActivities200EventsItemSafetyDecisionsItemProvider[keyof typeof ListGatewayActivities200EventsItemSafetyDecisionsItemProvider];
+  /**
+     * @minLength 1
+     * @maxLength 512
+     */
+  model: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  check_id: string;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  score: number;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  threshold: number;
+  decision: typeof ListGatewayActivities200EventsItemSafetyDecisionsItemDecision[keyof typeof ListGatewayActivities200EventsItemSafetyDecisionsItemDecision];
+  direction: typeof ListGatewayActivities200EventsItemSafetyDecisionsItemDirection[keyof typeof ListGatewayActivities200EventsItemSafetyDecisionsItemDirection];
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
      */
   step_id: string;
 };
@@ -25329,6 +25534,8 @@ export type ListGatewayActivities200EventsItem = {
   processor_response_steps: ListGatewayActivities200EventsItemProcessorResponseStepsItem[];
   /** @maxItems 4096 */
   data_classifications: ListGatewayActivities200EventsItemDataClassificationsItem[];
+  /** @maxItems 4096 */
+  safety_decisions?: ListGatewayActivities200EventsItemSafetyDecisionsItem[];
   input_tokens: number | null;
   output_tokens: number | null;
   total_tokens: number | null;
@@ -25613,6 +25820,13 @@ export const GetGatewayActivitySessionTimeline200EventsItemDataClassificationsIt
   DLP_DETECTOR: 'DLP_DETECTOR',
 } as const;
 
+export type GetGatewayActivitySessionTimeline200EventsItemDataClassificationsItemDetectorProvider = typeof GetGatewayActivitySessionTimeline200EventsItemDataClassificationsItemDetectorProvider[keyof typeof GetGatewayActivitySessionTimeline200EventsItemDataClassificationsItemDetectorProvider];
+
+
+export const GetGatewayActivitySessionTimeline200EventsItemDataClassificationsItemDetectorProvider = {
+  PRESIDIO: 'PRESIDIO',
+} as const;
+
 export type GetGatewayActivitySessionTimeline200EventsItemDataClassificationsItemTrustLevel = typeof GetGatewayActivitySessionTimeline200EventsItemDataClassificationsItemTrustLevel[keyof typeof GetGatewayActivitySessionTimeline200EventsItemDataClassificationsItemTrustLevel];
 
 
@@ -25633,10 +25847,64 @@ export type GetGatewayActivitySessionTimeline200EventsItemDataClassificationsIte
      * @maxLength 256
      */
   source_version: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  detector_adapter_id?: string;
+  detector_provider?: GetGatewayActivitySessionTimeline200EventsItemDataClassificationsItemDetectorProvider;
   trust_level: GetGatewayActivitySessionTimeline200EventsItemDataClassificationsItemTrustLevel;
   /**
      * @minLength 1
      * @maxLength 256
+     */
+  step_id: string;
+};
+
+export const GetGatewayActivitySessionTimeline200EventsItemSafetyDecisionsItemProvider = {  JEV: 'JEV',
+  HTTP: 'HTTP',
+} as const
+export const GetGatewayActivitySessionTimeline200EventsItemSafetyDecisionsItemDecision = {  ALLOW: 'ALLOW',
+  BLOCK: 'BLOCK',
+} as const
+export const GetGatewayActivitySessionTimeline200EventsItemSafetyDecisionsItemDirection = {  request: 'request',
+  response: 'response',
+} as const
+export type GetGatewayActivitySessionTimeline200EventsItemSafetyDecisionsItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  adapter_id: string;
+  provider: typeof GetGatewayActivitySessionTimeline200EventsItemSafetyDecisionsItemProvider[keyof typeof GetGatewayActivitySessionTimeline200EventsItemSafetyDecisionsItemProvider];
+  /**
+     * @minLength 1
+     * @maxLength 512
+     */
+  model: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  check_id: string;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  score: number;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  threshold: number;
+  decision: typeof GetGatewayActivitySessionTimeline200EventsItemSafetyDecisionsItemDecision[keyof typeof GetGatewayActivitySessionTimeline200EventsItemSafetyDecisionsItemDecision];
+  direction: typeof GetGatewayActivitySessionTimeline200EventsItemSafetyDecisionsItemDirection[keyof typeof GetGatewayActivitySessionTimeline200EventsItemSafetyDecisionsItemDirection];
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
      */
   step_id: string;
 };
@@ -25751,6 +26019,8 @@ export type GetGatewayActivitySessionTimeline200EventsItem = {
   processor_response_steps: GetGatewayActivitySessionTimeline200EventsItemProcessorResponseStepsItem[];
   /** @maxItems 4096 */
   data_classifications: GetGatewayActivitySessionTimeline200EventsItemDataClassificationsItem[];
+  /** @maxItems 4096 */
+  safety_decisions?: GetGatewayActivitySessionTimeline200EventsItemSafetyDecisionsItem[];
   input_tokens: number | null;
   output_tokens: number | null;
   total_tokens: number | null;
@@ -40957,6 +41227,42 @@ return managementApiFetch<previewEnforcementChainResponse>(getPreviewEnforcement
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(previewEnforcementChainBody)
+  }
+);}
+
+
+
+export type listProcessorAdaptersResponse200 = {
+  data: ListProcessorAdapters200
+  status: 200
+}
+
+export type listProcessorAdaptersResponseSuccess = (listProcessorAdaptersResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listProcessorAdaptersResponse = (listProcessorAdaptersResponseSuccess)
+
+export const getListProcessorAdaptersUrl = (tenantId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/processor-adapters`
+}
+
+/**
+ * @summary List tenant-scoped processor adapter metadata
+ */
+export const listProcessorAdapters = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listProcessorAdaptersResponse> => {
+
+  return managementApiFetch<listProcessorAdaptersResponse>(getListProcessorAdaptersUrl(tenantId),
+  {
+    ...options,
+    method: 'GET'
+
+
   }
 );}
 

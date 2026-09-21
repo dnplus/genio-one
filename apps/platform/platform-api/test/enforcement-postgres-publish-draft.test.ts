@@ -10,7 +10,9 @@ import { compileValidatedEnforcementChain } from "../src/capabilities/enforcemen
 import type { CompiledEnforcementChain, CompileEnforcementChainInput } from "../src/capabilities/enforcement/contract"
 import { createPostgresEnforcementChainRevisionStore } from "../src/capabilities/enforcement/postgres"
 import { resourcePolicyKey, createPolicyDraftStore } from "../src/capabilities/one-policy/drafts"
+import { createProcessorAdapterCatalog } from "../src/capabilities/processor-adapters/catalog"
 import { createPostgresSqlAdapter, type PostgresSqlAdapter } from "../src/persistence/sql-adapter"
+import type { ProcessorAdapterRegistry } from "../../../../runtimes/gateway/services/shared/processor-adapters"
 
 const persistenceUrl = process.env.GENIO_ONE_TEST_DATABASE_URL ?? process.env.GENIO_ONE_DATABASE_URL
 const persistenceTestEnabled = process.env.GENIO_ONE_ENFORCEMENT_PERSISTENCE_TEST === "1"
@@ -55,6 +57,34 @@ function steps(): CompileEnforcementChainInput["steps"] {
       implementation: "AIGW_NATIVE",
       depends_on: ["authorize"],
       config: {},
+    },
+  ]
+}
+
+function safetySteps(adapterId: string): CompileEnforcementChainInput["steps"] {
+  return [
+    steps()[0]!,
+    steps()[1]!,
+    {
+      step_id: "safety",
+      kind: "PROCESS",
+      implementation: "PROCESSOR",
+      depends_on: ["authorize"],
+      hooks: {
+        request: {
+          action: "SAFETY_CHECK",
+          config: {
+            schema_version: 1,
+            adapter_id: adapterId,
+            checks: [{ id: "instruction-override", instructions: "Detect unsafe instructions.", threshold: 0.7 }],
+            timeout_ms: 1_000,
+          },
+        },
+      },
+    },
+    {
+      ...steps()[2]!,
+      depends_on: ["safety"],
     },
   ]
 }
@@ -125,6 +155,7 @@ async function seed(sql: PostgresSqlAdapter): Promise<void> {
         { capability_id: "audit-failure", display_name: "Audit Failure" },
         { capability_id: "fallback", display_name: "Fallback" },
         { capability_id: "race", display_name: "Race" },
+        { capability_id: "safety-adapter", display_name: "Safety Adapter" },
       ]),
       "AI_GATEWAY",
     ],
@@ -162,6 +193,7 @@ async function createReviewedDraft(
   sql: PostgresSqlAdapter,
   capability: string,
   eligibleConnectionIds?: string[],
+  policySteps = steps(),
 ) {
   const drafts = createPolicyDraftStore(sql)
   const policyKey = resourcePolicyKey(resourceId, capability)
@@ -176,7 +208,7 @@ async function createReviewedDraft(
         definition: {
           one_policy_revision: 1,
           ...(eligibleConnectionIds ? { eligible_connection_ids: eligibleConnectionIds } : {}),
-          steps: steps(),
+          steps: policySteps,
         },
       },
     },
@@ -286,6 +318,57 @@ test(
       })
       assert.deepEqual(fallbackPublished.chain.eligible_connection_ids, ["connection-a", "connection-z"])
       assert.equal(await fallback.drafts.get(tenantId, fallback.policyKey), null)
+    } finally {
+      await cleanup(fixture)
+    }
+  },
+)
+
+test(
+  "PostgreSQL publishDraft rejects a reviewed safety policy with an incompatible tenant adapter",
+  { skip: !persistenceTestEnabled || !persistenceUrl, timeout: 30_000 },
+  async () => {
+    const fixture = await createFixture()
+    try {
+      const registry: ProcessorAdapterRegistry = {
+        schema_version: 1,
+        adapters: [
+          { id: "jev-primary", tenant_id: tenantId, kind: "JEV" },
+          {
+            id: "presidio-primary",
+            tenant_id: tenantId,
+            kind: "PRESIDIO",
+            endpoint: "http://presidio.example.test/analyze",
+          },
+        ],
+      }
+      const store = createPostgresEnforcementChainRevisionStore({
+        sql: fixture.sql,
+        now: () => 1_700_000_010,
+        processorAdapters: createProcessorAdapterCatalog(registry),
+      })
+      const prepared = await createReviewedDraft(
+        fixture.sql,
+        "safety-adapter",
+        ["connection-a"],
+        safetySteps("presidio-primary"),
+      )
+      const publishInput = {
+        tenantId,
+        resourceId,
+        capabilityId: "safety-adapter",
+        expectedVersion: prepared.reviewed.version,
+        expectedContentDigest: prepared.reviewed.content_digest,
+        publishedBySubjectId: "publisher",
+        correlationId: "safety-adapter-publish",
+      }
+
+      await assert.rejects(
+        store.publishDraft(publishInput),
+        (error: unknown) => errorCode(error) === "PROCESSOR_ADAPTER_KIND_INVALID",
+      )
+      assert.equal(await store.getLatest(publishInput), null)
+      assert.deepEqual(await prepared.drafts.get(tenantId, prepared.policyKey), prepared.reviewed)
     } finally {
       await cleanup(fixture)
     }

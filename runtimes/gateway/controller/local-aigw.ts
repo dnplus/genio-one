@@ -33,6 +33,11 @@ import {
   DataClassificationReceiptSchema,
   type DataClassificationReceipt,
 } from "../services/shared/data-classification"
+import {
+  SafetyDecisionReceiptSchema,
+  mergeSafetyDecisionReceipts,
+  type SafetyDecisionReceipt,
+} from "../services/shared/safety-decision"
 import type { GatewayReleaseApplier } from "./runtime"
 
 export interface LocalAigwOptions {
@@ -66,13 +71,44 @@ interface ModelRouteLeaseObservation {
   reused: boolean
 }
 
-interface ProcessorHttpObservation {
+export interface ProcessorHttpObservation {
   event: "genio.one.processor-http-request-completed" |
     "genio.one.processor-http-response-completed"
   correlation_id: string
   bundle_revision: string
   steps: Array<{ step_id: string; action: string }>
   data_classifications: DataClassificationReceipt[]
+  safety_decisions: SafetyDecisionReceipt[]
+}
+
+export function parseProcessorHttpObservation(value: unknown): ProcessorHttpObservation | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+  const observed = value as Partial<ProcessorHttpObservation>
+  if (
+    (observed.event !== "genio.one.processor-http-request-completed" &&
+      observed.event !== "genio.one.processor-http-response-completed") ||
+    typeof observed.correlation_id !== "string" ||
+    typeof observed.bundle_revision !== "string" ||
+    !Array.isArray(observed.steps) ||
+    !observed.steps.every((step) =>
+      step && typeof step === "object" &&
+      typeof step.step_id === "string" && step.step_id.length > 0 &&
+      typeof step.action === "string" && step.action.length > 0
+    ) ||
+    !Array.isArray(observed.data_classifications) ||
+    !observed.data_classifications.every((entry) => Check(DataClassificationReceiptSchema, entry)) ||
+    (observed.safety_decisions !== undefined &&
+      (!Array.isArray(observed.safety_decisions) ||
+        !observed.safety_decisions.every((entry) => Check(SafetyDecisionReceiptSchema, entry))))
+  ) return null
+  return {
+    event: observed.event,
+    correlation_id: observed.correlation_id,
+    bundle_revision: observed.bundle_revision,
+    steps: observed.steps,
+    data_classifications: observed.data_classifications,
+    safety_decisions: observed.safety_decisions ?? [],
+  }
 }
 
 export function attachMcpRouteSecurityPolicies(resources: Array<Record<string, any>>): void {
@@ -560,6 +596,7 @@ function projectionDocuments(
           json["genio.processor.request_steps"] = "%DYNAMIC_METADATA(genio.one.processor:request_steps)%"
           json["genio.processor.response_steps"] = "%DYNAMIC_METADATA(genio.one.processor:response_steps)%"
           json["genio.processor.data_classifications"] = "%DYNAMIC_METADATA(genio.one.processor:data_classifications)%"
+          json["genio.processor.safety_decisions"] = "%DYNAMIC_METADATA(genio.one.processor:safety_decisions)%"
         }
       }
     }
@@ -605,6 +642,7 @@ export function createLocalAigwApplier(options: LocalAigwOptions): GatewayReleas
     request_steps: Array<{ step_id: string; action: string }>
     response_steps: Array<{ step_id: string; action: string }>
     data_classifications: DataClassificationReceipt[]
+    safety_decisions: SafetyDecisionReceipt[]
   }>()
   let stopActivityReader: (() => void) | undefined
 
@@ -725,6 +763,24 @@ export function createLocalAigwApplier(options: LocalAigwOptions): GatewayReleas
         ? decoded as DataClassificationReceipt[]
         : []
     }
+    const safetyDecisions = (field: string): SafetyDecisionReceipt[] => {
+      const fieldValue = raw[field]
+      if (fieldValue === null || fieldValue === undefined || fieldValue === "" || fieldValue === "-") {
+        return []
+      }
+      let decoded: unknown = fieldValue
+      if (typeof fieldValue === "string") {
+        try {
+          decoded = JSON.parse(fieldValue)
+        } catch {
+          return []
+        }
+      }
+      if (!Array.isArray(decoded) || decoded.length > 4_096) return []
+      return decoded.every((value) => Check(SafetyDecisionReceiptSchema, value))
+        ? decoded as SafetyDecisionReceipt[]
+        : []
+    }
     const duration = Number(raw.duration)
     const occurredAt = Date.parse(String(raw.start_time ?? ""))
     const occurredAtSeconds = Number.isFinite(occurredAt)
@@ -804,6 +860,7 @@ export function createLocalAigwApplier(options: LocalAigwOptions): GatewayReleas
     const loggedRequestSteps = processorSteps("genio.processor.request_steps")
     const loggedResponseSteps = processorSteps("genio.processor.response_steps")
     const loggedDataClassifications = dataClassifications("genio.processor.data_classifications")
+    const loggedSafetyDecisions = safetyDecisions("genio.processor.safety_decisions")
     const credentialProfileId = typeof annotations?.["genio.one/provider-credential-profile-id"] === "string"
       ? annotations["genio.one/provider-credential-profile-id"]
       : null
@@ -862,6 +919,11 @@ export function createLocalAigwApplier(options: LocalAigwOptions): GatewayReleas
       data_classifications: loggedDataClassifications.length > 0
         ? loggedDataClassifications
         : processorReceipt?.data_classifications ?? [],
+      safety_decisions: (() => {
+        const merged = [...(processorReceipt?.safety_decisions ?? [])]
+        mergeSafetyDecisionReceipts(merged, loggedSafetyDecisions)
+        return merged
+      })(),
       input_tokens: integerOrNull("gen_ai.usage.input_tokens"),
       output_tokens: integerOrNull("gen_ai.usage.output_tokens"),
       total_tokens: integerOrNull("gen_ai.usage.total_tokens"),
@@ -1036,29 +1098,14 @@ export function createLocalAigwApplier(options: LocalAigwOptions): GatewayReleas
           process.stdout.write(`${line}\n`)
           continue
         }
-        const processorObserved = observed as Partial<ProcessorHttpObservation>
-        if (
-          (processorObserved.event === "genio.one.processor-http-request-completed" ||
-            processorObserved.event === "genio.one.processor-http-response-completed") &&
-          typeof processorObserved.correlation_id === "string" &&
-          typeof processorObserved.bundle_revision === "string" &&
-          Array.isArray(processorObserved.steps) &&
-          processorObserved.steps.every((step) =>
-            step && typeof step === "object" &&
-            typeof step.step_id === "string" && step.step_id.length > 0 &&
-            typeof step.action === "string" && step.action.length > 0
-          ) &&
-          Array.isArray(processorObserved.data_classifications) &&
-          processorObserved.data_classifications.every((value) =>
-            Check(DataClassificationReceiptSchema, value)
-          )
-        ) {
-          const receipt = processorObserved as ProcessorHttpObservation
+        const receipt = parseProcessorHttpObservation(observed)
+        if (receipt) {
           const current = processorReceiptByCorrelation.get(receipt.correlation_id) ?? {
             bundle_revision: receipt.bundle_revision,
             request_steps: [],
             response_steps: [],
             data_classifications: [],
+            safety_decisions: [],
           }
           processorReceiptByCorrelation.set(receipt.correlation_id, {
             bundle_revision: receipt.bundle_revision,
@@ -1071,6 +1118,11 @@ export function createLocalAigwApplier(options: LocalAigwOptions): GatewayReleas
             data_classifications: receipt.data_classifications.length > 0
               ? receipt.data_classifications
               : current.data_classifications,
+            safety_decisions: (() => {
+              const merged = [...current.safety_decisions]
+              mergeSafetyDecisionReceipts(merged, receipt.safety_decisions)
+              return merged
+            })(),
           })
           process.stdout.write(`${line}\n`)
           continue

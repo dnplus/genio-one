@@ -114,6 +114,7 @@ function policySnapshot(
     },
   ] as const
   return {
+    tenantId: context.tenantId,
     bundleRevision: revision,
     releaseId: release.release_id,
     releaseReference: release,
@@ -734,6 +735,7 @@ test("reversible tokenization is one bidirectional process step", () => {
 
 test("ext_proc admits deterministic routing without a caller session", async () => {
   const snapshot: ProcessorPolicySnapshot = {
+    tenantId: context.tenantId,
     bundleRevision,
     releaseId: releaseReference.release_id,
     releaseReference,
@@ -794,6 +796,7 @@ test("ext_proc releases usage concurrency leases on success and processing failu
 
 test("deterministic authorization keeps a single trusted public-model alias for receipts", async () => {
   const snapshot: ProcessorPolicySnapshot = {
+    tenantId: context.tenantId,
     bundleRevision,
     releaseId: releaseReference.release_id,
     releaseReference,
@@ -1159,6 +1162,7 @@ test("ext_proc serializes async body transforms and preserves response order", a
             "x-genio-usage-concurrency-leases",
             "x-genio-usage-policy-revisions",
             "x-genio-usage-currency-allocations",
+            "x-genio-processor-safety-decisions",
           ],
         },
       },

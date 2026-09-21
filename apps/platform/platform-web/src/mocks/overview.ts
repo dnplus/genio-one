@@ -422,6 +422,7 @@ function apiActivity(allResources: ResourceRegistration[]): ApiGatewayActivityEv
       processor_request_steps: [],
       processor_response_steps: [],
       data_classifications: [],
+      safety_decisions: [],
       input_tokens: null,
       output_tokens: null,
       total_tokens: null,

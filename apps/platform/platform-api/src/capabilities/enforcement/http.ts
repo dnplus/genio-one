@@ -79,6 +79,19 @@ export const enforcementHttp: FastifyPluginAsync<EnforcementHttpOptions> = async
       if (request.body.content.kind !== "RESOURCE_CAPABILITY") throw new PlatformApiError("POLICY_KIND_MISMATCH", 422)
       const latest = await options.revisionStore?.getLatest({ tenantId: request.params.tenant_id, resourceId: request.params.resource_id, capabilityId: request.params.capability_id })
       if ((latest?.one_policy_revision ?? 0) !== request.body.base_revision || request.body.content.definition.one_policy_revision !== request.body.base_revision + 1) throw new PlatformApiError("POLICY_REVISION_CONFLICT", 409)
+      const definition = request.body.content.definition
+      await options.compiler.compile({
+        tenantId: request.params.tenant_id,
+        value: {
+          ...definition,
+          resource_id: request.params.resource_id,
+          capability_id: request.params.capability_id,
+          eligible_connection_ids: definition.eligible_connection_ids ?? await options.compiler.listEligibleConnectionIds({
+            tenantId: request.params.tenant_id,
+            resourceId: request.params.resource_id,
+          }),
+        },
+      })
       const key = resourcePolicyKey(request.params.resource_id, request.params.capability_id)
       return drafts.save(request.params.tenant_id, key, request.body, {
         actorSubjectId: request.principal!.subject_id,
@@ -124,6 +137,21 @@ export const enforcementHttp: FastifyPluginAsync<EnforcementHttpOptions> = async
       const key = resourcePolicyKey(resourceId, capabilityId)
       const draft = await drafts.get(tenantId, key)
       if (!draft) throw new PlatformApiError("POLICY_DRAFT_CONFLICT", 409)
+      assertExpectedPolicyDraft(draft, {
+        expectedVersion: request.body.expected_version,
+        expectedContentDigest: request.body.expected_content_digest,
+      })
+      if (draft.content.kind !== "RESOURCE_CAPABILITY") throw new PlatformApiError("POLICY_KIND_MISMATCH", 422)
+      const definition = draft.content.definition
+      await options.compiler.compile({
+        tenantId,
+        value: {
+          ...definition,
+          resource_id: resourceId,
+          capability_id: capabilityId,
+          eligible_connection_ids: definition.eligible_connection_ids ?? await options.compiler.listEligibleConnectionIds({ tenantId, resourceId }),
+        },
+      })
       const store = options.revisionStore ?? revisionStoreRequired()
       return store.publishDraft({
         tenantId,

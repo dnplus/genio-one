@@ -15,6 +15,7 @@ import {
   attachMcpRouteSecurityPolicies,
   gatewayServiceEntrypoint,
   localCredentialSecrets,
+  parseProcessorHttpObservation,
 } from "./local-aigw"
 import { stopProcessTree, waitForEnvoyRunReadiness } from "./process-lifecycle"
 
@@ -64,6 +65,33 @@ test("local AIGW span content capture is disabled until explicitly enabled by it
   assert.equal(aigwSpanContentCapture(), "false")
   assert.equal(aigwSpanContentCapture({ OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: "false" }), "false")
   assert.equal(aigwSpanContentCapture({ OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: "true" }), "true")
+})
+
+test("legacy processor stdout without safety decisions retains its classification receipt", () => {
+  const receipt = parseProcessorHttpObservation({
+    event: "genio.one.processor-http-request-completed",
+    correlation_id: "legacy-correlation",
+    bundle_revision: "bundle-legacy",
+    steps: [{ step_id: "token-vault", action: "TOKENIZE" }],
+    data_classifications: [{
+      classification: "PERSON",
+      handling_action: "TOKENIZE",
+      source: "DLP_DETECTOR",
+      source_version: "builtin-v1",
+      trust_level: "RUNTIME_OBSERVED",
+      step_id: "token-vault",
+    }],
+  })
+
+  assert.deepEqual(receipt?.safety_decisions, [])
+  assert.deepEqual(receipt?.data_classifications, [{
+    classification: "PERSON",
+    handling_action: "TOKENIZE",
+    source: "DLP_DETECTOR",
+    source_version: "builtin-v1",
+    trust_level: "RUNTIME_OBSERVED",
+    step_id: "token-vault",
+  }])
 })
 
 test("local AIGW flags precede its positional configuration path", () => {

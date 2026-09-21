@@ -6,6 +6,7 @@ import {
   MODEL_ROUTE_HANDOFF_HEADERS,
   ROUTE_PUBLIC_MODEL_HEADER,
 } from "../../../../../../runtimes/gateway/services/shared/model-route-handoff"
+import { PROCESSOR_SAFETY_DECISIONS_HEADER } from "../../../../../../runtimes/gateway/services/shared/safety-decision"
 import { mcpOAuthHeaderName } from "../../../../../../runtimes/gateway/services/shared/mcp-oauth-handoff"
 import { isModelCandidateEffect } from "../../../../../../runtimes/gateway/services/shared/model-candidate-effect"
 import { isEd25519Signature } from "@genioone/protocol/ed25519-signature"
@@ -242,19 +243,26 @@ const SENSITIVE_POLICY_KEY = /(secret|token|password|api[_-]?key|credential|priv
  * action owns a versioned schema of its own.
  */
 const SAFE_POLICY_CONFIG_KEYS = new Set([
+  "adapter_id",
   "allow",
   "allowed",
   "allowed_models",
   "candidate_effect",
   "candidate_models",
+  "checks",
   "classifier_model",
   "default_model",
+  "detector",
+  "entities",
   "fallback_public_model_name",
   "fallback",
   "fallback_models",
   "fields",
   "flags",
   "expression",
+  "id",
+  "instructions",
+  "language",
   "match",
   "keywords",
   "max_bytes",
@@ -274,9 +282,12 @@ const SAFE_POLICY_CONFIG_KEYS = new Set([
   "rules",
   "schema_version",
   "scope",
+  "score_threshold",
   "strategy",
+  "threshold",
   "token_prefix",
   "token_ttl_seconds",
+  "timeout_ms",
   "ttl_seconds",
   "vault",
   "window_seconds",
@@ -649,6 +660,7 @@ function authorizationFilterOrder(
                 "genio.processor.request_steps": "%DYNAMIC_METADATA(genio.one.processor:request_steps)%",
                 "genio.processor.response_steps": "%DYNAMIC_METADATA(genio.one.processor:response_steps)%",
                 "genio.processor.data_classifications": "%DYNAMIC_METADATA(genio.one.processor:data_classifications)%",
+                "genio.processor.safety_decisions": "%DYNAMIC_METADATA(genio.one.processor:safety_decisions)%",
                 start_time: "%START_TIME%",
                 method: "%REQ(:METHOD)%",
                 path: "%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%",
@@ -1433,12 +1445,12 @@ function extensionPolicy(
 
   const processorRequestEnabled = requireRoutingBody ||
     processSteps.some((step) => Boolean(step.hooks.request))
-  const requestEnabled = processorRequestEnabled || Boolean(requestPreludeLua)
   // LLM projections always carry the bidirectional Processor seam so a later
   // immutable One Policy revision can add response hooks without rebuilding
   // the Resource publication topology.
   const responseEnabled = requireRoutingBody ||
     processSteps.some((step) => Boolean(step.hooks.response))
+  const requestEnabled = processorRequestEnabled || Boolean(requestPreludeLua) || responseEnabled
   if (!processorRequestEnabled && !responseEnabled) {
     return {
       policy: nativeResource(
@@ -1500,8 +1512,9 @@ function extensionPolicy(
   const lua = `
 local cluster = ${JSON.stringify(processorCluster)}
 local namespace = "genio.one.processor"
+local safety_decisions_header = ${JSON.stringify(PROCESSOR_SAFETY_DECISIONS_HEADER)}
 local context_headers = ${luaArray(contextHeaders)}
-local internal_headers = ${luaArray([...internalHeaders, ...MODEL_ROUTE_HANDOFF_HEADERS])}
+local internal_headers = ${luaArray([...internalHeaders, ...MODEL_ROUTE_HANDOFF_HEADERS, PROCESSOR_SAFETY_DECISIONS_HEADER])}
 local route_headers = ${luaArray(MODEL_ROUTE_HANDOFF_HEADERS)}
 
 local function fail(handle, status, body)
@@ -1541,6 +1554,10 @@ local function response_headers(handle, path)
     local value = values[name]
     if value ~= nil and value ~= "" then outgoing[name] = value end
   end
+  local safety_decisions = values["safety_decisions"]
+  if safety_decisions ~= nil and safety_decisions ~= "" then
+    outgoing[safety_decisions_header] = safety_decisions
+  end
   return outgoing
 end
 
@@ -1548,8 +1565,13 @@ local function record_receipt(handle, headers, direction)
   local metadata = handle:streamInfo():dynamicMetadata()
   local revision = headers["x-genio-processor-bundle-revision"]
   local steps = headers["x-genio-processor-steps"]
+  local safety_decisions = headers[safety_decisions_header]
   if revision ~= nil then metadata:set(namespace, "bundle_revision", revision) end
   if steps ~= nil then metadata:set(namespace, direction .. "_steps", steps) end
+  if safety_decisions ~= nil and safety_decisions ~= "" then
+    metadata:set(namespace, "safety_decisions", safety_decisions)
+    if direction == "request" then handle:headers():replace(safety_decisions_header, safety_decisions) end
+  end
   if direction == "request" then
     for _, name in ipairs(route_headers) do
       local value = headers[name]
@@ -1570,6 +1592,7 @@ ${requestPreludeLua}
 
 ${requestEnabled ? `function envoy_on_request(handle)
   ${requestPreludeLua ? "apply_api_query_mapping(handle)" : ""}
+  handle:headers():remove(safety_decisions_header)
   ${processorRequestEnabled ? `
   local original_body = handle:body(true)
   local correlation = handle:headers():get("x-genio-trusted-correlation-id")
@@ -1582,7 +1605,7 @@ ${requestEnabled ? `function envoy_on_request(handle)
     cluster,
     request_headers(handle, "/v1/process/request"),
     value,
-    2000
+    35000
   )
   if headers[":status"] ~= "200" then
     record_receipt(handle, headers, "request")
@@ -1641,8 +1664,9 @@ end` : ""}
               writableNamespaces: ["genio.one.processor"],
             },
             backendRefs: [backendReference(processorGrpcReference, namespace)],
-            messageTimeout: "2s",
+            messageTimeout: "35s",
             processingMode: {
+              allowModeOverride: true,
               request: {},
               response: { body: "Streamed" },
             },

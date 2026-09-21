@@ -3,7 +3,11 @@ import { createServer, type Server } from "node:http"
 
 import type { ProcessingContext, ProcessorPolicy } from "./contract"
 import { createProcessorChain, SseLineBuffer, type PayloadProcessor } from "./module"
-import type { ProcessorPolicySource } from "./policy-store"
+import {
+  assertProcessorPolicySnapshotTenant,
+  type ProcessorPolicySource,
+} from "./policy-store"
+import { appendSafetyBuffer, safetyBufferByteLimit } from "./safety-buffer"
 import type { TokenVault } from "./token-vault"
 import {
   gatewayModelRouteLeaseEvent,
@@ -45,9 +49,44 @@ import { operationalError, writeOperationalEvent } from "@genioone/telemetry/ope
 import { gatewayDetailActivityReference } from "@genioone/telemetry/otlp-detail-capture"
 import type { GatewayActivityIngest } from "../shared/gateway-activity"
 import { narrowGatewayRoutingScopeByObligations } from "../shared/gateway-routing-artifact"
+import type { ProcessorAdapterRuntime } from "../shared/processor-adapters"
+import {
+  PROCESSOR_SAFETY_DECISIONS_HEADER,
+  safetyDecisionReceipts,
+  serializeSafetyDecisionReceipts,
+  type SafetyDecisionReceipt,
+} from "../shared/safety-decision"
 
 const PROCESSOR_STEPS_HEADER = "x-genio-processor-steps"
 const PROCESSOR_BUNDLE_HEADER = "x-genio-processor-bundle-revision"
+
+type DeferredBodyReader = (maximumBytes?: number) => Promise<Uint8Array>
+
+class SafetyBufferLimitExceededError extends Error {}
+
+async function readIncomingBody(
+  incoming: AsyncIterable<Uint8Array>,
+  maximumBytes: number | undefined,
+): Promise<Uint8Array> {
+  const chunks: Buffer[] = []
+  let bytes = 0
+  let exceeded = false
+  for await (const chunk of incoming) {
+    const bodyChunk = Buffer.from(chunk)
+    if (maximumBytes === undefined) {
+      chunks.push(bodyChunk)
+      continue
+    }
+    try {
+      bytes = appendSafetyBuffer(chunks, bytes, bodyChunk, maximumBytes)
+    } catch {
+      exceeded = true
+      break
+    }
+  }
+  if (exceeded) throw new SafetyBufferLimitExceededError()
+  return Buffer.concat(chunks)
+}
 
 interface ProcessorHttpBridgeOptions {
   listen: string
@@ -55,6 +94,8 @@ interface ProcessorHttpBridgeOptions {
   tokenVault: TokenVault
   modelRouter?: GatewayModelRouteResolver
   processorFactory?: (policy: ProcessorPolicy, tokenVault: TokenVault) => PayloadProcessor
+  adapterRuntime?: ProcessorAdapterRuntime
+  safetyBufferBytes?: number
   onActivity?: (event: GatewayActivityIngest) => Promise<void> | void
 }
 
@@ -99,6 +140,19 @@ function errorResponse(status: number, code: string): Response {
   return Response.json({ code }, { status })
 }
 
+function recordActivity(
+  options: ProcessorHttpBridgeOptions,
+  event: GatewayActivityIngest,
+): void {
+  if (!options.onActivity) return
+  void Promise.resolve(options.onActivity(event)).catch((error) => {
+    writeOperationalEvent("processor", "ERROR", "genio.one.activity-observation-failed", {
+      correlation_id: event.correlation_id,
+      ...operationalError(error),
+    })
+  })
+}
+
 /**
  * HTTP bridge used by the Envoy Lua filter that runs before the native AIGW
  * request translator. Lua owns no policy semantics: it transports the body
@@ -114,8 +168,12 @@ export function startProcessorHttpBridge(
   if (!hostname || !Number.isInteger(port) || port < 1 || port > 65_535) {
     throw new Error("GENIO_ONE_AI_PROCESSOR_HTTP_LISTEN must be host:port")
   }
+  const safetyBufferBytes = safetyBufferByteLimit(options.safetyBufferBytes)
 
-  const handle = async (request: Request): Promise<Response> => {
+  const handle = async (
+    request: Request,
+    readBody: DeferredBodyReader,
+  ): Promise<Response> => {
       const url = new URL(request.url)
       // Envoy Gateway prefixes direct cluster calls with the generated
       // HTTPRoute backend path. The bridge contract is the final path segment;
@@ -159,6 +217,7 @@ export function startProcessorHttpBridge(
         if (!gatewayGroupReleaseReferencesEqual(snapshot.releaseReference, authorizedRelease)) {
           throw new Error("processor policy release does not match authorization release")
         }
+        assertProcessorPolicySnapshotTenant(snapshot, context.tenantId)
         const steps = snapshot.stepsFor(context.resourceId, context.capabilityId) ?? []
         const baseRoutingScope = snapshot.routingScopeFor(context.resourceId, context.capabilityId)
         const routingScope = baseRoutingScope
@@ -185,7 +244,10 @@ export function startProcessorHttpBridge(
               steps,
               options.tokenVault,
               snapshot.bundleRevision,
-              options.processorFactory,
+              {
+                processorFactory: options.processorFactory,
+                adapterRuntime: options.adapterRuntime,
+              },
             )
           : {
               protectJson: async (_context: ProcessingContext, body: Uint8Array) => ({
@@ -209,7 +271,95 @@ export function startProcessorHttpBridge(
                 matches: [],
               }),
             }
-        const originalBody = new Uint8Array(await request.arrayBuffer())
+        const requiresBufferedBody = processor.requiresBufferedResponse?.(direction) === true
+        const configuredSteps = steps.flatMap((step) => {
+          const hook = direction === "request" ? step.hooks.request : step.hooks.response
+          return hook ? [{ step_id: step.step_id, action: hook.action }] : []
+        })
+        const emitBlockedActivity = (
+          code: string,
+          status: number,
+          processedSteps: Array<{ step_id: string; action: string }>,
+          dataClassifications: GatewayActivityIngest["data_classifications"],
+          safetyDecisions: SafetyDecisionReceipt[],
+          requestedModel: string | undefined,
+        ) => {
+          const occurredAt = Math.floor(Date.now() / 1_000)
+          recordActivity(options, {
+            correlation_id: context.correlationId,
+            resource_id: context.resourceId,
+            capability_id: context.capabilityId,
+            application_id: null,
+            subject_id: context.subjectId,
+            acting_client_id: context.clientId,
+            session_id: context.sessionId ?? null,
+            entitlement_id: null,
+            usage_admission_id: optional(request.headers, USAGE_ADMISSION_ID_HEADER) ?? null,
+            usage_admission_disposition: request.headers.has(USAGE_ADMISSION_ID_HEADER) ? "ADMIT" : "NOT_APPLICABLE",
+            usage_admission_reason: null,
+            consumer_organization_id: optional(request.headers, TRUSTED_CONSUMER_ORGANIZATION_HEADER) ?? null,
+            resource_owner_organization_id: optional(request.headers, TRUSTED_RESOURCE_OWNER_ORGANIZATION_HEADER) ?? null,
+            use_case_id: optional(request.headers, TRUSTED_USE_CASE_HEADER) ?? null,
+            enforcement_point_id: "AI_GATEWAY",
+            route: "MANAGED",
+            method: originalMethod,
+            path: originalPath,
+            status_code: status,
+            outcome: "BLOCKED",
+            error_code: code,
+            latency_millis: null,
+            upstream_attempted: direction === "response",
+            requested_model_id: requestedModel ?? null,
+            effective_model_id: null,
+            provider_id: null,
+            connection_id: null,
+            mcp_method: null,
+            mcp_tool: null,
+            mcp_backend: null,
+            processor_bundle_revision: snapshot.bundleRevision,
+            processor_request_steps: direction === "request" ? processedSteps : [],
+            processor_response_steps: direction === "response" ? processedSteps : [],
+            data_classifications: dataClassifications,
+            safety_decisions: safetyDecisions,
+            input_tokens: null,
+            output_tokens: null,
+            total_tokens: null,
+            route_mode: null,
+            route_lease_id: null,
+            route_lease_reused: null,
+            routing_policy_id: null,
+            routing_revision: null,
+            candidate_set_digest: null,
+            ...gatewayDetailActivityReference(
+              snapshot.captureMessageContent,
+              context.correlationId,
+              occurredAt,
+            ),
+            occurred_at: occurredAt,
+          })
+        }
+        if (isEventStream && requiresBufferedBody) {
+          const code = direction === "request"
+            ? "SAFETY_REQUEST_STREAM_UNSUPPORTED"
+            : "SAFETY_RESPONSE_STREAM_UNSUPPORTED"
+          emitBlockedActivity(code, 403, configuredSteps, [], [], undefined)
+          return errorResponse(403, code)
+        }
+        let originalBody: Uint8Array
+        try {
+          originalBody = await readBody(requiresBufferedBody ? safetyBufferBytes : undefined)
+        } catch (error) {
+          if (!(error instanceof SafetyBufferLimitExceededError)) throw error
+          emitBlockedActivity(
+            "SAFETY_BUFFER_LIMIT_EXCEEDED",
+            413,
+            configuredSteps,
+            [],
+            [],
+            undefined,
+          )
+          return errorResponse(413, "SAFETY_BUFFER_LIMIT_EXCEEDED")
+        }
         const prepared = direction === "request"
           ? await prepareTranscriptionRequest(originalBody, contentType, steps.some((step) => Boolean(step.hooks.request)))
           : { body: originalBody, restore: (body: Uint8Array) => body }
@@ -217,6 +367,17 @@ export function startProcessorHttpBridge(
         const requestedPublicModelName = direction === "request" && routingScope
           ? requestPublicModelName(body)
           : undefined
+        if (requiresBufferedBody && body.byteLength > safetyBufferBytes) {
+          emitBlockedActivity(
+            "SAFETY_BUFFER_LIMIT_EXCEEDED",
+            413,
+            configuredSteps,
+            [],
+            [],
+            requestedPublicModelName,
+          )
+          return errorResponse(413, "SAFETY_BUFFER_LIMIT_EXCEEDED")
+        }
         const result = isEventStream
           ? await new SseLineBuffer().push(body, true, (line) =>
               direction === "request"
@@ -226,6 +387,7 @@ export function startProcessorHttpBridge(
           : direction === "request"
             ? await processor.protectJson(context, body)
             : await processor.restoreJson(context, body)
+        const safetyDecisions = safetyDecisionReceipts(result.safetyDecisions, direction)
         let outputBody = result.body
         const routeHeaders: Record<string, string> = {}
         if (
@@ -264,6 +426,22 @@ export function startProcessorHttpBridge(
           step_id: step.stepId,
           action: step.action,
           })) ?? []
+        let safetyDecisionHeader: string | undefined
+        try {
+          safetyDecisionHeader = safetyDecisions.length > 0
+            ? serializeSafetyDecisionReceipts(safetyDecisions)
+            : undefined
+        } catch {
+          emitBlockedActivity(
+            "PROCESSOR_RECEIPT_LIMIT_EXCEEDED",
+            503,
+            executedSteps,
+            [],
+            [],
+            requestedPublicModelName,
+          )
+          return errorResponse(503, "PROCESSOR_RECEIPT_LIMIT_EXCEEDED")
+        }
         process.stdout.write(`${JSON.stringify({
           event: `genio.one.processor-http-${direction}-completed`,
           correlation_id: correlationId,
@@ -273,68 +451,17 @@ export function startProcessorHttpBridge(
           steps: executedSteps,
           match_names: result.matches,
           data_classifications: result.dataClassifications ?? [],
+          safety_decisions: safetyDecisions,
         })}\n`)
         if (result.disposition === "BLOCK") {
-          if (options.onActivity) {
-            const occurredAt = Math.floor(Date.now() / 1_000)
-            const event: GatewayActivityIngest = {
-              correlation_id: context.correlationId,
-              resource_id: context.resourceId,
-              capability_id: context.capabilityId,
-              application_id: null,
-              subject_id: context.subjectId,
-              acting_client_id: context.clientId,
-              session_id: context.sessionId ?? null,
-              entitlement_id: null,
-              usage_admission_id: optional(request.headers, USAGE_ADMISSION_ID_HEADER) ?? null,
-              usage_admission_disposition: request.headers.has(USAGE_ADMISSION_ID_HEADER) ? "ADMIT" : "NOT_APPLICABLE",
-              usage_admission_reason: null,
-              consumer_organization_id: optional(request.headers, TRUSTED_CONSUMER_ORGANIZATION_HEADER) ?? null,
-              resource_owner_organization_id: optional(request.headers, TRUSTED_RESOURCE_OWNER_ORGANIZATION_HEADER) ?? null,
-              use_case_id: optional(request.headers, TRUSTED_USE_CASE_HEADER) ?? null,
-              enforcement_point_id: "AI_GATEWAY",
-              route: "MANAGED",
-              method: originalMethod,
-              path: originalPath,
-              status_code: 403,
-              outcome: "BLOCKED",
-              error_code: "DATA_PROTECTION_BLOCKED",
-              latency_millis: null,
-              upstream_attempted: false,
-              requested_model_id: requestedPublicModelName ?? null,
-              effective_model_id: null,
-              provider_id: null,
-              connection_id: null,
-              mcp_method: null,
-              mcp_tool: null,
-              mcp_backend: null,
-              processor_bundle_revision: snapshot.bundleRevision,
-              processor_request_steps: executedSteps,
-              processor_response_steps: [],
-              data_classifications: result.dataClassifications ?? [],
-              input_tokens: null,
-              output_tokens: null,
-              total_tokens: null,
-              route_mode: null,
-              route_lease_id: null,
-              route_lease_reused: null,
-              routing_policy_id: null,
-              routing_revision: null,
-              candidate_set_digest: null,
-              ...gatewayDetailActivityReference(
-                snapshot.captureMessageContent,
-                context.correlationId,
-                occurredAt,
-              ),
-              occurred_at: occurredAt,
-            }
-            void Promise.resolve(options.onActivity(event)).catch((error) => {
-              writeOperationalEvent("processor", "ERROR", "genio.one.activity-observation-failed", {
-                correlation_id: context.correlationId,
-                ...operationalError(error),
-              })
-            })
-          }
+          emitBlockedActivity(
+            "DATA_PROTECTION_BLOCKED",
+            403,
+            executedSteps,
+            result.dataClassifications ?? [],
+            safetyDecisions,
+            requestedPublicModelName,
+          )
           return Response.json(
             { code: "DATA_PROTECTION_BLOCKED", matches: result.matches },
             {
@@ -342,6 +469,7 @@ export function startProcessorHttpBridge(
               headers: {
                 [PROCESSOR_BUNDLE_HEADER]: snapshot.bundleRevision,
                 [PROCESSOR_STEPS_HEADER]: JSON.stringify(executedSteps),
+                ...(safetyDecisionHeader ? { [PROCESSOR_SAFETY_DECISIONS_HEADER]: safetyDecisionHeader } : {}),
               },
             },
           )
@@ -352,6 +480,7 @@ export function startProcessorHttpBridge(
             "content-type": contentType || "application/octet-stream",
             [PROCESSOR_BUNDLE_HEADER]: snapshot.bundleRevision,
             [PROCESSOR_STEPS_HEADER]: JSON.stringify(executedSteps),
+            ...(safetyDecisionHeader ? { [PROCESSOR_SAFETY_DECISIONS_HEADER]: safetyDecisionHeader } : {}),
             ...routeHeaders,
           },
         })
@@ -364,28 +493,28 @@ export function startProcessorHttpBridge(
   }
   const server = createServer((incoming, outgoing) => {
     void (async () => {
-      const chunks: Buffer[] = []
-      for await (const chunk of incoming) chunks.push(Buffer.from(chunk))
       const headers = new Headers()
       for (const [name, value] of Object.entries(incoming.headers)) {
         if (value === undefined) continue
         if (Array.isArray(value)) value.forEach((item) => headers.append(name, item))
         else headers.set(name, value)
       }
+      let bodyRead = false
       const request = new Request(
         `http://${incoming.headers.host ?? "processor"}${incoming.url ?? "/"}`,
         {
           method: incoming.method ?? "GET",
           headers,
-          body: incoming.method === "GET" || incoming.method === "HEAD"
-            ? undefined
-            : Buffer.concat(chunks),
         },
       )
-      const response = await handle(request)
+      const response = await handle(request, async (maximumBytes) => {
+        bodyRead = true
+        return readIncomingBody(incoming, maximumBytes)
+      })
       outgoing.statusCode = response.status
       response.headers.forEach((value, name) => outgoing.setHeader(name, value))
       outgoing.end(Buffer.from(await response.arrayBuffer()))
+      if (!bodyRead) incoming.resume()
     })().catch((error) => {
       writeOperationalEvent("processor", "ERROR", "genio.one.processor-http-server-error", {
         ...operationalError(error),

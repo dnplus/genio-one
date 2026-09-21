@@ -223,12 +223,29 @@ spec:
             - { name: GENIO_ONE_BROWSER_IDENTITY_JSON, value: {{ $browserIdentity | toJson | quote }} }
             - { name: GENIO_ONE_BOOTSTRAP_SUBJECTS_JSON, value: {{ $bootstrapSubjects | toJson | quote }} }
             - { name: GENIO_ONE_SWAGGER_UI_STATIC_DIR, value: /app/swagger-ui-static }
+            {{- if .Values.processorAdapters.configMap.name }}
+            - { name: GENIO_ONE_PROCESSOR_ADAPTERS_FILE, value: /var/run/genio-one/processor-adapters/registry.json }
+            {{- end }}
           readinessProbe: { httpGet: { path: /healthz, port: http }, periodSeconds: 5, failureThreshold: 12 }
           livenessProbe: { httpGet: { path: /healthz, port: http }, initialDelaySeconds: 15, periodSeconds: 10 }
           resources: {{- toYaml .Values.platform.resources | nindent 12 }}
           securityContext: { runAsUser: 1000, runAsGroup: 1000, allowPrivilegeEscalation: false, capabilities: { drop: [ALL] }, readOnlyRootFilesystem: true }
-          volumeMounts: [{ name: telemetry, mountPath: /var/lib/otel-outbox }, { name: product-secrets, mountPath: /var/run/secrets/genio-one, readOnly: true }]
-      volumes: [{ name: product-secrets, secret: { secretName: {{ include "genio-one.secretName" . }} } }]
+          volumeMounts:
+            - { name: telemetry, mountPath: /var/lib/otel-outbox }
+            - { name: product-secrets, mountPath: /var/run/secrets/genio-one, readOnly: true }
+            {{- if .Values.processorAdapters.configMap.name }}
+            - { name: processor-adapters, mountPath: /var/run/genio-one/processor-adapters, readOnly: true }
+            {{- end }}
+      volumes:
+        - { name: product-secrets, secret: { secretName: {{ include "genio-one.secretName" . }} } }
+        {{- if .Values.processorAdapters.configMap.name }}
+        - name: processor-adapters
+          configMap:
+            name: {{ .Values.processorAdapters.configMap.name | quote }}
+            items:
+              - key: {{ .Values.processorAdapters.configMap.key | quote }}
+                path: registry.json
+        {{- end }}
   volumeClaimTemplates:
     - metadata: { name: telemetry }
       spec:

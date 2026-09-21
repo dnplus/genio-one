@@ -1358,6 +1358,7 @@ export type EnforcementProcessAction =
   | "TOKENIZE"
   | "RESTORE"
   | "MODEL_CLASSIFIER"
+  | "SAFETY_CHECK"
 
 export type EnforcementCandidateEffect =
   | "NARROW_ENTITLEMENT_CANDIDATES"
@@ -1428,6 +1429,19 @@ export async function listLatestEnforcementChains(tenantId: string) {
   return requestJson<EnforcementChainInventoryView[]>(
     `/v1/tenants/${encodeURIComponent(tenantId)}/enforcement-chains`,
   )
+}
+
+export interface ProcessorAdapterCatalogEntry {
+  id: string
+  kind: "JEV" | "HTTP" | "PRESIDIO"
+  endpoint: string
+  model?: string
+}
+
+export function listProcessorAdapters(tenantId: string) {
+  return requestJson<{ adapters: ProcessorAdapterCatalogEntry[] }>(
+    `/v1/tenants/${encodeURIComponent(tenantId)}/processor-adapters`,
+  ).then((result) => result.adapters)
 }
 
 export async function getFirstPartyBotPolicySeed(tenantId: string) {

@@ -67,6 +67,7 @@ import { agentDelegationHttp } from "./capabilities/agent-delegations/http"
 import { federationHttp } from "./capabilities/federation/http"
 import { executionGrantHttp } from "./capabilities/execution-grants/http"
 import { onePolicyHttp } from "./capabilities/one-policy/http"
+import { processorAdapterHttp } from "./capabilities/processor-adapters/http"
 import { demoProjectHttp } from "./capabilities/demo-project/http"
 import { DemoProjectService } from "./capabilities/demo-project/service"
 import { prepareDemoLlm } from "./capabilities/demo-project/llm-provisioning"
@@ -515,6 +516,9 @@ export async function createManagementApi(dependencies: ManagementApiDependencie
     compiler: dependencies.modules.enforcementCompiler,
     revisionStore: dependencies.modules.enforcementRevisionStore,
     resources: dependencies.modules.resources,
+  })
+  await app.register(processorAdapterHttp, {
+    catalog: dependencies.modules.processorAdapters,
   })
   await app.register(publicationWorkflowHttp, {
     workflow: dependencies.modules.publicationWorkflow,
