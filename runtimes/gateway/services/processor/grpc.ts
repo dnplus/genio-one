@@ -35,7 +35,7 @@ import {
   gatewayDetailActivityReference,
   GatewayDetailBodyBuffer,
   type GatewayDetailCapture,
-} from "../../../../packages/telemetry/src/otlp-detail-capture"
+} from "@genioone/telemetry/otlp-detail-capture"
 import {
   TRUSTED_RELEASE_HEADERS,
   gatewayGroupReleaseReferencesEqual,
@@ -78,7 +78,7 @@ import {
   ROUTE_PROVIDER_CREDENTIAL_PROFILE_REVISION_HEADER,
   ROUTE_PROVIDER_CREDENTIAL_STRATEGY_DIGEST_HEADER,
 } from "../shared/model-route-handoff"
-import { operationalError, writeOperationalEvent } from "../../../../packages/telemetry/src/operational-log"
+import { operationalError, writeOperationalEvent } from "@genioone/telemetry/operational-log"
 import type { UsageCounterStore } from "../shared/usage-governance"
 
 interface HeaderValue {

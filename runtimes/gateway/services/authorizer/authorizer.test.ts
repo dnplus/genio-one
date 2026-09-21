@@ -8,7 +8,7 @@ import test from "node:test"
 import grpc from "@grpc/grpc-js"
 import protoLoader from "@grpc/proto-loader"
 
-import type { AuthorizationDecisionEvent, CompiledAuthorizationBundle } from "../../../../packages/protocol/src/authorization"
+import type { AuthorizationDecisionEvent, CompiledAuthorizationBundle } from "@genioone/protocol/authorization"
 import {
   createExternalAuthorizerServer,
   fixedAllowResponseHeaders,
@@ -16,7 +16,7 @@ import {
   type RoutingRejectionObservation,
   type UsageRejectionObservation,
 } from "./grpc"
-import { authorize } from "../../../../packages/policy/src/authorize"
+import { authorize } from "@genioone/policy/authorize"
 import { verifyAuthorizationBundle } from "./signed-bundle"
 import type { AuthorizationBundleSnapshot } from "./bundle-store"
 import { TRUSTED_RELEASE_HEADERS } from "../shared/release-handoff"

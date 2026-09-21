@@ -34,6 +34,33 @@ function responseFor(url: string): unknown {
   return []
 }
 
+test("overview requests Access Groups only for tenant administrators and keeps authorized failures visible", async () => {
+  const originalFetch = globalThis.fetch
+  const urls: string[] = []
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = input instanceof Request ? input.url : String(input)
+    urls.push(url)
+    return new Response(JSON.stringify(url.endsWith("/access-groups") ? { code: "DIRECTORY_UNAVAILABLE" } : responseFor(url)), {
+      headers: { "content-type": "application/json" },
+      status: url.endsWith("/access-groups") ? 503 : 200,
+    })
+  }) as typeof fetch
+  try {
+    for (const role of [undefined, "USER", "ORGANIZATION_ADMINISTRATOR"] as const) {
+      urls.length = 0
+      const overview = await loadOverview("tenant-acme", role)
+      assert.equal(urls.some((url) => url.endsWith("/access-groups")), false)
+      assert.equal(overview.failures.some((failure) => failure.source === "Access groups"), false)
+    }
+    urls.length = 0
+    const overview = await loadOverview("tenant-acme", "TENANT_ADMINISTRATOR")
+    assert.equal(urls.some((url) => url.endsWith("/access-groups")), true)
+    assert.equal(overview.failures.some((failure) => failure.source === "Access groups"), true)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test("live and mock overview omit legacy policy authority", async () => {
   const originalFetch = globalThis.fetch
   const originalSessionStorage = globalThis.sessionStorage
@@ -112,6 +139,8 @@ test("overview keeps a Resource capability inventory independent from owned Enti
         enforcement_point_id: "gateway-acme",
         created_at: 100,
       }]
+      : url.endsWith("/connections")
+        ? [{ ...createMockOverview().connections[0], resource_id: "resource-support", endpoint: "https://support.example.test", status: "DEGRADED" }]
       : url.endsWith("/me/owned-entitlements")
         ? [{
           entitlement_id: "entitlement-1",
@@ -134,6 +163,7 @@ test("overview keeps a Resource capability inventory independent from owned Enti
 
     assert.deepEqual(overview.resources[0]?.capabilities, capabilities)
     assert.equal(overview.ownedEntitlements[0]?.capability_id, "ticket.already-granted")
+    assert.equal(overview.connections[0]?.status, "DEGRADED")
   } finally {
     globalThis.fetch = originalFetch
     Object.defineProperty(globalThis, "sessionStorage", {

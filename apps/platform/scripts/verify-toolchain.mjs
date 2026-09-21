@@ -3,7 +3,7 @@ import { readdir, readFile } from "node:fs/promises"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
-const requiredBunVersion = "1.4.0"
+const requiredBunVersion = "1.4.2"
 const requiredTypeScriptVersion = "7.0.2"
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const appsRoot = resolve(appRoot, "..")

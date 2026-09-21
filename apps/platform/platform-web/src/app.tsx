@@ -67,7 +67,7 @@ export function App() {
   const { activePage, search, focusedResourceId, navigate, setSearch } = useManagementNavigation()
   const tenantId = identity?.tenant_id?.trim() ?? ""
   const overviewEnabled = authState === "signed_in" && tenantId.length > 0
-  const { data, loading, refreshing, refresh } = useOverview(tenantId, overviewEnabled, isMockMode)
+  const { data, loading, refreshing, refresh } = useOverview(tenantId, overviewEnabled, isMockMode, identity?.role)
 
   useEffect(() => {
     if (isMockMode) return

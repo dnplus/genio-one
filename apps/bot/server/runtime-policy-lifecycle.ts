@@ -1,6 +1,13 @@
 import type { RuntimeSession } from "./runtime-broker"
 import { requireRuntimePolicyDecision } from "./runtime-policy"
-import { RUNTIME_POLICY_RUNTIME_ID, type RuntimePolicyCapabilityId, type RuntimePolicyDecision, type RuntimePolicyResolver } from "./runtime-policy-contract"
+import {
+  RUNTIME_POLICY_RUNTIME_ID,
+  type RuntimePolicyCapabilityId,
+  type RuntimePolicyDecision,
+  type RuntimePolicyExecutableAction,
+  type RuntimePolicyResolver,
+  runtimePolicyDecisionTarget,
+} from "./runtime-policy-contract"
 
 export function createRuntimePolicyLifecycle(options: {
   policy: RuntimePolicyResolver
@@ -28,12 +35,13 @@ export function createRuntimePolicyLifecycle(options: {
       return false
     }
     try {
+      const target = runtimePolicyDecisionTarget(decision)
       await options.policy.report({
         principal: session.principal,
         botId,
         runtimeId: RUNTIME_POLICY_RUNTIME_ID,
-        capabilityId: decision.capability_id,
-        action: decision.action,
+        capabilityId: target.capabilityId,
+        action: target.action,
         sessionId: session.id,
         accessToken: options.accessToken() ?? session.accessToken,
         correlationId: decision.correlation_id,
@@ -60,7 +68,7 @@ export function createRuntimePolicyLifecycle(options: {
     session: RuntimeSession,
     botId: string,
     capabilityId: RuntimePolicyCapabilityId,
-    action: "expose" | "invoke" | "use",
+    action: RuntimePolicyExecutableAction,
     isCurrent: () => boolean = () => true,
   ) => {
     const input = {

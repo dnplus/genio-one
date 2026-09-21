@@ -10,7 +10,7 @@ import type { GatewayDiagnosticSettingsSource } from "../gateway-settings/module
 import type {
   CompiledUsageContext,
   CompiledUsagePolicy,
-} from "../../../../../../packages/protocol/src/authorization"
+} from "@genioone/protocol/authorization"
 import { PlatformApiError } from "../errors"
 import type {
   GatewayAggregateCommandRecord,
@@ -34,6 +34,7 @@ import {
 } from "./package"
 import { canonicalGatewayPolicyReleaseBytes, planGatewayPolicyRelease } from "./planner"
 import type { GatewayPolicyInputSource } from "./policy-inputs"
+import { compareUtf8 } from "@genioone/protocol/canonical"
 import {
   compileGatewayRoutingArtifact,
   type GatewayRoutingConnectionFact,
@@ -100,10 +101,6 @@ function sha256(value: unknown): string {
   return createHash("sha256")
     .update(canonicalGatewayPolicyReleaseBytes(value))
     .digest("hex")
-}
-
-function compareUtf8(left: string, right: string): number {
-  return Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"))
 }
 
 function projectionReferences(
@@ -247,9 +244,9 @@ function policyRevision(input: {
   pricing: readonly GatewayRoutingPricingFact[]
   captureMessageContent: boolean
   subjectAliases: Readonly<Record<string, readonly string[]>>
-  subjectContexts: readonly import("../../../../../../packages/protocol/src/authorization").CompiledSubjectContext[]
-  agentDelegations: readonly import("../../../../../../packages/protocol/src/authorization").CompiledAgentDelegation[]
-  executionGrants: readonly import("../../../../../../packages/protocol/src/authorization").CompiledExecutionGrant[]
+  subjectContexts: readonly import("@genioone/protocol/authorization").CompiledSubjectContext[]
+  agentDelegations: readonly import("@genioone/protocol/authorization").CompiledAgentDelegation[]
+  executionGrants: readonly import("@genioone/protocol/authorization").CompiledExecutionGrant[]
 }): string {
   return `policy-${sha256({
     projections: projectionReferences(input.projections),

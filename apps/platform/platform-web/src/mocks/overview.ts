@@ -299,6 +299,7 @@ function connections(allResources: ResourceRegistration[]): ConnectionSummary[] 
     if (!resource) throw new Error(`Missing mock resource ${resourceId}`)
     return {
       connection_id: `connection-${String(index + 1).padStart(2, "0")}`,
+      status: lifecycle === "ENABLED" ? "READY" : "DISABLED",
       display_name: `${resource.display_name} ${label}`,
       kind: resource.kind,
       endpoint_url: `https://${resource.resource_id}-${label.toLowerCase()}.example.internal`,
@@ -704,10 +705,10 @@ export function createMockOverview(): OverviewSnapshot {
     accessGroups: {
       tenant_id: tenantId,
       groups: [
-        { tenant_id: tenantId, access_group_id: "access-group-ai-platform", display_name: "AI Platform", description: "AI Platform members synchronized from SCIM.", created_at: now - 120 * day, updated_at: now - day },
-        { tenant_id: tenantId, access_group_id: "access-group-api-platform", display_name: "API Platform", description: "API owners and application operators.", created_at: now - 110 * day, updated_at: now - day },
-        { tenant_id: tenantId, access_group_id: "access-group-security", display_name: "Security Operations", description: "Security analysts using governed SaaS access.", created_at: now - 100 * day, updated_at: now - day },
-        { tenant_id: tenantId, access_group_id: "access-group-automation", display_name: "Automation Agents", description: "Registered agents with bounded engineering authority.", created_at: now - 90 * day, updated_at: now - day },
+        { tenant_id: tenantId, access_group_id: "access-group-ai-platform", display_name: "AI Platform", description: "People with AI Platform access.", enabled: true, revision: 1, membership_sources: [{ source_id: "manual", kind: "MANUAL" as const, revision: 1, subject_ids: ["ai-owner", "ai-user"], created_at: now - 120 * day, created_by: "platform-admin", updated_at: now - day, updated_by: "platform-admin" }], created_at: now - 120 * day, created_by: "platform-admin", updated_at: now - day, updated_by: "platform-admin" },
+        { tenant_id: tenantId, access_group_id: "access-group-api-platform", display_name: "API Platform", description: "API owners and application operators.", enabled: true, revision: 1, membership_sources: [{ source_id: "manual", kind: "MANUAL" as const, revision: 1, subject_ids: ["api-owner", "api-user"], created_at: now - 110 * day, created_by: "platform-admin", updated_at: now - day, updated_by: "platform-admin" }], created_at: now - 110 * day, created_by: "platform-admin", updated_at: now - day, updated_by: "platform-admin" },
+        { tenant_id: tenantId, access_group_id: "access-group-security", display_name: "Security Operations", description: "Security analysts using governed SaaS access.", enabled: true, revision: 1, membership_sources: [{ source_id: "manual", kind: "MANUAL" as const, revision: 1, subject_ids: ["access-owner", "access-user"], created_at: now - 100 * day, created_by: "platform-admin", updated_at: now - day, updated_by: "platform-admin" }], created_at: now - 100 * day, created_by: "platform-admin", updated_at: now - day, updated_by: "platform-admin" },
+        { tenant_id: tenantId, access_group_id: "access-group-automation", display_name: "Automation Agents", description: "Registered agents with bounded engineering authority.", enabled: true, revision: 1, membership_sources: [{ source_id: "manual", kind: "MANUAL" as const, revision: 1, subject_ids: ["agent-operations", "agent-security"], created_at: now - 90 * day, created_by: "platform-admin", updated_at: now - day, updated_by: "platform-admin" }], created_at: now - 90 * day, created_by: "platform-admin", updated_at: now - day, updated_by: "platform-admin" },
       ],
       memberships: [
         ["access-group-ai-platform", "ai-owner", "engineering/ai-platform"],
@@ -718,12 +719,13 @@ export function createMockOverview(): OverviewSnapshot {
         ["access-group-security", "access-user", "/security/operations"],
         ["access-group-automation", "agent-operations", "registered-agents"],
         ["access-group-automation", "agent-security", "registered-agents"],
-      ].map(([accessGroupId, subjectId, reference], index) => ({
+      ].map(([accessGroupId, subjectId], index) => ({
         tenant_id: tenantId,
         access_group_id: accessGroupId,
         subject_id: subjectId,
-        source: "EXTERNAL_GROUP" as const,
-        source_reference: reference,
+        source: "MANUAL" as const,
+        source_reference: "manual",
+        source_revision: 1,
         assigned_by: { subject_id: "platform-admin", evidence_level: "VERIFIED" as const },
         assigned_at: now - (20 - index) * day,
       })),

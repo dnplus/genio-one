@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next"
 
 import { Badge } from "@/components/ui/badge"
-import type { ApiGatewayActivityEvent, AuditEvent, EndpointActivityEvent } from "@/domain/contracts"
+import type { ApiGatewayActivityEvent, DecisionAuditEvent, EndpointActivityEvent } from "@/domain/contracts"
 
 export type TrafficPath = "BYPASS" | "DIRECT" | "SECURE_ACCESS" | "MANAGED_RESOURCE" | "BLOCK"
 
@@ -22,7 +22,7 @@ export function apiGatewayTrafficPath(event: ApiGatewayActivityEvent): TrafficPa
 }
 
 export function governedGatewayTrafficPath(
-  event: AuditEvent,
+  event: DecisionAuditEvent,
   lane: "ai" | "access",
 ): TrafficPath {
   if (isBlocked(event.outcome, event.route)) return "BLOCK"

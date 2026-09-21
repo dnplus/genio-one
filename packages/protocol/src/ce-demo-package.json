@@ -7,7 +7,16 @@
       "ref": "ce-demo-bundle",
       "path": "package"
     },
-    "resource_bindings": [],
+    "resource_bindings": [
+      {
+        "resource_id": "genio.demo.context7",
+        "capability_id": "context7"
+      },
+      {
+        "resource_id": "genio.demo.archify",
+        "capability_id": "archify"
+      }
+    ],
     "default_runtime_tier": "none",
     "artifact_digest": "e8a2db5680d9100ce48643762f5c5f3826c7b6e97a4b47053b01ded2e473bd75",
     "resource_id": "genio.demo.bot",
@@ -36,7 +45,7 @@
       }
     ],
     "model_route": "codex-subscription",
-    "manifest_digest": "1ab73d4dc75dd3a796237e9b47173acbf55e446327f15f03b14207c3dba78740"
+    "manifest_digest": "99a6c69c65039246a9d7b509d21803872418105bae9f4846b91a6d0605f3dbd7"
   },
   {
     "package_type": "BOT",

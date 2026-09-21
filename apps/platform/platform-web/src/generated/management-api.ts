@@ -5,6 +5,7 @@
  * Versioned product contracts used by the GenioOne Management UI and approved integrations.
  * OpenAPI spec version: 0.1.0
  */
+import { managementApiFetch } from '../lib/management-api-transport';
 export type GetManagementApiHealth200Status = typeof GetManagementApiHealth200Status[keyof typeof GetManagementApiHealth200Status];
 
 
@@ -43,7 +44,7 @@ export type GetLoginBranding200 = {
   custom_css: string;
 };
 
-export type ListResources200ItemBuiltinService = typeof ListResources200ItemBuiltinService[keyof typeof ListResources200ItemBuiltinService];
+export type ListResources200ItemBuiltinService = typeof ListResources200ItemBuiltinService[keyof typeof ListResources200ItemBuiltinService] | null;
 
 
 export const ListResources200ItemBuiltinService = {
@@ -722,7 +723,7 @@ export type CreateResourceBody = {
   enforcement_point_id: string;
 };
 
-export type CreateResource201BuiltinService = typeof CreateResource201BuiltinService[keyof typeof CreateResource201BuiltinService];
+export type CreateResource201BuiltinService = typeof CreateResource201BuiltinService[keyof typeof CreateResource201BuiltinService] | null;
 
 
 export const CreateResource201BuiltinService = {
@@ -1211,7 +1212,7 @@ export type ImportOpenApiResourceBody = {
   document: ImportOpenApiResourceBodyDocument;
 };
 
-export type ImportOpenApiResource201BuiltinService = typeof ImportOpenApiResource201BuiltinService[keyof typeof ImportOpenApiResource201BuiltinService];
+export type ImportOpenApiResource201BuiltinService = typeof ImportOpenApiResource201BuiltinService[keyof typeof ImportOpenApiResource201BuiltinService] | null;
 
 
 export const ImportOpenApiResource201BuiltinService = {
@@ -1612,7 +1613,7 @@ export type ImportOpenApiResource201 = {
   created_at: number;
 };
 
-export type GetResource200BuiltinService = typeof GetResource200BuiltinService[keyof typeof GetResource200BuiltinService];
+export type GetResource200BuiltinService = typeof GetResource200BuiltinService[keyof typeof GetResource200BuiltinService] | null;
 
 
 export const GetResource200BuiltinService = {
@@ -2176,7 +2177,7 @@ export type UpdateResourceBody = {
   extension_metadata?: UpdateResourceBodyExtensionMetadata;
 };
 
-export type UpdateResource200BuiltinService = typeof UpdateResource200BuiltinService[keyof typeof UpdateResource200BuiltinService];
+export type UpdateResource200BuiltinService = typeof UpdateResource200BuiltinService[keyof typeof UpdateResource200BuiltinService] | null;
 
 
 export const UpdateResource200BuiltinService = {
@@ -2585,7 +2586,7 @@ export type TransitionResourceLifecycleBody = {
   lifecycle: typeof TransitionResourceLifecycleBodyLifecycle[keyof typeof TransitionResourceLifecycleBodyLifecycle];
 };
 
-export type TransitionResourceLifecycle200BuiltinService = typeof TransitionResourceLifecycle200BuiltinService[keyof typeof TransitionResourceLifecycle200BuiltinService];
+export type TransitionResourceLifecycle200BuiltinService = typeof TransitionResourceLifecycle200BuiltinService[keyof typeof TransitionResourceLifecycle200BuiltinService] | null;
 
 
 export const TransitionResourceLifecycle200BuiltinService = {
@@ -3021,7 +3022,7 @@ export type SetResourcePublicationEndpointBody = {
   dns_target?: string | null;
 };
 
-export type SetResourcePublicationEndpoint200BuiltinService = typeof SetResourcePublicationEndpoint200BuiltinService[keyof typeof SetResourcePublicationEndpoint200BuiltinService];
+export type SetResourcePublicationEndpoint200BuiltinService = typeof SetResourcePublicationEndpoint200BuiltinService[keyof typeof SetResourcePublicationEndpoint200BuiltinService] | null;
 
 
 export const SetResourcePublicationEndpoint200BuiltinService = {
@@ -4231,6 +4232,468 @@ export type CreateSelfServiceAgent201 = {
   suspended_at: number | null;
   suspended_by: string | null;
   suspension_reason: string | null;
+};
+
+export type ListAccessGroups200ItemMembershipSourcesItemSourceId = typeof ListAccessGroups200ItemMembershipSourcesItemSourceId[keyof typeof ListAccessGroups200ItemMembershipSourcesItemSourceId];
+
+
+export const ListAccessGroups200ItemMembershipSourcesItemSourceId = {
+  manual: 'manual',
+} as const;
+
+export type ListAccessGroups200ItemMembershipSourcesItemKind = typeof ListAccessGroups200ItemMembershipSourcesItemKind[keyof typeof ListAccessGroups200ItemMembershipSourcesItemKind];
+
+
+export const ListAccessGroups200ItemMembershipSourcesItemKind = {
+  MANUAL: 'MANUAL',
+} as const;
+
+export type ListAccessGroups200ItemMembershipSourcesItem = {
+  source_id: ListAccessGroups200ItemMembershipSourcesItemSourceId;
+  kind: ListAccessGroups200ItemMembershipSourcesItemKind;
+  /** @minimum 1 */
+  revision: number;
+  /**
+     * @maxItems 10000
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  subject_ids: string[];
+  /** @minimum 0 */
+  created_at: number;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  created_by: string;
+  /** @minimum 0 */
+  updated_at: number;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  updated_by: string;
+};
+
+export type ListAccessGroups200Item = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  access_group_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  display_name: string;
+  /** @maxLength 2000 */
+  description: string;
+  enabled: boolean;
+  /** @minimum 1 */
+  revision: number;
+  /** @maxItems 1 */
+  membership_sources: ListAccessGroups200ItemMembershipSourcesItem[];
+  /** @minimum 0 */
+  created_at: number;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  created_by: string;
+  /** @minimum 0 */
+  updated_at: number;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  updated_by: string;
+};
+
+export type GetAccessGroup200MembershipSourcesItemSourceId = typeof GetAccessGroup200MembershipSourcesItemSourceId[keyof typeof GetAccessGroup200MembershipSourcesItemSourceId];
+
+
+export const GetAccessGroup200MembershipSourcesItemSourceId = {
+  manual: 'manual',
+} as const;
+
+export type GetAccessGroup200MembershipSourcesItemKind = typeof GetAccessGroup200MembershipSourcesItemKind[keyof typeof GetAccessGroup200MembershipSourcesItemKind];
+
+
+export const GetAccessGroup200MembershipSourcesItemKind = {
+  MANUAL: 'MANUAL',
+} as const;
+
+export type GetAccessGroup200MembershipSourcesItem = {
+  source_id: GetAccessGroup200MembershipSourcesItemSourceId;
+  kind: GetAccessGroup200MembershipSourcesItemKind;
+  /** @minimum 1 */
+  revision: number;
+  /**
+     * @maxItems 10000
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  subject_ids: string[];
+  /** @minimum 0 */
+  created_at: number;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  created_by: string;
+  /** @minimum 0 */
+  updated_at: number;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  updated_by: string;
+};
+
+export type GetAccessGroup200 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  access_group_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  display_name: string;
+  /** @maxLength 2000 */
+  description: string;
+  enabled: boolean;
+  /** @minimum 1 */
+  revision: number;
+  /** @maxItems 1 */
+  membership_sources: GetAccessGroup200MembershipSourcesItem[];
+  /** @minimum 0 */
+  created_at: number;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  created_by: string;
+  /** @minimum 0 */
+  updated_at: number;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  updated_by: string;
+};
+
+export type SaveAccessGroupBody = {
+  /** @minimum 0 */
+  expected_revision: number;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  display_name: string;
+  /** @maxLength 2000 */
+  description: string;
+  enabled: boolean;
+};
+
+export type SaveAccessGroup200MembershipSourcesItemSourceId = typeof SaveAccessGroup200MembershipSourcesItemSourceId[keyof typeof SaveAccessGroup200MembershipSourcesItemSourceId];
+
+
+export const SaveAccessGroup200MembershipSourcesItemSourceId = {
+  manual: 'manual',
+} as const;
+
+export type SaveAccessGroup200MembershipSourcesItemKind = typeof SaveAccessGroup200MembershipSourcesItemKind[keyof typeof SaveAccessGroup200MembershipSourcesItemKind];
+
+
+export const SaveAccessGroup200MembershipSourcesItemKind = {
+  MANUAL: 'MANUAL',
+} as const;
+
+export type SaveAccessGroup200MembershipSourcesItem = {
+  source_id: SaveAccessGroup200MembershipSourcesItemSourceId;
+  kind: SaveAccessGroup200MembershipSourcesItemKind;
+  /** @minimum 1 */
+  revision: number;
+  /**
+     * @maxItems 10000
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  subject_ids: string[];
+  /** @minimum 0 */
+  created_at: number;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  created_by: string;
+  /** @minimum 0 */
+  updated_at: number;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  updated_by: string;
+};
+
+export type SaveAccessGroup200 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  access_group_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  display_name: string;
+  /** @maxLength 2000 */
+  description: string;
+  enabled: boolean;
+  /** @minimum 1 */
+  revision: number;
+  /** @maxItems 1 */
+  membership_sources: SaveAccessGroup200MembershipSourcesItem[];
+  /** @minimum 0 */
+  created_at: number;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  created_by: string;
+  /** @minimum 0 */
+  updated_at: number;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  updated_by: string;
+};
+
+export type ReplaceAccessGroupMembersBody = {
+  /** @minimum 1 */
+  expected_group_revision: number;
+  /** @minimum 0 */
+  expected_source_revision: number;
+  /**
+     * @maxItems 10000
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  subject_ids: string[];
+};
+
+export type ReplaceAccessGroupMembers200MembershipSourcesItemSourceId = typeof ReplaceAccessGroupMembers200MembershipSourcesItemSourceId[keyof typeof ReplaceAccessGroupMembers200MembershipSourcesItemSourceId];
+
+
+export const ReplaceAccessGroupMembers200MembershipSourcesItemSourceId = {
+  manual: 'manual',
+} as const;
+
+export type ReplaceAccessGroupMembers200MembershipSourcesItemKind = typeof ReplaceAccessGroupMembers200MembershipSourcesItemKind[keyof typeof ReplaceAccessGroupMembers200MembershipSourcesItemKind];
+
+
+export const ReplaceAccessGroupMembers200MembershipSourcesItemKind = {
+  MANUAL: 'MANUAL',
+} as const;
+
+export type ReplaceAccessGroupMembers200MembershipSourcesItem = {
+  source_id: ReplaceAccessGroupMembers200MembershipSourcesItemSourceId;
+  kind: ReplaceAccessGroupMembers200MembershipSourcesItemKind;
+  /** @minimum 1 */
+  revision: number;
+  /**
+     * @maxItems 10000
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  subject_ids: string[];
+  /** @minimum 0 */
+  created_at: number;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  created_by: string;
+  /** @minimum 0 */
+  updated_at: number;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  updated_by: string;
+};
+
+export type ReplaceAccessGroupMembers200 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  access_group_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  display_name: string;
+  /** @maxLength 2000 */
+  description: string;
+  enabled: boolean;
+  /** @minimum 1 */
+  revision: number;
+  /** @maxItems 1 */
+  membership_sources: ReplaceAccessGroupMembers200MembershipSourcesItem[];
+  /** @minimum 0 */
+  created_at: number;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  created_by: string;
+  /** @minimum 0 */
+  updated_at: number;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  updated_by: string;
+};
+
+export type ListAccessGroupRevisions200ItemMembershipSourcesItemSourceId = typeof ListAccessGroupRevisions200ItemMembershipSourcesItemSourceId[keyof typeof ListAccessGroupRevisions200ItemMembershipSourcesItemSourceId];
+
+
+export const ListAccessGroupRevisions200ItemMembershipSourcesItemSourceId = {
+  manual: 'manual',
+} as const;
+
+export type ListAccessGroupRevisions200ItemMembershipSourcesItemKind = typeof ListAccessGroupRevisions200ItemMembershipSourcesItemKind[keyof typeof ListAccessGroupRevisions200ItemMembershipSourcesItemKind];
+
+
+export const ListAccessGroupRevisions200ItemMembershipSourcesItemKind = {
+  MANUAL: 'MANUAL',
+} as const;
+
+export type ListAccessGroupRevisions200ItemMembershipSourcesItem = {
+  source_id: ListAccessGroupRevisions200ItemMembershipSourcesItemSourceId;
+  kind: ListAccessGroupRevisions200ItemMembershipSourcesItemKind;
+  /** @minimum 1 */
+  revision: number;
+  /**
+     * @maxItems 10000
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  subject_ids: string[];
+  /** @minimum 0 */
+  created_at: number;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  created_by: string;
+  /** @minimum 0 */
+  updated_at: number;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  updated_by: string;
+};
+
+export type ListAccessGroupRevisions200Item = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  access_group_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  display_name: string;
+  /** @maxLength 2000 */
+  description: string;
+  enabled: boolean;
+  /** @minimum 1 */
+  revision: number;
+  /** @maxItems 1 */
+  membership_sources: ListAccessGroupRevisions200ItemMembershipSourcesItem[];
+  /** @minimum 0 */
+  created_at: number;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  created_by: string;
+  /** @minimum 0 */
+  updated_at: number;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  updated_by: string;
 };
 
 export type ListApplications200ItemRegisteredByEvidenceLevel = typeof ListApplications200ItemRegisteredByEvidenceLevel[keyof typeof ListApplications200ItemRegisteredByEvidenceLevel];
@@ -10751,6 +11214,14 @@ export type ResolveModelRouteBodyClassifierResult = {
   public_model_ids: string[];
 };
 
+export type ResolveModelRouteBodySemanticRouting = {
+  /**
+     * @minLength 1
+     * @maxLength 16384
+     */
+  task: string;
+};
+
 export type ResolveModelRouteBody = {
   /**
      * @minLength 1
@@ -10789,11 +11260,112 @@ export type ResolveModelRouteBody = {
      */
   lease_seconds?: number;
   classifier_result?: ResolveModelRouteBodyClassifierResult;
+  semantic_routing?: ResolveModelRouteBodySemanticRouting;
 };
 
 export const ResolveModelRoute200RouteMode = {  DETERMINISTIC: 'DETERMINISTIC',
   SESSION_LEASE: 'SESSION_LEASE',
 } as const
+export type ResolveModelRoute200DecisionReceiptProbabilitiesItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  public_model_id: string;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  probability: number;
+};
+
+export const ResolveModelRoute200DecisionReceiptAnnotationsTaskKind = {  GENERAL: 'GENERAL',
+  REASONING: 'REASONING',
+  TOOL_USE: 'TOOL_USE',
+  VISION: 'VISION',
+  TRANSCRIPTION: 'TRANSCRIPTION',
+} as const
+export type ResolveModelRoute200DecisionReceiptAnnotations = {
+  task_kind: typeof ResolveModelRoute200DecisionReceiptAnnotationsTaskKind[keyof typeof ResolveModelRoute200DecisionReceiptAnnotationsTaskKind];
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  task_kind_confidence: number;
+  /**
+     * @minimum 0
+     * @maximum 2
+     */
+  complexity_score: number;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  complexity_confidence: number;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  requires_tools_probability: number;
+};
+
+export type ResolveModelRoute200DecisionReceiptUsage = {
+  /** @minimum 0 */
+  input_tokens: number;
+  /** @minimum 0 */
+  output_tokens: number;
+};
+
+export type ResolveModelRoute200DecisionReceipt = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  provider_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  requested_model: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  resolved_model: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  suggested_public_model_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  selected_public_model_id: string;
+  /** @pattern ^[a-f0-9]{64}$ */
+  task_digest: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  request_id?: string;
+  applied: boolean;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  confidence: number;
+  /**
+     * @minItems 1
+     * @maxItems 128
+     */
+  probabilities: ResolveModelRoute200DecisionReceiptProbabilitiesItem[];
+  annotations: ResolveModelRoute200DecisionReceiptAnnotations;
+  usage: ResolveModelRoute200DecisionReceiptUsage;
+  /** @minimum 0 */
+  decided_at: number;
+};
+
 export type ResolveModelRoute200 = {
   /**
      * @minLength 1
@@ -10858,6 +11430,7 @@ export type ResolveModelRoute200 = {
   expires_at?: number;
   reused: boolean;
   route_mode: typeof ResolveModelRoute200RouteMode[keyof typeof ResolveModelRoute200RouteMode];
+  decision_receipt?: ResolveModelRoute200DecisionReceipt;
 };
 
 export const ListModelEntitlements200ItemState = {  ACTIVE: 'ACTIVE',
@@ -11451,7 +12024,7 @@ export const PreviewUserPermissions200BotAccessPolicyId = {
   'one-policyfirst-partybot-default': 'one-policy.first-party.bot-default',
 } as const;
 
-export type PreviewUserPermissions200BotAccessModelRoute = typeof PreviewUserPermissions200BotAccessModelRoute[keyof typeof PreviewUserPermissions200BotAccessModelRoute];
+export type PreviewUserPermissions200BotAccessModelRoute = typeof PreviewUserPermissions200BotAccessModelRoute[keyof typeof PreviewUserPermissions200BotAccessModelRoute] | null;
 
 
 export const PreviewUserPermissions200BotAccessModelRoute = {
@@ -11743,6 +12316,11 @@ export type PreviewUserPermissions200 = {
      */
   organization_ids: string[];
   /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  access_group_ids: string[];
+  /**
      * @minLength 1
      * @maxLength 256
      */
@@ -11761,6 +12339,38 @@ export type PreviewUserPermissions200 = {
   capabilities: PreviewUserPermissions200CapabilitiesItem[];
   bot_access: PreviewUserPermissions200BotAccess;
   runtime_decisions: PreviewUserPermissions200RuntimeDecisionsItem[];
+};
+
+export type GetPolicyAuthoringSettings200 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /** @minimum 0 */
+  revision: number;
+  require_distinct_reviewer: boolean;
+  /** @minimum 0 */
+  updated_at: number;
+};
+
+export type SavePolicyAuthoringSettingsBody = {
+  /** @minimum 0 */
+  expected_revision: number;
+  require_distinct_reviewer: boolean;
+};
+
+export type SavePolicyAuthoringSettings200 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /** @minimum 0 */
+  revision: number;
+  require_distinct_reviewer: boolean;
+  /** @minimum 0 */
+  updated_at: number;
 };
 
 export const GetV1TenantsTenantIdOnePolicyFirstPartyBotRevisions200ItemRulesAllowedRolesItem = {  TENANT_ADMINISTRATOR: 'TENANT_ADMINISTRATOR',
@@ -12001,6 +12611,12 @@ export type GetV1TenantsTenantIdOnePolicyFirstPartyBotDraft200Content = {
      * @items.minLength 1
      * @items.maxLength 256
      */
+  access_group_ids?: string[];
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
   subject_ids: string[];
   /**
      * @maxItems 1000
@@ -12201,6 +12817,28 @@ export type GetV1TenantsTenantIdOnePolicyFirstPartyBotDraft200Content = {
 };
 };
 
+export const GetV1TenantsTenantIdOnePolicyFirstPartyBotDraft200Lifecycle = {  DRAFT: 'DRAFT',
+  VALIDATED: 'VALIDATED',
+  REVIEWED: 'REVIEWED',
+} as const
+export type GetV1TenantsTenantIdOnePolicyFirstPartyBotDraft200Validation = {
+  actor_subject_id: string | null;
+  /** @minimum 0 */
+  at: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  correlation_id: string | null;
+} | null;
+
+export type GetV1TenantsTenantIdOnePolicyFirstPartyBotDraft200Review = {
+  actor_subject_id: string | null;
+  /** @minimum 0 */
+  at: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  correlation_id: string | null;
+} | null;
+
 export type GetV1TenantsTenantIdOnePolicyFirstPartyBotDraft200 = {
   policy_key: string;
   /** @minimum 1 */
@@ -12208,7 +12846,17 @@ export type GetV1TenantsTenantIdOnePolicyFirstPartyBotDraft200 = {
   /** @minimum 0 */
   base_revision: number;
   content: GetV1TenantsTenantIdOnePolicyFirstPartyBotDraft200Content;
+  lifecycle: typeof GetV1TenantsTenantIdOnePolicyFirstPartyBotDraft200Lifecycle[keyof typeof GetV1TenantsTenantIdOnePolicyFirstPartyBotDraft200Lifecycle];
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  created_by_subject_id: string | null;
+  /** @minimum 0 */
+  created_at: number;
+  updated_by_subject_id: string | null;
+  /** @minimum 0 */
   updated_at: number;
+  validation: GetV1TenantsTenantIdOnePolicyFirstPartyBotDraft200Validation;
+  review: GetV1TenantsTenantIdOnePolicyFirstPartyBotDraft200Review;
 } | null;
 
 export type PutV1TenantsTenantIdOnePolicyFirstPartyBotDraftBodyContent = {
@@ -12413,6 +13061,12 @@ export type PutV1TenantsTenantIdOnePolicyFirstPartyBotDraftBodyContent = {
      */
   display_name?: string;
   scope: {
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  access_group_ids?: string[];
   /**
      * @maxItems 1000
      * @items.minLength 1
@@ -12833,6 +13487,12 @@ export type PutV1TenantsTenantIdOnePolicyFirstPartyBotDraft200Content = {
      * @items.minLength 1
      * @items.maxLength 256
      */
+  access_group_ids?: string[];
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
   subject_ids: string[];
   /**
      * @maxItems 1000
@@ -13033,6 +13693,28 @@ export type PutV1TenantsTenantIdOnePolicyFirstPartyBotDraft200Content = {
 };
 };
 
+export const PutV1TenantsTenantIdOnePolicyFirstPartyBotDraft200Lifecycle = {  DRAFT: 'DRAFT',
+  VALIDATED: 'VALIDATED',
+  REVIEWED: 'REVIEWED',
+} as const
+export type PutV1TenantsTenantIdOnePolicyFirstPartyBotDraft200Validation = {
+  actor_subject_id: string | null;
+  /** @minimum 0 */
+  at: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  correlation_id: string | null;
+} | null;
+
+export type PutV1TenantsTenantIdOnePolicyFirstPartyBotDraft200Review = {
+  actor_subject_id: string | null;
+  /** @minimum 0 */
+  at: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  correlation_id: string | null;
+} | null;
+
 export type PutV1TenantsTenantIdOnePolicyFirstPartyBotDraft200 = {
   policy_key: string;
   /** @minimum 1 */
@@ -13040,12 +13722,948 @@ export type PutV1TenantsTenantIdOnePolicyFirstPartyBotDraft200 = {
   /** @minimum 0 */
   base_revision: number;
   content: PutV1TenantsTenantIdOnePolicyFirstPartyBotDraft200Content;
+  lifecycle: typeof PutV1TenantsTenantIdOnePolicyFirstPartyBotDraft200Lifecycle[keyof typeof PutV1TenantsTenantIdOnePolicyFirstPartyBotDraft200Lifecycle];
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  created_by_subject_id: string | null;
+  /** @minimum 0 */
+  created_at: number;
+  updated_by_subject_id: string | null;
+  /** @minimum 0 */
   updated_at: number;
+  validation: PutV1TenantsTenantIdOnePolicyFirstPartyBotDraft200Validation;
+  review: PutV1TenantsTenantIdOnePolicyFirstPartyBotDraft200Review;
+};
+
+export type PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftValidateBody = {
+  /** @minimum 1 */
+  expected_version: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  expected_content_digest: string;
+};
+
+export type PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftValidate200Content = {
+  kind: 'RESOURCE_CAPABILITY';
+  definition: {
+  /** @minimum 1 */
+  one_policy_revision: number;
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  eligible_connection_ids?: string[];
+  /** @minItems 1 */
+  steps: ({
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  step_id: string;
+  kind: 'AUTHENTICATE';
+  phase: 'REQUEST';
+  implementation: 'NATIVE';
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  depends_on?: string[];
+  config: {
+  schema_version: 'genio.one.auth.jwt.v1';
+  /**
+     * @minLength 1
+     * @maxLength 63
+     * @pattern ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+     */
+  provider: string;
+  /**
+     * @minLength 1
+     * @maxLength 2048
+     */
+  issuer: string;
+  /**
+     * @minItems 1
+     * @items.minLength 1
+     * @items.maxLength 512
+     */
+  audiences: string[];
+  /**
+     * @minLength 1
+     * @maxLength 2048
+     */
+  remote_jwks_uri: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$
+     */
+  subject_claim: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$
+     */
+  client_claim: string;
+};
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  step_id: string;
+  kind: 'AUTHORIZE';
+  phase: 'REQUEST';
+  implementation: 'EXT_AUTH';
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  depends_on?: string[];
+  config?: {[key: string]: unknown};
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  step_id: string;
+  kind: 'PROCESS';
+  implementation: 'PROCESSOR';
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  depends_on?: string[];
+  hooks: {
+  request?: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  action: string;
+  effect?: 'NARROW_ENTITLEMENT_CANDIDATES' | 'SORT_ENTITLEMENT_CANDIDATES';
+  config?: {[key: string]: unknown};
+};
+  response?: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  action: string;
+  effect?: 'NARROW_ENTITLEMENT_CANDIDATES' | 'SORT_ENTITLEMENT_CANDIDATES';
+  config?: {[key: string]: unknown};
+};
+};
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  step_id: string;
+  kind: 'ROUTE';
+  phase: 'ROUTING';
+  implementation: 'AIGW_NATIVE';
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  depends_on?: string[];
+  config?: {[key: string]: unknown};
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  step_id: string;
+  kind: 'OBSERVE';
+  implementation: 'NATIVE_OTEL';
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  depends_on?: string[];
+  hooks: {
+  request?: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  action: string;
+  config?: {[key: string]: unknown};
+};
+  attempt?: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  action: string;
+  config?: {[key: string]: unknown};
+};
+  response?: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  action: string;
+  config?: {[key: string]: unknown};
+};
+};
+})[];
+};
+} | {
+  kind: 'BOT_ACCESS';
+  definition: {
+  allowed_roles: ('TENANT_ADMINISTRATOR' | 'ORGANIZATION_ADMINISTRATOR' | 'USER')[];
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  allowed_subject_ids: string[];
+};
+} | {
+  kind: 'RUNTIME_CAPABILITY';
+  definition: {
+  /**
+     * @minLength 1
+     * @maxLength 512
+     */
+  display_name?: string;
+  scope: {
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  access_group_ids?: string[];
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  subject_ids: string[];
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  organization_ids: string[];
+  /** @maxItems 3 */
+  roles: ('TENANT_ADMINISTRATOR' | 'ORGANIZATION_ADMINISTRATOR' | 'USER')[];
+  /**
+     * @maxItems 256
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  client_ids: string[];
+  /**
+     * @maxItems 256
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  bot_ids: string[];
+  /**
+     * @maxItems 256
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  runtime_ids: string[];
+};
+  /** @maxItems 4096 */
+  rules: ({
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  group_id?: string;
+  individual_settings?: boolean;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  rule_id: string;
+  target: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  runtime_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  capability_id: string;
+};
+  /** @minItems 1 */
+  actions: ('expose' | 'invoke' | 'load_extension' | 'use' | 'execute')[];
+  effect: 'ALLOW' | 'DENY';
+  /** @maxItems 128 */
+  constraints: ({
+  kind: 'path_allowlist';
+  parameters: {
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  paths: string[];
+};
+} | {
+  kind: 'command_allowlist';
+  parameters: {
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  commands: string[];
+};
+} | {
+  kind: 'command_deny';
+  parameters: {
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  commands: string[];
+};
+} | {
+  kind: 'network';
+  parameters: {
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  allow: string[];
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  deny: string[];
+};
+} | {
+  kind: 'approval_required';
+  parameters: {
+  enabled: boolean;
+};
+} | {
+  kind: 'read_only';
+  parameters: {
+  enabled: boolean;
+};
+} | {
+  kind: 'cwd';
+  parameters: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  path: string;
+};
+} | {
+  kind: 'template';
+  parameters: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  template: string;
+};
+} | {
+  kind: 'ttl';
+  parameters: {
+  /**
+     * @minimum 1
+     * @maximum 86400
+     */
+  ttl_seconds: number;
+};
+})[];
+  /** @maxItems 128 */
+  obligations: ({
+  kind: 'audit';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  enforcement_point_id?: string;
+  parameters: {
+  event_kind?: 'expose' | 'invoke' | 'denied';
+};
+} | {
+  kind: 'require_approval';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  enforcement_point_id?: string;
+  parameters: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  reason?: string;
+};
+} | {
+  kind: 'redact';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  enforcement_point_id?: string;
+  parameters: {
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  fields: string[];
+};
+} | {
+  kind: 'usage';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  enforcement_point_id?: string;
+  parameters: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  meter: string;
+};
+})[];
+})[];
+};
+};
+
+export const PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftValidate200Lifecycle = {  DRAFT: 'DRAFT',
+  VALIDATED: 'VALIDATED',
+  REVIEWED: 'REVIEWED',
+} as const
+export type PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftValidate200Validation = {
+  actor_subject_id: string | null;
+  /** @minimum 0 */
+  at: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  correlation_id: string | null;
+} | null;
+
+export type PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftValidate200Review = {
+  actor_subject_id: string | null;
+  /** @minimum 0 */
+  at: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  correlation_id: string | null;
+} | null;
+
+export type PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftValidate200 = {
+  policy_key: string;
+  /** @minimum 1 */
+  version: number;
+  /** @minimum 0 */
+  base_revision: number;
+  content: PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftValidate200Content;
+  lifecycle: typeof PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftValidate200Lifecycle[keyof typeof PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftValidate200Lifecycle];
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  created_by_subject_id: string | null;
+  /** @minimum 0 */
+  created_at: number;
+  updated_by_subject_id: string | null;
+  /** @minimum 0 */
+  updated_at: number;
+  validation: PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftValidate200Validation;
+  review: PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftValidate200Review;
+};
+
+export type PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftReviewBody = {
+  /** @minimum 1 */
+  expected_version: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  expected_content_digest: string;
+};
+
+export type PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftReview200Content = {
+  kind: 'RESOURCE_CAPABILITY';
+  definition: {
+  /** @minimum 1 */
+  one_policy_revision: number;
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  eligible_connection_ids?: string[];
+  /** @minItems 1 */
+  steps: ({
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  step_id: string;
+  kind: 'AUTHENTICATE';
+  phase: 'REQUEST';
+  implementation: 'NATIVE';
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  depends_on?: string[];
+  config: {
+  schema_version: 'genio.one.auth.jwt.v1';
+  /**
+     * @minLength 1
+     * @maxLength 63
+     * @pattern ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+     */
+  provider: string;
+  /**
+     * @minLength 1
+     * @maxLength 2048
+     */
+  issuer: string;
+  /**
+     * @minItems 1
+     * @items.minLength 1
+     * @items.maxLength 512
+     */
+  audiences: string[];
+  /**
+     * @minLength 1
+     * @maxLength 2048
+     */
+  remote_jwks_uri: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$
+     */
+  subject_claim: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$
+     */
+  client_claim: string;
+};
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  step_id: string;
+  kind: 'AUTHORIZE';
+  phase: 'REQUEST';
+  implementation: 'EXT_AUTH';
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  depends_on?: string[];
+  config?: {[key: string]: unknown};
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  step_id: string;
+  kind: 'PROCESS';
+  implementation: 'PROCESSOR';
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  depends_on?: string[];
+  hooks: {
+  request?: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  action: string;
+  effect?: 'NARROW_ENTITLEMENT_CANDIDATES' | 'SORT_ENTITLEMENT_CANDIDATES';
+  config?: {[key: string]: unknown};
+};
+  response?: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  action: string;
+  effect?: 'NARROW_ENTITLEMENT_CANDIDATES' | 'SORT_ENTITLEMENT_CANDIDATES';
+  config?: {[key: string]: unknown};
+};
+};
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  step_id: string;
+  kind: 'ROUTE';
+  phase: 'ROUTING';
+  implementation: 'AIGW_NATIVE';
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  depends_on?: string[];
+  config?: {[key: string]: unknown};
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  step_id: string;
+  kind: 'OBSERVE';
+  implementation: 'NATIVE_OTEL';
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  depends_on?: string[];
+  hooks: {
+  request?: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  action: string;
+  config?: {[key: string]: unknown};
+};
+  attempt?: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  action: string;
+  config?: {[key: string]: unknown};
+};
+  response?: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  action: string;
+  config?: {[key: string]: unknown};
+};
+};
+})[];
+};
+} | {
+  kind: 'BOT_ACCESS';
+  definition: {
+  allowed_roles: ('TENANT_ADMINISTRATOR' | 'ORGANIZATION_ADMINISTRATOR' | 'USER')[];
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  allowed_subject_ids: string[];
+};
+} | {
+  kind: 'RUNTIME_CAPABILITY';
+  definition: {
+  /**
+     * @minLength 1
+     * @maxLength 512
+     */
+  display_name?: string;
+  scope: {
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  access_group_ids?: string[];
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  subject_ids: string[];
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  organization_ids: string[];
+  /** @maxItems 3 */
+  roles: ('TENANT_ADMINISTRATOR' | 'ORGANIZATION_ADMINISTRATOR' | 'USER')[];
+  /**
+     * @maxItems 256
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  client_ids: string[];
+  /**
+     * @maxItems 256
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  bot_ids: string[];
+  /**
+     * @maxItems 256
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  runtime_ids: string[];
+};
+  /** @maxItems 4096 */
+  rules: ({
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  group_id?: string;
+  individual_settings?: boolean;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  rule_id: string;
+  target: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  runtime_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  capability_id: string;
+};
+  /** @minItems 1 */
+  actions: ('expose' | 'invoke' | 'load_extension' | 'use' | 'execute')[];
+  effect: 'ALLOW' | 'DENY';
+  /** @maxItems 128 */
+  constraints: ({
+  kind: 'path_allowlist';
+  parameters: {
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  paths: string[];
+};
+} | {
+  kind: 'command_allowlist';
+  parameters: {
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  commands: string[];
+};
+} | {
+  kind: 'command_deny';
+  parameters: {
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  commands: string[];
+};
+} | {
+  kind: 'network';
+  parameters: {
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  allow: string[];
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  deny: string[];
+};
+} | {
+  kind: 'approval_required';
+  parameters: {
+  enabled: boolean;
+};
+} | {
+  kind: 'read_only';
+  parameters: {
+  enabled: boolean;
+};
+} | {
+  kind: 'cwd';
+  parameters: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  path: string;
+};
+} | {
+  kind: 'template';
+  parameters: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  template: string;
+};
+} | {
+  kind: 'ttl';
+  parameters: {
+  /**
+     * @minimum 1
+     * @maximum 86400
+     */
+  ttl_seconds: number;
+};
+})[];
+  /** @maxItems 128 */
+  obligations: ({
+  kind: 'audit';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  enforcement_point_id?: string;
+  parameters: {
+  event_kind?: 'expose' | 'invoke' | 'denied';
+};
+} | {
+  kind: 'require_approval';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  enforcement_point_id?: string;
+  parameters: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  reason?: string;
+};
+} | {
+  kind: 'redact';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  enforcement_point_id?: string;
+  parameters: {
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  fields: string[];
+};
+} | {
+  kind: 'usage';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  enforcement_point_id?: string;
+  parameters: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  meter: string;
+};
+})[];
+})[];
+};
+};
+
+export const PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftReview200Lifecycle = {  DRAFT: 'DRAFT',
+  VALIDATED: 'VALIDATED',
+  REVIEWED: 'REVIEWED',
+} as const
+export type PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftReview200Validation = {
+  actor_subject_id: string | null;
+  /** @minimum 0 */
+  at: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  correlation_id: string | null;
+} | null;
+
+export type PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftReview200Review = {
+  actor_subject_id: string | null;
+  /** @minimum 0 */
+  at: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  correlation_id: string | null;
+} | null;
+
+export type PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftReview200 = {
+  policy_key: string;
+  /** @minimum 1 */
+  version: number;
+  /** @minimum 0 */
+  base_revision: number;
+  content: PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftReview200Content;
+  lifecycle: typeof PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftReview200Lifecycle[keyof typeof PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftReview200Lifecycle];
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  created_by_subject_id: string | null;
+  /** @minimum 0 */
+  created_at: number;
+  updated_by_subject_id: string | null;
+  /** @minimum 0 */
+  updated_at: number;
+  validation: PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftReview200Validation;
+  review: PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftReview200Review;
 };
 
 export type PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftPublishBody = {
   /** @minimum 1 */
   expected_version: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  expected_content_digest: string;
 };
 
 export type PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftPublish200PolicyId = typeof PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftPublish200PolicyId[keyof typeof PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftPublish200PolicyId];
@@ -13196,7 +14814,7 @@ export const GetV1TenantsTenantIdOnePolicyBotAccess200PolicyId = {
   'one-policyfirst-partybot-default': 'one-policy.first-party.bot-default',
 } as const;
 
-export type GetV1TenantsTenantIdOnePolicyBotAccess200ModelRoute = typeof GetV1TenantsTenantIdOnePolicyBotAccess200ModelRoute[keyof typeof GetV1TenantsTenantIdOnePolicyBotAccess200ModelRoute];
+export type GetV1TenantsTenantIdOnePolicyBotAccess200ModelRoute = typeof GetV1TenantsTenantIdOnePolicyBotAccess200ModelRoute[keyof typeof GetV1TenantsTenantIdOnePolicyBotAccess200ModelRoute] | null;
 
 
 export const GetV1TenantsTenantIdOnePolicyBotAccess200ModelRoute = {
@@ -13241,6 +14859,12 @@ export const ListRuntimePolicies200ItemScopeRolesItem = {  TENANT_ADMINISTRATOR:
   USER: 'USER',
 } as const
 export type ListRuntimePolicies200ItemScope = {
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  access_group_ids?: string[];
   /**
      * @maxItems 1000
      * @items.minLength 1
@@ -13497,6 +15121,12 @@ export const GetRuntimePolicy200ScopeRolesItem = {  TENANT_ADMINISTRATOR: 'TENAN
   USER: 'USER',
 } as const
 export type GetRuntimePolicy200Scope = {
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  access_group_ids?: string[];
   /**
      * @maxItems 1000
      * @items.minLength 1
@@ -13764,6 +15394,12 @@ export type SetRuntimePolicyEnabled200Scope = {
      * @items.minLength 1
      * @items.maxLength 256
      */
+  access_group_ids?: string[];
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
   subject_ids: string[];
   /**
      * @maxItems 1000
@@ -14020,6 +15656,12 @@ export type ListRuntimePolicyRevisions200ItemScope = {
      * @items.minLength 1
      * @items.maxLength 256
      */
+  access_group_ids?: string[];
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
   subject_ids: string[];
   /**
      * @maxItems 1000
@@ -14271,6 +15913,12 @@ export const GetRuntimePolicyRevision200ScopeRolesItem = {  TENANT_ADMINISTRATOR
   USER: 'USER',
 } as const
 export type GetRuntimePolicyRevision200Scope = {
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  access_group_ids?: string[];
   /**
      * @maxItems 1000
      * @items.minLength 1
@@ -14726,6 +16374,12 @@ export type GetRuntimePolicyDraft200Content = {
      * @items.minLength 1
      * @items.maxLength 256
      */
+  access_group_ids?: string[];
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
   subject_ids: string[];
   /**
      * @maxItems 1000
@@ -14926,6 +16580,28 @@ export type GetRuntimePolicyDraft200Content = {
 };
 };
 
+export const GetRuntimePolicyDraft200Lifecycle = {  DRAFT: 'DRAFT',
+  VALIDATED: 'VALIDATED',
+  REVIEWED: 'REVIEWED',
+} as const
+export type GetRuntimePolicyDraft200Validation = {
+  actor_subject_id: string | null;
+  /** @minimum 0 */
+  at: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  correlation_id: string | null;
+} | null;
+
+export type GetRuntimePolicyDraft200Review = {
+  actor_subject_id: string | null;
+  /** @minimum 0 */
+  at: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  correlation_id: string | null;
+} | null;
+
 export type GetRuntimePolicyDraft200 = {
   policy_key: string;
   /** @minimum 1 */
@@ -14933,7 +16609,17 @@ export type GetRuntimePolicyDraft200 = {
   /** @minimum 0 */
   base_revision: number;
   content: GetRuntimePolicyDraft200Content;
+  lifecycle: typeof GetRuntimePolicyDraft200Lifecycle[keyof typeof GetRuntimePolicyDraft200Lifecycle];
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  created_by_subject_id: string | null;
+  /** @minimum 0 */
+  created_at: number;
+  updated_by_subject_id: string | null;
+  /** @minimum 0 */
   updated_at: number;
+  validation: GetRuntimePolicyDraft200Validation;
+  review: GetRuntimePolicyDraft200Review;
 } | null;
 
 export type SaveRuntimePolicyDraftBodyContent = {
@@ -15138,6 +16824,12 @@ export type SaveRuntimePolicyDraftBodyContent = {
      */
   display_name?: string;
   scope: {
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  access_group_ids?: string[];
   /**
      * @maxItems 1000
      * @items.minLength 1
@@ -15558,6 +17250,12 @@ export type SaveRuntimePolicyDraft200Content = {
      * @items.minLength 1
      * @items.maxLength 256
      */
+  access_group_ids?: string[];
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
   subject_ids: string[];
   /**
      * @maxItems 1000
@@ -15758,6 +17456,28 @@ export type SaveRuntimePolicyDraft200Content = {
 };
 };
 
+export const SaveRuntimePolicyDraft200Lifecycle = {  DRAFT: 'DRAFT',
+  VALIDATED: 'VALIDATED',
+  REVIEWED: 'REVIEWED',
+} as const
+export type SaveRuntimePolicyDraft200Validation = {
+  actor_subject_id: string | null;
+  /** @minimum 0 */
+  at: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  correlation_id: string | null;
+} | null;
+
+export type SaveRuntimePolicyDraft200Review = {
+  actor_subject_id: string | null;
+  /** @minimum 0 */
+  at: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  correlation_id: string | null;
+} | null;
+
 export type SaveRuntimePolicyDraft200 = {
   policy_key: string;
   /** @minimum 1 */
@@ -15765,7 +17485,941 @@ export type SaveRuntimePolicyDraft200 = {
   /** @minimum 0 */
   base_revision: number;
   content: SaveRuntimePolicyDraft200Content;
+  lifecycle: typeof SaveRuntimePolicyDraft200Lifecycle[keyof typeof SaveRuntimePolicyDraft200Lifecycle];
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  created_by_subject_id: string | null;
+  /** @minimum 0 */
+  created_at: number;
+  updated_by_subject_id: string | null;
+  /** @minimum 0 */
   updated_at: number;
+  validation: SaveRuntimePolicyDraft200Validation;
+  review: SaveRuntimePolicyDraft200Review;
+};
+
+export type ValidateRuntimePolicyDraftBody = {
+  /** @minimum 1 */
+  expected_version: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  expected_content_digest: string;
+};
+
+export type ValidateRuntimePolicyDraft200Content = {
+  kind: 'RESOURCE_CAPABILITY';
+  definition: {
+  /** @minimum 1 */
+  one_policy_revision: number;
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  eligible_connection_ids?: string[];
+  /** @minItems 1 */
+  steps: ({
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  step_id: string;
+  kind: 'AUTHENTICATE';
+  phase: 'REQUEST';
+  implementation: 'NATIVE';
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  depends_on?: string[];
+  config: {
+  schema_version: 'genio.one.auth.jwt.v1';
+  /**
+     * @minLength 1
+     * @maxLength 63
+     * @pattern ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+     */
+  provider: string;
+  /**
+     * @minLength 1
+     * @maxLength 2048
+     */
+  issuer: string;
+  /**
+     * @minItems 1
+     * @items.minLength 1
+     * @items.maxLength 512
+     */
+  audiences: string[];
+  /**
+     * @minLength 1
+     * @maxLength 2048
+     */
+  remote_jwks_uri: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$
+     */
+  subject_claim: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$
+     */
+  client_claim: string;
+};
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  step_id: string;
+  kind: 'AUTHORIZE';
+  phase: 'REQUEST';
+  implementation: 'EXT_AUTH';
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  depends_on?: string[];
+  config?: {[key: string]: unknown};
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  step_id: string;
+  kind: 'PROCESS';
+  implementation: 'PROCESSOR';
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  depends_on?: string[];
+  hooks: {
+  request?: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  action: string;
+  effect?: 'NARROW_ENTITLEMENT_CANDIDATES' | 'SORT_ENTITLEMENT_CANDIDATES';
+  config?: {[key: string]: unknown};
+};
+  response?: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  action: string;
+  effect?: 'NARROW_ENTITLEMENT_CANDIDATES' | 'SORT_ENTITLEMENT_CANDIDATES';
+  config?: {[key: string]: unknown};
+};
+};
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  step_id: string;
+  kind: 'ROUTE';
+  phase: 'ROUTING';
+  implementation: 'AIGW_NATIVE';
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  depends_on?: string[];
+  config?: {[key: string]: unknown};
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  step_id: string;
+  kind: 'OBSERVE';
+  implementation: 'NATIVE_OTEL';
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  depends_on?: string[];
+  hooks: {
+  request?: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  action: string;
+  config?: {[key: string]: unknown};
+};
+  attempt?: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  action: string;
+  config?: {[key: string]: unknown};
+};
+  response?: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  action: string;
+  config?: {[key: string]: unknown};
+};
+};
+})[];
+};
+} | {
+  kind: 'BOT_ACCESS';
+  definition: {
+  allowed_roles: ('TENANT_ADMINISTRATOR' | 'ORGANIZATION_ADMINISTRATOR' | 'USER')[];
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  allowed_subject_ids: string[];
+};
+} | {
+  kind: 'RUNTIME_CAPABILITY';
+  definition: {
+  /**
+     * @minLength 1
+     * @maxLength 512
+     */
+  display_name?: string;
+  scope: {
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  access_group_ids?: string[];
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  subject_ids: string[];
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  organization_ids: string[];
+  /** @maxItems 3 */
+  roles: ('TENANT_ADMINISTRATOR' | 'ORGANIZATION_ADMINISTRATOR' | 'USER')[];
+  /**
+     * @maxItems 256
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  client_ids: string[];
+  /**
+     * @maxItems 256
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  bot_ids: string[];
+  /**
+     * @maxItems 256
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  runtime_ids: string[];
+};
+  /** @maxItems 4096 */
+  rules: ({
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  group_id?: string;
+  individual_settings?: boolean;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  rule_id: string;
+  target: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  runtime_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  capability_id: string;
+};
+  /** @minItems 1 */
+  actions: ('expose' | 'invoke' | 'load_extension' | 'use' | 'execute')[];
+  effect: 'ALLOW' | 'DENY';
+  /** @maxItems 128 */
+  constraints: ({
+  kind: 'path_allowlist';
+  parameters: {
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  paths: string[];
+};
+} | {
+  kind: 'command_allowlist';
+  parameters: {
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  commands: string[];
+};
+} | {
+  kind: 'command_deny';
+  parameters: {
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  commands: string[];
+};
+} | {
+  kind: 'network';
+  parameters: {
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  allow: string[];
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  deny: string[];
+};
+} | {
+  kind: 'approval_required';
+  parameters: {
+  enabled: boolean;
+};
+} | {
+  kind: 'read_only';
+  parameters: {
+  enabled: boolean;
+};
+} | {
+  kind: 'cwd';
+  parameters: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  path: string;
+};
+} | {
+  kind: 'template';
+  parameters: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  template: string;
+};
+} | {
+  kind: 'ttl';
+  parameters: {
+  /**
+     * @minimum 1
+     * @maximum 86400
+     */
+  ttl_seconds: number;
+};
+})[];
+  /** @maxItems 128 */
+  obligations: ({
+  kind: 'audit';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  enforcement_point_id?: string;
+  parameters: {
+  event_kind?: 'expose' | 'invoke' | 'denied';
+};
+} | {
+  kind: 'require_approval';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  enforcement_point_id?: string;
+  parameters: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  reason?: string;
+};
+} | {
+  kind: 'redact';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  enforcement_point_id?: string;
+  parameters: {
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  fields: string[];
+};
+} | {
+  kind: 'usage';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  enforcement_point_id?: string;
+  parameters: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  meter: string;
+};
+})[];
+})[];
+};
+};
+
+export const ValidateRuntimePolicyDraft200Lifecycle = {  DRAFT: 'DRAFT',
+  VALIDATED: 'VALIDATED',
+  REVIEWED: 'REVIEWED',
+} as const
+export type ValidateRuntimePolicyDraft200Validation = {
+  actor_subject_id: string | null;
+  /** @minimum 0 */
+  at: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  correlation_id: string | null;
+} | null;
+
+export type ValidateRuntimePolicyDraft200Review = {
+  actor_subject_id: string | null;
+  /** @minimum 0 */
+  at: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  correlation_id: string | null;
+} | null;
+
+export type ValidateRuntimePolicyDraft200 = {
+  policy_key: string;
+  /** @minimum 1 */
+  version: number;
+  /** @minimum 0 */
+  base_revision: number;
+  content: ValidateRuntimePolicyDraft200Content;
+  lifecycle: typeof ValidateRuntimePolicyDraft200Lifecycle[keyof typeof ValidateRuntimePolicyDraft200Lifecycle];
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  created_by_subject_id: string | null;
+  /** @minimum 0 */
+  created_at: number;
+  updated_by_subject_id: string | null;
+  /** @minimum 0 */
+  updated_at: number;
+  validation: ValidateRuntimePolicyDraft200Validation;
+  review: ValidateRuntimePolicyDraft200Review;
+};
+
+export type ReviewRuntimePolicyDraftBody = {
+  /** @minimum 1 */
+  expected_version: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  expected_content_digest: string;
+};
+
+export type ReviewRuntimePolicyDraft200Content = {
+  kind: 'RESOURCE_CAPABILITY';
+  definition: {
+  /** @minimum 1 */
+  one_policy_revision: number;
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  eligible_connection_ids?: string[];
+  /** @minItems 1 */
+  steps: ({
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  step_id: string;
+  kind: 'AUTHENTICATE';
+  phase: 'REQUEST';
+  implementation: 'NATIVE';
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  depends_on?: string[];
+  config: {
+  schema_version: 'genio.one.auth.jwt.v1';
+  /**
+     * @minLength 1
+     * @maxLength 63
+     * @pattern ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+     */
+  provider: string;
+  /**
+     * @minLength 1
+     * @maxLength 2048
+     */
+  issuer: string;
+  /**
+     * @minItems 1
+     * @items.minLength 1
+     * @items.maxLength 512
+     */
+  audiences: string[];
+  /**
+     * @minLength 1
+     * @maxLength 2048
+     */
+  remote_jwks_uri: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$
+     */
+  subject_claim: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$
+     */
+  client_claim: string;
+};
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  step_id: string;
+  kind: 'AUTHORIZE';
+  phase: 'REQUEST';
+  implementation: 'EXT_AUTH';
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  depends_on?: string[];
+  config?: {[key: string]: unknown};
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  step_id: string;
+  kind: 'PROCESS';
+  implementation: 'PROCESSOR';
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  depends_on?: string[];
+  hooks: {
+  request?: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  action: string;
+  effect?: 'NARROW_ENTITLEMENT_CANDIDATES' | 'SORT_ENTITLEMENT_CANDIDATES';
+  config?: {[key: string]: unknown};
+};
+  response?: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  action: string;
+  effect?: 'NARROW_ENTITLEMENT_CANDIDATES' | 'SORT_ENTITLEMENT_CANDIDATES';
+  config?: {[key: string]: unknown};
+};
+};
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  step_id: string;
+  kind: 'ROUTE';
+  phase: 'ROUTING';
+  implementation: 'AIGW_NATIVE';
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  depends_on?: string[];
+  config?: {[key: string]: unknown};
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  step_id: string;
+  kind: 'OBSERVE';
+  implementation: 'NATIVE_OTEL';
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  depends_on?: string[];
+  hooks: {
+  request?: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  action: string;
+  config?: {[key: string]: unknown};
+};
+  attempt?: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  action: string;
+  config?: {[key: string]: unknown};
+};
+  response?: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  action: string;
+  config?: {[key: string]: unknown};
+};
+};
+})[];
+};
+} | {
+  kind: 'BOT_ACCESS';
+  definition: {
+  allowed_roles: ('TENANT_ADMINISTRATOR' | 'ORGANIZATION_ADMINISTRATOR' | 'USER')[];
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  allowed_subject_ids: string[];
+};
+} | {
+  kind: 'RUNTIME_CAPABILITY';
+  definition: {
+  /**
+     * @minLength 1
+     * @maxLength 512
+     */
+  display_name?: string;
+  scope: {
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  access_group_ids?: string[];
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  subject_ids: string[];
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  organization_ids: string[];
+  /** @maxItems 3 */
+  roles: ('TENANT_ADMINISTRATOR' | 'ORGANIZATION_ADMINISTRATOR' | 'USER')[];
+  /**
+     * @maxItems 256
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  client_ids: string[];
+  /**
+     * @maxItems 256
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  bot_ids: string[];
+  /**
+     * @maxItems 256
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  runtime_ids: string[];
+};
+  /** @maxItems 4096 */
+  rules: ({
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  group_id?: string;
+  individual_settings?: boolean;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  rule_id: string;
+  target: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  runtime_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  capability_id: string;
+};
+  /** @minItems 1 */
+  actions: ('expose' | 'invoke' | 'load_extension' | 'use' | 'execute')[];
+  effect: 'ALLOW' | 'DENY';
+  /** @maxItems 128 */
+  constraints: ({
+  kind: 'path_allowlist';
+  parameters: {
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  paths: string[];
+};
+} | {
+  kind: 'command_allowlist';
+  parameters: {
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  commands: string[];
+};
+} | {
+  kind: 'command_deny';
+  parameters: {
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  commands: string[];
+};
+} | {
+  kind: 'network';
+  parameters: {
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  allow: string[];
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  deny: string[];
+};
+} | {
+  kind: 'approval_required';
+  parameters: {
+  enabled: boolean;
+};
+} | {
+  kind: 'read_only';
+  parameters: {
+  enabled: boolean;
+};
+} | {
+  kind: 'cwd';
+  parameters: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  path: string;
+};
+} | {
+  kind: 'template';
+  parameters: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  template: string;
+};
+} | {
+  kind: 'ttl';
+  parameters: {
+  /**
+     * @minimum 1
+     * @maximum 86400
+     */
+  ttl_seconds: number;
+};
+})[];
+  /** @maxItems 128 */
+  obligations: ({
+  kind: 'audit';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  enforcement_point_id?: string;
+  parameters: {
+  event_kind?: 'expose' | 'invoke' | 'denied';
+};
+} | {
+  kind: 'require_approval';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  enforcement_point_id?: string;
+  parameters: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  reason?: string;
+};
+} | {
+  kind: 'redact';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  enforcement_point_id?: string;
+  parameters: {
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  fields: string[];
+};
+} | {
+  kind: 'usage';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  enforcement_point_id?: string;
+  parameters: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  meter: string;
+};
+})[];
+})[];
+};
+};
+
+export const ReviewRuntimePolicyDraft200Lifecycle = {  DRAFT: 'DRAFT',
+  VALIDATED: 'VALIDATED',
+  REVIEWED: 'REVIEWED',
+} as const
+export type ReviewRuntimePolicyDraft200Validation = {
+  actor_subject_id: string | null;
+  /** @minimum 0 */
+  at: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  correlation_id: string | null;
+} | null;
+
+export type ReviewRuntimePolicyDraft200Review = {
+  actor_subject_id: string | null;
+  /** @minimum 0 */
+  at: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  correlation_id: string | null;
+} | null;
+
+export type ReviewRuntimePolicyDraft200 = {
+  policy_key: string;
+  /** @minimum 1 */
+  version: number;
+  /** @minimum 0 */
+  base_revision: number;
+  content: ReviewRuntimePolicyDraft200Content;
+  lifecycle: typeof ReviewRuntimePolicyDraft200Lifecycle[keyof typeof ReviewRuntimePolicyDraft200Lifecycle];
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  created_by_subject_id: string | null;
+  /** @minimum 0 */
+  created_at: number;
+  updated_by_subject_id: string | null;
+  /** @minimum 0 */
+  updated_at: number;
+  validation: ReviewRuntimePolicyDraft200Validation;
+  review: ReviewRuntimePolicyDraft200Review;
 };
 
 export type DiscardRuntimePolicyDraftBody = {
@@ -15780,6 +18434,8 @@ export type DiscardRuntimePolicyDraft200 = {
 export type PublishRuntimePolicyDraftBody = {
   /** @minimum 1 */
   expected_version: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  expected_content_digest: string;
 };
 
 export const PublishRuntimePolicyDraft200Provenance = {  SYSTEM_SEED: 'SYSTEM_SEED',
@@ -15790,6 +18446,12 @@ export const PublishRuntimePolicyDraft200ScopeRolesItem = {  TENANT_ADMINISTRATO
   USER: 'USER',
 } as const
 export type PublishRuntimePolicyDraft200Scope = {
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  access_group_ids?: string[];
   /**
      * @maxItems 1000
      * @items.minLength 1
@@ -16915,12 +19577,20 @@ export type ReportRuntimePolicyOutcome201 = {
   occurred_at: number;
 };
 
+export const GetV1TenantsTenantIdOnePolicyDrafts200ItemLifecycle = {  DRAFT: 'DRAFT',
+  VALIDATED: 'VALIDATED',
+  REVIEWED: 'REVIEWED',
+} as const
 export type GetV1TenantsTenantIdOnePolicyDrafts200Item = {
   policy_key: string;
   /** @minimum 1 */
   version: number;
   /** @minimum 0 */
   base_revision: number;
+  lifecycle: typeof GetV1TenantsTenantIdOnePolicyDrafts200ItemLifecycle[keyof typeof GetV1TenantsTenantIdOnePolicyDrafts200ItemLifecycle];
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  /** @minimum 0 */
   updated_at: number;
 };
 
@@ -17140,6 +19810,12 @@ export type GetV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolic
      * @items.minLength 1
      * @items.maxLength 256
      */
+  access_group_ids?: string[];
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
   subject_ids: string[];
   /**
      * @maxItems 1000
@@ -17340,6 +20016,28 @@ export type GetV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolic
 };
 };
 
+export const GetV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraft200Lifecycle = {  DRAFT: 'DRAFT',
+  VALIDATED: 'VALIDATED',
+  REVIEWED: 'REVIEWED',
+} as const
+export type GetV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraft200Validation = {
+  actor_subject_id: string | null;
+  /** @minimum 0 */
+  at: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  correlation_id: string | null;
+} | null;
+
+export type GetV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraft200Review = {
+  actor_subject_id: string | null;
+  /** @minimum 0 */
+  at: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  correlation_id: string | null;
+} | null;
+
 export type GetV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraft200 = {
   policy_key: string;
   /** @minimum 1 */
@@ -17347,7 +20045,17 @@ export type GetV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolic
   /** @minimum 0 */
   base_revision: number;
   content: GetV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraft200Content;
+  lifecycle: typeof GetV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraft200Lifecycle[keyof typeof GetV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraft200Lifecycle];
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  created_by_subject_id: string | null;
+  /** @minimum 0 */
+  created_at: number;
+  updated_by_subject_id: string | null;
+  /** @minimum 0 */
   updated_at: number;
+  validation: GetV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraft200Validation;
+  review: GetV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraft200Review;
 } | null;
 
 export type PutV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftBodyContent = {
@@ -17552,6 +20260,12 @@ export type PutV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolic
      */
   display_name?: string;
   scope: {
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  access_group_ids?: string[];
   /**
      * @maxItems 1000
      * @items.minLength 1
@@ -17972,6 +20686,12 @@ export type PutV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolic
      * @items.minLength 1
      * @items.maxLength 256
      */
+  access_group_ids?: string[];
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
   subject_ids: string[];
   /**
      * @maxItems 1000
@@ -18172,6 +20892,28 @@ export type PutV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolic
 };
 };
 
+export const PutV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraft200Lifecycle = {  DRAFT: 'DRAFT',
+  VALIDATED: 'VALIDATED',
+  REVIEWED: 'REVIEWED',
+} as const
+export type PutV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraft200Validation = {
+  actor_subject_id: string | null;
+  /** @minimum 0 */
+  at: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  correlation_id: string | null;
+} | null;
+
+export type PutV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraft200Review = {
+  actor_subject_id: string | null;
+  /** @minimum 0 */
+  at: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  correlation_id: string | null;
+} | null;
+
 export type PutV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraft200 = {
   policy_key: string;
   /** @minimum 1 */
@@ -18179,12 +20921,948 @@ export type PutV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolic
   /** @minimum 0 */
   base_revision: number;
   content: PutV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraft200Content;
+  lifecycle: typeof PutV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraft200Lifecycle[keyof typeof PutV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraft200Lifecycle];
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  created_by_subject_id: string | null;
+  /** @minimum 0 */
+  created_at: number;
+  updated_by_subject_id: string | null;
+  /** @minimum 0 */
   updated_at: number;
+  validation: PutV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraft200Validation;
+  review: PutV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraft200Review;
+};
+
+export type PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftValidateBody = {
+  /** @minimum 1 */
+  expected_version: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  expected_content_digest: string;
+};
+
+export type PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftValidate200Content = {
+  kind: 'RESOURCE_CAPABILITY';
+  definition: {
+  /** @minimum 1 */
+  one_policy_revision: number;
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  eligible_connection_ids?: string[];
+  /** @minItems 1 */
+  steps: ({
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  step_id: string;
+  kind: 'AUTHENTICATE';
+  phase: 'REQUEST';
+  implementation: 'NATIVE';
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  depends_on?: string[];
+  config: {
+  schema_version: 'genio.one.auth.jwt.v1';
+  /**
+     * @minLength 1
+     * @maxLength 63
+     * @pattern ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+     */
+  provider: string;
+  /**
+     * @minLength 1
+     * @maxLength 2048
+     */
+  issuer: string;
+  /**
+     * @minItems 1
+     * @items.minLength 1
+     * @items.maxLength 512
+     */
+  audiences: string[];
+  /**
+     * @minLength 1
+     * @maxLength 2048
+     */
+  remote_jwks_uri: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$
+     */
+  subject_claim: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$
+     */
+  client_claim: string;
+};
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  step_id: string;
+  kind: 'AUTHORIZE';
+  phase: 'REQUEST';
+  implementation: 'EXT_AUTH';
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  depends_on?: string[];
+  config?: {[key: string]: unknown};
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  step_id: string;
+  kind: 'PROCESS';
+  implementation: 'PROCESSOR';
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  depends_on?: string[];
+  hooks: {
+  request?: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  action: string;
+  effect?: 'NARROW_ENTITLEMENT_CANDIDATES' | 'SORT_ENTITLEMENT_CANDIDATES';
+  config?: {[key: string]: unknown};
+};
+  response?: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  action: string;
+  effect?: 'NARROW_ENTITLEMENT_CANDIDATES' | 'SORT_ENTITLEMENT_CANDIDATES';
+  config?: {[key: string]: unknown};
+};
+};
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  step_id: string;
+  kind: 'ROUTE';
+  phase: 'ROUTING';
+  implementation: 'AIGW_NATIVE';
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  depends_on?: string[];
+  config?: {[key: string]: unknown};
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  step_id: string;
+  kind: 'OBSERVE';
+  implementation: 'NATIVE_OTEL';
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  depends_on?: string[];
+  hooks: {
+  request?: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  action: string;
+  config?: {[key: string]: unknown};
+};
+  attempt?: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  action: string;
+  config?: {[key: string]: unknown};
+};
+  response?: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  action: string;
+  config?: {[key: string]: unknown};
+};
+};
+})[];
+};
+} | {
+  kind: 'BOT_ACCESS';
+  definition: {
+  allowed_roles: ('TENANT_ADMINISTRATOR' | 'ORGANIZATION_ADMINISTRATOR' | 'USER')[];
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  allowed_subject_ids: string[];
+};
+} | {
+  kind: 'RUNTIME_CAPABILITY';
+  definition: {
+  /**
+     * @minLength 1
+     * @maxLength 512
+     */
+  display_name?: string;
+  scope: {
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  access_group_ids?: string[];
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  subject_ids: string[];
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  organization_ids: string[];
+  /** @maxItems 3 */
+  roles: ('TENANT_ADMINISTRATOR' | 'ORGANIZATION_ADMINISTRATOR' | 'USER')[];
+  /**
+     * @maxItems 256
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  client_ids: string[];
+  /**
+     * @maxItems 256
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  bot_ids: string[];
+  /**
+     * @maxItems 256
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  runtime_ids: string[];
+};
+  /** @maxItems 4096 */
+  rules: ({
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  group_id?: string;
+  individual_settings?: boolean;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  rule_id: string;
+  target: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  runtime_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  capability_id: string;
+};
+  /** @minItems 1 */
+  actions: ('expose' | 'invoke' | 'load_extension' | 'use' | 'execute')[];
+  effect: 'ALLOW' | 'DENY';
+  /** @maxItems 128 */
+  constraints: ({
+  kind: 'path_allowlist';
+  parameters: {
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  paths: string[];
+};
+} | {
+  kind: 'command_allowlist';
+  parameters: {
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  commands: string[];
+};
+} | {
+  kind: 'command_deny';
+  parameters: {
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  commands: string[];
+};
+} | {
+  kind: 'network';
+  parameters: {
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  allow: string[];
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  deny: string[];
+};
+} | {
+  kind: 'approval_required';
+  parameters: {
+  enabled: boolean;
+};
+} | {
+  kind: 'read_only';
+  parameters: {
+  enabled: boolean;
+};
+} | {
+  kind: 'cwd';
+  parameters: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  path: string;
+};
+} | {
+  kind: 'template';
+  parameters: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  template: string;
+};
+} | {
+  kind: 'ttl';
+  parameters: {
+  /**
+     * @minimum 1
+     * @maximum 86400
+     */
+  ttl_seconds: number;
+};
+})[];
+  /** @maxItems 128 */
+  obligations: ({
+  kind: 'audit';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  enforcement_point_id?: string;
+  parameters: {
+  event_kind?: 'expose' | 'invoke' | 'denied';
+};
+} | {
+  kind: 'require_approval';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  enforcement_point_id?: string;
+  parameters: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  reason?: string;
+};
+} | {
+  kind: 'redact';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  enforcement_point_id?: string;
+  parameters: {
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  fields: string[];
+};
+} | {
+  kind: 'usage';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  enforcement_point_id?: string;
+  parameters: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  meter: string;
+};
+})[];
+})[];
+};
+};
+
+export const PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftValidate200Lifecycle = {  DRAFT: 'DRAFT',
+  VALIDATED: 'VALIDATED',
+  REVIEWED: 'REVIEWED',
+} as const
+export type PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftValidate200Validation = {
+  actor_subject_id: string | null;
+  /** @minimum 0 */
+  at: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  correlation_id: string | null;
+} | null;
+
+export type PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftValidate200Review = {
+  actor_subject_id: string | null;
+  /** @minimum 0 */
+  at: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  correlation_id: string | null;
+} | null;
+
+export type PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftValidate200 = {
+  policy_key: string;
+  /** @minimum 1 */
+  version: number;
+  /** @minimum 0 */
+  base_revision: number;
+  content: PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftValidate200Content;
+  lifecycle: typeof PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftValidate200Lifecycle[keyof typeof PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftValidate200Lifecycle];
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  created_by_subject_id: string | null;
+  /** @minimum 0 */
+  created_at: number;
+  updated_by_subject_id: string | null;
+  /** @minimum 0 */
+  updated_at: number;
+  validation: PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftValidate200Validation;
+  review: PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftValidate200Review;
+};
+
+export type PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftReviewBody = {
+  /** @minimum 1 */
+  expected_version: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  expected_content_digest: string;
+};
+
+export type PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftReview200Content = {
+  kind: 'RESOURCE_CAPABILITY';
+  definition: {
+  /** @minimum 1 */
+  one_policy_revision: number;
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  eligible_connection_ids?: string[];
+  /** @minItems 1 */
+  steps: ({
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  step_id: string;
+  kind: 'AUTHENTICATE';
+  phase: 'REQUEST';
+  implementation: 'NATIVE';
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  depends_on?: string[];
+  config: {
+  schema_version: 'genio.one.auth.jwt.v1';
+  /**
+     * @minLength 1
+     * @maxLength 63
+     * @pattern ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+     */
+  provider: string;
+  /**
+     * @minLength 1
+     * @maxLength 2048
+     */
+  issuer: string;
+  /**
+     * @minItems 1
+     * @items.minLength 1
+     * @items.maxLength 512
+     */
+  audiences: string[];
+  /**
+     * @minLength 1
+     * @maxLength 2048
+     */
+  remote_jwks_uri: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$
+     */
+  subject_claim: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$
+     */
+  client_claim: string;
+};
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  step_id: string;
+  kind: 'AUTHORIZE';
+  phase: 'REQUEST';
+  implementation: 'EXT_AUTH';
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  depends_on?: string[];
+  config?: {[key: string]: unknown};
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  step_id: string;
+  kind: 'PROCESS';
+  implementation: 'PROCESSOR';
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  depends_on?: string[];
+  hooks: {
+  request?: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  action: string;
+  effect?: 'NARROW_ENTITLEMENT_CANDIDATES' | 'SORT_ENTITLEMENT_CANDIDATES';
+  config?: {[key: string]: unknown};
+};
+  response?: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  action: string;
+  effect?: 'NARROW_ENTITLEMENT_CANDIDATES' | 'SORT_ENTITLEMENT_CANDIDATES';
+  config?: {[key: string]: unknown};
+};
+};
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  step_id: string;
+  kind: 'ROUTE';
+  phase: 'ROUTING';
+  implementation: 'AIGW_NATIVE';
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  depends_on?: string[];
+  config?: {[key: string]: unknown};
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  step_id: string;
+  kind: 'OBSERVE';
+  implementation: 'NATIVE_OTEL';
+  /**
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  depends_on?: string[];
+  hooks: {
+  request?: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  action: string;
+  config?: {[key: string]: unknown};
+};
+  attempt?: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  action: string;
+  config?: {[key: string]: unknown};
+};
+  response?: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
+     */
+  action: string;
+  config?: {[key: string]: unknown};
+};
+};
+})[];
+};
+} | {
+  kind: 'BOT_ACCESS';
+  definition: {
+  allowed_roles: ('TENANT_ADMINISTRATOR' | 'ORGANIZATION_ADMINISTRATOR' | 'USER')[];
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  allowed_subject_ids: string[];
+};
+} | {
+  kind: 'RUNTIME_CAPABILITY';
+  definition: {
+  /**
+     * @minLength 1
+     * @maxLength 512
+     */
+  display_name?: string;
+  scope: {
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  access_group_ids?: string[];
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  subject_ids: string[];
+  /**
+     * @maxItems 1000
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  organization_ids: string[];
+  /** @maxItems 3 */
+  roles: ('TENANT_ADMINISTRATOR' | 'ORGANIZATION_ADMINISTRATOR' | 'USER')[];
+  /**
+     * @maxItems 256
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  client_ids: string[];
+  /**
+     * @maxItems 256
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  bot_ids: string[];
+  /**
+     * @maxItems 256
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  runtime_ids: string[];
+};
+  /** @maxItems 4096 */
+  rules: ({
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  group_id?: string;
+  individual_settings?: boolean;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  rule_id: string;
+  target: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  runtime_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  capability_id: string;
+};
+  /** @minItems 1 */
+  actions: ('expose' | 'invoke' | 'load_extension' | 'use' | 'execute')[];
+  effect: 'ALLOW' | 'DENY';
+  /** @maxItems 128 */
+  constraints: ({
+  kind: 'path_allowlist';
+  parameters: {
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  paths: string[];
+};
+} | {
+  kind: 'command_allowlist';
+  parameters: {
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  commands: string[];
+};
+} | {
+  kind: 'command_deny';
+  parameters: {
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  commands: string[];
+};
+} | {
+  kind: 'network';
+  parameters: {
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  allow: string[];
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  deny: string[];
+};
+} | {
+  kind: 'approval_required';
+  parameters: {
+  enabled: boolean;
+};
+} | {
+  kind: 'read_only';
+  parameters: {
+  enabled: boolean;
+};
+} | {
+  kind: 'cwd';
+  parameters: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  path: string;
+};
+} | {
+  kind: 'template';
+  parameters: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  template: string;
+};
+} | {
+  kind: 'ttl';
+  parameters: {
+  /**
+     * @minimum 1
+     * @maximum 86400
+     */
+  ttl_seconds: number;
+};
+})[];
+  /** @maxItems 128 */
+  obligations: ({
+  kind: 'audit';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  enforcement_point_id?: string;
+  parameters: {
+  event_kind?: 'expose' | 'invoke' | 'denied';
+};
+} | {
+  kind: 'require_approval';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  enforcement_point_id?: string;
+  parameters: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  reason?: string;
+};
+} | {
+  kind: 'redact';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  enforcement_point_id?: string;
+  parameters: {
+  /**
+     * @maxItems 2048
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  fields: string[];
+};
+} | {
+  kind: 'usage';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  enforcement_point_id?: string;
+  parameters: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  meter: string;
+};
+})[];
+})[];
+};
+};
+
+export const PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftReview200Lifecycle = {  DRAFT: 'DRAFT',
+  VALIDATED: 'VALIDATED',
+  REVIEWED: 'REVIEWED',
+} as const
+export type PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftReview200Validation = {
+  actor_subject_id: string | null;
+  /** @minimum 0 */
+  at: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  correlation_id: string | null;
+} | null;
+
+export type PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftReview200Review = {
+  actor_subject_id: string | null;
+  /** @minimum 0 */
+  at: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  correlation_id: string | null;
+} | null;
+
+export type PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftReview200 = {
+  policy_key: string;
+  /** @minimum 1 */
+  version: number;
+  /** @minimum 0 */
+  base_revision: number;
+  content: PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftReview200Content;
+  lifecycle: typeof PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftReview200Lifecycle[keyof typeof PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftReview200Lifecycle];
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  created_by_subject_id: string | null;
+  /** @minimum 0 */
+  created_at: number;
+  updated_by_subject_id: string | null;
+  /** @minimum 0 */
+  updated_at: number;
+  validation: PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftReview200Validation;
+  review: PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftReview200Review;
 };
 
 export type PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftPublishBody = {
   /** @minimum 1 */
   expected_version: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  expected_content_digest: string;
 };
 
 export type PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftPublish200ChainStepsItem = {
@@ -18433,6 +22111,9 @@ export type PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPoli
      * @maxLength 64
      */
   chain_digest: string;
+  published_by_subject_id: string | null;
+  reviewed_by_subject_id: string | null;
+  rollback_source_one_policy_revision: number | null;
   /** @minimum 0 */
   created_at: number;
   /** @minimum 0 */
@@ -18688,6 +22369,9 @@ export type ListLatestEnforcementChainRevisions200ItemRevision = {
      * @maxLength 64
      */
   chain_digest: string;
+  published_by_subject_id: string | null;
+  reviewed_by_subject_id: string | null;
+  rollback_source_one_policy_revision: number | null;
   /** @minimum 0 */
   created_at: number;
   /** @minimum 0 */
@@ -18966,6 +22650,9 @@ export type GetLatestEnforcementChainRevision200 = {
      * @maxLength 64
      */
   chain_digest: string;
+  published_by_subject_id: string | null;
+  reviewed_by_subject_id: string | null;
+  rollback_source_one_policy_revision: number | null;
   /** @minimum 0 */
   created_at: number;
   /** @minimum 0 */
@@ -19155,256 +22842,8 @@ export type SaveEnforcementChainRevisionBody = {
   steps: SaveEnforcementChainRevisionBodyStepsItem[];
 };
 
-export type SaveEnforcementChainRevision200ChainStepsItem = {
-  /**
-     * @minLength 1
-     * @maxLength 256
-     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
-     */
-  step_id: string;
-  kind: 'AUTHENTICATE';
-  phase: 'REQUEST';
-  implementation: 'NATIVE';
-  /**
-     * @items.minLength 1
-     * @items.maxLength 256
-     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
-     */
-  depends_on?: string[];
-  config: {
-  schema_version: 'genio.one.auth.jwt.v1';
-  /**
-     * @minLength 1
-     * @maxLength 63
-     * @pattern ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
-     */
-  provider: string;
-  /**
-     * @minLength 1
-     * @maxLength 2048
-     */
-  issuer: string;
-  /**
-     * @minItems 1
-     * @items.minLength 1
-     * @items.maxLength 512
-     */
-  audiences: string[];
-  /**
-     * @minLength 1
-     * @maxLength 2048
-     */
-  remote_jwks_uri: string;
-  /**
-     * @minLength 1
-     * @maxLength 256
-     * @pattern ^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$
-     */
-  subject_claim: string;
-  /**
-     * @minLength 1
-     * @maxLength 256
-     * @pattern ^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$
-     */
-  client_claim: string;
-};
-} | {
-  /**
-     * @minLength 1
-     * @maxLength 256
-     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
-     */
-  step_id: string;
-  kind: 'AUTHORIZE';
-  phase: 'REQUEST';
-  implementation: 'EXT_AUTH';
-  /**
-     * @items.minLength 1
-     * @items.maxLength 256
-     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
-     */
-  depends_on?: string[];
-  config?: {[key: string]: unknown};
-} | {
-  /**
-     * @minLength 1
-     * @maxLength 256
-     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
-     */
-  step_id: string;
-  kind: 'PROCESS';
-  implementation: 'PROCESSOR';
-  /**
-     * @items.minLength 1
-     * @items.maxLength 256
-     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
-     */
-  depends_on?: string[];
-  hooks: {
-  request?: {
-  /**
-     * @minLength 1
-     * @maxLength 256
-     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
-     */
-  action: string;
-  effect?: 'NARROW_ENTITLEMENT_CANDIDATES' | 'SORT_ENTITLEMENT_CANDIDATES';
-  config?: {[key: string]: unknown};
-};
-  response?: {
-  /**
-     * @minLength 1
-     * @maxLength 256
-     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
-     */
-  action: string;
-  effect?: 'NARROW_ENTITLEMENT_CANDIDATES' | 'SORT_ENTITLEMENT_CANDIDATES';
-  config?: {[key: string]: unknown};
-};
-};
-} | {
-  /**
-     * @minLength 1
-     * @maxLength 256
-     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
-     */
-  step_id: string;
-  kind: 'ROUTE';
-  phase: 'ROUTING';
-  implementation: 'AIGW_NATIVE';
-  /**
-     * @items.minLength 1
-     * @items.maxLength 256
-     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
-     */
-  depends_on?: string[];
-  config?: {[key: string]: unknown};
-} | {
-  /**
-     * @minLength 1
-     * @maxLength 256
-     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
-     */
-  step_id: string;
-  kind: 'OBSERVE';
-  implementation: 'NATIVE_OTEL';
-  /**
-     * @items.minLength 1
-     * @items.maxLength 256
-     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
-     */
-  depends_on?: string[];
-  hooks: {
-  request?: {
-  /**
-     * @minLength 1
-     * @maxLength 256
-     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
-     */
-  action: string;
-  config?: {[key: string]: unknown};
-};
-  attempt?: {
-  /**
-     * @minLength 1
-     * @maxLength 256
-     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
-     */
-  action: string;
-  config?: {[key: string]: unknown};
-};
-  response?: {
-  /**
-     * @minLength 1
-     * @maxLength 256
-     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
-     */
-  action: string;
-  config?: {[key: string]: unknown};
-};
-};
-};
-
-export type SaveEnforcementChainRevision200Chain = {
-  /**
-     * @minLength 1
-     * @maxLength 256
-     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
-     */
-  chain_id: string;
-  /**
-     * @minLength 1
-     * @maxLength 256
-     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
-     */
-  tenant_id: string;
-  /**
-     * @minLength 1
-     * @maxLength 256
-     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
-     */
-  resource_id: string;
-  /**
-     * @minLength 1
-     * @maxLength 256
-     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
-     */
-  capability_id: string;
-  /**
-     * @minItems 1
-     * @items.minLength 1
-     * @items.maxLength 256
-     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
-     */
-  eligible_connection_ids: string[];
-  /** @minimum 1 */
-  one_policy_revision: number;
-  steps: SaveEnforcementChainRevision200ChainStepsItem[];
-  /**
-     * @items.minLength 1
-     * @items.maxLength 256
-     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
-     */
-  request_filter_order: string[];
-  /**
-     * @items.minLength 1
-     * @items.maxLength 256
-     * @items.pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
-     */
-  response_filter_order: string[];
-};
-
-export type SaveEnforcementChainRevision200 = {
-  /**
-     * @minLength 1
-     * @maxLength 256
-     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
-     */
-  tenant_id: string;
-  /**
-     * @minLength 1
-     * @maxLength 256
-     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
-     */
-  resource_id: string;
-  /**
-     * @minLength 1
-     * @maxLength 256
-     * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
-     */
-  capability_id: string;
-  /** @minimum 1 */
-  one_policy_revision: number;
-  chain: SaveEnforcementChainRevision200Chain;
-  /**
-     * @minLength 64
-     * @maxLength 64
-     */
-  chain_digest: string;
-  /** @minimum 0 */
-  created_at: number;
-  /** @minimum 0 */
-  updated_at: number;
+export type SaveEnforcementChainRevision410 = {
+  code: string;
 };
 
 export type PreviewEnforcementChainBodyStepsItem = {
@@ -19947,7 +23386,7 @@ export type ReviewResourcePublicationBody = {
   reviewer_id?: string;
 };
 
-export type ReviewResourcePublication200BuiltinService = typeof ReviewResourcePublication200BuiltinService[keyof typeof ReviewResourcePublication200BuiltinService];
+export type ReviewResourcePublication200BuiltinService = typeof ReviewResourcePublication200BuiltinService[keyof typeof ReviewResourcePublication200BuiltinService] | null;
 
 
 export const ReviewResourcePublication200BuiltinService = {
@@ -24449,7 +27888,7 @@ export const RecordEndpointEnforcementBodyRoute = {  DIRECT: 'DIRECT',
   MANAGED: 'MANAGED',
   BLOCK: 'BLOCK',
 } as const
-export type RecordEndpointEnforcementBodyMissingDeploymentCapability = typeof RecordEndpointEnforcementBodyMissingDeploymentCapability[keyof typeof RecordEndpointEnforcementBodyMissingDeploymentCapability];
+export type RecordEndpointEnforcementBodyMissingDeploymentCapability = typeof RecordEndpointEnforcementBodyMissingDeploymentCapability[keyof typeof RecordEndpointEnforcementBodyMissingDeploymentCapability] | null;
 
 
 export const RecordEndpointEnforcementBodyMissingDeploymentCapability = {
@@ -25614,6 +29053,101 @@ export type ListGatewayAuthorizationAuditEvents200 = (({
   session_id: string | null;
   /** @minimum 0 */
   occurred_at: number;
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  audit_event_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  correlation_id: string;
+  kind: 'POLICY_CHANGE';
+  outcome: 'SUCCESS';
+  subject: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  subject_id: string;
+  evidence_level: 'VERIFIED';
+};
+  actor_subject: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  subject_id: string;
+  evidence_level: 'VERIFIED';
+};
+  /**
+     * @minLength 1
+     * @maxLength 4096
+     */
+  policy_key: string;
+  action: 'DRAFT_SAVED' | 'VALIDATED' | 'REVIEWED' | 'PUBLISHED' | 'DISCARDED' | 'SETTINGS_UPDATED' | 'SYSTEM_PUBLISHED' | 'ENABLED' | 'DISABLED';
+  policy_draft_version: number | null;
+  base_revision: number | null;
+  published_revision: number | null;
+  lifecycle: 'DRAFT' | 'VALIDATED' | 'REVIEWED' | null;
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  enabled?: boolean;
+  /** @minimum 0 */
+  occurred_at: number;
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  audit_event_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  correlation_id: string;
+  kind: 'ACCESS_GROUP_CHANGE';
+  outcome: 'SUCCESS';
+  subject: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  subject_id: string;
+  evidence_level: 'VERIFIED';
+};
+  actor_subject: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  subject_id: string;
+  evidence_level: 'VERIFIED';
+};
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  access_group_id: string;
+  operation: 'CREATED' | 'UPDATED' | 'ENABLED' | 'DISABLED' | 'MEMBERS_REPLACED';
+  /** @minimum 0 */
+  before_revision: number;
+  /** @minimum 1 */
+  after_revision: number;
+  /** @minimum 0 */
+  occurred_at: number;
 })[] | {
   events: (({
   /**
@@ -26012,6 +29546,101 @@ export type ListGatewayAuthorizationAuditEvents200 = (({
   rule_ids: string[];
 }[];
   session_id: string | null;
+  /** @minimum 0 */
+  occurred_at: number;
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  audit_event_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  correlation_id: string;
+  kind: 'POLICY_CHANGE';
+  outcome: 'SUCCESS';
+  subject: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  subject_id: string;
+  evidence_level: 'VERIFIED';
+};
+  actor_subject: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  subject_id: string;
+  evidence_level: 'VERIFIED';
+};
+  /**
+     * @minLength 1
+     * @maxLength 4096
+     */
+  policy_key: string;
+  action: 'DRAFT_SAVED' | 'VALIDATED' | 'REVIEWED' | 'PUBLISHED' | 'DISCARDED' | 'SETTINGS_UPDATED' | 'SYSTEM_PUBLISHED' | 'ENABLED' | 'DISABLED';
+  policy_draft_version: number | null;
+  base_revision: number | null;
+  published_revision: number | null;
+  lifecycle: 'DRAFT' | 'VALIDATED' | 'REVIEWED' | null;
+  /** @pattern ^[a-f0-9]{64}$ */
+  content_digest: string;
+  enabled?: boolean;
+  /** @minimum 0 */
+  occurred_at: number;
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  audit_event_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  correlation_id: string;
+  kind: 'ACCESS_GROUP_CHANGE';
+  outcome: 'SUCCESS';
+  subject: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  subject_id: string;
+  evidence_level: 'VERIFIED';
+};
+  actor_subject: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  subject_id: string;
+  evidence_level: 'VERIFIED';
+};
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  access_group_id: string;
+  operation: 'CREATED' | 'UPDATED' | 'ENABLED' | 'DISABLED' | 'MEMBERS_REPLACED';
+  /** @minimum 0 */
+  before_revision: number;
+  /** @minimum 1 */
+  after_revision: number;
   /** @minimum 0 */
   occurred_at: number;
 })[];
@@ -31681,7 +35310,7 @@ export const GetV1TenantsTenantIdRuntimes200ItemOperatorState = {  READY: 'READY
   OFFLINE: 'OFFLINE',
   OUT_OF_SYNC: 'OUT_OF_SYNC',
 } as const
-export type GetV1TenantsTenantIdRuntimes200ItemOperatorAlertCode = typeof GetV1TenantsTenantIdRuntimes200ItemOperatorAlertCode[keyof typeof GetV1TenantsTenantIdRuntimes200ItemOperatorAlertCode];
+export type GetV1TenantsTenantIdRuntimes200ItemOperatorAlertCode = typeof GetV1TenantsTenantIdRuntimes200ItemOperatorAlertCode[keyof typeof GetV1TenantsTenantIdRuntimes200ItemOperatorAlertCode] | null;
 
 
 export const GetV1TenantsTenantIdRuntimes200ItemOperatorAlertCode = {
@@ -31809,23 +35438,16 @@ export const getGetManagementApiHealthUrl = () => {
   return `/healthz`
 }
 
-export const getManagementApiHealth = async ( options?: RequestInit): Promise<getManagementApiHealthResponse> => {
+export const getManagementApiHealth = async ( options?: Parameters<typeof managementApiFetch>[1]): Promise<getManagementApiHealthResponse> => {
 
-  const res = await fetch(getGetManagementApiHealthUrl(),
+  return managementApiFetch<getManagementApiHealthResponse>(getGetManagementApiHealthUrl(),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getManagementApiHealthResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getManagementApiHealthResponse
-}
+);}
 
 
 
@@ -31849,23 +35471,16 @@ export const getGetV1IdentityBrowserConfigurationUrl = () => {
   return `/v1/identity/browser-configuration`
 }
 
-export const getV1IdentityBrowserConfiguration = async ( options?: RequestInit): Promise<getV1IdentityBrowserConfigurationResponse> => {
+export const getV1IdentityBrowserConfiguration = async ( options?: Parameters<typeof managementApiFetch>[1]): Promise<getV1IdentityBrowserConfigurationResponse> => {
 
-  const res = await fetch(getGetV1IdentityBrowserConfigurationUrl(),
+  return managementApiFetch<getV1IdentityBrowserConfigurationResponse>(getGetV1IdentityBrowserConfigurationUrl(),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getV1IdentityBrowserConfigurationResponse['data'] = body ? JSON.parse(body) : undefined
-  return { data, status: res.status, headers: res.headers } as getV1IdentityBrowserConfigurationResponse
-}
+);}
 
 
 
@@ -31889,23 +35504,16 @@ export const getGetLoginBrandingUrl = () => {
   return `/v1/identity/login-branding`
 }
 
-export const getLoginBranding = async ( options?: RequestInit): Promise<getLoginBrandingResponse> => {
+export const getLoginBranding = async ( options?: Parameters<typeof managementApiFetch>[1]): Promise<getLoginBrandingResponse> => {
 
-  const res = await fetch(getGetLoginBrandingUrl(),
+  return managementApiFetch<getLoginBrandingResponse>(getGetLoginBrandingUrl(),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getLoginBrandingResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getLoginBrandingResponse
-}
+);}
 
 
 
@@ -31929,23 +35537,16 @@ export const getGetV1IdentitySessionUrl = () => {
   return `/v1/identity/session`
 }
 
-export const getV1IdentitySession = async ( options?: RequestInit): Promise<getV1IdentitySessionResponse> => {
+export const getV1IdentitySession = async ( options?: Parameters<typeof managementApiFetch>[1]): Promise<getV1IdentitySessionResponse> => {
 
-  const res = await fetch(getGetV1IdentitySessionUrl(),
+  return managementApiFetch<getV1IdentitySessionResponse>(getGetV1IdentitySessionUrl(),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getV1IdentitySessionResponse['data'] = body ? JSON.parse(body) : undefined
-  return { data, status: res.status, headers: res.headers } as getV1IdentitySessionResponse
-}
+);}
 
 
 
@@ -31966,30 +35567,23 @@ export const getListResourcesUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/resources`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources`
 }
 
 /**
  * Returns the Tenant Resource Catalog from the TypeScript Control Plane canonical store.
  * @summary List governed Resources
  */
-export const listResources = async (tenantId: string, options?: RequestInit): Promise<listResourcesResponse> => {
+export const listResources = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listResourcesResponse> => {
 
-  const res = await fetch(getListResourcesUrl(tenantId),
+  return managementApiFetch<listResourcesResponse>(getListResourcesUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listResourcesResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listResourcesResponse
-}
+);}
 
 
 
@@ -32010,36 +35604,37 @@ export const getCreateResourceUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/resources`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources`
 }
 
 /**
  * @summary Create a draft Resource
  */
 export const createResource = async (tenantId: string,
-    createResourceBody: CreateResourceBody, options?: RequestInit): Promise<createResourceResponse> => {
+    createResourceBody: CreateResourceBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<createResourceResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getCreateResourceUrl(tenantId),
+return managementApiFetch<createResourceResponse>(getCreateResourceUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(createResourceBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: createResourceResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as createResourceResponse
-}
+);}
 
 
 
@@ -32060,36 +35655,37 @@ export const getImportOpenApiResourceUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/resources/import-openapi`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/import-openapi`
 }
 
 /**
  * @summary Create a draft API Resource from an OpenAPI document
  */
 export const importOpenApiResource = async (tenantId: string,
-    importOpenApiResourceBody: ImportOpenApiResourceBody, options?: RequestInit): Promise<importOpenApiResourceResponse> => {
+    importOpenApiResourceBody: ImportOpenApiResourceBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<importOpenApiResourceResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getImportOpenApiResourceUrl(tenantId),
+return managementApiFetch<importOpenApiResourceResponse>(getImportOpenApiResourceUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(importOpenApiResourceBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: importOpenApiResourceResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as importOpenApiResourceResponse
-}
+);}
 
 
 
@@ -32111,30 +35707,23 @@ export const getGetResourceUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}`
 }
 
 /**
  * @summary Get a Resource
  */
 export const getResource = async (tenantId: string,
-    resourceId: string, options?: RequestInit): Promise<getResourceResponse> => {
+    resourceId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getResourceResponse> => {
 
-  const res = await fetch(getGetResourceUrl(tenantId,resourceId),
+  return managementApiFetch<getResourceResponse>(getGetResourceUrl(tenantId,resourceId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getResourceResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getResourceResponse
-}
+);}
 
 
 
@@ -32156,7 +35745,7 @@ export const getUpdateResourceUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}`
 }
 
 /**
@@ -32164,29 +35753,30 @@ export const getUpdateResourceUrl = (tenantId: string,
  */
 export const updateResource = async (tenantId: string,
     resourceId: string,
-    updateResourceBody: UpdateResourceBody, options?: RequestInit): Promise<updateResourceResponse> => {
+    updateResourceBody: UpdateResourceBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<updateResourceResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getUpdateResourceUrl(tenantId,resourceId),
+return managementApiFetch<updateResourceResponse>(getUpdateResourceUrl(tenantId,resourceId),
   {
     ...options,
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(updateResourceBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: updateResourceResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as updateResourceResponse
-}
+);}
 
 
 
@@ -32208,7 +35798,7 @@ export const getTransitionResourceLifecycleUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}/lifecycle`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/lifecycle`
 }
 
 /**
@@ -32216,29 +35806,30 @@ export const getTransitionResourceLifecycleUrl = (tenantId: string,
  */
 export const transitionResourceLifecycle = async (tenantId: string,
     resourceId: string,
-    transitionResourceLifecycleBody: TransitionResourceLifecycleBody, options?: RequestInit): Promise<transitionResourceLifecycleResponse> => {
+    transitionResourceLifecycleBody: TransitionResourceLifecycleBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<transitionResourceLifecycleResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getTransitionResourceLifecycleUrl(tenantId,resourceId),
+return managementApiFetch<transitionResourceLifecycleResponse>(getTransitionResourceLifecycleUrl(tenantId,resourceId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(transitionResourceLifecycleBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: transitionResourceLifecycleResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as transitionResourceLifecycleResponse
-}
+);}
 
 
 
@@ -32260,7 +35851,7 @@ export const getSetResourcePublicationEndpointUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}/publication-endpoint`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/publication-endpoint`
 }
 
 /**
@@ -32269,29 +35860,30 @@ export const getSetResourcePublicationEndpointUrl = (tenantId: string,
  */
 export const setResourcePublicationEndpoint = async (tenantId: string,
     resourceId: string,
-    setResourcePublicationEndpointBody: SetResourcePublicationEndpointBody, options?: RequestInit): Promise<setResourcePublicationEndpointResponse> => {
+    setResourcePublicationEndpointBody: SetResourcePublicationEndpointBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<setResourcePublicationEndpointResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getSetResourcePublicationEndpointUrl(tenantId,resourceId),
+return managementApiFetch<setResourcePublicationEndpointResponse>(getSetResourcePublicationEndpointUrl(tenantId,resourceId),
   {
     ...options,
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(setResourcePublicationEndpointBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: setResourcePublicationEndpointResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as setResourcePublicationEndpointResponse
-}
+);}
 
 
 
@@ -32312,26 +35904,19 @@ export const getGetDemoProjectUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/demo-project`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/demo-project`
 }
 
-export const getDemoProject = async (tenantId: string, options?: RequestInit): Promise<getDemoProjectResponse> => {
+export const getDemoProject = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getDemoProjectResponse> => {
 
-  const res = await fetch(getGetDemoProjectUrl(tenantId),
+  return managementApiFetch<getDemoProjectResponse>(getGetDemoProjectUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getDemoProjectResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getDemoProjectResponse
-}
+);}
 
 
 
@@ -32352,33 +35937,34 @@ export const getInstallDemoProjectUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/demo-project/install`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/demo-project/install`
 }
 
 export const installDemoProject = async (tenantId: string,
-    installDemoProjectBody: InstallDemoProjectBody, options?: RequestInit): Promise<installDemoProjectResponse> => {
+    installDemoProjectBody: InstallDemoProjectBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<installDemoProjectResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getInstallDemoProjectUrl(tenantId),
+return managementApiFetch<installDemoProjectResponse>(getInstallDemoProjectUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(installDemoProjectBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: installDemoProjectResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as installDemoProjectResponse
-}
+);}
 
 
 
@@ -32399,26 +35985,19 @@ export const getSkipDemoProjectUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/demo-project/skip`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/demo-project/skip`
 }
 
-export const skipDemoProject = async (tenantId: string, options?: RequestInit): Promise<skipDemoProjectResponse> => {
+export const skipDemoProject = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<skipDemoProjectResponse> => {
 
-  const res = await fetch(getSkipDemoProjectUrl(tenantId),
+  return managementApiFetch<skipDemoProjectResponse>(getSkipDemoProjectUrl(tenantId),
   {
     ...options,
     method: 'POST'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: skipDemoProjectResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as skipDemoProjectResponse
-}
+);}
 
 
 
@@ -32439,29 +36018,22 @@ export const getListOrganizationsUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/organizations`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/organizations`
 }
 
 /**
  * @summary List owner organizations
  */
-export const listOrganizations = async (tenantId: string, options?: RequestInit): Promise<listOrganizationsResponse> => {
+export const listOrganizations = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listOrganizationsResponse> => {
 
-  const res = await fetch(getListOrganizationsUrl(tenantId),
+  return managementApiFetch<listOrganizationsResponse>(getListOrganizationsUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listOrganizationsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listOrganizationsResponse
-}
+);}
 
 
 
@@ -32482,36 +36054,37 @@ export const getCreateOrganizationUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/organizations`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/organizations`
 }
 
 /**
  * @summary Create a Resource owner organization
  */
 export const createOrganization = async (tenantId: string,
-    createOrganizationBody: CreateOrganizationBody, options?: RequestInit): Promise<createOrganizationResponse> => {
+    createOrganizationBody: CreateOrganizationBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<createOrganizationResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getCreateOrganizationUrl(tenantId),
+return managementApiFetch<createOrganizationResponse>(getCreateOrganizationUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(createOrganizationBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: createOrganizationResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as createOrganizationResponse
-}
+);}
 
 
 
@@ -32533,30 +36106,23 @@ export const getGetOrganizationUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/organizations/${organizationId}`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/organizations/${encodeURIComponent(String(organizationId))}`
 }
 
 /**
  * @summary Get an owner organization
  */
 export const getOrganization = async (tenantId: string,
-    organizationId: string, options?: RequestInit): Promise<getOrganizationResponse> => {
+    organizationId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getOrganizationResponse> => {
 
-  const res = await fetch(getGetOrganizationUrl(tenantId,organizationId),
+  return managementApiFetch<getOrganizationResponse>(getGetOrganizationUrl(tenantId,organizationId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getOrganizationResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getOrganizationResponse
-}
+);}
 
 
 
@@ -32578,7 +36144,7 @@ export const getUpdateOrganizationUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/organizations/${organizationId}`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/organizations/${encodeURIComponent(String(organizationId))}`
 }
 
 /**
@@ -32586,29 +36152,30 @@ export const getUpdateOrganizationUrl = (tenantId: string,
  */
 export const updateOrganization = async (tenantId: string,
     organizationId: string,
-    updateOrganizationBody: UpdateOrganizationBody, options?: RequestInit): Promise<updateOrganizationResponse> => {
+    updateOrganizationBody: UpdateOrganizationBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<updateOrganizationResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getUpdateOrganizationUrl(tenantId,organizationId),
+return managementApiFetch<updateOrganizationResponse>(getUpdateOrganizationUrl(tenantId,organizationId),
   {
     ...options,
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(updateOrganizationBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: updateOrganizationResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as updateOrganizationResponse
-}
+);}
 
 
 
@@ -32629,26 +36196,19 @@ export const getGetIdentityInventoryUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/identity`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/identity`
 }
 
-export const getIdentityInventory = async (tenantId: string, options?: RequestInit): Promise<getIdentityInventoryResponse> => {
+export const getIdentityInventory = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getIdentityInventoryResponse> => {
 
-  const res = await fetch(getGetIdentityInventoryUrl(tenantId),
+  return managementApiFetch<getIdentityInventoryResponse>(getGetIdentityInventoryUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getIdentityInventoryResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getIdentityInventoryResponse
-}
+);}
 
 
 
@@ -32669,33 +36229,34 @@ export const getRegisterAgentSubjectUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/identity/subjects`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/identity/subjects`
 }
 
 export const registerAgentSubject = async (tenantId: string,
-    registerAgentSubjectBody: RegisterAgentSubjectBody, options?: RequestInit): Promise<registerAgentSubjectResponse> => {
+    registerAgentSubjectBody: RegisterAgentSubjectBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<registerAgentSubjectResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getRegisterAgentSubjectUrl(tenantId),
+return managementApiFetch<registerAgentSubjectResponse>(getRegisterAgentSubjectUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(registerAgentSubjectBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: registerAgentSubjectResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as registerAgentSubjectResponse
-}
+);}
 
 
 
@@ -32717,34 +36278,35 @@ export const getSuspendSubjectUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/identity/subjects/${subjectId}/suspend`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/identity/subjects/${encodeURIComponent(String(subjectId))}/suspend`
 }
 
 export const suspendSubject = async (tenantId: string,
     subjectId: string,
-    suspendSubjectBody: SuspendSubjectBody, options?: RequestInit): Promise<suspendSubjectResponse> => {
+    suspendSubjectBody: SuspendSubjectBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<suspendSubjectResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getSuspendSubjectUrl(tenantId,subjectId),
+return managementApiFetch<suspendSubjectResponse>(getSuspendSubjectUrl(tenantId,subjectId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(suspendSubjectBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: suspendSubjectResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as suspendSubjectResponse
-}
+);}
 
 
 
@@ -32766,27 +36328,20 @@ export const getRestoreSubjectUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/identity/subjects/${subjectId}/restore`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/identity/subjects/${encodeURIComponent(String(subjectId))}/restore`
 }
 
 export const restoreSubject = async (tenantId: string,
-    subjectId: string, options?: RequestInit): Promise<restoreSubjectResponse> => {
+    subjectId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<restoreSubjectResponse> => {
 
-  const res = await fetch(getRestoreSubjectUrl(tenantId,subjectId),
+  return managementApiFetch<restoreSubjectResponse>(getRestoreSubjectUrl(tenantId,subjectId),
   {
     ...options,
     method: 'POST'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: restoreSubjectResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as restoreSubjectResponse
-}
+);}
 
 
 
@@ -32807,33 +36362,237 @@ export const getCreateSelfServiceAgentUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/me/agents`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/me/agents`
 }
 
 export const createSelfServiceAgent = async (tenantId: string,
-    createSelfServiceAgentBody: CreateSelfServiceAgentBody, options?: RequestInit): Promise<createSelfServiceAgentResponse> => {
+    createSelfServiceAgentBody: CreateSelfServiceAgentBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<createSelfServiceAgentResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getCreateSelfServiceAgentUrl(tenantId),
+return managementApiFetch<createSelfServiceAgentResponse>(getCreateSelfServiceAgentUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(createSelfServiceAgentBody)
   }
-)
+);}
 
 
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
 
-  const data: createSelfServiceAgentResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as createSelfServiceAgentResponse
+export type listAccessGroupsResponse200 = {
+  data: ListAccessGroups200Item[]
+  status: 200
 }
+
+export type listAccessGroupsResponseSuccess = (listAccessGroupsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listAccessGroupsResponse = (listAccessGroupsResponseSuccess)
+
+export const getListAccessGroupsUrl = (tenantId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/access-groups`
+}
+
+export const listAccessGroups = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listAccessGroupsResponse> => {
+
+  return managementApiFetch<listAccessGroupsResponse>(getListAccessGroupsUrl(tenantId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getAccessGroupResponse200 = {
+  data: GetAccessGroup200
+  status: 200
+}
+
+export type getAccessGroupResponseSuccess = (getAccessGroupResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getAccessGroupResponse = (getAccessGroupResponseSuccess)
+
+export const getGetAccessGroupUrl = (tenantId: string,
+    accessGroupId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/access-groups/${encodeURIComponent(String(accessGroupId))}`
+}
+
+export const getAccessGroup = async (tenantId: string,
+    accessGroupId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getAccessGroupResponse> => {
+
+  return managementApiFetch<getAccessGroupResponse>(getGetAccessGroupUrl(tenantId,accessGroupId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type saveAccessGroupResponse200 = {
+  data: SaveAccessGroup200
+  status: 200
+}
+
+export type saveAccessGroupResponseSuccess = (saveAccessGroupResponse200) & {
+  headers: Headers;
+};
+;
+
+export type saveAccessGroupResponse = (saveAccessGroupResponseSuccess)
+
+export const getSaveAccessGroupUrl = (tenantId: string,
+    accessGroupId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/access-groups/${encodeURIComponent(String(accessGroupId))}`
+}
+
+export const saveAccessGroup = async (tenantId: string,
+    accessGroupId: string,
+    saveAccessGroupBody: SaveAccessGroupBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<saveAccessGroupResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return managementApiFetch<saveAccessGroupResponse>(getSaveAccessGroupUrl(tenantId,accessGroupId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(saveAccessGroupBody)
+  }
+);}
+
+
+
+export type replaceAccessGroupMembersResponse200 = {
+  data: ReplaceAccessGroupMembers200
+  status: 200
+}
+
+export type replaceAccessGroupMembersResponseSuccess = (replaceAccessGroupMembersResponse200) & {
+  headers: Headers;
+};
+;
+
+export type replaceAccessGroupMembersResponse = (replaceAccessGroupMembersResponseSuccess)
+
+export const getReplaceAccessGroupMembersUrl = (tenantId: string,
+    accessGroupId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/access-groups/${encodeURIComponent(String(accessGroupId))}/members`
+}
+
+export const replaceAccessGroupMembers = async (tenantId: string,
+    accessGroupId: string,
+    replaceAccessGroupMembersBody: ReplaceAccessGroupMembersBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<replaceAccessGroupMembersResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return managementApiFetch<replaceAccessGroupMembersResponse>(getReplaceAccessGroupMembersUrl(tenantId,accessGroupId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(replaceAccessGroupMembersBody)
+  }
+);}
+
+
+
+export type listAccessGroupRevisionsResponse200 = {
+  data: ListAccessGroupRevisions200Item[]
+  status: 200
+}
+
+export type listAccessGroupRevisionsResponseSuccess = (listAccessGroupRevisionsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listAccessGroupRevisionsResponse = (listAccessGroupRevisionsResponseSuccess)
+
+export const getListAccessGroupRevisionsUrl = (tenantId: string,
+    accessGroupId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/access-groups/${encodeURIComponent(String(accessGroupId))}/revisions`
+}
+
+export const listAccessGroupRevisions = async (tenantId: string,
+    accessGroupId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listAccessGroupRevisionsResponse> => {
+
+  return managementApiFetch<listAccessGroupRevisionsResponse>(getListAccessGroupRevisionsUrl(tenantId,accessGroupId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
 
 
 
@@ -32854,26 +36613,19 @@ export const getListApplicationsUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/applications`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/applications`
 }
 
-export const listApplications = async (tenantId: string, options?: RequestInit): Promise<listApplicationsResponse> => {
+export const listApplications = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listApplicationsResponse> => {
 
-  const res = await fetch(getListApplicationsUrl(tenantId),
+  return managementApiFetch<listApplicationsResponse>(getListApplicationsUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listApplicationsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listApplicationsResponse
-}
+);}
 
 
 
@@ -32894,33 +36646,34 @@ export const getRegisterApplicationUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/applications`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/applications`
 }
 
 export const registerApplication = async (tenantId: string,
-    registerApplicationBody: RegisterApplicationBody, options?: RequestInit): Promise<registerApplicationResponse> => {
+    registerApplicationBody: RegisterApplicationBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<registerApplicationResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getRegisterApplicationUrl(tenantId),
+return managementApiFetch<registerApplicationResponse>(getRegisterApplicationUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(registerApplicationBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: registerApplicationResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as registerApplicationResponse
-}
+);}
 
 
 
@@ -32942,27 +36695,20 @@ export const getListApplicationApiCredentialsUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/applications/${applicationId}/api-credentials`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/applications/${encodeURIComponent(String(applicationId))}/api-credentials`
 }
 
 export const listApplicationApiCredentials = async (tenantId: string,
-    applicationId: string, options?: RequestInit): Promise<listApplicationApiCredentialsResponse> => {
+    applicationId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listApplicationApiCredentialsResponse> => {
 
-  const res = await fetch(getListApplicationApiCredentialsUrl(tenantId,applicationId),
+  return managementApiFetch<listApplicationApiCredentialsResponse>(getListApplicationApiCredentialsUrl(tenantId,applicationId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listApplicationApiCredentialsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listApplicationApiCredentialsResponse
-}
+);}
 
 
 
@@ -32984,34 +36730,35 @@ export const getIssueApplicationOAuthCredentialUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/applications/${applicationId}/api-credentials`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/applications/${encodeURIComponent(String(applicationId))}/api-credentials`
 }
 
 export const issueApplicationOAuthCredential = async (tenantId: string,
     applicationId: string,
-    issueApplicationOAuthCredentialBody: IssueApplicationOAuthCredentialBody, options?: RequestInit): Promise<issueApplicationOAuthCredentialResponse> => {
+    issueApplicationOAuthCredentialBody: IssueApplicationOAuthCredentialBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<issueApplicationOAuthCredentialResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getIssueApplicationOAuthCredentialUrl(tenantId,applicationId),
+return managementApiFetch<issueApplicationOAuthCredentialResponse>(getIssueApplicationOAuthCredentialUrl(tenantId,applicationId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(issueApplicationOAuthCredentialBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: issueApplicationOAuthCredentialResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as issueApplicationOAuthCredentialResponse
-}
+);}
 
 
 
@@ -33034,35 +36781,36 @@ export const getRotateApplicationApiCredentialUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/applications/${applicationId}/api-credentials/${credentialId}/rotate`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/applications/${encodeURIComponent(String(applicationId))}/api-credentials/${encodeURIComponent(String(credentialId))}/rotate`
 }
 
 export const rotateApplicationApiCredential = async (tenantId: string,
     applicationId: string,
     credentialId: string,
-    rotateApplicationApiCredentialBody: RotateApplicationApiCredentialBody, options?: RequestInit): Promise<rotateApplicationApiCredentialResponse> => {
+    rotateApplicationApiCredentialBody: RotateApplicationApiCredentialBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<rotateApplicationApiCredentialResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getRotateApplicationApiCredentialUrl(tenantId,applicationId,credentialId),
+return managementApiFetch<rotateApplicationApiCredentialResponse>(getRotateApplicationApiCredentialUrl(tenantId,applicationId,credentialId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(rotateApplicationApiCredentialBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: rotateApplicationApiCredentialResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as rotateApplicationApiCredentialResponse
-}
+);}
 
 
 
@@ -33085,35 +36833,36 @@ export const getRevokeApplicationApiCredentialUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/applications/${applicationId}/api-credentials/${credentialId}/revoke`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/applications/${encodeURIComponent(String(applicationId))}/api-credentials/${encodeURIComponent(String(credentialId))}/revoke`
 }
 
 export const revokeApplicationApiCredential = async (tenantId: string,
     applicationId: string,
     credentialId: string,
-    revokeApplicationApiCredentialBody: RevokeApplicationApiCredentialBody, options?: RequestInit): Promise<revokeApplicationApiCredentialResponse> => {
+    revokeApplicationApiCredentialBody: RevokeApplicationApiCredentialBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<revokeApplicationApiCredentialResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getRevokeApplicationApiCredentialUrl(tenantId,applicationId,credentialId),
+return managementApiFetch<revokeApplicationApiCredentialResponse>(getRevokeApplicationApiCredentialUrl(tenantId,applicationId,credentialId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(revokeApplicationApiCredentialBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: revokeApplicationApiCredentialResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as revokeApplicationApiCredentialResponse
-}
+);}
 
 
 
@@ -33135,27 +36884,20 @@ export const getListApplicationFederationTrustRevisionsUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/applications/${applicationId}/federation-trust-revisions`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/applications/${encodeURIComponent(String(applicationId))}/federation-trust-revisions`
 }
 
 export const listApplicationFederationTrustRevisions = async (tenantId: string,
-    applicationId: string, options?: RequestInit): Promise<listApplicationFederationTrustRevisionsResponse> => {
+    applicationId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listApplicationFederationTrustRevisionsResponse> => {
 
-  const res = await fetch(getListApplicationFederationTrustRevisionsUrl(tenantId,applicationId),
+  return managementApiFetch<listApplicationFederationTrustRevisionsResponse>(getListApplicationFederationTrustRevisionsUrl(tenantId,applicationId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listApplicationFederationTrustRevisionsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listApplicationFederationTrustRevisionsResponse
-}
+);}
 
 
 
@@ -33177,34 +36919,35 @@ export const getCreateApplicationFederationTrustRevisionUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/applications/${applicationId}/federation-trust-revisions`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/applications/${encodeURIComponent(String(applicationId))}/federation-trust-revisions`
 }
 
 export const createApplicationFederationTrustRevision = async (tenantId: string,
     applicationId: string,
-    createApplicationFederationTrustRevisionBody: CreateApplicationFederationTrustRevisionBody, options?: RequestInit): Promise<createApplicationFederationTrustRevisionResponse> => {
+    createApplicationFederationTrustRevisionBody: CreateApplicationFederationTrustRevisionBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<createApplicationFederationTrustRevisionResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getCreateApplicationFederationTrustRevisionUrl(tenantId,applicationId),
+return managementApiFetch<createApplicationFederationTrustRevisionResponse>(getCreateApplicationFederationTrustRevisionUrl(tenantId,applicationId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(createApplicationFederationTrustRevisionBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: createApplicationFederationTrustRevisionResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as createApplicationFederationTrustRevisionResponse
-}
+);}
 
 
 
@@ -33226,27 +36969,20 @@ export const getListApplicationFederationExchangesUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/applications/${applicationId}/federation-exchanges`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/applications/${encodeURIComponent(String(applicationId))}/federation-exchanges`
 }
 
 export const listApplicationFederationExchanges = async (tenantId: string,
-    applicationId: string, options?: RequestInit): Promise<listApplicationFederationExchangesResponse> => {
+    applicationId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listApplicationFederationExchangesResponse> => {
 
-  const res = await fetch(getListApplicationFederationExchangesUrl(tenantId,applicationId),
+  return managementApiFetch<listApplicationFederationExchangesResponse>(getListApplicationFederationExchangesUrl(tenantId,applicationId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listApplicationFederationExchangesResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listApplicationFederationExchangesResponse
-}
+);}
 
 
 
@@ -33267,33 +37003,34 @@ export const getExchangeFederatedWorkloadTokenUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/sts/token-exchange`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/sts/token-exchange`
 }
 
 export const exchangeFederatedWorkloadToken = async (tenantId: string,
-    exchangeFederatedWorkloadTokenBody: ExchangeFederatedWorkloadTokenBody, options?: RequestInit): Promise<exchangeFederatedWorkloadTokenResponse> => {
+    exchangeFederatedWorkloadTokenBody: ExchangeFederatedWorkloadTokenBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<exchangeFederatedWorkloadTokenResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getExchangeFederatedWorkloadTokenUrl(tenantId),
+return managementApiFetch<exchangeFederatedWorkloadTokenResponse>(getExchangeFederatedWorkloadTokenUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(exchangeFederatedWorkloadTokenBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: exchangeFederatedWorkloadTokenResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as exchangeFederatedWorkloadTokenResponse
-}
+);}
 
 
 
@@ -33314,26 +37051,19 @@ export const getListInstalledConnectorsUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/connectors`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/connectors`
 }
 
-export const listInstalledConnectors = async (tenantId: string, options?: RequestInit): Promise<listInstalledConnectorsResponse> => {
+export const listInstalledConnectors = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listInstalledConnectorsResponse> => {
 
-  const res = await fetch(getListInstalledConnectorsUrl(tenantId),
+  return managementApiFetch<listInstalledConnectorsResponse>(getListInstalledConnectorsUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listInstalledConnectorsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listInstalledConnectorsResponse
-}
+);}
 
 
 
@@ -33355,30 +37085,23 @@ export const getListRuntimeConnectionHealthTargetsUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/runtime-control/GATEWAY/${runtimeId}/connection-health-targets`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/runtime-control/GATEWAY/${encodeURIComponent(String(runtimeId))}/connection-health-targets`
 }
 
 /**
  * @summary List Connection health targets assigned to a Gateway Runtime
  */
 export const listRuntimeConnectionHealthTargets = async (tenantId: string,
-    runtimeId: string, options?: RequestInit): Promise<listRuntimeConnectionHealthTargetsResponse> => {
+    runtimeId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listRuntimeConnectionHealthTargetsResponse> => {
 
-  const res = await fetch(getListRuntimeConnectionHealthTargetsUrl(tenantId,runtimeId),
+  return managementApiFetch<listRuntimeConnectionHealthTargetsResponse>(getListRuntimeConnectionHealthTargetsUrl(tenantId,runtimeId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listRuntimeConnectionHealthTargetsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listRuntimeConnectionHealthTargetsResponse
-}
+);}
 
 
 
@@ -33400,7 +37123,7 @@ export const getObserveRuntimeConnectionHealthBatchUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/runtime-control/GATEWAY/${runtimeId}/connection-health-observations`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/runtime-control/GATEWAY/${encodeURIComponent(String(runtimeId))}/connection-health-observations`
 }
 
 /**
@@ -33408,29 +37131,30 @@ export const getObserveRuntimeConnectionHealthBatchUrl = (tenantId: string,
  */
 export const observeRuntimeConnectionHealthBatch = async (tenantId: string,
     runtimeId: string,
-    observeRuntimeConnectionHealthBatchBody: ObserveRuntimeConnectionHealthBatchBody, options?: RequestInit): Promise<observeRuntimeConnectionHealthBatchResponse> => {
+    observeRuntimeConnectionHealthBatchBody: ObserveRuntimeConnectionHealthBatchBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<observeRuntimeConnectionHealthBatchResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getObserveRuntimeConnectionHealthBatchUrl(tenantId,runtimeId),
+return managementApiFetch<observeRuntimeConnectionHealthBatchResponse>(getObserveRuntimeConnectionHealthBatchUrl(tenantId,runtimeId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(observeRuntimeConnectionHealthBatchBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: observeRuntimeConnectionHealthBatchResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as observeRuntimeConnectionHealthBatchResponse
-}
+);}
 
 
 
@@ -33452,30 +37176,23 @@ export const getListResourceConnectionsUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}/connections`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/connections`
 }
 
 /**
  * @summary List Connections owned by a Resource
  */
 export const listResourceConnections = async (tenantId: string,
-    resourceId: string, options?: RequestInit): Promise<listResourceConnectionsResponse> => {
+    resourceId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listResourceConnectionsResponse> => {
 
-  const res = await fetch(getListResourceConnectionsUrl(tenantId,resourceId),
+  return managementApiFetch<listResourceConnectionsResponse>(getListResourceConnectionsUrl(tenantId,resourceId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listResourceConnectionsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listResourceConnectionsResponse
-}
+);}
 
 
 
@@ -33497,7 +37214,7 @@ export const getCreateResourceConnectionUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}/connections`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/connections`
 }
 
 /**
@@ -33505,29 +37222,30 @@ export const getCreateResourceConnectionUrl = (tenantId: string,
  */
 export const createResourceConnection = async (tenantId: string,
     resourceId: string,
-    createResourceConnectionBody: CreateResourceConnectionBody, options?: RequestInit): Promise<createResourceConnectionResponse> => {
+    createResourceConnectionBody: CreateResourceConnectionBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<createResourceConnectionResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getCreateResourceConnectionUrl(tenantId,resourceId),
+return managementApiFetch<createResourceConnectionResponse>(getCreateResourceConnectionUrl(tenantId,resourceId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(createResourceConnectionBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: createResourceConnectionResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as createResourceConnectionResponse
-}
+);}
 
 
 
@@ -33550,7 +37268,7 @@ export const getUpdateResourceConnectionUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}/connections/${connectionId}`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/connections/${encodeURIComponent(String(connectionId))}`
 }
 
 /**
@@ -33559,29 +37277,30 @@ export const getUpdateResourceConnectionUrl = (tenantId: string,
 export const updateResourceConnection = async (tenantId: string,
     resourceId: string,
     connectionId: string,
-    updateResourceConnectionBody: UpdateResourceConnectionBody, options?: RequestInit): Promise<updateResourceConnectionResponse> => {
+    updateResourceConnectionBody: UpdateResourceConnectionBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<updateResourceConnectionResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getUpdateResourceConnectionUrl(tenantId,resourceId,connectionId),
+return managementApiFetch<updateResourceConnectionResponse>(getUpdateResourceConnectionUrl(tenantId,resourceId,connectionId),
   {
     ...options,
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(updateResourceConnectionBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: updateResourceConnectionResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as updateResourceConnectionResponse
-}
+);}
 
 
 
@@ -33604,7 +37323,7 @@ export const getDeleteResourceConnectionUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}/connections/${connectionId}`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/connections/${encodeURIComponent(String(connectionId))}`
 }
 
 /**
@@ -33612,23 +37331,16 @@ export const getDeleteResourceConnectionUrl = (tenantId: string,
  */
 export const deleteResourceConnection = async (tenantId: string,
     resourceId: string,
-    connectionId: string, options?: RequestInit): Promise<deleteResourceConnectionResponse> => {
+    connectionId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<deleteResourceConnectionResponse> => {
 
-  const res = await fetch(getDeleteResourceConnectionUrl(tenantId,resourceId,connectionId),
+  return managementApiFetch<deleteResourceConnectionResponse>(getDeleteResourceConnectionUrl(tenantId,resourceId,connectionId),
   {
     ...options,
     method: 'DELETE'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: deleteResourceConnectionResponse['data'] = body ? JSON.parse(body) : undefined
-  return { data, status: res.status, headers: res.headers } as deleteResourceConnectionResponse
-}
+);}
 
 
 
@@ -33651,7 +37363,7 @@ export const getUpdateResourceConnectionCertificateUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}/connections/${connectionId}/certificate`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/connections/${encodeURIComponent(String(connectionId))}/certificate`
 }
 
 /**
@@ -33660,29 +37372,30 @@ export const getUpdateResourceConnectionCertificateUrl = (tenantId: string,
 export const updateResourceConnectionCertificate = async (tenantId: string,
     resourceId: string,
     connectionId: string,
-    updateResourceConnectionCertificateBody: UpdateResourceConnectionCertificateBody, options?: RequestInit): Promise<updateResourceConnectionCertificateResponse> => {
+    updateResourceConnectionCertificateBody: UpdateResourceConnectionCertificateBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<updateResourceConnectionCertificateResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getUpdateResourceConnectionCertificateUrl(tenantId,resourceId,connectionId),
+return managementApiFetch<updateResourceConnectionCertificateResponse>(getUpdateResourceConnectionCertificateUrl(tenantId,resourceId,connectionId),
   {
     ...options,
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(updateResourceConnectionCertificateBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: updateResourceConnectionCertificateResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as updateResourceConnectionCertificateResponse
-}
+);}
 
 
 
@@ -33705,7 +37418,7 @@ export const getTestResourceConnectionUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}/connections/${connectionId}/test`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/connections/${encodeURIComponent(String(connectionId))}/test`
 }
 
 /**
@@ -33713,23 +37426,16 @@ export const getTestResourceConnectionUrl = (tenantId: string,
  */
 export const testResourceConnection = async (tenantId: string,
     resourceId: string,
-    connectionId: string, options?: RequestInit): Promise<testResourceConnectionResponse> => {
+    connectionId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<testResourceConnectionResponse> => {
 
-  const res = await fetch(getTestResourceConnectionUrl(tenantId,resourceId,connectionId),
+  return managementApiFetch<testResourceConnectionResponse>(getTestResourceConnectionUrl(tenantId,resourceId,connectionId),
   {
     ...options,
     method: 'POST'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: testResourceConnectionResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as testResourceConnectionResponse
-}
+);}
 
 
 
@@ -33752,7 +37458,7 @@ export const getVerifyResourceConnectionUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}/connections/${connectionId}/verify`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/connections/${encodeURIComponent(String(connectionId))}/verify`
 }
 
 /**
@@ -33760,23 +37466,16 @@ export const getVerifyResourceConnectionUrl = (tenantId: string,
  */
 export const verifyResourceConnection = async (tenantId: string,
     resourceId: string,
-    connectionId: string, options?: RequestInit): Promise<verifyResourceConnectionResponse> => {
+    connectionId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<verifyResourceConnectionResponse> => {
 
-  const res = await fetch(getVerifyResourceConnectionUrl(tenantId,resourceId,connectionId),
+  return managementApiFetch<verifyResourceConnectionResponse>(getVerifyResourceConnectionUrl(tenantId,resourceId,connectionId),
   {
     ...options,
     method: 'POST'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: verifyResourceConnectionResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as verifyResourceConnectionResponse
-}
+);}
 
 
 
@@ -33799,7 +37498,7 @@ export const getUpdateConnectionMcpRoutingUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}/connections/${connectionId}/mcp-routing`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/connections/${encodeURIComponent(String(connectionId))}/mcp-routing`
 }
 
 /**
@@ -33808,29 +37507,30 @@ export const getUpdateConnectionMcpRoutingUrl = (tenantId: string,
 export const updateConnectionMcpRouting = async (tenantId: string,
     resourceId: string,
     connectionId: string,
-    updateConnectionMcpRoutingBody: UpdateConnectionMcpRoutingBody, options?: RequestInit): Promise<updateConnectionMcpRoutingResponse> => {
+    updateConnectionMcpRoutingBody: UpdateConnectionMcpRoutingBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<updateConnectionMcpRoutingResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getUpdateConnectionMcpRoutingUrl(tenantId,resourceId,connectionId),
+return managementApiFetch<updateConnectionMcpRoutingResponse>(getUpdateConnectionMcpRoutingUrl(tenantId,resourceId,connectionId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(updateConnectionMcpRoutingBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: updateConnectionMcpRoutingResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as updateConnectionMcpRoutingResponse
-}
+);}
 
 
 
@@ -33853,7 +37553,7 @@ export const getTransitionResourceConnectionLifecycleUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}/connections/${connectionId}/lifecycle`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/connections/${encodeURIComponent(String(connectionId))}/lifecycle`
 }
 
 /**
@@ -33862,29 +37562,30 @@ export const getTransitionResourceConnectionLifecycleUrl = (tenantId: string,
 export const transitionResourceConnectionLifecycle = async (tenantId: string,
     resourceId: string,
     connectionId: string,
-    transitionResourceConnectionLifecycleBody: TransitionResourceConnectionLifecycleBody, options?: RequestInit): Promise<transitionResourceConnectionLifecycleResponse> => {
+    transitionResourceConnectionLifecycleBody: TransitionResourceConnectionLifecycleBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<transitionResourceConnectionLifecycleResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getTransitionResourceConnectionLifecycleUrl(tenantId,resourceId,connectionId),
+return managementApiFetch<transitionResourceConnectionLifecycleResponse>(getTransitionResourceConnectionLifecycleUrl(tenantId,resourceId,connectionId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(transitionResourceConnectionLifecycleBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: transitionResourceConnectionLifecycleResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as transitionResourceConnectionLifecycleResponse
-}
+);}
 
 
 
@@ -33907,7 +37608,7 @@ export const getObserveResourceConnectionHealthUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}/connections/${connectionId}/health-observations`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/connections/${encodeURIComponent(String(connectionId))}/health-observations`
 }
 
 /**
@@ -33916,29 +37617,30 @@ export const getObserveResourceConnectionHealthUrl = (tenantId: string,
 export const observeResourceConnectionHealth = async (tenantId: string,
     resourceId: string,
     connectionId: string,
-    observeResourceConnectionHealthBody: ObserveResourceConnectionHealthBody, options?: RequestInit): Promise<observeResourceConnectionHealthResponse> => {
+    observeResourceConnectionHealthBody: ObserveResourceConnectionHealthBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<observeResourceConnectionHealthResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getObserveResourceConnectionHealthUrl(tenantId,resourceId,connectionId),
+return managementApiFetch<observeResourceConnectionHealthResponse>(getObserveResourceConnectionHealthUrl(tenantId,resourceId,connectionId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(observeResourceConnectionHealthBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: observeResourceConnectionHealthResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as observeResourceConnectionHealthResponse
-}
+);}
 
 
 
@@ -33961,7 +37663,7 @@ export const getRequestMcpDiscoveryUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}/connections/${connectionId}/mcp-discovery`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/connections/${encodeURIComponent(String(connectionId))}/mcp-discovery`
 }
 
 /**
@@ -33970,29 +37672,30 @@ export const getRequestMcpDiscoveryUrl = (tenantId: string,
 export const requestMcpDiscovery = async (tenantId: string,
     resourceId: string,
     connectionId: string,
-    requestMcpDiscoveryBody: RequestMcpDiscoveryBody, options?: RequestInit): Promise<requestMcpDiscoveryResponse> => {
+    requestMcpDiscoveryBody: RequestMcpDiscoveryBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<requestMcpDiscoveryResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getRequestMcpDiscoveryUrl(tenantId,resourceId,connectionId),
+return managementApiFetch<requestMcpDiscoveryResponse>(getRequestMcpDiscoveryUrl(tenantId,resourceId,connectionId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(requestMcpDiscoveryBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: requestMcpDiscoveryResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as requestMcpDiscoveryResponse
-}
+);}
 
 
 
@@ -34015,7 +37718,7 @@ export const getGetLatestMcpDiscoveryUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}/connections/${connectionId}/mcp-discovery/latest`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/connections/${encodeURIComponent(String(connectionId))}/mcp-discovery/latest`
 }
 
 /**
@@ -34023,23 +37726,16 @@ export const getGetLatestMcpDiscoveryUrl = (tenantId: string,
  */
 export const getLatestMcpDiscovery = async (tenantId: string,
     resourceId: string,
-    connectionId: string, options?: RequestInit): Promise<getLatestMcpDiscoveryResponse> => {
+    connectionId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getLatestMcpDiscoveryResponse> => {
 
-  const res = await fetch(getGetLatestMcpDiscoveryUrl(tenantId,resourceId,connectionId),
+  return managementApiFetch<getLatestMcpDiscoveryResponse>(getGetLatestMcpDiscoveryUrl(tenantId,resourceId,connectionId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getLatestMcpDiscoveryResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getLatestMcpDiscoveryResponse
-}
+);}
 
 
 
@@ -34063,7 +37759,7 @@ export const getDecideMcpDiscoveryCandidateUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}/connections/${connectionId}/mcp-discovery/candidates/${candidateId}/decision`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/connections/${encodeURIComponent(String(connectionId))}/mcp-discovery/candidates/${encodeURIComponent(String(candidateId))}/decision`
 }
 
 /**
@@ -34073,29 +37769,30 @@ export const decideMcpDiscoveryCandidate = async (tenantId: string,
     resourceId: string,
     connectionId: string,
     candidateId: string,
-    decideMcpDiscoveryCandidateBody: DecideMcpDiscoveryCandidateBody, options?: RequestInit): Promise<decideMcpDiscoveryCandidateResponse> => {
+    decideMcpDiscoveryCandidateBody: DecideMcpDiscoveryCandidateBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<decideMcpDiscoveryCandidateResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getDecideMcpDiscoveryCandidateUrl(tenantId,resourceId,connectionId,candidateId),
+return managementApiFetch<decideMcpDiscoveryCandidateResponse>(getDecideMcpDiscoveryCandidateUrl(tenantId,resourceId,connectionId,candidateId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(decideMcpDiscoveryCandidateBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: decideMcpDiscoveryCandidateResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as decideMcpDiscoveryCandidateResponse
-}
+);}
 
 
 
@@ -34117,30 +37814,23 @@ export const getClaimMcpDiscoveryOperationUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/runtime-control/GATEWAY/${runtimeId}/operations/mcp-discovery/next`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/runtime-control/GATEWAY/${encodeURIComponent(String(runtimeId))}/operations/mcp-discovery/next`
 }
 
 /**
  * @summary Claim the next MCP discovery operation for a Gateway Runtime group
  */
 export const claimMcpDiscoveryOperation = async (tenantId: string,
-    runtimeId: string, options?: RequestInit): Promise<claimMcpDiscoveryOperationResponse> => {
+    runtimeId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<claimMcpDiscoveryOperationResponse> => {
 
-  const res = await fetch(getClaimMcpDiscoveryOperationUrl(tenantId,runtimeId),
+  return managementApiFetch<claimMcpDiscoveryOperationResponse>(getClaimMcpDiscoveryOperationUrl(tenantId,runtimeId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: claimMcpDiscoveryOperationResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as claimMcpDiscoveryOperationResponse
-}
+);}
 
 
 
@@ -34163,7 +37853,7 @@ export const getCompleteMcpDiscoveryOperationUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/runtime-control/GATEWAY/${runtimeId}/operations/mcp-discovery/${operationId}/result`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/runtime-control/GATEWAY/${encodeURIComponent(String(runtimeId))}/operations/mcp-discovery/${encodeURIComponent(String(operationId))}/result`
 }
 
 /**
@@ -34172,29 +37862,30 @@ export const getCompleteMcpDiscoveryOperationUrl = (tenantId: string,
 export const completeMcpDiscoveryOperation = async (tenantId: string,
     runtimeId: string,
     operationId: string,
-    completeMcpDiscoveryOperationBody: CompleteMcpDiscoveryOperationBody, options?: RequestInit): Promise<completeMcpDiscoveryOperationResponse> => {
+    completeMcpDiscoveryOperationBody: CompleteMcpDiscoveryOperationBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<completeMcpDiscoveryOperationResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getCompleteMcpDiscoveryOperationUrl(tenantId,runtimeId,operationId),
+return managementApiFetch<completeMcpDiscoveryOperationResponse>(getCompleteMcpDiscoveryOperationUrl(tenantId,runtimeId,operationId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(completeMcpDiscoveryOperationBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: completeMcpDiscoveryOperationResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as completeMcpDiscoveryOperationResponse
-}
+);}
 
 
 
@@ -34217,7 +37908,7 @@ export const getResolveMcpDiscoveryCredentialUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/runtime-control/GATEWAY/${runtimeId}/operations/mcp-discovery/${operationId}/credential`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/runtime-control/GATEWAY/${encodeURIComponent(String(runtimeId))}/operations/mcp-discovery/${encodeURIComponent(String(operationId))}/credential`
 }
 
 /**
@@ -34225,23 +37916,16 @@ export const getResolveMcpDiscoveryCredentialUrl = (tenantId: string,
  */
 export const resolveMcpDiscoveryCredential = async (tenantId: string,
     runtimeId: string,
-    operationId: string, options?: RequestInit): Promise<resolveMcpDiscoveryCredentialResponse> => {
+    operationId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<resolveMcpDiscoveryCredentialResponse> => {
 
-  const res = await fetch(getResolveMcpDiscoveryCredentialUrl(tenantId,runtimeId,operationId),
+  return managementApiFetch<resolveMcpDiscoveryCredentialResponse>(getResolveMcpDiscoveryCredentialUrl(tenantId,runtimeId,operationId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: resolveMcpDiscoveryCredentialResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as resolveMcpDiscoveryCredentialResponse
-}
+);}
 
 
 
@@ -34264,7 +37948,7 @@ export const getStartMcpOAuthAuthorizationUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}/connections/${connectionId}/mcp-oauth/authorize`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/connections/${encodeURIComponent(String(connectionId))}/mcp-oauth/authorize`
 }
 
 /**
@@ -34272,23 +37956,16 @@ export const getStartMcpOAuthAuthorizationUrl = (tenantId: string,
  */
 export const startMcpOAuthAuthorization = async (tenantId: string,
     resourceId: string,
-    connectionId: string, options?: RequestInit): Promise<startMcpOAuthAuthorizationResponse> => {
+    connectionId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<startMcpOAuthAuthorizationResponse> => {
 
-  const res = await fetch(getStartMcpOAuthAuthorizationUrl(tenantId,resourceId,connectionId),
+  return managementApiFetch<startMcpOAuthAuthorizationResponse>(getStartMcpOAuthAuthorizationUrl(tenantId,resourceId,connectionId),
   {
     ...options,
     method: 'POST'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: startMcpOAuthAuthorizationResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as startMcpOAuthAuthorizationResponse
-}
+);}
 
 
 
@@ -34311,7 +37988,7 @@ export const getGetMcpOAuthBindingUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}/connections/${connectionId}/mcp-oauth`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/connections/${encodeURIComponent(String(connectionId))}/mcp-oauth`
 }
 
 /**
@@ -34319,23 +37996,16 @@ export const getGetMcpOAuthBindingUrl = (tenantId: string,
  */
 export const getMcpOAuthBinding = async (tenantId: string,
     resourceId: string,
-    connectionId: string, options?: RequestInit): Promise<getMcpOAuthBindingResponse> => {
+    connectionId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getMcpOAuthBindingResponse> => {
 
-  const res = await fetch(getGetMcpOAuthBindingUrl(tenantId,resourceId,connectionId),
+  return managementApiFetch<getMcpOAuthBindingResponse>(getGetMcpOAuthBindingUrl(tenantId,resourceId,connectionId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getMcpOAuthBindingResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getMcpOAuthBindingResponse
-}
+);}
 
 
 
@@ -34358,7 +38028,7 @@ export const getDisconnectMcpOAuthBindingUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}/connections/${connectionId}/mcp-oauth`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/connections/${encodeURIComponent(String(connectionId))}/mcp-oauth`
 }
 
 /**
@@ -34366,23 +38036,16 @@ export const getDisconnectMcpOAuthBindingUrl = (tenantId: string,
  */
 export const disconnectMcpOAuthBinding = async (tenantId: string,
     resourceId: string,
-    connectionId: string, options?: RequestInit): Promise<disconnectMcpOAuthBindingResponse> => {
+    connectionId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<disconnectMcpOAuthBindingResponse> => {
 
-  const res = await fetch(getDisconnectMcpOAuthBindingUrl(tenantId,resourceId,connectionId),
+  return managementApiFetch<disconnectMcpOAuthBindingResponse>(getDisconnectMcpOAuthBindingUrl(tenantId,resourceId,connectionId),
   {
     ...options,
     method: 'DELETE'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: disconnectMcpOAuthBindingResponse['data'] = body ? JSON.parse(body) : undefined
-  return { data, status: res.status, headers: res.headers } as disconnectMcpOAuthBindingResponse
-}
+);}
 
 
 
@@ -34412,7 +38075,7 @@ export const getResolveMcpOAuthRequestHeadersUrl = (tenantId: string,
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/v1/tenants/${tenantId}/runtime-control/GATEWAY/${runtimeId}/mcp-oauth/headers?${stringifiedParams}` : `/v1/tenants/${tenantId}/runtime-control/GATEWAY/${runtimeId}/mcp-oauth/headers`
+  return stringifiedParams.length > 0 ? `/v1/tenants/${encodeURIComponent(String(tenantId))}/runtime-control/GATEWAY/${encodeURIComponent(String(runtimeId))}/mcp-oauth/headers?${stringifiedParams}` : `/v1/tenants/${encodeURIComponent(String(tenantId))}/runtime-control/GATEWAY/${encodeURIComponent(String(runtimeId))}/mcp-oauth/headers`
 }
 
 /**
@@ -34420,23 +38083,16 @@ export const getResolveMcpOAuthRequestHeadersUrl = (tenantId: string,
  */
 export const resolveMcpOAuthRequestHeaders = async (tenantId: string,
     runtimeId: string,
-    params: ResolveMcpOAuthRequestHeadersParams, options?: RequestInit): Promise<resolveMcpOAuthRequestHeadersResponse> => {
+    params: ResolveMcpOAuthRequestHeadersParams, options?: Parameters<typeof managementApiFetch>[1]): Promise<resolveMcpOAuthRequestHeadersResponse> => {
 
-  const res = await fetch(getResolveMcpOAuthRequestHeadersUrl(tenantId,runtimeId,params),
+  return managementApiFetch<resolveMcpOAuthRequestHeadersResponse>(getResolveMcpOAuthRequestHeadersUrl(tenantId,runtimeId,params),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: resolveMcpOAuthRequestHeadersResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as resolveMcpOAuthRequestHeadersResponse
-}
+);}
 
 
 
@@ -34470,23 +38126,16 @@ export const getCompleteMcpOAuthAuthorizationUrl = (params: CompleteMcpOAuthAuth
 /**
  * @summary Complete an MCP OAuth authorization code flow
  */
-export const completeMcpOAuthAuthorization = async (params: CompleteMcpOAuthAuthorizationParams, options?: RequestInit): Promise<completeMcpOAuthAuthorizationResponse> => {
+export const completeMcpOAuthAuthorization = async (params: CompleteMcpOAuthAuthorizationParams, options?: Parameters<typeof managementApiFetch>[1]): Promise<completeMcpOAuthAuthorizationResponse> => {
 
-  const res = await fetch(getCompleteMcpOAuthAuthorizationUrl(params),
+  return managementApiFetch<completeMcpOAuthAuthorizationResponse>(getCompleteMcpOAuthAuthorizationUrl(params),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: completeMcpOAuthAuthorizationResponse['data'] = body ? JSON.parse(body) : undefined
-  return { data, status: res.status, headers: res.headers } as completeMcpOAuthAuthorizationResponse
-}
+);}
 
 
 
@@ -34508,27 +38157,20 @@ export const getGetV1TenantsTenantIdMeResourceConnectionsResourceIdUrl = (tenant
 
 
 
-  return `/v1/tenants/${tenantId}/me/resource-connections/${resourceId}`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/me/resource-connections/${encodeURIComponent(String(resourceId))}`
 }
 
 export const getV1TenantsTenantIdMeResourceConnectionsResourceId = async (tenantId: string,
-    resourceId: string, options?: RequestInit): Promise<getV1TenantsTenantIdMeResourceConnectionsResourceIdResponse> => {
+    resourceId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getV1TenantsTenantIdMeResourceConnectionsResourceIdResponse> => {
 
-  const res = await fetch(getGetV1TenantsTenantIdMeResourceConnectionsResourceIdUrl(tenantId,resourceId),
+  return managementApiFetch<getV1TenantsTenantIdMeResourceConnectionsResourceIdResponse>(getGetV1TenantsTenantIdMeResourceConnectionsResourceIdUrl(tenantId,resourceId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getV1TenantsTenantIdMeResourceConnectionsResourceIdResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getV1TenantsTenantIdMeResourceConnectionsResourceIdResponse
-}
+);}
 
 
 
@@ -34551,35 +38193,36 @@ export const getPostV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionId
 
 
 
-  return `/v1/tenants/${tenantId}/me/resource-connections/${resourceId}/${connectionId}/password`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/me/resource-connections/${encodeURIComponent(String(resourceId))}/${encodeURIComponent(String(connectionId))}/password`
 }
 
 export const postV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdPassword = async (tenantId: string,
     resourceId: string,
     connectionId: string,
-    postV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdPasswordBody: PostV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdPasswordBody, options?: RequestInit): Promise<postV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdPasswordResponse> => {
+    postV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdPasswordBody: PostV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdPasswordBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<postV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdPasswordResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getPostV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdPasswordUrl(tenantId,resourceId,connectionId),
+return managementApiFetch<postV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdPasswordResponse>(getPostV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdPasswordUrl(tenantId,resourceId,connectionId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(postV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdPasswordBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: postV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdPasswordResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as postV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdPasswordResponse
-}
+);}
 
 
 
@@ -34602,28 +38245,21 @@ export const getPostV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionId
 
 
 
-  return `/v1/tenants/${tenantId}/me/resource-connections/${resourceId}/${connectionId}/authorize`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/me/resource-connections/${encodeURIComponent(String(resourceId))}/${encodeURIComponent(String(connectionId))}/authorize`
 }
 
 export const postV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdAuthorize = async (tenantId: string,
     resourceId: string,
-    connectionId: string, options?: RequestInit): Promise<postV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdAuthorizeResponse> => {
+    connectionId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<postV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdAuthorizeResponse> => {
 
-  const res = await fetch(getPostV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdAuthorizeUrl(tenantId,resourceId,connectionId),
+  return managementApiFetch<postV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdAuthorizeResponse>(getPostV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdAuthorizeUrl(tenantId,resourceId,connectionId),
   {
     ...options,
     method: 'POST'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: postV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdAuthorizeResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as postV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdAuthorizeResponse
-}
+);}
 
 
 
@@ -34646,28 +38282,21 @@ export const getDeleteV1TenantsTenantIdMeResourceConnectionsResourceIdConnection
 
 
 
-  return `/v1/tenants/${tenantId}/me/resource-connections/${resourceId}/${connectionId}`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/me/resource-connections/${encodeURIComponent(String(resourceId))}/${encodeURIComponent(String(connectionId))}`
 }
 
 export const deleteV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionId = async (tenantId: string,
     resourceId: string,
-    connectionId: string, options?: RequestInit): Promise<deleteV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdResponse> => {
+    connectionId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<deleteV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdResponse> => {
 
-  const res = await fetch(getDeleteV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdUrl(tenantId,resourceId,connectionId),
+  return managementApiFetch<deleteV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdResponse>(getDeleteV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdUrl(tenantId,resourceId,connectionId),
   {
     ...options,
     method: 'DELETE'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: deleteV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdResponse['data'] = body ? JSON.parse(body) : undefined
-  return { data, status: res.status, headers: res.headers } as deleteV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdResponse
-}
+);}
 
 
 
@@ -34688,29 +38317,22 @@ export const getListProviderProfilesUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/providers/profiles`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/providers/profiles`
 }
 
 /**
  * @summary List AI provider profiles
  */
-export const listProviderProfiles = async (tenantId: string, options?: RequestInit): Promise<listProviderProfilesResponse> => {
+export const listProviderProfiles = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listProviderProfilesResponse> => {
 
-  const res = await fetch(getListProviderProfilesUrl(tenantId),
+  return managementApiFetch<listProviderProfilesResponse>(getListProviderProfilesUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listProviderProfilesResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listProviderProfilesResponse
-}
+);}
 
 
 
@@ -34731,36 +38353,37 @@ export const getCreateProviderProfileUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/providers/profiles`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/providers/profiles`
 }
 
 /**
  * @summary Create an AI provider profile without storing a secret
  */
 export const createProviderProfile = async (tenantId: string,
-    createProviderProfileBody: CreateProviderProfileBody, options?: RequestInit): Promise<createProviderProfileResponse> => {
+    createProviderProfileBody: CreateProviderProfileBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<createProviderProfileResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getCreateProviderProfileUrl(tenantId),
+return managementApiFetch<createProviderProfileResponse>(getCreateProviderProfileUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(createProviderProfileBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: createProviderProfileResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as createProviderProfileResponse
-}
+);}
 
 
 
@@ -34781,26 +38404,19 @@ export const getListProviderCredentialProfilesUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/provider-credential-profiles`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/provider-credential-profiles`
 }
 
-export const listProviderCredentialProfiles = async (tenantId: string, options?: RequestInit): Promise<listProviderCredentialProfilesResponse> => {
+export const listProviderCredentialProfiles = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listProviderCredentialProfilesResponse> => {
 
-  const res = await fetch(getListProviderCredentialProfilesUrl(tenantId),
+  return managementApiFetch<listProviderCredentialProfilesResponse>(getListProviderCredentialProfilesUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listProviderCredentialProfilesResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listProviderCredentialProfilesResponse
-}
+);}
 
 
 
@@ -34821,33 +38437,34 @@ export const getCreateProviderCredentialProfileUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/provider-credential-profiles`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/provider-credential-profiles`
 }
 
 export const createProviderCredentialProfile = async (tenantId: string,
-    createProviderCredentialProfileBody: CreateProviderCredentialProfileBody, options?: RequestInit): Promise<createProviderCredentialProfileResponse> => {
+    createProviderCredentialProfileBody: CreateProviderCredentialProfileBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<createProviderCredentialProfileResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getCreateProviderCredentialProfileUrl(tenantId),
+return managementApiFetch<createProviderCredentialProfileResponse>(getCreateProviderCredentialProfileUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(createProviderCredentialProfileBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: createProviderCredentialProfileResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as createProviderCredentialProfileResponse
-}
+);}
 
 
 
@@ -34869,27 +38486,20 @@ export const getGetProviderCredentialProfileUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/provider-credential-profiles/${profileId}`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/provider-credential-profiles/${encodeURIComponent(String(profileId))}`
 }
 
 export const getProviderCredentialProfile = async (tenantId: string,
-    profileId: string, options?: RequestInit): Promise<getProviderCredentialProfileResponse> => {
+    profileId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getProviderCredentialProfileResponse> => {
 
-  const res = await fetch(getGetProviderCredentialProfileUrl(tenantId,profileId),
+  return managementApiFetch<getProviderCredentialProfileResponse>(getGetProviderCredentialProfileUrl(tenantId,profileId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getProviderCredentialProfileResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getProviderCredentialProfileResponse
-}
+);}
 
 
 
@@ -34911,34 +38521,35 @@ export const getReviseProviderCredentialProfileUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/provider-credential-profiles/${profileId}/revisions`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/provider-credential-profiles/${encodeURIComponent(String(profileId))}/revisions`
 }
 
 export const reviseProviderCredentialProfile = async (tenantId: string,
     profileId: string,
-    reviseProviderCredentialProfileBody: ReviseProviderCredentialProfileBody, options?: RequestInit): Promise<reviseProviderCredentialProfileResponse> => {
+    reviseProviderCredentialProfileBody: ReviseProviderCredentialProfileBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<reviseProviderCredentialProfileResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getReviseProviderCredentialProfileUrl(tenantId,profileId),
+return managementApiFetch<reviseProviderCredentialProfileResponse>(getReviseProviderCredentialProfileUrl(tenantId,profileId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(reviseProviderCredentialProfileBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: reviseProviderCredentialProfileResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as reviseProviderCredentialProfileResponse
-}
+);}
 
 
 
@@ -34967,30 +38578,23 @@ export const getListPublicModelsUrl = (tenantId: string,
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/v1/tenants/${tenantId}/models?${stringifiedParams}` : `/v1/tenants/${tenantId}/models`
+  return stringifiedParams.length > 0 ? `/v1/tenants/${encodeURIComponent(String(tenantId))}/models?${stringifiedParams}` : `/v1/tenants/${encodeURIComponent(String(tenantId))}/models`
 }
 
 /**
  * @summary List public AI models
  */
 export const listPublicModels = async (tenantId: string,
-    params?: ListPublicModelsParams, options?: RequestInit): Promise<listPublicModelsResponse> => {
+    params?: ListPublicModelsParams, options?: Parameters<typeof managementApiFetch>[1]): Promise<listPublicModelsResponse> => {
 
-  const res = await fetch(getListPublicModelsUrl(tenantId,params),
+  return managementApiFetch<listPublicModelsResponse>(getListPublicModelsUrl(tenantId,params),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listPublicModelsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listPublicModelsResponse
-}
+);}
 
 
 
@@ -35011,29 +38615,22 @@ export const getListMyPublicModelsUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/me/models`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/me/models`
 }
 
 /**
  * @summary List public AI models available to the authenticated principal
  */
-export const listMyPublicModels = async (tenantId: string, options?: RequestInit): Promise<listMyPublicModelsResponse> => {
+export const listMyPublicModels = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listMyPublicModelsResponse> => {
 
-  const res = await fetch(getListMyPublicModelsUrl(tenantId),
+  return managementApiFetch<listMyPublicModelsResponse>(getListMyPublicModelsUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listMyPublicModelsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listMyPublicModelsResponse
-}
+);}
 
 
 
@@ -35056,7 +38653,7 @@ export const getAddConnectionModelMappingUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}/models/${modelId}/mappings`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/models/${encodeURIComponent(String(modelId))}/mappings`
 }
 
 /**
@@ -35065,29 +38662,30 @@ export const getAddConnectionModelMappingUrl = (tenantId: string,
 export const addConnectionModelMapping = async (tenantId: string,
     resourceId: string,
     modelId: string,
-    addConnectionModelMappingBody: AddConnectionModelMappingBody, options?: RequestInit): Promise<addConnectionModelMappingResponse> => {
+    addConnectionModelMappingBody: AddConnectionModelMappingBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<addConnectionModelMappingResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getAddConnectionModelMappingUrl(tenantId,resourceId,modelId),
+return managementApiFetch<addConnectionModelMappingResponse>(getAddConnectionModelMappingUrl(tenantId,resourceId,modelId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(addConnectionModelMappingBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: addConnectionModelMappingResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as addConnectionModelMappingResponse
-}
+);}
 
 
 
@@ -35109,7 +38707,7 @@ export const getCreatePublicModelUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}/models`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/models`
 }
 
 /**
@@ -35117,29 +38715,30 @@ export const getCreatePublicModelUrl = (tenantId: string,
  */
 export const createPublicModel = async (tenantId: string,
     resourceId: string,
-    createPublicModelBody: CreatePublicModelBody, options?: RequestInit): Promise<createPublicModelResponse> => {
+    createPublicModelBody: CreatePublicModelBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<createPublicModelResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getCreatePublicModelUrl(tenantId,resourceId),
+return managementApiFetch<createPublicModelResponse>(getCreatePublicModelUrl(tenantId,resourceId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(createPublicModelBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: createPublicModelResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as createPublicModelResponse
-}
+);}
 
 
 
@@ -35169,7 +38768,7 @@ export const getListConnectionModelMappingsUrl = (tenantId: string,
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/v1/tenants/${tenantId}/resources/${resourceId}/model-mappings?${stringifiedParams}` : `/v1/tenants/${tenantId}/resources/${resourceId}/model-mappings`
+  return stringifiedParams.length > 0 ? `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/model-mappings?${stringifiedParams}` : `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/model-mappings`
 }
 
 /**
@@ -35177,23 +38776,16 @@ export const getListConnectionModelMappingsUrl = (tenantId: string,
  */
 export const listConnectionModelMappings = async (tenantId: string,
     resourceId: string,
-    params?: ListConnectionModelMappingsParams, options?: RequestInit): Promise<listConnectionModelMappingsResponse> => {
+    params?: ListConnectionModelMappingsParams, options?: Parameters<typeof managementApiFetch>[1]): Promise<listConnectionModelMappingsResponse> => {
 
-  const res = await fetch(getListConnectionModelMappingsUrl(tenantId,resourceId,params),
+  return managementApiFetch<listConnectionModelMappingsResponse>(getListConnectionModelMappingsUrl(tenantId,resourceId,params),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listConnectionModelMappingsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listConnectionModelMappingsResponse
-}
+);}
 
 
 
@@ -35216,7 +38808,7 @@ export const getGetLatestModelRoutingPolicyUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}/capabilities/${capabilityId}/model-routing-policy`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/capabilities/${encodeURIComponent(String(capabilityId))}/model-routing-policy`
 }
 
 /**
@@ -35224,23 +38816,16 @@ export const getGetLatestModelRoutingPolicyUrl = (tenantId: string,
  */
 export const getLatestModelRoutingPolicy = async (tenantId: string,
     resourceId: string,
-    capabilityId: string, options?: RequestInit): Promise<getLatestModelRoutingPolicyResponse> => {
+    capabilityId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getLatestModelRoutingPolicyResponse> => {
 
-  const res = await fetch(getGetLatestModelRoutingPolicyUrl(tenantId,resourceId,capabilityId),
+  return managementApiFetch<getLatestModelRoutingPolicyResponse>(getGetLatestModelRoutingPolicyUrl(tenantId,resourceId,capabilityId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getLatestModelRoutingPolicyResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getLatestModelRoutingPolicyResponse
-}
+);}
 
 
 
@@ -35263,7 +38848,7 @@ export const getSaveModelRoutingPolicyRevisionUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}/capabilities/${capabilityId}/model-routing-policy`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/capabilities/${encodeURIComponent(String(capabilityId))}/model-routing-policy`
 }
 
 /**
@@ -35272,29 +38857,30 @@ export const getSaveModelRoutingPolicyRevisionUrl = (tenantId: string,
 export const saveModelRoutingPolicyRevision = async (tenantId: string,
     resourceId: string,
     capabilityId: string,
-    saveModelRoutingPolicyRevisionBody: SaveModelRoutingPolicyRevisionBody, options?: RequestInit): Promise<saveModelRoutingPolicyRevisionResponse> => {
+    saveModelRoutingPolicyRevisionBody: SaveModelRoutingPolicyRevisionBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<saveModelRoutingPolicyRevisionResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getSaveModelRoutingPolicyRevisionUrl(tenantId,resourceId,capabilityId),
+return managementApiFetch<saveModelRoutingPolicyRevisionResponse>(getSaveModelRoutingPolicyRevisionUrl(tenantId,resourceId,capabilityId),
   {
     ...options,
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(saveModelRoutingPolicyRevisionBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: saveModelRoutingPolicyRevisionResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as saveModelRoutingPolicyRevisionResponse
-}
+);}
 
 
 
@@ -35315,36 +38901,37 @@ export const getResolveModelRouteUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/model-routing/resolve`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/model-routing/resolve`
 }
 
 /**
  * @summary Resolve a deterministic or session-scoped model route
  */
 export const resolveModelRoute = async (tenantId: string,
-    resolveModelRouteBody: ResolveModelRouteBody, options?: RequestInit): Promise<resolveModelRouteResponse> => {
+    resolveModelRouteBody: ResolveModelRouteBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<resolveModelRouteResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getResolveModelRouteUrl(tenantId),
+return managementApiFetch<resolveModelRouteResponse>(getResolveModelRouteUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(resolveModelRouteBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: resolveModelRouteResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as resolveModelRouteResponse
-}
+);}
 
 
 
@@ -35365,26 +38952,19 @@ export const getListModelEntitlementsUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/entitlements`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/entitlements`
 }
 
-export const listModelEntitlements = async (tenantId: string, options?: RequestInit): Promise<listModelEntitlementsResponse> => {
+export const listModelEntitlements = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listModelEntitlementsResponse> => {
 
-  const res = await fetch(getListModelEntitlementsUrl(tenantId),
+  return managementApiFetch<listModelEntitlementsResponse>(getListModelEntitlementsUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listModelEntitlementsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listModelEntitlementsResponse
-}
+);}
 
 
 
@@ -35405,33 +38985,34 @@ export const getGrantModelEntitlementUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/entitlements`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/entitlements`
 }
 
 export const grantModelEntitlement = async (tenantId: string,
-    grantModelEntitlementBody: GrantModelEntitlementBody, options?: RequestInit): Promise<grantModelEntitlementResponse> => {
+    grantModelEntitlementBody: GrantModelEntitlementBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<grantModelEntitlementResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getGrantModelEntitlementUrl(tenantId),
+return managementApiFetch<grantModelEntitlementResponse>(getGrantModelEntitlementUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(grantModelEntitlementBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: grantModelEntitlementResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as grantModelEntitlementResponse
-}
+);}
 
 
 
@@ -35452,26 +39033,19 @@ export const getListAgentDelegationsUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/agent-delegations`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/agent-delegations`
 }
 
-export const listAgentDelegations = async (tenantId: string, options?: RequestInit): Promise<listAgentDelegationsResponse> => {
+export const listAgentDelegations = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listAgentDelegationsResponse> => {
 
-  const res = await fetch(getListAgentDelegationsUrl(tenantId),
+  return managementApiFetch<listAgentDelegationsResponse>(getListAgentDelegationsUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listAgentDelegationsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listAgentDelegationsResponse
-}
+);}
 
 
 
@@ -35492,33 +39066,34 @@ export const getCreateAgentDelegationUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/agent-delegations`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/agent-delegations`
 }
 
 export const createAgentDelegation = async (tenantId: string,
-    createAgentDelegationBody: CreateAgentDelegationBody, options?: RequestInit): Promise<createAgentDelegationResponse> => {
+    createAgentDelegationBody: CreateAgentDelegationBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<createAgentDelegationResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getCreateAgentDelegationUrl(tenantId),
+return managementApiFetch<createAgentDelegationResponse>(getCreateAgentDelegationUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(createAgentDelegationBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: createAgentDelegationResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as createAgentDelegationResponse
-}
+);}
 
 
 
@@ -35540,34 +39115,35 @@ export const getRevokeAgentDelegationUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/agent-delegations/${delegationId}/revoke`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/agent-delegations/${encodeURIComponent(String(delegationId))}/revoke`
 }
 
 export const revokeAgentDelegation = async (tenantId: string,
     delegationId: string,
-    revokeAgentDelegationBody: RevokeAgentDelegationBody, options?: RequestInit): Promise<revokeAgentDelegationResponse> => {
+    revokeAgentDelegationBody: RevokeAgentDelegationBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<revokeAgentDelegationResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getRevokeAgentDelegationUrl(tenantId,delegationId),
+return managementApiFetch<revokeAgentDelegationResponse>(getRevokeAgentDelegationUrl(tenantId,delegationId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(revokeAgentDelegationBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: revokeAgentDelegationResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as revokeAgentDelegationResponse
-}
+);}
 
 
 
@@ -35588,26 +39164,19 @@ export const getListExecutionGrantRequestsUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/execution-grant-requests`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/execution-grant-requests`
 }
 
-export const listExecutionGrantRequests = async (tenantId: string, options?: RequestInit): Promise<listExecutionGrantRequestsResponse> => {
+export const listExecutionGrantRequests = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listExecutionGrantRequestsResponse> => {
 
-  const res = await fetch(getListExecutionGrantRequestsUrl(tenantId),
+  return managementApiFetch<listExecutionGrantRequestsResponse>(getListExecutionGrantRequestsUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listExecutionGrantRequestsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listExecutionGrantRequestsResponse
-}
+);}
 
 
 
@@ -35628,33 +39197,34 @@ export const getCreateExecutionGrantRequestUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/execution-grant-requests`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/execution-grant-requests`
 }
 
 export const createExecutionGrantRequest = async (tenantId: string,
-    createExecutionGrantRequestBody: CreateExecutionGrantRequestBody, options?: RequestInit): Promise<createExecutionGrantRequestResponse> => {
+    createExecutionGrantRequestBody: CreateExecutionGrantRequestBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<createExecutionGrantRequestResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getCreateExecutionGrantRequestUrl(tenantId),
+return managementApiFetch<createExecutionGrantRequestResponse>(getCreateExecutionGrantRequestUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(createExecutionGrantRequestBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: createExecutionGrantRequestResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as createExecutionGrantRequestResponse
-}
+);}
 
 
 
@@ -35676,34 +39246,35 @@ export const getDecideExecutionGrantRequestUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/execution-grant-requests/${requestId}/decision`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/execution-grant-requests/${encodeURIComponent(String(requestId))}/decision`
 }
 
 export const decideExecutionGrantRequest = async (tenantId: string,
     requestId: string,
-    decideExecutionGrantRequestBody: DecideExecutionGrantRequestBody, options?: RequestInit): Promise<decideExecutionGrantRequestResponse> => {
+    decideExecutionGrantRequestBody: DecideExecutionGrantRequestBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<decideExecutionGrantRequestResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getDecideExecutionGrantRequestUrl(tenantId,requestId),
+return managementApiFetch<decideExecutionGrantRequestResponse>(getDecideExecutionGrantRequestUrl(tenantId,requestId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(decideExecutionGrantRequestBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: decideExecutionGrantRequestResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as decideExecutionGrantRequestResponse
-}
+);}
 
 
 
@@ -35724,33 +39295,115 @@ export const getPreviewUserPermissionsUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/one-policy/permission-preview`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/one-policy/permission-preview`
 }
 
 export const previewUserPermissions = async (tenantId: string,
-    previewUserPermissionsBody: PreviewUserPermissionsBody, options?: RequestInit): Promise<previewUserPermissionsResponse> => {
+    previewUserPermissionsBody: PreviewUserPermissionsBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<previewUserPermissionsResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getPreviewUserPermissionsUrl(tenantId),
+return managementApiFetch<previewUserPermissionsResponse>(getPreviewUserPermissionsUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(previewUserPermissionsBody)
   }
-)
+);}
 
 
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
 
-  const data: previewUserPermissionsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as previewUserPermissionsResponse
+export type getPolicyAuthoringSettingsResponse200 = {
+  data: GetPolicyAuthoringSettings200
+  status: 200
 }
+
+export type getPolicyAuthoringSettingsResponseSuccess = (getPolicyAuthoringSettingsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getPolicyAuthoringSettingsResponse = (getPolicyAuthoringSettingsResponseSuccess)
+
+export const getGetPolicyAuthoringSettingsUrl = (tenantId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/one-policy/authoring-settings`
+}
+
+export const getPolicyAuthoringSettings = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getPolicyAuthoringSettingsResponse> => {
+
+  return managementApiFetch<getPolicyAuthoringSettingsResponse>(getGetPolicyAuthoringSettingsUrl(tenantId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type savePolicyAuthoringSettingsResponse200 = {
+  data: SavePolicyAuthoringSettings200
+  status: 200
+}
+
+export type savePolicyAuthoringSettingsResponseSuccess = (savePolicyAuthoringSettingsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type savePolicyAuthoringSettingsResponse = (savePolicyAuthoringSettingsResponseSuccess)
+
+export const getSavePolicyAuthoringSettingsUrl = (tenantId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/one-policy/authoring-settings`
+}
+
+export const savePolicyAuthoringSettings = async (tenantId: string,
+    savePolicyAuthoringSettingsBody: SavePolicyAuthoringSettingsBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<savePolicyAuthoringSettingsResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return managementApiFetch<savePolicyAuthoringSettingsResponse>(getSavePolicyAuthoringSettingsUrl(tenantId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(savePolicyAuthoringSettingsBody)
+  }
+);}
 
 
 
@@ -35771,26 +39424,19 @@ export const getGetV1TenantsTenantIdOnePolicyFirstPartyBotRevisionsUrl = (tenant
 
 
 
-  return `/v1/tenants/${tenantId}/one-policy/first-party-bot/revisions`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/one-policy/first-party-bot/revisions`
 }
 
-export const getV1TenantsTenantIdOnePolicyFirstPartyBotRevisions = async (tenantId: string, options?: RequestInit): Promise<getV1TenantsTenantIdOnePolicyFirstPartyBotRevisionsResponse> => {
+export const getV1TenantsTenantIdOnePolicyFirstPartyBotRevisions = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getV1TenantsTenantIdOnePolicyFirstPartyBotRevisionsResponse> => {
 
-  const res = await fetch(getGetV1TenantsTenantIdOnePolicyFirstPartyBotRevisionsUrl(tenantId),
+  return managementApiFetch<getV1TenantsTenantIdOnePolicyFirstPartyBotRevisionsResponse>(getGetV1TenantsTenantIdOnePolicyFirstPartyBotRevisionsUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getV1TenantsTenantIdOnePolicyFirstPartyBotRevisionsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getV1TenantsTenantIdOnePolicyFirstPartyBotRevisionsResponse
-}
+);}
 
 
 
@@ -35811,33 +39457,34 @@ export const getPostV1TenantsTenantIdOnePolicyFirstPartyBotDraftDiscardUrl = (te
 
 
 
-  return `/v1/tenants/${tenantId}/one-policy/first-party-bot/draft/discard`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/one-policy/first-party-bot/draft/discard`
 }
 
 export const postV1TenantsTenantIdOnePolicyFirstPartyBotDraftDiscard = async (tenantId: string,
-    postV1TenantsTenantIdOnePolicyFirstPartyBotDraftDiscardBody: PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftDiscardBody, options?: RequestInit): Promise<postV1TenantsTenantIdOnePolicyFirstPartyBotDraftDiscardResponse> => {
+    postV1TenantsTenantIdOnePolicyFirstPartyBotDraftDiscardBody: PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftDiscardBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<postV1TenantsTenantIdOnePolicyFirstPartyBotDraftDiscardResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getPostV1TenantsTenantIdOnePolicyFirstPartyBotDraftDiscardUrl(tenantId),
+return managementApiFetch<postV1TenantsTenantIdOnePolicyFirstPartyBotDraftDiscardResponse>(getPostV1TenantsTenantIdOnePolicyFirstPartyBotDraftDiscardUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(postV1TenantsTenantIdOnePolicyFirstPartyBotDraftDiscardBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: postV1TenantsTenantIdOnePolicyFirstPartyBotDraftDiscardResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as postV1TenantsTenantIdOnePolicyFirstPartyBotDraftDiscardResponse
-}
+);}
 
 
 
@@ -35858,26 +39505,19 @@ export const getGetV1TenantsTenantIdOnePolicyFirstPartyBotDraftUrl = (tenantId: 
 
 
 
-  return `/v1/tenants/${tenantId}/one-policy/first-party-bot/draft`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/one-policy/first-party-bot/draft`
 }
 
-export const getV1TenantsTenantIdOnePolicyFirstPartyBotDraft = async (tenantId: string, options?: RequestInit): Promise<getV1TenantsTenantIdOnePolicyFirstPartyBotDraftResponse> => {
+export const getV1TenantsTenantIdOnePolicyFirstPartyBotDraft = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getV1TenantsTenantIdOnePolicyFirstPartyBotDraftResponse> => {
 
-  const res = await fetch(getGetV1TenantsTenantIdOnePolicyFirstPartyBotDraftUrl(tenantId),
+  return managementApiFetch<getV1TenantsTenantIdOnePolicyFirstPartyBotDraftResponse>(getGetV1TenantsTenantIdOnePolicyFirstPartyBotDraftUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getV1TenantsTenantIdOnePolicyFirstPartyBotDraftResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getV1TenantsTenantIdOnePolicyFirstPartyBotDraftResponse
-}
+);}
 
 
 
@@ -35898,33 +39538,130 @@ export const getPutV1TenantsTenantIdOnePolicyFirstPartyBotDraftUrl = (tenantId: 
 
 
 
-  return `/v1/tenants/${tenantId}/one-policy/first-party-bot/draft`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/one-policy/first-party-bot/draft`
 }
 
 export const putV1TenantsTenantIdOnePolicyFirstPartyBotDraft = async (tenantId: string,
-    putV1TenantsTenantIdOnePolicyFirstPartyBotDraftBody: PutV1TenantsTenantIdOnePolicyFirstPartyBotDraftBody, options?: RequestInit): Promise<putV1TenantsTenantIdOnePolicyFirstPartyBotDraftResponse> => {
+    putV1TenantsTenantIdOnePolicyFirstPartyBotDraftBody: PutV1TenantsTenantIdOnePolicyFirstPartyBotDraftBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<putV1TenantsTenantIdOnePolicyFirstPartyBotDraftResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getPutV1TenantsTenantIdOnePolicyFirstPartyBotDraftUrl(tenantId),
+return managementApiFetch<putV1TenantsTenantIdOnePolicyFirstPartyBotDraftResponse>(getPutV1TenantsTenantIdOnePolicyFirstPartyBotDraftUrl(tenantId),
   {
     ...options,
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(putV1TenantsTenantIdOnePolicyFirstPartyBotDraftBody)
   }
-)
+);}
 
 
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
 
-  const data: putV1TenantsTenantIdOnePolicyFirstPartyBotDraftResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as putV1TenantsTenantIdOnePolicyFirstPartyBotDraftResponse
+export type postV1TenantsTenantIdOnePolicyFirstPartyBotDraftValidateResponse200 = {
+  data: PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftValidate200
+  status: 200
 }
+
+export type postV1TenantsTenantIdOnePolicyFirstPartyBotDraftValidateResponseSuccess = (postV1TenantsTenantIdOnePolicyFirstPartyBotDraftValidateResponse200) & {
+  headers: Headers;
+};
+;
+
+export type postV1TenantsTenantIdOnePolicyFirstPartyBotDraftValidateResponse = (postV1TenantsTenantIdOnePolicyFirstPartyBotDraftValidateResponseSuccess)
+
+export const getPostV1TenantsTenantIdOnePolicyFirstPartyBotDraftValidateUrl = (tenantId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/one-policy/first-party-bot/draft/validate`
+}
+
+export const postV1TenantsTenantIdOnePolicyFirstPartyBotDraftValidate = async (tenantId: string,
+    postV1TenantsTenantIdOnePolicyFirstPartyBotDraftValidateBody: PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftValidateBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<postV1TenantsTenantIdOnePolicyFirstPartyBotDraftValidateResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return managementApiFetch<postV1TenantsTenantIdOnePolicyFirstPartyBotDraftValidateResponse>(getPostV1TenantsTenantIdOnePolicyFirstPartyBotDraftValidateUrl(tenantId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postV1TenantsTenantIdOnePolicyFirstPartyBotDraftValidateBody)
+  }
+);}
+
+
+
+export type postV1TenantsTenantIdOnePolicyFirstPartyBotDraftReviewResponse200 = {
+  data: PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftReview200
+  status: 200
+}
+
+export type postV1TenantsTenantIdOnePolicyFirstPartyBotDraftReviewResponseSuccess = (postV1TenantsTenantIdOnePolicyFirstPartyBotDraftReviewResponse200) & {
+  headers: Headers;
+};
+;
+
+export type postV1TenantsTenantIdOnePolicyFirstPartyBotDraftReviewResponse = (postV1TenantsTenantIdOnePolicyFirstPartyBotDraftReviewResponseSuccess)
+
+export const getPostV1TenantsTenantIdOnePolicyFirstPartyBotDraftReviewUrl = (tenantId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/one-policy/first-party-bot/draft/review`
+}
+
+export const postV1TenantsTenantIdOnePolicyFirstPartyBotDraftReview = async (tenantId: string,
+    postV1TenantsTenantIdOnePolicyFirstPartyBotDraftReviewBody: PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftReviewBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<postV1TenantsTenantIdOnePolicyFirstPartyBotDraftReviewResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return managementApiFetch<postV1TenantsTenantIdOnePolicyFirstPartyBotDraftReviewResponse>(getPostV1TenantsTenantIdOnePolicyFirstPartyBotDraftReviewUrl(tenantId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postV1TenantsTenantIdOnePolicyFirstPartyBotDraftReviewBody)
+  }
+);}
 
 
 
@@ -35945,33 +39682,34 @@ export const getPostV1TenantsTenantIdOnePolicyFirstPartyBotDraftPublishUrl = (te
 
 
 
-  return `/v1/tenants/${tenantId}/one-policy/first-party-bot/draft/publish`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/one-policy/first-party-bot/draft/publish`
 }
 
 export const postV1TenantsTenantIdOnePolicyFirstPartyBotDraftPublish = async (tenantId: string,
-    postV1TenantsTenantIdOnePolicyFirstPartyBotDraftPublishBody: PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftPublishBody, options?: RequestInit): Promise<postV1TenantsTenantIdOnePolicyFirstPartyBotDraftPublishResponse> => {
+    postV1TenantsTenantIdOnePolicyFirstPartyBotDraftPublishBody: PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftPublishBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<postV1TenantsTenantIdOnePolicyFirstPartyBotDraftPublishResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getPostV1TenantsTenantIdOnePolicyFirstPartyBotDraftPublishUrl(tenantId),
+return managementApiFetch<postV1TenantsTenantIdOnePolicyFirstPartyBotDraftPublishResponse>(getPostV1TenantsTenantIdOnePolicyFirstPartyBotDraftPublishUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(postV1TenantsTenantIdOnePolicyFirstPartyBotDraftPublishBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: postV1TenantsTenantIdOnePolicyFirstPartyBotDraftPublishResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as postV1TenantsTenantIdOnePolicyFirstPartyBotDraftPublishResponse
-}
+);}
 
 
 
@@ -35992,26 +39730,19 @@ export const getGetV1TenantsTenantIdOnePolicyFirstPartyBotUrl = (tenantId: strin
 
 
 
-  return `/v1/tenants/${tenantId}/one-policy/first-party-bot`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/one-policy/first-party-bot`
 }
 
-export const getV1TenantsTenantIdOnePolicyFirstPartyBot = async (tenantId: string, options?: RequestInit): Promise<getV1TenantsTenantIdOnePolicyFirstPartyBotResponse> => {
+export const getV1TenantsTenantIdOnePolicyFirstPartyBot = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getV1TenantsTenantIdOnePolicyFirstPartyBotResponse> => {
 
-  const res = await fetch(getGetV1TenantsTenantIdOnePolicyFirstPartyBotUrl(tenantId),
+  return managementApiFetch<getV1TenantsTenantIdOnePolicyFirstPartyBotResponse>(getGetV1TenantsTenantIdOnePolicyFirstPartyBotUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getV1TenantsTenantIdOnePolicyFirstPartyBotResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getV1TenantsTenantIdOnePolicyFirstPartyBotResponse
-}
+);}
 
 
 
@@ -36032,33 +39763,34 @@ export const getPatchV1TenantsTenantIdOnePolicyFirstPartyBotUrl = (tenantId: str
 
 
 
-  return `/v1/tenants/${tenantId}/one-policy/first-party-bot`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/one-policy/first-party-bot`
 }
 
 export const patchV1TenantsTenantIdOnePolicyFirstPartyBot = async (tenantId: string,
-    patchV1TenantsTenantIdOnePolicyFirstPartyBotBody: PatchV1TenantsTenantIdOnePolicyFirstPartyBotBody, options?: RequestInit): Promise<patchV1TenantsTenantIdOnePolicyFirstPartyBotResponse> => {
+    patchV1TenantsTenantIdOnePolicyFirstPartyBotBody: PatchV1TenantsTenantIdOnePolicyFirstPartyBotBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<patchV1TenantsTenantIdOnePolicyFirstPartyBotResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getPatchV1TenantsTenantIdOnePolicyFirstPartyBotUrl(tenantId),
+return managementApiFetch<patchV1TenantsTenantIdOnePolicyFirstPartyBotResponse>(getPatchV1TenantsTenantIdOnePolicyFirstPartyBotUrl(tenantId),
   {
     ...options,
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(patchV1TenantsTenantIdOnePolicyFirstPartyBotBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: patchV1TenantsTenantIdOnePolicyFirstPartyBotResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as patchV1TenantsTenantIdOnePolicyFirstPartyBotResponse
-}
+);}
 
 
 
@@ -36087,27 +39819,20 @@ export const getGetV1TenantsTenantIdOnePolicyBotAccessUrl = (tenantId: string,
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/v1/tenants/${tenantId}/one-policy/bot-access?${stringifiedParams}` : `/v1/tenants/${tenantId}/one-policy/bot-access`
+  return stringifiedParams.length > 0 ? `/v1/tenants/${encodeURIComponent(String(tenantId))}/one-policy/bot-access?${stringifiedParams}` : `/v1/tenants/${encodeURIComponent(String(tenantId))}/one-policy/bot-access`
 }
 
 export const getV1TenantsTenantIdOnePolicyBotAccess = async (tenantId: string,
-    params?: GetV1TenantsTenantIdOnePolicyBotAccessParams, options?: RequestInit): Promise<getV1TenantsTenantIdOnePolicyBotAccessResponse> => {
+    params?: GetV1TenantsTenantIdOnePolicyBotAccessParams, options?: Parameters<typeof managementApiFetch>[1]): Promise<getV1TenantsTenantIdOnePolicyBotAccessResponse> => {
 
-  const res = await fetch(getGetV1TenantsTenantIdOnePolicyBotAccessUrl(tenantId,params),
+  return managementApiFetch<getV1TenantsTenantIdOnePolicyBotAccessResponse>(getGetV1TenantsTenantIdOnePolicyBotAccessUrl(tenantId,params),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getV1TenantsTenantIdOnePolicyBotAccessResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getV1TenantsTenantIdOnePolicyBotAccessResponse
-}
+);}
 
 
 
@@ -36128,26 +39853,19 @@ export const getListRuntimePoliciesUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/one-policy/runtime-policies`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/one-policy/runtime-policies`
 }
 
-export const listRuntimePolicies = async (tenantId: string, options?: RequestInit): Promise<listRuntimePoliciesResponse> => {
+export const listRuntimePolicies = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listRuntimePoliciesResponse> => {
 
-  const res = await fetch(getListRuntimePoliciesUrl(tenantId),
+  return managementApiFetch<listRuntimePoliciesResponse>(getListRuntimePoliciesUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listRuntimePoliciesResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listRuntimePoliciesResponse
-}
+);}
 
 
 
@@ -36169,27 +39887,20 @@ export const getGetRuntimePolicyUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/one-policy/runtime-policies/${policyId}`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/one-policy/runtime-policies/${encodeURIComponent(String(policyId))}`
 }
 
 export const getRuntimePolicy = async (tenantId: string,
-    policyId: string, options?: RequestInit): Promise<getRuntimePolicyResponse> => {
+    policyId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getRuntimePolicyResponse> => {
 
-  const res = await fetch(getGetRuntimePolicyUrl(tenantId,policyId),
+  return managementApiFetch<getRuntimePolicyResponse>(getGetRuntimePolicyUrl(tenantId,policyId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getRuntimePolicyResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getRuntimePolicyResponse
-}
+);}
 
 
 
@@ -36211,34 +39922,35 @@ export const getSetRuntimePolicyEnabledUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/one-policy/runtime-policies/${policyId}`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/one-policy/runtime-policies/${encodeURIComponent(String(policyId))}`
 }
 
 export const setRuntimePolicyEnabled = async (tenantId: string,
     policyId: string,
-    setRuntimePolicyEnabledBody: SetRuntimePolicyEnabledBody, options?: RequestInit): Promise<setRuntimePolicyEnabledResponse> => {
+    setRuntimePolicyEnabledBody: SetRuntimePolicyEnabledBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<setRuntimePolicyEnabledResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getSetRuntimePolicyEnabledUrl(tenantId,policyId),
+return managementApiFetch<setRuntimePolicyEnabledResponse>(getSetRuntimePolicyEnabledUrl(tenantId,policyId),
   {
     ...options,
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(setRuntimePolicyEnabledBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: setRuntimePolicyEnabledResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as setRuntimePolicyEnabledResponse
-}
+);}
 
 
 
@@ -36260,27 +39972,20 @@ export const getListRuntimePolicyRevisionsUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/one-policy/runtime-policies/${policyId}/revisions`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/one-policy/runtime-policies/${encodeURIComponent(String(policyId))}/revisions`
 }
 
 export const listRuntimePolicyRevisions = async (tenantId: string,
-    policyId: string, options?: RequestInit): Promise<listRuntimePolicyRevisionsResponse> => {
+    policyId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listRuntimePolicyRevisionsResponse> => {
 
-  const res = await fetch(getListRuntimePolicyRevisionsUrl(tenantId,policyId),
+  return managementApiFetch<listRuntimePolicyRevisionsResponse>(getListRuntimePolicyRevisionsUrl(tenantId,policyId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listRuntimePolicyRevisionsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listRuntimePolicyRevisionsResponse
-}
+);}
 
 
 
@@ -36303,28 +40008,21 @@ export const getGetRuntimePolicyRevisionUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/one-policy/runtime-policies/${policyId}/revisions/${revision}`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/one-policy/runtime-policies/${encodeURIComponent(String(policyId))}/revisions/${encodeURIComponent(String(revision))}`
 }
 
 export const getRuntimePolicyRevision = async (tenantId: string,
     policyId: string,
-    revision: number, options?: RequestInit): Promise<getRuntimePolicyRevisionResponse> => {
+    revision: number, options?: Parameters<typeof managementApiFetch>[1]): Promise<getRuntimePolicyRevisionResponse> => {
 
-  const res = await fetch(getGetRuntimePolicyRevisionUrl(tenantId,policyId,revision),
+  return managementApiFetch<getRuntimePolicyRevisionResponse>(getGetRuntimePolicyRevisionUrl(tenantId,policyId,revision),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getRuntimePolicyRevisionResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getRuntimePolicyRevisionResponse
-}
+);}
 
 
 
@@ -36346,27 +40044,20 @@ export const getGetRuntimePolicyDraftUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/one-policy/runtime-policies/${policyId}/draft`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/one-policy/runtime-policies/${encodeURIComponent(String(policyId))}/draft`
 }
 
 export const getRuntimePolicyDraft = async (tenantId: string,
-    policyId: string, options?: RequestInit): Promise<getRuntimePolicyDraftResponse> => {
+    policyId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getRuntimePolicyDraftResponse> => {
 
-  const res = await fetch(getGetRuntimePolicyDraftUrl(tenantId,policyId),
+  return managementApiFetch<getRuntimePolicyDraftResponse>(getGetRuntimePolicyDraftUrl(tenantId,policyId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getRuntimePolicyDraftResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getRuntimePolicyDraftResponse
-}
+);}
 
 
 
@@ -36388,34 +40079,135 @@ export const getSaveRuntimePolicyDraftUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/one-policy/runtime-policies/${policyId}/draft`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/one-policy/runtime-policies/${encodeURIComponent(String(policyId))}/draft`
 }
 
 export const saveRuntimePolicyDraft = async (tenantId: string,
     policyId: string,
-    saveRuntimePolicyDraftBody: SaveRuntimePolicyDraftBody, options?: RequestInit): Promise<saveRuntimePolicyDraftResponse> => {
+    saveRuntimePolicyDraftBody: SaveRuntimePolicyDraftBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<saveRuntimePolicyDraftResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getSaveRuntimePolicyDraftUrl(tenantId,policyId),
+return managementApiFetch<saveRuntimePolicyDraftResponse>(getSaveRuntimePolicyDraftUrl(tenantId,policyId),
   {
     ...options,
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(saveRuntimePolicyDraftBody)
   }
-)
+);}
 
 
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
 
-  const data: saveRuntimePolicyDraftResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as saveRuntimePolicyDraftResponse
+export type validateRuntimePolicyDraftResponse200 = {
+  data: ValidateRuntimePolicyDraft200
+  status: 200
 }
+
+export type validateRuntimePolicyDraftResponseSuccess = (validateRuntimePolicyDraftResponse200) & {
+  headers: Headers;
+};
+;
+
+export type validateRuntimePolicyDraftResponse = (validateRuntimePolicyDraftResponseSuccess)
+
+export const getValidateRuntimePolicyDraftUrl = (tenantId: string,
+    policyId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/one-policy/runtime-policies/${encodeURIComponent(String(policyId))}/draft/validate`
+}
+
+export const validateRuntimePolicyDraft = async (tenantId: string,
+    policyId: string,
+    validateRuntimePolicyDraftBody: ValidateRuntimePolicyDraftBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<validateRuntimePolicyDraftResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return managementApiFetch<validateRuntimePolicyDraftResponse>(getValidateRuntimePolicyDraftUrl(tenantId,policyId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(validateRuntimePolicyDraftBody)
+  }
+);}
+
+
+
+export type reviewRuntimePolicyDraftResponse200 = {
+  data: ReviewRuntimePolicyDraft200
+  status: 200
+}
+
+export type reviewRuntimePolicyDraftResponseSuccess = (reviewRuntimePolicyDraftResponse200) & {
+  headers: Headers;
+};
+;
+
+export type reviewRuntimePolicyDraftResponse = (reviewRuntimePolicyDraftResponseSuccess)
+
+export const getReviewRuntimePolicyDraftUrl = (tenantId: string,
+    policyId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/one-policy/runtime-policies/${encodeURIComponent(String(policyId))}/draft/review`
+}
+
+export const reviewRuntimePolicyDraft = async (tenantId: string,
+    policyId: string,
+    reviewRuntimePolicyDraftBody: ReviewRuntimePolicyDraftBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<reviewRuntimePolicyDraftResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return managementApiFetch<reviewRuntimePolicyDraftResponse>(getReviewRuntimePolicyDraftUrl(tenantId,policyId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(reviewRuntimePolicyDraftBody)
+  }
+);}
 
 
 
@@ -36437,34 +40229,35 @@ export const getDiscardRuntimePolicyDraftUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/one-policy/runtime-policies/${policyId}/draft/discard`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/one-policy/runtime-policies/${encodeURIComponent(String(policyId))}/draft/discard`
 }
 
 export const discardRuntimePolicyDraft = async (tenantId: string,
     policyId: string,
-    discardRuntimePolicyDraftBody: DiscardRuntimePolicyDraftBody, options?: RequestInit): Promise<discardRuntimePolicyDraftResponse> => {
+    discardRuntimePolicyDraftBody: DiscardRuntimePolicyDraftBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<discardRuntimePolicyDraftResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getDiscardRuntimePolicyDraftUrl(tenantId,policyId),
+return managementApiFetch<discardRuntimePolicyDraftResponse>(getDiscardRuntimePolicyDraftUrl(tenantId,policyId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(discardRuntimePolicyDraftBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: discardRuntimePolicyDraftResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as discardRuntimePolicyDraftResponse
-}
+);}
 
 
 
@@ -36486,34 +40279,35 @@ export const getPublishRuntimePolicyDraftUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/one-policy/runtime-policies/${policyId}/draft/publish`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/one-policy/runtime-policies/${encodeURIComponent(String(policyId))}/draft/publish`
 }
 
 export const publishRuntimePolicyDraft = async (tenantId: string,
     policyId: string,
-    publishRuntimePolicyDraftBody: PublishRuntimePolicyDraftBody, options?: RequestInit): Promise<publishRuntimePolicyDraftResponse> => {
+    publishRuntimePolicyDraftBody: PublishRuntimePolicyDraftBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<publishRuntimePolicyDraftResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getPublishRuntimePolicyDraftUrl(tenantId,policyId),
+return managementApiFetch<publishRuntimePolicyDraftResponse>(getPublishRuntimePolicyDraftUrl(tenantId,policyId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(publishRuntimePolicyDraftBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: publishRuntimePolicyDraftResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as publishRuntimePolicyDraftResponse
-}
+);}
 
 
 
@@ -36542,27 +40336,20 @@ export const getGetRuntimePolicyEffectiveUrl = (tenantId: string,
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/v1/tenants/${tenantId}/one-policy/runtime-effective?${stringifiedParams}` : `/v1/tenants/${tenantId}/one-policy/runtime-effective`
+  return stringifiedParams.length > 0 ? `/v1/tenants/${encodeURIComponent(String(tenantId))}/one-policy/runtime-effective?${stringifiedParams}` : `/v1/tenants/${encodeURIComponent(String(tenantId))}/one-policy/runtime-effective`
 }
 
 export const getRuntimePolicyEffective = async (tenantId: string,
-    params: GetRuntimePolicyEffectiveParams, options?: RequestInit): Promise<getRuntimePolicyEffectiveResponse> => {
+    params: GetRuntimePolicyEffectiveParams, options?: Parameters<typeof managementApiFetch>[1]): Promise<getRuntimePolicyEffectiveResponse> => {
 
-  const res = await fetch(getGetRuntimePolicyEffectiveUrl(tenantId,params),
+  return managementApiFetch<getRuntimePolicyEffectiveResponse>(getGetRuntimePolicyEffectiveUrl(tenantId,params),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getRuntimePolicyEffectiveResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getRuntimePolicyEffectiveResponse
-}
+);}
 
 
 
@@ -36583,33 +40370,34 @@ export const getAuthorizeRuntimePolicyUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/one-policy/runtime-authorize`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/one-policy/runtime-authorize`
 }
 
 export const authorizeRuntimePolicy = async (tenantId: string,
-    authorizeRuntimePolicyBody: AuthorizeRuntimePolicyBody, options?: RequestInit): Promise<authorizeRuntimePolicyResponse> => {
+    authorizeRuntimePolicyBody: AuthorizeRuntimePolicyBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<authorizeRuntimePolicyResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getAuthorizeRuntimePolicyUrl(tenantId),
+return managementApiFetch<authorizeRuntimePolicyResponse>(getAuthorizeRuntimePolicyUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(authorizeRuntimePolicyBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: authorizeRuntimePolicyResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as authorizeRuntimePolicyResponse
-}
+);}
 
 
 
@@ -36630,33 +40418,34 @@ export const getReportRuntimePolicyOutcomeUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/one-policy/runtime-report`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/one-policy/runtime-report`
 }
 
 export const reportRuntimePolicyOutcome = async (tenantId: string,
-    reportRuntimePolicyOutcomeBody: ReportRuntimePolicyOutcomeBody, options?: RequestInit): Promise<reportRuntimePolicyOutcomeResponse> => {
+    reportRuntimePolicyOutcomeBody: ReportRuntimePolicyOutcomeBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<reportRuntimePolicyOutcomeResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getReportRuntimePolicyOutcomeUrl(tenantId),
+return managementApiFetch<reportRuntimePolicyOutcomeResponse>(getReportRuntimePolicyOutcomeUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(reportRuntimePolicyOutcomeBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: reportRuntimePolicyOutcomeResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as reportRuntimePolicyOutcomeResponse
-}
+);}
 
 
 
@@ -36677,26 +40466,19 @@ export const getGetV1TenantsTenantIdOnePolicyDraftsUrl = (tenantId: string,) => 
 
 
 
-  return `/v1/tenants/${tenantId}/one-policy/drafts`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/one-policy/drafts`
 }
 
-export const getV1TenantsTenantIdOnePolicyDrafts = async (tenantId: string, options?: RequestInit): Promise<getV1TenantsTenantIdOnePolicyDraftsResponse> => {
+export const getV1TenantsTenantIdOnePolicyDrafts = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getV1TenantsTenantIdOnePolicyDraftsResponse> => {
 
-  const res = await fetch(getGetV1TenantsTenantIdOnePolicyDraftsUrl(tenantId),
+  return managementApiFetch<getV1TenantsTenantIdOnePolicyDraftsResponse>(getGetV1TenantsTenantIdOnePolicyDraftsUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getV1TenantsTenantIdOnePolicyDraftsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getV1TenantsTenantIdOnePolicyDraftsResponse
-}
+);}
 
 
 
@@ -36719,35 +40501,36 @@ export const getPostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityId
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}/capabilities/${capabilityId}/policy-draft/discard`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/capabilities/${encodeURIComponent(String(capabilityId))}/policy-draft/discard`
 }
 
 export const postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftDiscard = async (tenantId: string,
     resourceId: string,
     capabilityId: string,
-    postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftDiscardBody: PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftDiscardBody, options?: RequestInit): Promise<postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftDiscardResponse> => {
+    postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftDiscardBody: PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftDiscardBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftDiscardResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getPostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftDiscardUrl(tenantId,resourceId,capabilityId),
+return managementApiFetch<postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftDiscardResponse>(getPostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftDiscardUrl(tenantId,resourceId,capabilityId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftDiscardBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftDiscardResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftDiscardResponse
-}
+);}
 
 
 
@@ -36770,28 +40553,21 @@ export const getGetV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdP
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}/capabilities/${capabilityId}/policy-draft`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/capabilities/${encodeURIComponent(String(capabilityId))}/policy-draft`
 }
 
 export const getV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraft = async (tenantId: string,
     resourceId: string,
-    capabilityId: string, options?: RequestInit): Promise<getV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftResponse> => {
+    capabilityId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftResponse> => {
 
-  const res = await fetch(getGetV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftUrl(tenantId,resourceId,capabilityId),
+  return managementApiFetch<getV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftResponse>(getGetV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftUrl(tenantId,resourceId,capabilityId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftResponse
-}
+);}
 
 
 
@@ -36814,35 +40590,140 @@ export const getPutV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdP
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}/capabilities/${capabilityId}/policy-draft`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/capabilities/${encodeURIComponent(String(capabilityId))}/policy-draft`
 }
 
 export const putV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraft = async (tenantId: string,
     resourceId: string,
     capabilityId: string,
-    putV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftBody: PutV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftBody, options?: RequestInit): Promise<putV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftResponse> => {
+    putV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftBody: PutV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<putV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getPutV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftUrl(tenantId,resourceId,capabilityId),
+return managementApiFetch<putV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftResponse>(getPutV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftUrl(tenantId,resourceId,capabilityId),
   {
     ...options,
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(putV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftBody)
   }
-)
+);}
 
 
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
 
-  const data: putV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as putV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftResponse
+export type postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftValidateResponse200 = {
+  data: PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftValidate200
+  status: 200
 }
+
+export type postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftValidateResponseSuccess = (postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftValidateResponse200) & {
+  headers: Headers;
+};
+;
+
+export type postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftValidateResponse = (postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftValidateResponseSuccess)
+
+export const getPostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftValidateUrl = (tenantId: string,
+    resourceId: string,
+    capabilityId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/capabilities/${encodeURIComponent(String(capabilityId))}/policy-draft/validate`
+}
+
+export const postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftValidate = async (tenantId: string,
+    resourceId: string,
+    capabilityId: string,
+    postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftValidateBody: PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftValidateBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftValidateResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return managementApiFetch<postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftValidateResponse>(getPostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftValidateUrl(tenantId,resourceId,capabilityId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftValidateBody)
+  }
+);}
+
+
+
+export type postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftReviewResponse200 = {
+  data: PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftReview200
+  status: 200
+}
+
+export type postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftReviewResponseSuccess = (postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftReviewResponse200) & {
+  headers: Headers;
+};
+;
+
+export type postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftReviewResponse = (postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftReviewResponseSuccess)
+
+export const getPostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftReviewUrl = (tenantId: string,
+    resourceId: string,
+    capabilityId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/capabilities/${encodeURIComponent(String(capabilityId))}/policy-draft/review`
+}
+
+export const postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftReview = async (tenantId: string,
+    resourceId: string,
+    capabilityId: string,
+    postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftReviewBody: PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftReviewBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftReviewResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return managementApiFetch<postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftReviewResponse>(getPostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftReviewUrl(tenantId,resourceId,capabilityId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftReviewBody)
+  }
+);}
 
 
 
@@ -36865,35 +40746,36 @@ export const getPostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityId
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}/capabilities/${capabilityId}/policy-draft/publish`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/capabilities/${encodeURIComponent(String(capabilityId))}/policy-draft/publish`
 }
 
 export const postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftPublish = async (tenantId: string,
     resourceId: string,
     capabilityId: string,
-    postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftPublishBody: PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftPublishBody, options?: RequestInit): Promise<postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftPublishResponse> => {
+    postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftPublishBody: PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftPublishBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftPublishResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getPostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftPublishUrl(tenantId,resourceId,capabilityId),
+return managementApiFetch<postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftPublishResponse>(getPostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftPublishUrl(tenantId,resourceId,capabilityId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftPublishBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftPublishResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as postV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftPublishResponse
-}
+);}
 
 
 
@@ -36914,29 +40796,22 @@ export const getListLatestEnforcementChainRevisionsUrl = (tenantId: string,) => 
 
 
 
-  return `/v1/tenants/${tenantId}/enforcement-chains`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/enforcement-chains`
 }
 
 /**
  * @summary List the latest Resource Capability enforcement chains
  */
-export const listLatestEnforcementChainRevisions = async (tenantId: string, options?: RequestInit): Promise<listLatestEnforcementChainRevisionsResponse> => {
+export const listLatestEnforcementChainRevisions = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listLatestEnforcementChainRevisionsResponse> => {
 
-  const res = await fetch(getListLatestEnforcementChainRevisionsUrl(tenantId),
+  return managementApiFetch<listLatestEnforcementChainRevisionsResponse>(getListLatestEnforcementChainRevisionsUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listLatestEnforcementChainRevisionsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listLatestEnforcementChainRevisionsResponse
-}
+);}
 
 
 
@@ -36959,7 +40834,7 @@ export const getGetLatestEnforcementChainRevisionUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}/capabilities/${capabilityId}/enforcement-chain`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/capabilities/${encodeURIComponent(String(capabilityId))}/enforcement-chain`
 }
 
 /**
@@ -36967,37 +40842,30 @@ export const getGetLatestEnforcementChainRevisionUrl = (tenantId: string,
  */
 export const getLatestEnforcementChainRevision = async (tenantId: string,
     resourceId: string,
-    capabilityId: string, options?: RequestInit): Promise<getLatestEnforcementChainRevisionResponse> => {
+    capabilityId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getLatestEnforcementChainRevisionResponse> => {
 
-  const res = await fetch(getGetLatestEnforcementChainRevisionUrl(tenantId,resourceId,capabilityId),
+  return managementApiFetch<getLatestEnforcementChainRevisionResponse>(getGetLatestEnforcementChainRevisionUrl(tenantId,resourceId,capabilityId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
+);}
 
 
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
 
-  const data: getLatestEnforcementChainRevisionResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getLatestEnforcementChainRevisionResponse
+export type saveEnforcementChainRevisionResponse410 = {
+  data: SaveEnforcementChainRevision410
+  status: 410
 }
 
-
-
-export type saveEnforcementChainRevisionResponse200 = {
-  data: SaveEnforcementChainRevision200
-  status: 200
-}
-
-export type saveEnforcementChainRevisionResponseSuccess = (saveEnforcementChainRevisionResponse200) & {
+;
+export type saveEnforcementChainRevisionResponseError = (saveEnforcementChainRevisionResponse410) & {
   headers: Headers;
 };
-;
 
-export type saveEnforcementChainRevisionResponse = (saveEnforcementChainRevisionResponseSuccess)
+export type saveEnforcementChainRevisionResponse = (saveEnforcementChainRevisionResponseError)
 
 export const getSaveEnforcementChainRevisionUrl = (tenantId: string,
     resourceId: string,
@@ -37006,39 +40874,39 @@ export const getSaveEnforcementChainRevisionUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}/capabilities/${capabilityId}/enforcement-chain`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/capabilities/${encodeURIComponent(String(capabilityId))}/enforcement-chain`
 }
 
 /**
- * Resource and Capability come from the route. The compiler freezes the eligible Resource-owned Connection set; replaying the same revision is idempotent and changing it is rejected.
- * @summary Persist an immutable, tenant-scoped Enforcement Chain revision
+ * @summary Retired direct Enforcement Chain write route
  */
 export const saveEnforcementChainRevision = async (tenantId: string,
     resourceId: string,
     capabilityId: string,
-    saveEnforcementChainRevisionBody: SaveEnforcementChainRevisionBody, options?: RequestInit): Promise<saveEnforcementChainRevisionResponse> => {
+    saveEnforcementChainRevisionBody: SaveEnforcementChainRevisionBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<saveEnforcementChainRevisionResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getSaveEnforcementChainRevisionUrl(tenantId,resourceId,capabilityId),
+return managementApiFetch<saveEnforcementChainRevisionResponse>(getSaveEnforcementChainRevisionUrl(tenantId,resourceId,capabilityId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(saveEnforcementChainRevisionBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: saveEnforcementChainRevisionResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as saveEnforcementChainRevisionResponse
-}
+);}
 
 
 
@@ -37059,7 +40927,7 @@ export const getPreviewEnforcementChainUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/ai-gateway/enforcement-chain/preview`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/ai-gateway/enforcement-chain/preview`
 }
 
 /**
@@ -37067,29 +40935,30 @@ export const getPreviewEnforcementChainUrl = (tenantId: string,) => {
  * @summary Preview and validate an Enforcement Chain without persistence
  */
 export const previewEnforcementChain = async (tenantId: string,
-    previewEnforcementChainBody: PreviewEnforcementChainBody, options?: RequestInit): Promise<previewEnforcementChainResponse> => {
+    previewEnforcementChainBody: PreviewEnforcementChainBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<previewEnforcementChainResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getPreviewEnforcementChainUrl(tenantId),
+return managementApiFetch<previewEnforcementChainResponse>(getPreviewEnforcementChainUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(previewEnforcementChainBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: previewEnforcementChainResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as previewEnforcementChainResponse
-}
+);}
 
 
 
@@ -37133,7 +41002,7 @@ export const getRequestResourcePublicationReviewUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}/publication-requests`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/publication-requests`
 }
 
 /**
@@ -37142,29 +41011,30 @@ export const getRequestResourcePublicationReviewUrl = (tenantId: string,
  */
 export const requestResourcePublicationReview = async (tenantId: string,
     resourceId: string,
-    requestResourcePublicationReviewBody: RequestResourcePublicationReviewBody, options?: RequestInit): Promise<requestResourcePublicationReviewResponse> => {
+    requestResourcePublicationReviewBody: RequestResourcePublicationReviewBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<requestResourcePublicationReviewResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getRequestResourcePublicationReviewUrl(tenantId,resourceId),
+return managementApiFetch<requestResourcePublicationReviewResponse>(getRequestResourcePublicationReviewUrl(tenantId,resourceId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(requestResourcePublicationReviewBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: requestResourcePublicationReviewResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as requestResourcePublicationReviewResponse
-}
+);}
 
 
 
@@ -37209,7 +41079,7 @@ export const getReviewResourcePublicationUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/resources/${resourceId}/publication-requests/${requestId}/review`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/publication-requests/${encodeURIComponent(String(requestId))}/review`
 }
 
 /**
@@ -37219,29 +41089,30 @@ export const getReviewResourcePublicationUrl = (tenantId: string,
 export const reviewResourcePublication = async (tenantId: string,
     resourceId: string,
     requestId: string,
-    reviewResourcePublicationBody: ReviewResourcePublicationBody, options?: RequestInit): Promise<reviewResourcePublicationResponse> => {
+    reviewResourcePublicationBody: ReviewResourcePublicationBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<reviewResourcePublicationResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getReviewResourcePublicationUrl(tenantId,resourceId,requestId),
+return managementApiFetch<reviewResourcePublicationResponse>(getReviewResourcePublicationUrl(tenantId,resourceId,requestId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(reviewResourcePublicationBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: reviewResourcePublicationResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as reviewResourcePublicationResponse
-}
+);}
 
 
 
@@ -37262,7 +41133,7 @@ export const getCompileGatewayProjectionUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/ai-gateway/projections`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/ai-gateway/projections`
 }
 
 /**
@@ -37270,29 +41141,30 @@ export const getCompileGatewayProjectionUrl = (tenantId: string,) => {
  * @summary Compile a persisted Publication snapshot into a signed Envoy projection
  */
 export const compileGatewayProjection = async (tenantId: string,
-    compileGatewayProjectionBody: CompileGatewayProjectionBody, options?: RequestInit): Promise<compileGatewayProjectionResponse> => {
+    compileGatewayProjectionBody: CompileGatewayProjectionBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<compileGatewayProjectionResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getCompileGatewayProjectionUrl(tenantId),
+return managementApiFetch<compileGatewayProjectionResponse>(getCompileGatewayProjectionUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(compileGatewayProjectionBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: compileGatewayProjectionResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as compileGatewayProjectionResponse
-}
+);}
 
 
 
@@ -37314,34 +41186,35 @@ export const getRecordRoutingAttemptUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/runtime-control/GATEWAY/${runtimeId}/routing-attempts`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/runtime-control/GATEWAY/${encodeURIComponent(String(runtimeId))}/routing-attempts`
 }
 
 export const recordRoutingAttempt = async (tenantId: string,
     runtimeId: string,
-    recordRoutingAttemptBody: RecordRoutingAttemptBody, options?: RequestInit): Promise<recordRoutingAttemptResponse> => {
+    recordRoutingAttemptBody: RecordRoutingAttemptBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<recordRoutingAttemptResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getRecordRoutingAttemptUrl(tenantId,runtimeId),
+return managementApiFetch<recordRoutingAttemptResponse>(getRecordRoutingAttemptUrl(tenantId,runtimeId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(recordRoutingAttemptBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: recordRoutingAttemptResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as recordRoutingAttemptResponse
-}
+);}
 
 
 
@@ -37363,34 +41236,35 @@ export const getRecordGatewayActivityUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/runtime-control/GATEWAY/${runtimeId}/activities`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/runtime-control/GATEWAY/${encodeURIComponent(String(runtimeId))}/activities`
 }
 
 export const recordGatewayActivity = async (tenantId: string,
     runtimeId: string,
-    recordGatewayActivityBody: RecordGatewayActivityBody, options?: RequestInit): Promise<recordGatewayActivityResponse> => {
+    recordGatewayActivityBody: RecordGatewayActivityBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<recordGatewayActivityResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getRecordGatewayActivityUrl(tenantId,runtimeId),
+return managementApiFetch<recordGatewayActivityResponse>(getRecordGatewayActivityUrl(tenantId,runtimeId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(recordGatewayActivityBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: recordGatewayActivityResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as recordGatewayActivityResponse
-}
+);}
 
 
 
@@ -37419,27 +41293,20 @@ export const getListGatewayActivitiesUrl = (tenantId: string,
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/v1/tenants/${tenantId}/api-activities?${stringifiedParams}` : `/v1/tenants/${tenantId}/api-activities`
+  return stringifiedParams.length > 0 ? `/v1/tenants/${encodeURIComponent(String(tenantId))}/api-activities?${stringifiedParams}` : `/v1/tenants/${encodeURIComponent(String(tenantId))}/api-activities`
 }
 
 export const listGatewayActivities = async (tenantId: string,
-    params?: ListGatewayActivitiesParams, options?: RequestInit): Promise<listGatewayActivitiesResponse> => {
+    params?: ListGatewayActivitiesParams, options?: Parameters<typeof managementApiFetch>[1]): Promise<listGatewayActivitiesResponse> => {
 
-  const res = await fetch(getListGatewayActivitiesUrl(tenantId,params),
+  return managementApiFetch<listGatewayActivitiesResponse>(getListGatewayActivitiesUrl(tenantId,params),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listGatewayActivitiesResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listGatewayActivitiesResponse
-}
+);}
 
 
 
@@ -37468,27 +41335,20 @@ export const getGetGatewayActivityDetailUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/api-activities/${correlationId}/detail`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/api-activities/${encodeURIComponent(String(correlationId))}/detail`
 }
 
 export const getGatewayActivityDetail = async (tenantId: string,
-    correlationId: string, options?: RequestInit): Promise<getGatewayActivityDetailResponse> => {
+    correlationId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getGatewayActivityDetailResponse> => {
 
-  const res = await fetch(getGetGatewayActivityDetailUrl(tenantId,correlationId),
+  return managementApiFetch<getGatewayActivityDetailResponse>(getGetGatewayActivityDetailUrl(tenantId,correlationId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getGatewayActivityDetailResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getGatewayActivityDetailResponse
-}
+);}
 
 
 
@@ -37510,27 +41370,20 @@ export const getGetGatewayActivitySessionTimelineUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/activity-sessions/${sessionId}`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/activity-sessions/${encodeURIComponent(String(sessionId))}`
 }
 
 export const getGatewayActivitySessionTimeline = async (tenantId: string,
-    sessionId: string, options?: RequestInit): Promise<getGatewayActivitySessionTimelineResponse> => {
+    sessionId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getGatewayActivitySessionTimelineResponse> => {
 
-  const res = await fetch(getGetGatewayActivitySessionTimelineUrl(tenantId,sessionId),
+  return managementApiFetch<getGatewayActivitySessionTimelineResponse>(getGetGatewayActivitySessionTimelineUrl(tenantId,sessionId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getGatewayActivitySessionTimelineResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getGatewayActivitySessionTimelineResponse
-}
+);}
 
 
 
@@ -37559,27 +41412,20 @@ export const getGetRoutingReconstructionUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/activities/${correlationId}/routing-reconstruction`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/activities/${encodeURIComponent(String(correlationId))}/routing-reconstruction`
 }
 
 export const getRoutingReconstruction = async (tenantId: string,
-    correlationId: string, options?: RequestInit): Promise<getRoutingReconstructionResponse> => {
+    correlationId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getRoutingReconstructionResponse> => {
 
-  const res = await fetch(getGetRoutingReconstructionUrl(tenantId,correlationId),
+  return managementApiFetch<getRoutingReconstructionResponse>(getGetRoutingReconstructionUrl(tenantId,correlationId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getRoutingReconstructionResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getRoutingReconstructionResponse
-}
+);}
 
 
 
@@ -37608,34 +41454,35 @@ export const getRecordActivityOutcomeAttributionUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/activities/${correlationId}/outcomes`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/activities/${encodeURIComponent(String(correlationId))}/outcomes`
 }
 
 export const recordActivityOutcomeAttribution = async (tenantId: string,
     correlationId: string,
-    recordActivityOutcomeAttributionBody: RecordActivityOutcomeAttributionBody, options?: RequestInit): Promise<recordActivityOutcomeAttributionResponse> => {
+    recordActivityOutcomeAttributionBody: RecordActivityOutcomeAttributionBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<recordActivityOutcomeAttributionResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getRecordActivityOutcomeAttributionUrl(tenantId,correlationId),
+return managementApiFetch<recordActivityOutcomeAttributionResponse>(getRecordActivityOutcomeAttributionUrl(tenantId,correlationId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(recordActivityOutcomeAttributionBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: recordActivityOutcomeAttributionResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as recordActivityOutcomeAttributionResponse
-}
+);}
 
 
 
@@ -37657,27 +41504,20 @@ export const getListActivityOutcomeAttributionsUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/activities/${correlationId}/outcomes`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/activities/${encodeURIComponent(String(correlationId))}/outcomes`
 }
 
 export const listActivityOutcomeAttributions = async (tenantId: string,
-    correlationId: string, options?: RequestInit): Promise<listActivityOutcomeAttributionsResponse> => {
+    correlationId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listActivityOutcomeAttributionsResponse> => {
 
-  const res = await fetch(getListActivityOutcomeAttributionsUrl(tenantId,correlationId),
+  return managementApiFetch<listActivityOutcomeAttributionsResponse>(getListActivityOutcomeAttributionsUrl(tenantId,correlationId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listActivityOutcomeAttributionsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listActivityOutcomeAttributionsResponse
-}
+);}
 
 
 
@@ -37713,27 +41553,20 @@ export const getGetGatewayTransactionTrendsUrl = (tenantId: string,
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/v1/tenants/${tenantId}/transaction-trends?${stringifiedParams}` : `/v1/tenants/${tenantId}/transaction-trends`
+  return stringifiedParams.length > 0 ? `/v1/tenants/${encodeURIComponent(String(tenantId))}/transaction-trends?${stringifiedParams}` : `/v1/tenants/${encodeURIComponent(String(tenantId))}/transaction-trends`
 }
 
 export const getGatewayTransactionTrends = async (tenantId: string,
-    params: GetGatewayTransactionTrendsParams, options?: RequestInit): Promise<getGatewayTransactionTrendsResponse> => {
+    params: GetGatewayTransactionTrendsParams, options?: Parameters<typeof managementApiFetch>[1]): Promise<getGatewayTransactionTrendsResponse> => {
 
-  const res = await fetch(getGetGatewayTransactionTrendsUrl(tenantId,params),
+  return managementApiFetch<getGatewayTransactionTrendsResponse>(getGetGatewayTransactionTrendsUrl(tenantId,params),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getGatewayTransactionTrendsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getGatewayTransactionTrendsResponse
-}
+);}
 
 
 
@@ -37769,27 +41602,20 @@ export const getGetAiUsageDashboardUrl = (tenantId: string,
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/v1/tenants/${tenantId}/ai-usage?${stringifiedParams}` : `/v1/tenants/${tenantId}/ai-usage`
+  return stringifiedParams.length > 0 ? `/v1/tenants/${encodeURIComponent(String(tenantId))}/ai-usage?${stringifiedParams}` : `/v1/tenants/${encodeURIComponent(String(tenantId))}/ai-usage`
 }
 
 export const getAiUsageDashboard = async (tenantId: string,
-    params: GetAiUsageDashboardParams, options?: RequestInit): Promise<getAiUsageDashboardResponse> => {
+    params: GetAiUsageDashboardParams, options?: Parameters<typeof managementApiFetch>[1]): Promise<getAiUsageDashboardResponse> => {
 
-  const res = await fetch(getGetAiUsageDashboardUrl(tenantId,params),
+  return managementApiFetch<getAiUsageDashboardResponse>(getGetAiUsageDashboardUrl(tenantId,params),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getAiUsageDashboardResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getAiUsageDashboardResponse
-}
+);}
 
 
 
@@ -37811,34 +41637,35 @@ export const getRecordInvocationAccountingUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/runtime-control/GATEWAY/${runtimeId}/accounting`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/runtime-control/GATEWAY/${encodeURIComponent(String(runtimeId))}/accounting`
 }
 
 export const recordInvocationAccounting = async (tenantId: string,
     runtimeId: string,
-    recordInvocationAccountingBody: RecordInvocationAccountingBody, options?: RequestInit): Promise<recordInvocationAccountingResponse> => {
+    recordInvocationAccountingBody: RecordInvocationAccountingBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<recordInvocationAccountingResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getRecordInvocationAccountingUrl(tenantId,runtimeId),
+return managementApiFetch<recordInvocationAccountingResponse>(getRecordInvocationAccountingUrl(tenantId,runtimeId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(recordInvocationAccountingBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: recordInvocationAccountingResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as recordInvocationAccountingResponse
-}
+);}
 
 
 
@@ -37860,27 +41687,20 @@ export const getGetInvocationAccountingUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/activities/${correlationId}/accounting`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/activities/${encodeURIComponent(String(correlationId))}/accounting`
 }
 
 export const getInvocationAccounting = async (tenantId: string,
-    correlationId: string, options?: RequestInit): Promise<getInvocationAccountingResponse> => {
+    correlationId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getInvocationAccountingResponse> => {
 
-  const res = await fetch(getGetInvocationAccountingUrl(tenantId,correlationId),
+  return managementApiFetch<getInvocationAccountingResponse>(getGetInvocationAccountingUrl(tenantId,correlationId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getInvocationAccountingResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getInvocationAccountingResponse
-}
+);}
 
 
 
@@ -37902,27 +41722,20 @@ export const getListUseCasesUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/organizations/${organizationId}/use-cases`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/organizations/${encodeURIComponent(String(organizationId))}/use-cases`
 }
 
 export const listUseCases = async (tenantId: string,
-    organizationId: string, options?: RequestInit): Promise<listUseCasesResponse> => {
+    organizationId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listUseCasesResponse> => {
 
-  const res = await fetch(getListUseCasesUrl(tenantId,organizationId),
+  return managementApiFetch<listUseCasesResponse>(getListUseCasesUrl(tenantId,organizationId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listUseCasesResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listUseCasesResponse
-}
+);}
 
 
 
@@ -37944,34 +41757,35 @@ export const getCreateUseCaseUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/organizations/${organizationId}/use-cases`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/organizations/${encodeURIComponent(String(organizationId))}/use-cases`
 }
 
 export const createUseCase = async (tenantId: string,
     organizationId: string,
-    createUseCaseBody: CreateUseCaseBody, options?: RequestInit): Promise<createUseCaseResponse> => {
+    createUseCaseBody: CreateUseCaseBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<createUseCaseResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getCreateUseCaseUrl(tenantId,organizationId),
+return managementApiFetch<createUseCaseResponse>(getCreateUseCaseUrl(tenantId,organizationId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(createUseCaseBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: createUseCaseResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as createUseCaseResponse
-}
+);}
 
 
 
@@ -37992,26 +41806,19 @@ export const getListUsagePoliciesUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/usage-policies`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/usage-policies`
 }
 
-export const listUsagePolicies = async (tenantId: string, options?: RequestInit): Promise<listUsagePoliciesResponse> => {
+export const listUsagePolicies = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listUsagePoliciesResponse> => {
 
-  const res = await fetch(getListUsagePoliciesUrl(tenantId),
+  return managementApiFetch<listUsagePoliciesResponse>(getListUsagePoliciesUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listUsagePoliciesResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listUsagePoliciesResponse
-}
+);}
 
 
 
@@ -38032,33 +41839,34 @@ export const getCreateUsagePolicyRevisionUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/usage-policies`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/usage-policies`
 }
 
 export const createUsagePolicyRevision = async (tenantId: string,
-    createUsagePolicyRevisionBody: CreateUsagePolicyRevisionBody, options?: RequestInit): Promise<createUsagePolicyRevisionResponse> => {
+    createUsagePolicyRevisionBody: CreateUsagePolicyRevisionBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<createUsagePolicyRevisionResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getCreateUsagePolicyRevisionUrl(tenantId),
+return managementApiFetch<createUsagePolicyRevisionResponse>(getCreateUsagePolicyRevisionUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(createUsagePolicyRevisionBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: createUsagePolicyRevisionResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as createUsagePolicyRevisionResponse
-}
+);}
 
 
 
@@ -38080,34 +41888,35 @@ export const getRecordEndpointActivityUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/endpoints/${deviceId}/ai-activities`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/endpoints/${encodeURIComponent(String(deviceId))}/ai-activities`
 }
 
 export const recordEndpointActivity = async (tenantId: string,
     deviceId: string,
-    recordEndpointActivityBody: RecordEndpointActivityBody, options?: RequestInit): Promise<recordEndpointActivityResponse> => {
+    recordEndpointActivityBody: RecordEndpointActivityBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<recordEndpointActivityResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getRecordEndpointActivityUrl(tenantId,deviceId),
+return managementApiFetch<recordEndpointActivityResponse>(getRecordEndpointActivityUrl(tenantId,deviceId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(recordEndpointActivityBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: recordEndpointActivityResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as recordEndpointActivityResponse
-}
+);}
 
 
 
@@ -38136,27 +41945,20 @@ export const getListEndpointActivitiesUrl = (tenantId: string,
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/v1/tenants/${tenantId}/ai-activities?${stringifiedParams}` : `/v1/tenants/${tenantId}/ai-activities`
+  return stringifiedParams.length > 0 ? `/v1/tenants/${encodeURIComponent(String(tenantId))}/ai-activities?${stringifiedParams}` : `/v1/tenants/${encodeURIComponent(String(tenantId))}/ai-activities`
 }
 
 export const listEndpointActivities = async (tenantId: string,
-    params?: ListEndpointActivitiesParams, options?: RequestInit): Promise<listEndpointActivitiesResponse> => {
+    params?: ListEndpointActivitiesParams, options?: Parameters<typeof managementApiFetch>[1]): Promise<listEndpointActivitiesResponse> => {
 
-  const res = await fetch(getListEndpointActivitiesUrl(tenantId,params),
+  return managementApiFetch<listEndpointActivitiesResponse>(getListEndpointActivitiesUrl(tenantId,params),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listEndpointActivitiesResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listEndpointActivitiesResponse
-}
+);}
 
 
 
@@ -38177,33 +41979,34 @@ export const getBootstrapEndpointDeviceUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/endpoints/bootstrap`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/endpoints/bootstrap`
 }
 
 export const bootstrapEndpointDevice = async (tenantId: string,
-    bootstrapEndpointDeviceBody: BootstrapEndpointDeviceBody, options?: RequestInit): Promise<bootstrapEndpointDeviceResponse> => {
+    bootstrapEndpointDeviceBody: BootstrapEndpointDeviceBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<bootstrapEndpointDeviceResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getBootstrapEndpointDeviceUrl(tenantId),
+return managementApiFetch<bootstrapEndpointDeviceResponse>(getBootstrapEndpointDeviceUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(bootstrapEndpointDeviceBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: bootstrapEndpointDeviceResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as bootstrapEndpointDeviceResponse
-}
+);}
 
 
 
@@ -38225,27 +42028,20 @@ export const getRotateEndpointCredentialUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/endpoints/${deviceId}/rotate-credential`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/endpoints/${encodeURIComponent(String(deviceId))}/rotate-credential`
 }
 
 export const rotateEndpointCredential = async (tenantId: string,
-    deviceId: string, options?: RequestInit): Promise<rotateEndpointCredentialResponse> => {
+    deviceId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<rotateEndpointCredentialResponse> => {
 
-  const res = await fetch(getRotateEndpointCredentialUrl(tenantId,deviceId),
+  return managementApiFetch<rotateEndpointCredentialResponse>(getRotateEndpointCredentialUrl(tenantId,deviceId),
   {
     ...options,
     method: 'POST'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: rotateEndpointCredentialResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as rotateEndpointCredentialResponse
-}
+);}
 
 
 
@@ -38266,26 +42062,19 @@ export const getListEndpointDevicesUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/endpoints`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/endpoints`
 }
 
-export const listEndpointDevices = async (tenantId: string, options?: RequestInit): Promise<listEndpointDevicesResponse> => {
+export const listEndpointDevices = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listEndpointDevicesResponse> => {
 
-  const res = await fetch(getListEndpointDevicesUrl(tenantId),
+  return managementApiFetch<listEndpointDevicesResponse>(getListEndpointDevicesUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listEndpointDevicesResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listEndpointDevicesResponse
-}
+);}
 
 
 
@@ -38307,27 +42096,20 @@ export const getGetEndpointDeviceUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/endpoints/${deviceId}`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/endpoints/${encodeURIComponent(String(deviceId))}`
 }
 
 export const getEndpointDevice = async (tenantId: string,
-    deviceId: string, options?: RequestInit): Promise<getEndpointDeviceResponse> => {
+    deviceId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getEndpointDeviceResponse> => {
 
-  const res = await fetch(getGetEndpointDeviceUrl(tenantId,deviceId),
+  return managementApiFetch<getEndpointDeviceResponse>(getGetEndpointDeviceUrl(tenantId,deviceId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getEndpointDeviceResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getEndpointDeviceResponse
-}
+);}
 
 
 
@@ -38349,27 +42131,20 @@ export const getListEndpointLifecycleEventsUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/endpoints/${deviceId}/lifecycle-events`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/endpoints/${encodeURIComponent(String(deviceId))}/lifecycle-events`
 }
 
 export const listEndpointLifecycleEvents = async (tenantId: string,
-    deviceId: string, options?: RequestInit): Promise<listEndpointLifecycleEventsResponse> => {
+    deviceId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listEndpointLifecycleEventsResponse> => {
 
-  const res = await fetch(getListEndpointLifecycleEventsUrl(tenantId,deviceId),
+  return managementApiFetch<listEndpointLifecycleEventsResponse>(getListEndpointLifecycleEventsUrl(tenantId,deviceId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listEndpointLifecycleEventsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listEndpointLifecycleEventsResponse
-}
+);}
 
 
 
@@ -38391,34 +42166,35 @@ export const getRevokeEndpointDeviceUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/endpoints/${deviceId}/revoke`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/endpoints/${encodeURIComponent(String(deviceId))}/revoke`
 }
 
 export const revokeEndpointDevice = async (tenantId: string,
     deviceId: string,
-    revokeEndpointDeviceBody: RevokeEndpointDeviceBody, options?: RequestInit): Promise<revokeEndpointDeviceResponse> => {
+    revokeEndpointDeviceBody: RevokeEndpointDeviceBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<revokeEndpointDeviceResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getRevokeEndpointDeviceUrl(tenantId,deviceId),
+return managementApiFetch<revokeEndpointDeviceResponse>(getRevokeEndpointDeviceUrl(tenantId,deviceId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(revokeEndpointDeviceBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: revokeEndpointDeviceResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as revokeEndpointDeviceResponse
-}
+);}
 
 
 
@@ -38439,33 +42215,34 @@ export const getEnrollEndpointRuntimeUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/endpoints/enroll`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/endpoints/enroll`
 }
 
 export const enrollEndpointRuntime = async (tenantId: string,
-    enrollEndpointRuntimeBody: EnrollEndpointRuntimeBody, options?: RequestInit): Promise<enrollEndpointRuntimeResponse> => {
+    enrollEndpointRuntimeBody: EnrollEndpointRuntimeBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<enrollEndpointRuntimeResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getEnrollEndpointRuntimeUrl(tenantId),
+return managementApiFetch<enrollEndpointRuntimeResponse>(getEnrollEndpointRuntimeUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(enrollEndpointRuntimeBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: enrollEndpointRuntimeResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as enrollEndpointRuntimeResponse
-}
+);}
 
 
 
@@ -38487,34 +42264,35 @@ export const getHeartbeatEndpointRuntimeUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/endpoints/${deviceId}/heartbeat`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/endpoints/${encodeURIComponent(String(deviceId))}/heartbeat`
 }
 
 export const heartbeatEndpointRuntime = async (tenantId: string,
     deviceId: string,
-    heartbeatEndpointRuntimeBody: HeartbeatEndpointRuntimeBody, options?: RequestInit): Promise<heartbeatEndpointRuntimeResponse> => {
+    heartbeatEndpointRuntimeBody: HeartbeatEndpointRuntimeBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<heartbeatEndpointRuntimeResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getHeartbeatEndpointRuntimeUrl(tenantId,deviceId),
+return managementApiFetch<heartbeatEndpointRuntimeResponse>(getHeartbeatEndpointRuntimeUrl(tenantId,deviceId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(heartbeatEndpointRuntimeBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: heartbeatEndpointRuntimeResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as heartbeatEndpointRuntimeResponse
-}
+);}
 
 
 
@@ -38536,34 +42314,35 @@ export const getRecordEndpointEnforcementUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/endpoints/${deviceId}/enforcements`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/endpoints/${encodeURIComponent(String(deviceId))}/enforcements`
 }
 
 export const recordEndpointEnforcement = async (tenantId: string,
     deviceId: string,
-    recordEndpointEnforcementBody: RecordEndpointEnforcementBody, options?: RequestInit): Promise<recordEndpointEnforcementResponse> => {
+    recordEndpointEnforcementBody: RecordEndpointEnforcementBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<recordEndpointEnforcementResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getRecordEndpointEnforcementUrl(tenantId,deviceId),
+return managementApiFetch<recordEndpointEnforcementResponse>(getRecordEndpointEnforcementUrl(tenantId,deviceId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(recordEndpointEnforcementBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: recordEndpointEnforcementResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as recordEndpointEnforcementResponse
-}
+);}
 
 
 
@@ -38593,28 +42372,21 @@ export const getListTraceSpansUrl = (tenantId: string,
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/v1/tenants/${tenantId}/traces/${traceId}/spans?${stringifiedParams}` : `/v1/tenants/${tenantId}/traces/${traceId}/spans`
+  return stringifiedParams.length > 0 ? `/v1/tenants/${encodeURIComponent(String(tenantId))}/traces/${encodeURIComponent(String(traceId))}/spans?${stringifiedParams}` : `/v1/tenants/${encodeURIComponent(String(tenantId))}/traces/${encodeURIComponent(String(traceId))}/spans`
 }
 
 export const listTraceSpans = async (tenantId: string,
     traceId: string,
-    params?: ListTraceSpansParams, options?: RequestInit): Promise<listTraceSpansResponse> => {
+    params?: ListTraceSpansParams, options?: Parameters<typeof managementApiFetch>[1]): Promise<listTraceSpansResponse> => {
 
-  const res = await fetch(getListTraceSpansUrl(tenantId,traceId,params),
+  return managementApiFetch<listTraceSpansResponse>(getListTraceSpansUrl(tenantId,traceId,params),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listTraceSpansResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listTraceSpansResponse
-}
+);}
 
 
 
@@ -38643,27 +42415,20 @@ export const getListTracesUrl = (tenantId: string,
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/v1/tenants/${tenantId}/traces?${stringifiedParams}` : `/v1/tenants/${tenantId}/traces`
+  return stringifiedParams.length > 0 ? `/v1/tenants/${encodeURIComponent(String(tenantId))}/traces?${stringifiedParams}` : `/v1/tenants/${encodeURIComponent(String(tenantId))}/traces`
 }
 
 export const listTraces = async (tenantId: string,
-    params?: ListTracesParams, options?: RequestInit): Promise<listTracesResponse> => {
+    params?: ListTracesParams, options?: Parameters<typeof managementApiFetch>[1]): Promise<listTracesResponse> => {
 
-  const res = await fetch(getListTracesUrl(tenantId,params),
+  return managementApiFetch<listTracesResponse>(getListTracesUrl(tenantId,params),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listTracesResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listTracesResponse
-}
+);}
 
 
 
@@ -38692,27 +42457,20 @@ export const getListTelemetryLogsUrl = (tenantId: string,
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/v1/tenants/${tenantId}/logs?${stringifiedParams}` : `/v1/tenants/${tenantId}/logs`
+  return stringifiedParams.length > 0 ? `/v1/tenants/${encodeURIComponent(String(tenantId))}/logs?${stringifiedParams}` : `/v1/tenants/${encodeURIComponent(String(tenantId))}/logs`
 }
 
 export const listTelemetryLogs = async (tenantId: string,
-    params?: ListTelemetryLogsParams, options?: RequestInit): Promise<listTelemetryLogsResponse> => {
+    params?: ListTelemetryLogsParams, options?: Parameters<typeof managementApiFetch>[1]): Promise<listTelemetryLogsResponse> => {
 
-  const res = await fetch(getListTelemetryLogsUrl(tenantId,params),
+  return managementApiFetch<listTelemetryLogsResponse>(getListTelemetryLogsUrl(tenantId,params),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listTelemetryLogsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listTelemetryLogsResponse
-}
+);}
 
 
 
@@ -38733,33 +42491,34 @@ export const getPostV1TenantsTenantIdBrowserTelemetryUrl = (tenantId: string,) =
 
 
 
-  return `/v1/tenants/${tenantId}/browser-telemetry`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/browser-telemetry`
 }
 
 export const postV1TenantsTenantIdBrowserTelemetry = async (tenantId: string,
-    postV1TenantsTenantIdBrowserTelemetryBody: PostV1TenantsTenantIdBrowserTelemetryBody, options?: RequestInit): Promise<postV1TenantsTenantIdBrowserTelemetryResponse> => {
+    postV1TenantsTenantIdBrowserTelemetryBody: PostV1TenantsTenantIdBrowserTelemetryBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<postV1TenantsTenantIdBrowserTelemetryResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getPostV1TenantsTenantIdBrowserTelemetryUrl(tenantId),
+return managementApiFetch<postV1TenantsTenantIdBrowserTelemetryResponse>(getPostV1TenantsTenantIdBrowserTelemetryUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(postV1TenantsTenantIdBrowserTelemetryBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: postV1TenantsTenantIdBrowserTelemetryResponse['data'] = body ? JSON.parse(body) : undefined
-  return { data, status: res.status, headers: res.headers } as postV1TenantsTenantIdBrowserTelemetryResponse
-}
+);}
 
 
 
@@ -38788,27 +42547,20 @@ export const getGetGatewayMetricsUrl = (tenantId: string,
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/v1/tenants/${tenantId}/metrics?${stringifiedParams}` : `/v1/tenants/${tenantId}/metrics`
+  return stringifiedParams.length > 0 ? `/v1/tenants/${encodeURIComponent(String(tenantId))}/metrics?${stringifiedParams}` : `/v1/tenants/${encodeURIComponent(String(tenantId))}/metrics`
 }
 
 export const getGatewayMetrics = async (tenantId: string,
-    params?: GetGatewayMetricsParams, options?: RequestInit): Promise<getGatewayMetricsResponse> => {
+    params?: GetGatewayMetricsParams, options?: Parameters<typeof managementApiFetch>[1]): Promise<getGatewayMetricsResponse> => {
 
-  const res = await fetch(getGetGatewayMetricsUrl(tenantId,params),
+  return managementApiFetch<getGatewayMetricsResponse>(getGetGatewayMetricsUrl(tenantId,params),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getGatewayMetricsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getGatewayMetricsResponse
-}
+);}
 
 
 
@@ -38830,34 +42582,35 @@ export const getRecordGatewayAuthorizationAuditEventUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/runtime-control/GATEWAY/${runtimeId}/audit-events`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/runtime-control/GATEWAY/${encodeURIComponent(String(runtimeId))}/audit-events`
 }
 
 export const recordGatewayAuthorizationAuditEvent = async (tenantId: string,
     runtimeId: string,
-    recordGatewayAuthorizationAuditEventBody: RecordGatewayAuthorizationAuditEventBody, options?: RequestInit): Promise<recordGatewayAuthorizationAuditEventResponse> => {
+    recordGatewayAuthorizationAuditEventBody: RecordGatewayAuthorizationAuditEventBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<recordGatewayAuthorizationAuditEventResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getRecordGatewayAuthorizationAuditEventUrl(tenantId,runtimeId),
+return managementApiFetch<recordGatewayAuthorizationAuditEventResponse>(getRecordGatewayAuthorizationAuditEventUrl(tenantId,runtimeId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(recordGatewayAuthorizationAuditEventBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: recordGatewayAuthorizationAuditEventResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as recordGatewayAuthorizationAuditEventResponse
-}
+);}
 
 
 
@@ -38893,27 +42646,20 @@ export const getListGatewayAuthorizationAuditEventsUrl = (tenantId: string,
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/v1/tenants/${tenantId}/audit-events?${stringifiedParams}` : `/v1/tenants/${tenantId}/audit-events`
+  return stringifiedParams.length > 0 ? `/v1/tenants/${encodeURIComponent(String(tenantId))}/audit-events?${stringifiedParams}` : `/v1/tenants/${encodeURIComponent(String(tenantId))}/audit-events`
 }
 
 export const listGatewayAuthorizationAuditEvents = async (tenantId: string,
-    params?: ListGatewayAuthorizationAuditEventsParams, options?: RequestInit): Promise<listGatewayAuthorizationAuditEventsResponse> => {
+    params?: ListGatewayAuthorizationAuditEventsParams, options?: Parameters<typeof managementApiFetch>[1]): Promise<listGatewayAuthorizationAuditEventsResponse> => {
 
-  const res = await fetch(getListGatewayAuthorizationAuditEventsUrl(tenantId,params),
+  return managementApiFetch<listGatewayAuthorizationAuditEventsResponse>(getListGatewayAuthorizationAuditEventsUrl(tenantId,params),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listGatewayAuthorizationAuditEventsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listGatewayAuthorizationAuditEventsResponse
-}
+);}
 
 
 
@@ -38934,26 +42680,19 @@ export const getGetV1TenantsTenantIdSiemDestinationUrl = (tenantId: string,) => 
 
 
 
-  return `/v1/tenants/${tenantId}/siem-destination`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/siem-destination`
 }
 
-export const getV1TenantsTenantIdSiemDestination = async (tenantId: string, options?: RequestInit): Promise<getV1TenantsTenantIdSiemDestinationResponse> => {
+export const getV1TenantsTenantIdSiemDestination = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getV1TenantsTenantIdSiemDestinationResponse> => {
 
-  const res = await fetch(getGetV1TenantsTenantIdSiemDestinationUrl(tenantId),
+  return managementApiFetch<getV1TenantsTenantIdSiemDestinationResponse>(getGetV1TenantsTenantIdSiemDestinationUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getV1TenantsTenantIdSiemDestinationResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getV1TenantsTenantIdSiemDestinationResponse
-}
+);}
 
 
 
@@ -38974,33 +42713,34 @@ export const getPutV1TenantsTenantIdSiemDestinationUrl = (tenantId: string,) => 
 
 
 
-  return `/v1/tenants/${tenantId}/siem-destination`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/siem-destination`
 }
 
 export const putV1TenantsTenantIdSiemDestination = async (tenantId: string,
-    putV1TenantsTenantIdSiemDestinationBody: PutV1TenantsTenantIdSiemDestinationBody, options?: RequestInit): Promise<putV1TenantsTenantIdSiemDestinationResponse> => {
+    putV1TenantsTenantIdSiemDestinationBody: PutV1TenantsTenantIdSiemDestinationBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<putV1TenantsTenantIdSiemDestinationResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getPutV1TenantsTenantIdSiemDestinationUrl(tenantId),
+return managementApiFetch<putV1TenantsTenantIdSiemDestinationResponse>(getPutV1TenantsTenantIdSiemDestinationUrl(tenantId),
   {
     ...options,
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(putV1TenantsTenantIdSiemDestinationBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: putV1TenantsTenantIdSiemDestinationResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as putV1TenantsTenantIdSiemDestinationResponse
-}
+);}
 
 
 
@@ -39029,27 +42769,20 @@ export const getGetV1TenantsTenantIdSiemDeliveriesUrl = (tenantId: string,
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/v1/tenants/${tenantId}/siem-deliveries?${stringifiedParams}` : `/v1/tenants/${tenantId}/siem-deliveries`
+  return stringifiedParams.length > 0 ? `/v1/tenants/${encodeURIComponent(String(tenantId))}/siem-deliveries?${stringifiedParams}` : `/v1/tenants/${encodeURIComponent(String(tenantId))}/siem-deliveries`
 }
 
 export const getV1TenantsTenantIdSiemDeliveries = async (tenantId: string,
-    params?: GetV1TenantsTenantIdSiemDeliveriesParams, options?: RequestInit): Promise<getV1TenantsTenantIdSiemDeliveriesResponse> => {
+    params?: GetV1TenantsTenantIdSiemDeliveriesParams, options?: Parameters<typeof managementApiFetch>[1]): Promise<getV1TenantsTenantIdSiemDeliveriesResponse> => {
 
-  const res = await fetch(getGetV1TenantsTenantIdSiemDeliveriesUrl(tenantId,params),
+  return managementApiFetch<getV1TenantsTenantIdSiemDeliveriesResponse>(getGetV1TenantsTenantIdSiemDeliveriesUrl(tenantId,params),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getV1TenantsTenantIdSiemDeliveriesResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getV1TenantsTenantIdSiemDeliveriesResponse
-}
+);}
 
 
 
@@ -39070,26 +42803,19 @@ export const getListNotificationSubscriptionsUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/notification-subscriptions`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/notification-subscriptions`
 }
 
-export const listNotificationSubscriptions = async (tenantId: string, options?: RequestInit): Promise<listNotificationSubscriptionsResponse> => {
+export const listNotificationSubscriptions = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listNotificationSubscriptionsResponse> => {
 
-  const res = await fetch(getListNotificationSubscriptionsUrl(tenantId),
+  return managementApiFetch<listNotificationSubscriptionsResponse>(getListNotificationSubscriptionsUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listNotificationSubscriptionsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listNotificationSubscriptionsResponse
-}
+);}
 
 
 
@@ -39110,33 +42836,34 @@ export const getUpsertNotificationSubscriptionUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/notification-subscriptions`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/notification-subscriptions`
 }
 
 export const upsertNotificationSubscription = async (tenantId: string,
-    upsertNotificationSubscriptionBody: UpsertNotificationSubscriptionBody, options?: RequestInit): Promise<upsertNotificationSubscriptionResponse> => {
+    upsertNotificationSubscriptionBody: UpsertNotificationSubscriptionBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<upsertNotificationSubscriptionResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getUpsertNotificationSubscriptionUrl(tenantId),
+return managementApiFetch<upsertNotificationSubscriptionResponse>(getUpsertNotificationSubscriptionUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(upsertNotificationSubscriptionBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: upsertNotificationSubscriptionResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as upsertNotificationSubscriptionResponse
-}
+);}
 
 
 
@@ -39158,34 +42885,35 @@ export const getDisableNotificationSubscriptionUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/notification-subscriptions/${subscriptionId}`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/notification-subscriptions/${encodeURIComponent(String(subscriptionId))}`
 }
 
 export const disableNotificationSubscription = async (tenantId: string,
     subscriptionId: string,
-    disableNotificationSubscriptionBody: DisableNotificationSubscriptionBody, options?: RequestInit): Promise<disableNotificationSubscriptionResponse> => {
+    disableNotificationSubscriptionBody: DisableNotificationSubscriptionBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<disableNotificationSubscriptionResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getDisableNotificationSubscriptionUrl(tenantId,subscriptionId),
+return managementApiFetch<disableNotificationSubscriptionResponse>(getDisableNotificationSubscriptionUrl(tenantId,subscriptionId),
   {
     ...options,
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(disableNotificationSubscriptionBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: disableNotificationSubscriptionResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as disableNotificationSubscriptionResponse
-}
+);}
 
 
 
@@ -39206,26 +42934,19 @@ export const getListTenantConfigurationRevisionsUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/configuration-revisions`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/configuration-revisions`
 }
 
-export const listTenantConfigurationRevisions = async (tenantId: string, options?: RequestInit): Promise<listTenantConfigurationRevisionsResponse> => {
+export const listTenantConfigurationRevisions = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listTenantConfigurationRevisionsResponse> => {
 
-  const res = await fetch(getListTenantConfigurationRevisionsUrl(tenantId),
+  return managementApiFetch<listTenantConfigurationRevisionsResponse>(getListTenantConfigurationRevisionsUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listTenantConfigurationRevisionsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listTenantConfigurationRevisionsResponse
-}
+);}
 
 
 
@@ -39246,33 +42967,34 @@ export const getCreateTenantConfigurationRevisionUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/configuration-revisions`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/configuration-revisions`
 }
 
 export const createTenantConfigurationRevision = async (tenantId: string,
-    createTenantConfigurationRevisionBody: CreateTenantConfigurationRevisionBody, options?: RequestInit): Promise<createTenantConfigurationRevisionResponse> => {
+    createTenantConfigurationRevisionBody: CreateTenantConfigurationRevisionBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<createTenantConfigurationRevisionResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getCreateTenantConfigurationRevisionUrl(tenantId),
+return managementApiFetch<createTenantConfigurationRevisionResponse>(getCreateTenantConfigurationRevisionUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(createTenantConfigurationRevisionBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: createTenantConfigurationRevisionResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as createTenantConfigurationRevisionResponse
-}
+);}
 
 
 
@@ -39293,26 +43015,19 @@ export const getGetPublishedTenantConfigurationUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/self-service-configuration`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/self-service-configuration`
 }
 
-export const getPublishedTenantConfiguration = async (tenantId: string, options?: RequestInit): Promise<getPublishedTenantConfigurationResponse> => {
+export const getPublishedTenantConfiguration = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getPublishedTenantConfigurationResponse> => {
 
-  const res = await fetch(getGetPublishedTenantConfigurationUrl(tenantId),
+  return managementApiFetch<getPublishedTenantConfigurationResponse>(getGetPublishedTenantConfigurationUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getPublishedTenantConfigurationResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getPublishedTenantConfigurationResponse
-}
+);}
 
 
 
@@ -39334,34 +43049,35 @@ export const getPostV1TenantsTenantIdConfigurationRevisionsRevisionValidateUrl =
 
 
 
-  return `/v1/tenants/${tenantId}/configuration-revisions/${revision}/validate`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/configuration-revisions/${encodeURIComponent(String(revision))}/validate`
 }
 
 export const postV1TenantsTenantIdConfigurationRevisionsRevisionValidate = async (tenantId: string,
     revision: string,
-    postV1TenantsTenantIdConfigurationRevisionsRevisionValidateBody: PostV1TenantsTenantIdConfigurationRevisionsRevisionValidateBody, options?: RequestInit): Promise<postV1TenantsTenantIdConfigurationRevisionsRevisionValidateResponse> => {
+    postV1TenantsTenantIdConfigurationRevisionsRevisionValidateBody: PostV1TenantsTenantIdConfigurationRevisionsRevisionValidateBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<postV1TenantsTenantIdConfigurationRevisionsRevisionValidateResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getPostV1TenantsTenantIdConfigurationRevisionsRevisionValidateUrl(tenantId,revision),
+return managementApiFetch<postV1TenantsTenantIdConfigurationRevisionsRevisionValidateResponse>(getPostV1TenantsTenantIdConfigurationRevisionsRevisionValidateUrl(tenantId,revision),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(postV1TenantsTenantIdConfigurationRevisionsRevisionValidateBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: postV1TenantsTenantIdConfigurationRevisionsRevisionValidateResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as postV1TenantsTenantIdConfigurationRevisionsRevisionValidateResponse
-}
+);}
 
 
 
@@ -39383,34 +43099,35 @@ export const getPostV1TenantsTenantIdConfigurationRevisionsRevisionPreviewUrl = 
 
 
 
-  return `/v1/tenants/${tenantId}/configuration-revisions/${revision}/preview`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/configuration-revisions/${encodeURIComponent(String(revision))}/preview`
 }
 
 export const postV1TenantsTenantIdConfigurationRevisionsRevisionPreview = async (tenantId: string,
     revision: string,
-    postV1TenantsTenantIdConfigurationRevisionsRevisionPreviewBody: PostV1TenantsTenantIdConfigurationRevisionsRevisionPreviewBody, options?: RequestInit): Promise<postV1TenantsTenantIdConfigurationRevisionsRevisionPreviewResponse> => {
+    postV1TenantsTenantIdConfigurationRevisionsRevisionPreviewBody: PostV1TenantsTenantIdConfigurationRevisionsRevisionPreviewBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<postV1TenantsTenantIdConfigurationRevisionsRevisionPreviewResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getPostV1TenantsTenantIdConfigurationRevisionsRevisionPreviewUrl(tenantId,revision),
+return managementApiFetch<postV1TenantsTenantIdConfigurationRevisionsRevisionPreviewResponse>(getPostV1TenantsTenantIdConfigurationRevisionsRevisionPreviewUrl(tenantId,revision),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(postV1TenantsTenantIdConfigurationRevisionsRevisionPreviewBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: postV1TenantsTenantIdConfigurationRevisionsRevisionPreviewResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as postV1TenantsTenantIdConfigurationRevisionsRevisionPreviewResponse
-}
+);}
 
 
 
@@ -39432,34 +43149,35 @@ export const getPostV1TenantsTenantIdConfigurationRevisionsRevisionReviewUrl = (
 
 
 
-  return `/v1/tenants/${tenantId}/configuration-revisions/${revision}/review`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/configuration-revisions/${encodeURIComponent(String(revision))}/review`
 }
 
 export const postV1TenantsTenantIdConfigurationRevisionsRevisionReview = async (tenantId: string,
     revision: string,
-    postV1TenantsTenantIdConfigurationRevisionsRevisionReviewBody: PostV1TenantsTenantIdConfigurationRevisionsRevisionReviewBody, options?: RequestInit): Promise<postV1TenantsTenantIdConfigurationRevisionsRevisionReviewResponse> => {
+    postV1TenantsTenantIdConfigurationRevisionsRevisionReviewBody: PostV1TenantsTenantIdConfigurationRevisionsRevisionReviewBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<postV1TenantsTenantIdConfigurationRevisionsRevisionReviewResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getPostV1TenantsTenantIdConfigurationRevisionsRevisionReviewUrl(tenantId,revision),
+return managementApiFetch<postV1TenantsTenantIdConfigurationRevisionsRevisionReviewResponse>(getPostV1TenantsTenantIdConfigurationRevisionsRevisionReviewUrl(tenantId,revision),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(postV1TenantsTenantIdConfigurationRevisionsRevisionReviewBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: postV1TenantsTenantIdConfigurationRevisionsRevisionReviewResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as postV1TenantsTenantIdConfigurationRevisionsRevisionReviewResponse
-}
+);}
 
 
 
@@ -39481,34 +43199,35 @@ export const getPostV1TenantsTenantIdConfigurationRevisionsRevisionPublishUrl = 
 
 
 
-  return `/v1/tenants/${tenantId}/configuration-revisions/${revision}/publish`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/configuration-revisions/${encodeURIComponent(String(revision))}/publish`
 }
 
 export const postV1TenantsTenantIdConfigurationRevisionsRevisionPublish = async (tenantId: string,
     revision: string,
-    postV1TenantsTenantIdConfigurationRevisionsRevisionPublishBody: PostV1TenantsTenantIdConfigurationRevisionsRevisionPublishBody, options?: RequestInit): Promise<postV1TenantsTenantIdConfigurationRevisionsRevisionPublishResponse> => {
+    postV1TenantsTenantIdConfigurationRevisionsRevisionPublishBody: PostV1TenantsTenantIdConfigurationRevisionsRevisionPublishBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<postV1TenantsTenantIdConfigurationRevisionsRevisionPublishResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getPostV1TenantsTenantIdConfigurationRevisionsRevisionPublishUrl(tenantId,revision),
+return managementApiFetch<postV1TenantsTenantIdConfigurationRevisionsRevisionPublishResponse>(getPostV1TenantsTenantIdConfigurationRevisionsRevisionPublishUrl(tenantId,revision),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(postV1TenantsTenantIdConfigurationRevisionsRevisionPublishBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: postV1TenantsTenantIdConfigurationRevisionsRevisionPublishResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as postV1TenantsTenantIdConfigurationRevisionsRevisionPublishResponse
-}
+);}
 
 
 
@@ -39530,34 +43249,35 @@ export const getPostV1TenantsTenantIdConfigurationRevisionsRevisionRetryUrl = (t
 
 
 
-  return `/v1/tenants/${tenantId}/configuration-revisions/${revision}/retry`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/configuration-revisions/${encodeURIComponent(String(revision))}/retry`
 }
 
 export const postV1TenantsTenantIdConfigurationRevisionsRevisionRetry = async (tenantId: string,
     revision: string,
-    postV1TenantsTenantIdConfigurationRevisionsRevisionRetryBody: PostV1TenantsTenantIdConfigurationRevisionsRevisionRetryBody, options?: RequestInit): Promise<postV1TenantsTenantIdConfigurationRevisionsRevisionRetryResponse> => {
+    postV1TenantsTenantIdConfigurationRevisionsRevisionRetryBody: PostV1TenantsTenantIdConfigurationRevisionsRevisionRetryBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<postV1TenantsTenantIdConfigurationRevisionsRevisionRetryResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getPostV1TenantsTenantIdConfigurationRevisionsRevisionRetryUrl(tenantId,revision),
+return managementApiFetch<postV1TenantsTenantIdConfigurationRevisionsRevisionRetryResponse>(getPostV1TenantsTenantIdConfigurationRevisionsRevisionRetryUrl(tenantId,revision),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(postV1TenantsTenantIdConfigurationRevisionsRevisionRetryBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: postV1TenantsTenantIdConfigurationRevisionsRevisionRetryResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as postV1TenantsTenantIdConfigurationRevisionsRevisionRetryResponse
-}
+);}
 
 
 
@@ -39579,34 +43299,35 @@ export const getPostV1TenantsTenantIdConfigurationRevisionsRevisionProjectionObs
 
 
 
-  return `/v1/tenants/${tenantId}/configuration-revisions/${revision}/projection-observation`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/configuration-revisions/${encodeURIComponent(String(revision))}/projection-observation`
 }
 
 export const postV1TenantsTenantIdConfigurationRevisionsRevisionProjectionObservation = async (tenantId: string,
     revision: string,
-    postV1TenantsTenantIdConfigurationRevisionsRevisionProjectionObservationBody: PostV1TenantsTenantIdConfigurationRevisionsRevisionProjectionObservationBody, options?: RequestInit): Promise<postV1TenantsTenantIdConfigurationRevisionsRevisionProjectionObservationResponse> => {
+    postV1TenantsTenantIdConfigurationRevisionsRevisionProjectionObservationBody: PostV1TenantsTenantIdConfigurationRevisionsRevisionProjectionObservationBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<postV1TenantsTenantIdConfigurationRevisionsRevisionProjectionObservationResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getPostV1TenantsTenantIdConfigurationRevisionsRevisionProjectionObservationUrl(tenantId,revision),
+return managementApiFetch<postV1TenantsTenantIdConfigurationRevisionsRevisionProjectionObservationResponse>(getPostV1TenantsTenantIdConfigurationRevisionsRevisionProjectionObservationUrl(tenantId,revision),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(postV1TenantsTenantIdConfigurationRevisionsRevisionProjectionObservationBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: postV1TenantsTenantIdConfigurationRevisionsRevisionProjectionObservationResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as postV1TenantsTenantIdConfigurationRevisionsRevisionProjectionObservationResponse
-}
+);}
 
 
 
@@ -39627,33 +43348,34 @@ export const getPostV1TenantsTenantIdConfigurationRevisionsRollbackUrl = (tenant
 
 
 
-  return `/v1/tenants/${tenantId}/configuration-revisions/rollback`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/configuration-revisions/rollback`
 }
 
 export const postV1TenantsTenantIdConfigurationRevisionsRollback = async (tenantId: string,
-    postV1TenantsTenantIdConfigurationRevisionsRollbackBody: PostV1TenantsTenantIdConfigurationRevisionsRollbackBody, options?: RequestInit): Promise<postV1TenantsTenantIdConfigurationRevisionsRollbackResponse> => {
+    postV1TenantsTenantIdConfigurationRevisionsRollbackBody: PostV1TenantsTenantIdConfigurationRevisionsRollbackBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<postV1TenantsTenantIdConfigurationRevisionsRollbackResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getPostV1TenantsTenantIdConfigurationRevisionsRollbackUrl(tenantId),
+return managementApiFetch<postV1TenantsTenantIdConfigurationRevisionsRollbackResponse>(getPostV1TenantsTenantIdConfigurationRevisionsRollbackUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(postV1TenantsTenantIdConfigurationRevisionsRollbackBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: postV1TenantsTenantIdConfigurationRevisionsRollbackResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as postV1TenantsTenantIdConfigurationRevisionsRollbackResponse
-}
+);}
 
 
 
@@ -39675,27 +43397,20 @@ export const getGetGatewayDiagnosticSettingsUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/gateway-groups/${gatewayId}/diagnostics`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/gateway-groups/${encodeURIComponent(String(gatewayId))}/diagnostics`
 }
 
 export const getGatewayDiagnosticSettings = async (tenantId: string,
-    gatewayId: string, options?: RequestInit): Promise<getGatewayDiagnosticSettingsResponse> => {
+    gatewayId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getGatewayDiagnosticSettingsResponse> => {
 
-  const res = await fetch(getGetGatewayDiagnosticSettingsUrl(tenantId,gatewayId),
+  return managementApiFetch<getGatewayDiagnosticSettingsResponse>(getGetGatewayDiagnosticSettingsUrl(tenantId,gatewayId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getGatewayDiagnosticSettingsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getGatewayDiagnosticSettingsResponse
-}
+);}
 
 
 
@@ -39717,34 +43432,35 @@ export const getUpdateGatewayDiagnosticSettingsUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/gateway-groups/${gatewayId}/diagnostics`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/gateway-groups/${encodeURIComponent(String(gatewayId))}/diagnostics`
 }
 
 export const updateGatewayDiagnosticSettings = async (tenantId: string,
     gatewayId: string,
-    updateGatewayDiagnosticSettingsBody: UpdateGatewayDiagnosticSettingsBody, options?: RequestInit): Promise<updateGatewayDiagnosticSettingsResponse> => {
+    updateGatewayDiagnosticSettingsBody: UpdateGatewayDiagnosticSettingsBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<updateGatewayDiagnosticSettingsResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getUpdateGatewayDiagnosticSettingsUrl(tenantId,gatewayId),
+return managementApiFetch<updateGatewayDiagnosticSettingsResponse>(getUpdateGatewayDiagnosticSettingsUrl(tenantId,gatewayId),
   {
     ...options,
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(updateGatewayDiagnosticSettingsBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: updateGatewayDiagnosticSettingsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as updateGatewayDiagnosticSettingsResponse
-}
+);}
 
 
 
@@ -39765,26 +43481,19 @@ export const getListGatewayRegistrationsUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/gateways`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/gateways`
 }
 
-export const listGatewayRegistrations = async (tenantId: string, options?: RequestInit): Promise<listGatewayRegistrationsResponse> => {
+export const listGatewayRegistrations = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listGatewayRegistrationsResponse> => {
 
-  const res = await fetch(getListGatewayRegistrationsUrl(tenantId),
+  return managementApiFetch<listGatewayRegistrationsResponse>(getListGatewayRegistrationsUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listGatewayRegistrationsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listGatewayRegistrationsResponse
-}
+);}
 
 
 
@@ -39805,33 +43514,34 @@ export const getRegisterGatewayUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/gateways`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/gateways`
 }
 
 export const registerGateway = async (tenantId: string,
-    registerGatewayBody: RegisterGatewayBody, options?: RequestInit): Promise<registerGatewayResponse> => {
+    registerGatewayBody: RegisterGatewayBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<registerGatewayResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getRegisterGatewayUrl(tenantId),
+return managementApiFetch<registerGatewayResponse>(getRegisterGatewayUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(registerGatewayBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: registerGatewayResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as registerGatewayResponse
-}
+);}
 
 
 
@@ -39853,34 +43563,35 @@ export const getProvisionGatewayUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/gateways/${runtimeId}/provision`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/gateways/${encodeURIComponent(String(runtimeId))}/provision`
 }
 
 export const provisionGateway = async (tenantId: string,
     runtimeId: string,
-    provisionGatewayBody: ProvisionGatewayBody, options?: RequestInit): Promise<provisionGatewayResponse> => {
+    provisionGatewayBody: ProvisionGatewayBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<provisionGatewayResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getProvisionGatewayUrl(tenantId,runtimeId),
+return managementApiFetch<provisionGatewayResponse>(getProvisionGatewayUrl(tenantId,runtimeId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(provisionGatewayBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: provisionGatewayResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as provisionGatewayResponse
-}
+);}
 
 
 
@@ -39902,34 +43613,35 @@ export const getRetireGatewayUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/gateways/${runtimeId}/retire`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/gateways/${encodeURIComponent(String(runtimeId))}/retire`
 }
 
 export const retireGateway = async (tenantId: string,
     runtimeId: string,
-    retireGatewayBody: RetireGatewayBody, options?: RequestInit): Promise<retireGatewayResponse> => {
+    retireGatewayBody: RetireGatewayBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<retireGatewayResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getRetireGatewayUrl(tenantId,runtimeId),
+return managementApiFetch<retireGatewayResponse>(getRetireGatewayUrl(tenantId,runtimeId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(retireGatewayBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: retireGatewayResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as retireGatewayResponse
-}
+);}
 
 
 
@@ -39950,26 +43662,19 @@ export const getGetV1TenantsTenantIdCatalogUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/catalog`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/catalog`
 }
 
-export const getV1TenantsTenantIdCatalog = async (tenantId: string, options?: RequestInit): Promise<getV1TenantsTenantIdCatalogResponse> => {
+export const getV1TenantsTenantIdCatalog = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getV1TenantsTenantIdCatalogResponse> => {
 
-  const res = await fetch(getGetV1TenantsTenantIdCatalogUrl(tenantId),
+  return managementApiFetch<getV1TenantsTenantIdCatalogResponse>(getGetV1TenantsTenantIdCatalogUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getV1TenantsTenantIdCatalogResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getV1TenantsTenantIdCatalogResponse
-}
+);}
 
 
 
@@ -39990,33 +43695,34 @@ export const getPostV1TenantsTenantIdAccessRequestsUrl = (tenantId: string,) => 
 
 
 
-  return `/v1/tenants/${tenantId}/access-requests`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/access-requests`
 }
 
 export const postV1TenantsTenantIdAccessRequests = async (tenantId: string,
-    postV1TenantsTenantIdAccessRequestsBody: PostV1TenantsTenantIdAccessRequestsBody, options?: RequestInit): Promise<postV1TenantsTenantIdAccessRequestsResponse> => {
+    postV1TenantsTenantIdAccessRequestsBody: PostV1TenantsTenantIdAccessRequestsBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<postV1TenantsTenantIdAccessRequestsResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getPostV1TenantsTenantIdAccessRequestsUrl(tenantId),
+return managementApiFetch<postV1TenantsTenantIdAccessRequestsResponse>(getPostV1TenantsTenantIdAccessRequestsUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(postV1TenantsTenantIdAccessRequestsBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: postV1TenantsTenantIdAccessRequestsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as postV1TenantsTenantIdAccessRequestsResponse
-}
+);}
 
 
 
@@ -40037,26 +43743,19 @@ export const getGetV1TenantsTenantIdAccessRequestsUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/access-requests`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/access-requests`
 }
 
-export const getV1TenantsTenantIdAccessRequests = async (tenantId: string, options?: RequestInit): Promise<getV1TenantsTenantIdAccessRequestsResponse> => {
+export const getV1TenantsTenantIdAccessRequests = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getV1TenantsTenantIdAccessRequestsResponse> => {
 
-  const res = await fetch(getGetV1TenantsTenantIdAccessRequestsUrl(tenantId),
+  return managementApiFetch<getV1TenantsTenantIdAccessRequestsResponse>(getGetV1TenantsTenantIdAccessRequestsUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getV1TenantsTenantIdAccessRequestsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getV1TenantsTenantIdAccessRequestsResponse
-}
+);}
 
 
 
@@ -40077,26 +43776,19 @@ export const getGetV1TenantsTenantIdMeAccessRequestsUrl = (tenantId: string,) =>
 
 
 
-  return `/v1/tenants/${tenantId}/me/access-requests`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/me/access-requests`
 }
 
-export const getV1TenantsTenantIdMeAccessRequests = async (tenantId: string, options?: RequestInit): Promise<getV1TenantsTenantIdMeAccessRequestsResponse> => {
+export const getV1TenantsTenantIdMeAccessRequests = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getV1TenantsTenantIdMeAccessRequestsResponse> => {
 
-  const res = await fetch(getGetV1TenantsTenantIdMeAccessRequestsUrl(tenantId),
+  return managementApiFetch<getV1TenantsTenantIdMeAccessRequestsResponse>(getGetV1TenantsTenantIdMeAccessRequestsUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getV1TenantsTenantIdMeAccessRequestsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getV1TenantsTenantIdMeAccessRequestsResponse
-}
+);}
 
 
 
@@ -40118,34 +43810,35 @@ export const getPostV1TenantsTenantIdAccessRequestsRequestIdDecisionUrl = (tenan
 
 
 
-  return `/v1/tenants/${tenantId}/access-requests/${requestId}/decision`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/access-requests/${encodeURIComponent(String(requestId))}/decision`
 }
 
 export const postV1TenantsTenantIdAccessRequestsRequestIdDecision = async (tenantId: string,
     requestId: string,
-    postV1TenantsTenantIdAccessRequestsRequestIdDecisionBody: PostV1TenantsTenantIdAccessRequestsRequestIdDecisionBody, options?: RequestInit): Promise<postV1TenantsTenantIdAccessRequestsRequestIdDecisionResponse> => {
+    postV1TenantsTenantIdAccessRequestsRequestIdDecisionBody: PostV1TenantsTenantIdAccessRequestsRequestIdDecisionBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<postV1TenantsTenantIdAccessRequestsRequestIdDecisionResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getPostV1TenantsTenantIdAccessRequestsRequestIdDecisionUrl(tenantId,requestId),
+return managementApiFetch<postV1TenantsTenantIdAccessRequestsRequestIdDecisionResponse>(getPostV1TenantsTenantIdAccessRequestsRequestIdDecisionUrl(tenantId,requestId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(postV1TenantsTenantIdAccessRequestsRequestIdDecisionBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: postV1TenantsTenantIdAccessRequestsRequestIdDecisionResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as postV1TenantsTenantIdAccessRequestsRequestIdDecisionResponse
-}
+);}
 
 
 
@@ -40167,34 +43860,35 @@ export const getPostV1TenantsTenantIdAccessRequestsRequestIdCancelUrl = (tenantI
 
 
 
-  return `/v1/tenants/${tenantId}/access-requests/${requestId}/cancel`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/access-requests/${encodeURIComponent(String(requestId))}/cancel`
 }
 
 export const postV1TenantsTenantIdAccessRequestsRequestIdCancel = async (tenantId: string,
     requestId: string,
-    postV1TenantsTenantIdAccessRequestsRequestIdCancelBody: PostV1TenantsTenantIdAccessRequestsRequestIdCancelBody, options?: RequestInit): Promise<postV1TenantsTenantIdAccessRequestsRequestIdCancelResponse> => {
+    postV1TenantsTenantIdAccessRequestsRequestIdCancelBody: PostV1TenantsTenantIdAccessRequestsRequestIdCancelBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<postV1TenantsTenantIdAccessRequestsRequestIdCancelResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getPostV1TenantsTenantIdAccessRequestsRequestIdCancelUrl(tenantId,requestId),
+return managementApiFetch<postV1TenantsTenantIdAccessRequestsRequestIdCancelResponse>(getPostV1TenantsTenantIdAccessRequestsRequestIdCancelUrl(tenantId,requestId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(postV1TenantsTenantIdAccessRequestsRequestIdCancelBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: postV1TenantsTenantIdAccessRequestsRequestIdCancelResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as postV1TenantsTenantIdAccessRequestsRequestIdCancelResponse
-}
+);}
 
 
 
@@ -40216,34 +43910,35 @@ export const getPostV1TenantsTenantIdEntitlementsEntitlementIdRevokeUrl = (tenan
 
 
 
-  return `/v1/tenants/${tenantId}/entitlements/${entitlementId}/revoke`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/entitlements/${encodeURIComponent(String(entitlementId))}/revoke`
 }
 
 export const postV1TenantsTenantIdEntitlementsEntitlementIdRevoke = async (tenantId: string,
     entitlementId: string,
-    postV1TenantsTenantIdEntitlementsEntitlementIdRevokeBody: PostV1TenantsTenantIdEntitlementsEntitlementIdRevokeBody, options?: RequestInit): Promise<postV1TenantsTenantIdEntitlementsEntitlementIdRevokeResponse> => {
+    postV1TenantsTenantIdEntitlementsEntitlementIdRevokeBody: PostV1TenantsTenantIdEntitlementsEntitlementIdRevokeBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<postV1TenantsTenantIdEntitlementsEntitlementIdRevokeResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getPostV1TenantsTenantIdEntitlementsEntitlementIdRevokeUrl(tenantId,entitlementId),
+return managementApiFetch<postV1TenantsTenantIdEntitlementsEntitlementIdRevokeResponse>(getPostV1TenantsTenantIdEntitlementsEntitlementIdRevokeUrl(tenantId,entitlementId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(postV1TenantsTenantIdEntitlementsEntitlementIdRevokeBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: postV1TenantsTenantIdEntitlementsEntitlementIdRevokeResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as postV1TenantsTenantIdEntitlementsEntitlementIdRevokeResponse
-}
+);}
 
 
 
@@ -40264,26 +43959,19 @@ export const getGetV1TenantsTenantIdMeEntitlementsUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/me/entitlements`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/me/entitlements`
 }
 
-export const getV1TenantsTenantIdMeEntitlements = async (tenantId: string, options?: RequestInit): Promise<getV1TenantsTenantIdMeEntitlementsResponse> => {
+export const getV1TenantsTenantIdMeEntitlements = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getV1TenantsTenantIdMeEntitlementsResponse> => {
 
-  const res = await fetch(getGetV1TenantsTenantIdMeEntitlementsUrl(tenantId),
+  return managementApiFetch<getV1TenantsTenantIdMeEntitlementsResponse>(getGetV1TenantsTenantIdMeEntitlementsUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getV1TenantsTenantIdMeEntitlementsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getV1TenantsTenantIdMeEntitlementsResponse
-}
+);}
 
 
 
@@ -40304,26 +43992,19 @@ export const getGetV1TenantsTenantIdMeOwnedEntitlementsUrl = (tenantId: string,)
 
 
 
-  return `/v1/tenants/${tenantId}/me/owned-entitlements`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/me/owned-entitlements`
 }
 
-export const getV1TenantsTenantIdMeOwnedEntitlements = async (tenantId: string, options?: RequestInit): Promise<getV1TenantsTenantIdMeOwnedEntitlementsResponse> => {
+export const getV1TenantsTenantIdMeOwnedEntitlements = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getV1TenantsTenantIdMeOwnedEntitlementsResponse> => {
 
-  const res = await fetch(getGetV1TenantsTenantIdMeOwnedEntitlementsUrl(tenantId),
+  return managementApiFetch<getV1TenantsTenantIdMeOwnedEntitlementsResponse>(getGetV1TenantsTenantIdMeOwnedEntitlementsUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getV1TenantsTenantIdMeOwnedEntitlementsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getV1TenantsTenantIdMeOwnedEntitlementsResponse
-}
+);}
 
 
 
@@ -40344,26 +44025,19 @@ export const getGetV1TenantsTenantIdMeAccessNotificationsUrl = (tenantId: string
 
 
 
-  return `/v1/tenants/${tenantId}/me/access-notifications`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/me/access-notifications`
 }
 
-export const getV1TenantsTenantIdMeAccessNotifications = async (tenantId: string, options?: RequestInit): Promise<getV1TenantsTenantIdMeAccessNotificationsResponse> => {
+export const getV1TenantsTenantIdMeAccessNotifications = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getV1TenantsTenantIdMeAccessNotificationsResponse> => {
 
-  const res = await fetch(getGetV1TenantsTenantIdMeAccessNotificationsUrl(tenantId),
+  return managementApiFetch<getV1TenantsTenantIdMeAccessNotificationsResponse>(getGetV1TenantsTenantIdMeAccessNotificationsUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getV1TenantsTenantIdMeAccessNotificationsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getV1TenantsTenantIdMeAccessNotificationsResponse
-}
+);}
 
 
 
@@ -40385,7 +44059,7 @@ export const getRegisterGatewayRuntimeUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/runtime-control/GATEWAY/${runtimeId}/registration`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/runtime-control/GATEWAY/${encodeURIComponent(String(runtimeId))}/registration`
 }
 
 /**
@@ -40393,29 +44067,30 @@ export const getRegisterGatewayRuntimeUrl = (tenantId: string,
  */
 export const registerGatewayRuntime = async (tenantId: string,
     runtimeId: string,
-    registerGatewayRuntimeBody: RegisterGatewayRuntimeBody, options?: RequestInit): Promise<registerGatewayRuntimeResponse> => {
+    registerGatewayRuntimeBody: RegisterGatewayRuntimeBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<registerGatewayRuntimeResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getRegisterGatewayRuntimeUrl(tenantId,runtimeId),
+return managementApiFetch<registerGatewayRuntimeResponse>(getRegisterGatewayRuntimeUrl(tenantId,runtimeId),
   {
     ...options,
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(registerGatewayRuntimeBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: registerGatewayRuntimeResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as registerGatewayRuntimeResponse
-}
+);}
 
 
 
@@ -40436,36 +44111,37 @@ export const getRollbackGatewayRuntimesUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/gateway-rollbacks`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/gateway-rollbacks`
 }
 
 /**
  * @summary Re-deliver the last release each Gateway Runtime reported as applied
  */
 export const rollbackGatewayRuntimes = async (tenantId: string,
-    rollbackGatewayRuntimesBody: RollbackGatewayRuntimesBody, options?: RequestInit): Promise<rollbackGatewayRuntimesResponse> => {
+    rollbackGatewayRuntimesBody: RollbackGatewayRuntimesBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<rollbackGatewayRuntimesResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getRollbackGatewayRuntimesUrl(tenantId),
+return managementApiFetch<rollbackGatewayRuntimesResponse>(getRollbackGatewayRuntimesUrl(tenantId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(rollbackGatewayRuntimesBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: rollbackGatewayRuntimesResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as rollbackGatewayRuntimesResponse
-}
+);}
 
 
 
@@ -40487,7 +44163,7 @@ export const getNegotiateGatewayAggregateRuntimeCapabilitiesUrl = (tenantId: str
 
 
 
-  return `/v1/tenants/${tenantId}/runtime-control/GATEWAY/${runtimeId}/capabilities`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/runtime-control/GATEWAY/${encodeURIComponent(String(runtimeId))}/capabilities`
 }
 
 /**
@@ -40495,29 +44171,30 @@ export const getNegotiateGatewayAggregateRuntimeCapabilitiesUrl = (tenantId: str
  */
 export const negotiateGatewayAggregateRuntimeCapabilities = async (tenantId: string,
     runtimeId: string,
-    negotiateGatewayAggregateRuntimeCapabilitiesBody: NegotiateGatewayAggregateRuntimeCapabilitiesBody, options?: RequestInit): Promise<negotiateGatewayAggregateRuntimeCapabilitiesResponse> => {
+    negotiateGatewayAggregateRuntimeCapabilitiesBody: NegotiateGatewayAggregateRuntimeCapabilitiesBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<negotiateGatewayAggregateRuntimeCapabilitiesResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getNegotiateGatewayAggregateRuntimeCapabilitiesUrl(tenantId,runtimeId),
+return managementApiFetch<negotiateGatewayAggregateRuntimeCapabilitiesResponse>(getNegotiateGatewayAggregateRuntimeCapabilitiesUrl(tenantId,runtimeId),
   {
     ...options,
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(negotiateGatewayAggregateRuntimeCapabilitiesBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: negotiateGatewayAggregateRuntimeCapabilitiesResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as negotiateGatewayAggregateRuntimeCapabilitiesResponse
-}
+);}
 
 
 
@@ -40539,30 +44216,23 @@ export const getHeartbeatGatewayAggregateRuntimeUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/runtime-control/GATEWAY/${runtimeId}/aggregate/heartbeat`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/runtime-control/GATEWAY/${encodeURIComponent(String(runtimeId))}/aggregate/heartbeat`
 }
 
 /**
  * @summary Renew the aggregate Gateway Runtime session lease
  */
 export const heartbeatGatewayAggregateRuntime = async (tenantId: string,
-    runtimeId: string, options?: RequestInit): Promise<heartbeatGatewayAggregateRuntimeResponse> => {
+    runtimeId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<heartbeatGatewayAggregateRuntimeResponse> => {
 
-  const res = await fetch(getHeartbeatGatewayAggregateRuntimeUrl(tenantId,runtimeId),
+  return managementApiFetch<heartbeatGatewayAggregateRuntimeResponse>(getHeartbeatGatewayAggregateRuntimeUrl(tenantId,runtimeId),
   {
     ...options,
     method: 'PUT'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: heartbeatGatewayAggregateRuntimeResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as heartbeatGatewayAggregateRuntimeResponse
-}
+);}
 
 
 
@@ -40593,29 +44263,22 @@ export const getGetGatewayReleaseCredentialsUrl = (tenantId: string,
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/v1/tenants/${tenantId}/runtime-control/GATEWAY/${runtimeId}/aggregate/releases/${releaseId}/credentials?${stringifiedParams}` : `/v1/tenants/${tenantId}/runtime-control/GATEWAY/${runtimeId}/aggregate/releases/${releaseId}/credentials`
+  return stringifiedParams.length > 0 ? `/v1/tenants/${encodeURIComponent(String(tenantId))}/runtime-control/GATEWAY/${encodeURIComponent(String(runtimeId))}/aggregate/releases/${encodeURIComponent(String(releaseId))}/credentials?${stringifiedParams}` : `/v1/tenants/${encodeURIComponent(String(tenantId))}/runtime-control/GATEWAY/${encodeURIComponent(String(runtimeId))}/aggregate/releases/${encodeURIComponent(String(releaseId))}/credentials`
 }
 
 export const getGatewayReleaseCredentials = async (tenantId: string,
     runtimeId: string,
     releaseId: string,
-    params: GetGatewayReleaseCredentialsParams, options?: RequestInit): Promise<getGatewayReleaseCredentialsResponse> => {
+    params: GetGatewayReleaseCredentialsParams, options?: Parameters<typeof managementApiFetch>[1]): Promise<getGatewayReleaseCredentialsResponse> => {
 
-  const res = await fetch(getGetGatewayReleaseCredentialsUrl(tenantId,runtimeId,releaseId,params),
+  return managementApiFetch<getGatewayReleaseCredentialsResponse>(getGetGatewayReleaseCredentialsUrl(tenantId,runtimeId,releaseId,params),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getGatewayReleaseCredentialsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getGatewayReleaseCredentialsResponse
-}
+);}
 
 
 
@@ -40646,7 +44309,7 @@ export const getGetGatewayAggregateReleasePackageUrl = (tenantId: string,
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/v1/tenants/${tenantId}/runtime-control/GATEWAY/${runtimeId}/aggregate/releases/${releaseId}/package?${stringifiedParams}` : `/v1/tenants/${tenantId}/runtime-control/GATEWAY/${runtimeId}/aggregate/releases/${releaseId}/package`
+  return stringifiedParams.length > 0 ? `/v1/tenants/${encodeURIComponent(String(tenantId))}/runtime-control/GATEWAY/${encodeURIComponent(String(runtimeId))}/aggregate/releases/${encodeURIComponent(String(releaseId))}/package?${stringifiedParams}` : `/v1/tenants/${encodeURIComponent(String(tenantId))}/runtime-control/GATEWAY/${encodeURIComponent(String(runtimeId))}/aggregate/releases/${encodeURIComponent(String(releaseId))}/package`
 }
 
 /**
@@ -40655,23 +44318,16 @@ export const getGetGatewayAggregateReleasePackageUrl = (tenantId: string,
 export const getGatewayAggregateReleasePackage = async (tenantId: string,
     runtimeId: string,
     releaseId: string,
-    params: GetGatewayAggregateReleasePackageParams, options?: RequestInit): Promise<getGatewayAggregateReleasePackageResponse> => {
+    params: GetGatewayAggregateReleasePackageParams, options?: Parameters<typeof managementApiFetch>[1]): Promise<getGatewayAggregateReleasePackageResponse> => {
 
-  const res = await fetch(getGetGatewayAggregateReleasePackageUrl(tenantId,runtimeId,releaseId,params),
+  return managementApiFetch<getGatewayAggregateReleasePackageResponse>(getGetGatewayAggregateReleasePackageUrl(tenantId,runtimeId,releaseId,params),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getGatewayAggregateReleasePackageResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getGatewayAggregateReleasePackageResponse
-}
+);}
 
 
 
@@ -40693,30 +44349,23 @@ export const getGetGatewayAggregateObservedStateUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/runtime-control/GATEWAY/${runtimeId}/aggregate/observed-state`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/runtime-control/GATEWAY/${encodeURIComponent(String(runtimeId))}/aggregate/observed-state`
 }
 
 /**
  * @summary Get the latest aggregate Gateway Runtime state
  */
 export const getGatewayAggregateObservedState = async (tenantId: string,
-    runtimeId: string, options?: RequestInit): Promise<getGatewayAggregateObservedStateResponse> => {
+    runtimeId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getGatewayAggregateObservedStateResponse> => {
 
-  const res = await fetch(getGetGatewayAggregateObservedStateUrl(tenantId,runtimeId),
+  return managementApiFetch<getGatewayAggregateObservedStateResponse>(getGetGatewayAggregateObservedStateUrl(tenantId,runtimeId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getGatewayAggregateObservedStateResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getGatewayAggregateObservedStateResponse
-}
+);}
 
 
 
@@ -40738,30 +44387,23 @@ export const getListGatewayAggregateReportHistoryUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/runtime-control/GATEWAY/${runtimeId}/aggregate/report-history`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/runtime-control/GATEWAY/${encodeURIComponent(String(runtimeId))}/aggregate/report-history`
 }
 
 /**
  * @summary List aggregate Gateway Runtime report history
  */
 export const listGatewayAggregateReportHistory = async (tenantId: string,
-    runtimeId: string, options?: RequestInit): Promise<listGatewayAggregateReportHistoryResponse> => {
+    runtimeId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listGatewayAggregateReportHistoryResponse> => {
 
-  const res = await fetch(getListGatewayAggregateReportHistoryUrl(tenantId,runtimeId),
+  return managementApiFetch<listGatewayAggregateReportHistoryResponse>(getListGatewayAggregateReportHistoryUrl(tenantId,runtimeId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: listGatewayAggregateReportHistoryResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as listGatewayAggregateReportHistoryResponse
-}
+);}
 
 
 
@@ -40783,30 +44425,23 @@ export const getPollGatewayAggregateCommandUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/runtime-control/GATEWAY/${runtimeId}/aggregate/commands/next`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/runtime-control/GATEWAY/${encodeURIComponent(String(runtimeId))}/aggregate/commands/next`
 }
 
 /**
  * @summary Poll the next aggregate Gateway Runtime command
  */
 export const pollGatewayAggregateCommand = async (tenantId: string,
-    runtimeId: string, options?: RequestInit): Promise<pollGatewayAggregateCommandResponse> => {
+    runtimeId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<pollGatewayAggregateCommandResponse> => {
 
-  const res = await fetch(getPollGatewayAggregateCommandUrl(tenantId,runtimeId),
+  return managementApiFetch<pollGatewayAggregateCommandResponse>(getPollGatewayAggregateCommandUrl(tenantId,runtimeId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: pollGatewayAggregateCommandResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as pollGatewayAggregateCommandResponse
-}
+);}
 
 
 
@@ -40828,7 +44463,7 @@ export const getReportGatewayAggregateStatusUrl = (tenantId: string,
 
 
 
-  return `/v1/tenants/${tenantId}/runtime-control/GATEWAY/${runtimeId}/aggregate/reports`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/runtime-control/GATEWAY/${encodeURIComponent(String(runtimeId))}/aggregate/reports`
 }
 
 /**
@@ -40836,29 +44471,30 @@ export const getReportGatewayAggregateStatusUrl = (tenantId: string,
  */
 export const reportGatewayAggregateStatus = async (tenantId: string,
     runtimeId: string,
-    reportGatewayAggregateStatusBody: ReportGatewayAggregateStatusBody, options?: RequestInit): Promise<reportGatewayAggregateStatusResponse> => {
+    reportGatewayAggregateStatusBody: ReportGatewayAggregateStatusBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<reportGatewayAggregateStatusResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
     if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
   };
-const res = await fetch(getReportGatewayAggregateStatusUrl(tenantId,runtimeId),
+return managementApiFetch<reportGatewayAggregateStatusResponse>(getReportGatewayAggregateStatusUrl(tenantId,runtimeId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(reportGatewayAggregateStatusBody)
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: reportGatewayAggregateStatusResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as reportGatewayAggregateStatusResponse
-}
+);}
 
 
 
@@ -40879,26 +44515,19 @@ export const getGetV1TenantsTenantIdRuntimesUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/runtimes`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/runtimes`
 }
 
-export const getV1TenantsTenantIdRuntimes = async (tenantId: string, options?: RequestInit): Promise<getV1TenantsTenantIdRuntimesResponse> => {
+export const getV1TenantsTenantIdRuntimes = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getV1TenantsTenantIdRuntimesResponse> => {
 
-  const res = await fetch(getGetV1TenantsTenantIdRuntimesUrl(tenantId),
+  return managementApiFetch<getV1TenantsTenantIdRuntimesResponse>(getGetV1TenantsTenantIdRuntimesUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getV1TenantsTenantIdRuntimesResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getV1TenantsTenantIdRuntimesResponse
-}
+);}
 
 
 
@@ -40919,23 +44548,16 @@ export const getGetV1TenantsTenantIdGatewaySitesUrl = (tenantId: string,) => {
 
 
 
-  return `/v1/tenants/${tenantId}/gateway-sites`
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/gateway-sites`
 }
 
-export const getV1TenantsTenantIdGatewaySites = async (tenantId: string, options?: RequestInit): Promise<getV1TenantsTenantIdGatewaySitesResponse> => {
+export const getV1TenantsTenantIdGatewaySites = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getV1TenantsTenantIdGatewaySitesResponse> => {
 
-  const res = await fetch(getGetV1TenantsTenantIdGatewaySitesUrl(tenantId),
+  return managementApiFetch<getV1TenantsTenantIdGatewaySitesResponse>(getGetV1TenantsTenantIdGatewaySitesUrl(tenantId),
   {
     ...options,
     method: 'GET'
 
 
   }
-)
-
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: getV1TenantsTenantIdGatewaySitesResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getV1TenantsTenantIdGatewaySitesResponse
-}
+);}

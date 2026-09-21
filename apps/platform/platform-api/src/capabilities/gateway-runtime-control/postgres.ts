@@ -13,7 +13,7 @@ import {
   type GatewayObservedState,
   type GatewayRuntimeCommand,
   type GatewayRuntimeReport,
-} from "../../../../../../packages/protocol/src/gateway-release"
+} from "@genioone/protocol/gateway-release"
 import type {
   RuntimeRegistration,
   RuntimeRegistrationKey,

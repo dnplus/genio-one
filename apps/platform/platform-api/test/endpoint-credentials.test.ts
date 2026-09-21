@@ -1,4 +1,4 @@
-import { observationEvidence } from "../../../../packages/telemetry/src/operation-observability"
+import { observationEvidence } from "@genioone/telemetry/operation-observability"
 import assert from "node:assert/strict"
 import test from "node:test"
 import { createInMemoryEndpointRuntimeStore } from "../src/capabilities/endpoint-runtime/memory"

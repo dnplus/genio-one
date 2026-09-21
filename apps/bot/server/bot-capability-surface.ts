@@ -11,6 +11,7 @@ import {
   CODEX_CORE_CAPABILITY_DEFS,
   type CodexCoreCapabilityDef,
 } from "./codex-runtime-catalog"
+import { RUNTIME_CAPABILITY_IDS } from "@genioone/protocol/runtime-capability-actions"
 import type { CatalogAddState } from "./bot-binding-add"
 import { formatRuntimeTarget } from "./runtime-capability"
 import {
@@ -179,10 +180,7 @@ export function runtimeExposePolicyFromSnapshot(snapshot: RuntimePolicySnapshot 
 }
 
 function snapshotCapabilityIds(): string[] {
-  return [
-    "codex.subscription",
-    ...CODEX_CORE_CAPABILITY_DEFS.map((definition) => definition.id),
-  ]
+  return [...RUNTIME_CAPABILITY_IDS]
 }
 
 export function mapEnterpriseToSurfaceStatus(

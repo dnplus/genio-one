@@ -1,7 +1,7 @@
-FROM oven/bun:1.4.0 AS build
+FROM oven/bun:1.4.2 AS build
 
 WORKDIR /workspace
-RUN bun add --global pnpm@10.32.1
+RUN bun add --global pnpm@12.4.2
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/platform/package.json apps/platform/package.json
@@ -34,7 +34,7 @@ RUN apt-get update \
     && echo "$(cat /tmp/kubectl.sha256)  /usr/local/bin/kubectl" | sha256sum --check \
     && chmod 0755 /usr/local/bin/kubectl
 
-FROM oven/bun:1.4.0
+FROM oven/bun:1.4.2
 
 WORKDIR /opt/genio-one
 COPY --from=kubectl /usr/local/bin/kubectl /usr/local/bin/kubectl

@@ -3,7 +3,8 @@ import { createHash } from "node:crypto"
 import {
   isCompiledAuthorizationBundle,
 } from "../../../../../../runtimes/gateway/services/authorizer/signed-bundle"
-import type { CompiledAuthorizationRule } from "../../../../../../packages/protocol/src/authorization"
+import type { CompiledAuthorizationRule } from "@genioone/protocol/authorization"
+import { canonicalBytes, compareUtf8 } from "@genioone/protocol/canonical"
 import {
   validateGatewayRoutingArtifact,
   type GatewayRoutingArtifact,
@@ -64,33 +65,8 @@ function sha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex")
 }
 
-function compareUtf8(left: string, right: string): number {
-  const leftBytes = new TextEncoder().encode(left)
-  const rightBytes = new TextEncoder().encode(right)
-  const length = Math.min(leftBytes.length, rightBytes.length)
-  for (let index = 0; index < length; index += 1) {
-    const difference = leftBytes[index]! - rightBytes[index]!
-    if (difference !== 0) return difference
-  }
-  return leftBytes.length - rightBytes.length
-}
-
-function stableValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(stableValue)
-  if (isRecord(value)) {
-    return Object.fromEntries(
-      Object.entries(value)
-        .sort(([left], [right]) => compareUtf8(left, right))
-        .map(([key, entry]) => [key, stableValue(entry)]),
-    )
-  }
-  return value
-}
-
 /** Canonical bytes shared by release identity, artifacts, and manifest. */
-export function canonicalGatewayPolicyReleaseBytes(value: unknown): Uint8Array {
-  return new TextEncoder().encode(JSON.stringify(stableValue(value)))
-}
+export const canonicalGatewayPolicyReleaseBytes = canonicalBytes
 
 function assertSigner(signer: CompactJwsSigner, label: string): void {
   if (

@@ -57,6 +57,7 @@ import { } from "@/features/identity/manage-organization-sheet"
 import { RegisterAgentSheet } from "@/features/identity/register-agent-sheet"
 import { AgentDelegationsCard } from "@/features/identity/agent-delegations-card"
 import { IdentityProvidersCard } from "@/features/identity/identity-providers-card"
+import { AccessGroupsPanel } from "@/features/identity/access-groups-panel"
 import { SuspendPersonAction } from "@/features/identity/suspend-person-action"
 import { } from "@/domain/organization-roles"
 import { relativeTime } from "@/lib/format"
@@ -207,6 +208,7 @@ export function IdentityPage({
       <PageHeader title={t("People")} description={t("Canonical Person identities synchronized from the configured identity provider.")} />
       <Card><CardContent className="py-5 text-sm">{t("Create or update People in your identity provider, then have them sign in to synchronize their verified identity. Assign organization membership and roles on the Organizations page.")} <a className="underline" href="/management?view=organization">{t("Organizations")}</a></CardContent></Card>
       <IdentityProvidersCard tenantId={tenantId} />
+      <AccessGroupsPanel tenantId={tenantId} data={data} canManage={identity?.role === "TENANT_ADMINISTRATOR"} onChanged={onRefresh} />
       <Card>
         <CardHeader className="border-b"><CardTitle>{t("People")}</CardTitle></CardHeader>
         <CardContent className="px-0">

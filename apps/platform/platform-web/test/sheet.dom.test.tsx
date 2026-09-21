@@ -19,7 +19,7 @@ import {
  */
 function ExampleSheet({
   presentation = "workspace",
-}: { presentation?: "workspace" | "side" } = {}) {
+}: { presentation?: "workspace" | "workspace-panel" | "side" } = {}) {
   return (
     <SheetWorkspaceRoot>
     <Sheet>
@@ -98,5 +98,18 @@ describe("Sheet", () => {
     await user.click(screen.getByRole("button", { name: "Register" }))
 
     await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy())
+  })
+
+  test("the workspace panel stays inside the workspace and uses the wide right-side layout", async () => {
+    const user = userEvent.setup()
+    render(<ExampleSheet presentation="workspace-panel" />)
+
+    await user.click(screen.getByRole("button", { name: "Register" }))
+
+    const dialog = await waitFor(() => screen.getByRole("dialog"))
+    expect(dialog.getAttribute("data-presentation")).toBe("workspace-panel")
+    expect(dialog.getAttribute("data-side")).toBe("right")
+    expect(dialog.className).toContain("sm:w-4/5")
+    expect(dialog.closest("[data-slot='sheet-workspace-root']")).toBeTruthy()
   })
 })

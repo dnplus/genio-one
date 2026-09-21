@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { CodexRpcChannels } from "./codex-rpc-channels"
 import { PendingInteractions } from "./pending-interactions"
-import type { ManagedMcpEndpoints } from "./ce-demo-mcp"
+import type { ManagedMcpMounts } from "./managed-mcp"
 
 import {
   PendingRuntime,
@@ -46,8 +46,20 @@ export interface RuntimeSession {
   modelRoute?: "codex-subscription" | "genio-gateway"
   selectedBotId?: string | null
   usageContext?: RuntimeUsageContext | null
-  managedMcpEndpoints?: ManagedMcpEndpoints
+  managedMcpMounts?: ManagedMcpMounts
   eventBuffer: string[]
+}
+
+export interface BotSelection {
+  botId: string
+  usageContext: RuntimeUsageContext | null
+  mcpMounts: ManagedMcpMounts
+}
+
+export function setBotSelection(session: RuntimeSession, selection: BotSelection | null) {
+  session.selectedBotId = selection?.botId ?? null
+  session.usageContext = selection?.usageContext ?? null
+  session.managedMcpMounts = selection?.mcpMounts
 }
 
 interface ManagedRuntimeSession {
@@ -196,7 +208,7 @@ export class RuntimeBroker {
     return this.ensure(id, "headless", botId)
   }
 
-  attachEndpoint(id: string, desktop: ManagedDesktop) {
+  attachEndpoint(id: string, desktop: ManagedDesktop, notify = true) {
     const managed = this.sessions.get(id)
     if (!managed || this.closing) throw new Error("RUNTIME_SESSION_NOT_FOUND")
     if (managed.session.leases.headless || this.tierProvisioning.has(`${id}:headless`)) throw new Error("LOCAL_HANDS_RUNTIME_CONFLICT")
@@ -205,7 +217,21 @@ export class RuntimeBroker {
     session.runtimeDetails.headless = desktop.details
     session.details = desktop.details
     session.desktop = desktop
-    this.notifyEndpoint(id, "genio/runtime/ready", { ...desktop.details, runtimeSessionId: id })
+    if (notify) this.notifyEndpoint(id, "genio/runtime/ready", { ...desktop.details, runtimeSessionId: id })
+  }
+
+  detachEndpoint(id: string, desktop: ManagedDesktop) {
+    const managed = this.sessions.get(id)
+    if (!managed || managed.session.leases.headless !== desktop) return false
+    const session = managed.session
+    delete session.leases.headless
+    delete session.runtimeDetails.headless
+    if (session.desktop === desktop) {
+      session.details = this.activeDetails(session)
+      session.desktop = session.leases.desktop ?? new PendingRuntime(session.details)
+    }
+    console.info(JSON.stringify({ event: "runtime.broker.endpoint.detached", runtime_session_id: id }))
+    return true
   }
 
   notifyEndpoint(id: string, method: string, params: Record<string, unknown>) {

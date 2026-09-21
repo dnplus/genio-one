@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react"
-import { KeyRoundIcon, LoaderCircleIcon, RefreshCwIcon, ShieldPlusIcon, XCircleIcon } from "lucide-react"
+import { CheckIcon, CopyIcon, KeyRoundIcon, LoaderCircleIcon, RefreshCwIcon, ShieldPlusIcon, XCircleIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
 import {
   Select,
   SelectContent,
@@ -83,6 +84,8 @@ export function ApplicationAccessSheet({
   const [federationClaimName, setFederationClaimName] = useState("")
   const [federationClaimValue, setFederationClaimValue] = useState("")
   const [federationMaxTtl, setFederationMaxTtl] = useState("600")
+  const [copiedApiKey, setCopiedApiKey] = useState(false)
+  const [copiedOAuthSecret, setCopiedOAuthSecret] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -159,6 +162,20 @@ export function ApplicationAccessSheet({
     setBusy("")
     setError("")
     setIssued(null)
+    setCopiedApiKey(false)
+    setCopiedOAuthSecret(false)
+  }
+
+  async function copyApiKey(secret: string) {
+    await navigator.clipboard.writeText(secret)
+    setCopiedApiKey(true)
+    window.setTimeout(() => setCopiedApiKey(false), 2000)
+  }
+
+  async function copyOAuthSecret(secret: string) {
+    await navigator.clipboard.writeText(secret)
+    setCopiedOAuthSecret(true)
+    window.setTimeout(() => setCopiedOAuthSecret(false), 2000)
   }
 
   function closeSheet() {
@@ -562,7 +579,18 @@ export function ApplicationAccessSheet({
               <p className="mt-1 text-xs text-muted-foreground">
                 {t("GenioOne shows the complete secret only once and does not persist it in canonical state.")}
               </p>
-              <Input className="mt-3 font-mono" readOnly value={issued.api_key} aria-label={t("One-time API key")} />
+              <InputGroup className="mt-3 h-10 bg-background">
+                <InputGroupInput className="font-mono" readOnly value={issued.api_key} aria-label={t("One-time API key")} />
+                <InputGroupAddon align="inline-end">
+                  <InputGroupButton
+                    aria-label={t("Copy API key")}
+                    onClick={() => void copyApiKey(issued.api_key!)}
+                  >
+                    {copiedApiKey ? <CheckIcon /> : <CopyIcon />}
+                    {t(copiedApiKey ? "Copied" : "Copy")}
+                  </InputGroupButton>
+                </InputGroupAddon>
+              </InputGroup>
               <div className="mt-2 font-mono text-xs text-muted-foreground">{issued.credential.credential_id}</div>
             </div>
           ) : null}
@@ -577,7 +605,18 @@ export function ApplicationAccessSheet({
                 <div><span className="text-muted-foreground">{t("Token endpoint")}: </span><span className="break-all font-mono">{issued.oauth_token_endpoint ?? "—"}</span></div>
                 <div><span className="text-muted-foreground">{t("Scope")}: </span><span className="font-mono">{issued.credential.oauth_scope ?? "—"}</span></div>
               </div>
-              <Input className="mt-3 font-mono" readOnly value={issued.oauth_client_secret} aria-label={t("One-time OAuth client secret")} />
+              <InputGroup className="mt-3 h-10 bg-background">
+                <InputGroupInput className="font-mono" readOnly value={issued.oauth_client_secret} aria-label={t("One-time OAuth client secret")} />
+                <InputGroupAddon align="inline-end">
+                  <InputGroupButton
+                    aria-label={t("Copy OAuth client secret")}
+                    onClick={() => void copyOAuthSecret(issued.oauth_client_secret!)}
+                  >
+                    {copiedOAuthSecret ? <CheckIcon /> : <CopyIcon />}
+                    {t(copiedOAuthSecret ? "Copied" : "Copy")}
+                  </InputGroupButton>
+                </InputGroupAddon>
+              </InputGroup>
               <div className="mt-2 font-mono text-xs text-muted-foreground">{issued.credential.credential_id}</div>
             </div>
           ) : null}

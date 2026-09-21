@@ -1,8 +1,8 @@
-FROM oven/bun:1.4.0 AS build
+FROM oven/bun:1.4.2 AS build
 
 WORKDIR /workspace
 
-RUN bun add --global pnpm@10.32.1
+RUN bun add --global pnpm@12.4.2
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/connectors/package.json apps/connectors/package.json
@@ -12,7 +12,7 @@ RUN pnpm install --frozen-lockfile --filter genio-connectors...
 COPY apps/connectors/archify apps/connectors/archify
 RUN bun build apps/connectors/archify/main.ts --target=bun --outfile=dist/archify.js
 
-FROM oven/bun:1.4.0 AS runtime
+FROM oven/bun:1.4.2 AS runtime
 
 WORKDIR /app
 

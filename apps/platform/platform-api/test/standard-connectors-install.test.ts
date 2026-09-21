@@ -32,6 +32,7 @@ for (const provider of ["mail2000", "servicenow"] as const) test(`${provider} in
 
   const api: Api = async <T>(path: string, init?: RequestInit): Promise<T> => {
     const response = await app.inject({ method: (init?.method ?? "GET") as "GET" | "POST" | "PUT" | "PATCH" | "DELETE", url: path, headers: { authorization: "Bearer test-token", ...(init?.body ? { "content-type": "application/json" } : {}) }, ...(init?.body ? { payload: String(init.body) } : {}) })
+    if (response.statusCode === 404) throw new Error(`STANDARD_INSTALL_HTTP_404:${path}`)
     assert.ok(response.statusCode < 400, `${init?.method ?? "GET"} ${path}: ${response.statusCode} ${response.body}`)
     if (path.endsWith("/mcp-discovery") && init?.method === "POST") {
       const operation = await modules.mcpDiscovery.claimNext({ tenantId, gatewayId, runtimeId })
@@ -47,6 +48,8 @@ for (const provider of ["mail2000", "servicenow"] as const) test(`${provider} in
     const capabilities = catalog.capabilities.filter((capability) => capability.resource_id === result.resourceId)
     assert.equal(capabilities.length, tools.length + 1)
     assert.ok(capabilities.every((capability) => capability.access === "AUTO_GRANT"))
+    const chain = await api<{ one_policy_revision: number }>(`/v1/tenants/${tenantId}/resources/${result.resourceId}/capabilities/mcp.invoke/enforcement-chain`)
+    assert.equal(chain.one_policy_revision, 1)
     const personal = await api<Array<{ authentication: string }>>(`/v1/tenants/${tenantId}/me/resource-connections/${result.resourceId}`)
     assert.equal(personal.length, 1)
     assert.equal(personal[0]!.authentication, provider === "mail2000" ? "PASSWORD" : "OAUTH")

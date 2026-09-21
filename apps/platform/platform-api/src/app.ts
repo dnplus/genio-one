@@ -1,8 +1,9 @@
 import { endpointRuntimeWebSocket } from "./capabilities/endpoint-runtime/websocket"
-import { registerBrowserTelemetry } from "../../../../packages/telemetry/src/browser-telemetry-http"
-import { instrumentModuleGraph } from "../../../../packages/telemetry/src/operation-observability"
-import { registerHttpObservability } from "../../../../packages/telemetry/src/fastify-observability"
+import { registerBrowserTelemetry } from "@genioone/telemetry/browser-telemetry-http"
+import { instrumentModuleGraph } from "@genioone/telemetry/operation-observability"
+import { registerHttpObservability } from "@genioone/telemetry/fastify-observability"
 import { permissionPreviewHttp } from "./capabilities/one-policy/permission-preview"
+import { accessGroupHttp } from "./capabilities/access-groups/http"
 import { discoveryMcpHttp } from "./capabilities/discovery-mcp/http"
 import type { InstalledConnectorDeployment } from "./capabilities/connections/installed-connectors"
 import swagger from "@fastify/swagger"
@@ -428,6 +429,9 @@ export async function createManagementApi(dependencies: ManagementApiDependencie
     policy: dependencies.modules.botAccessPolicy,
     connections: dependencies.modules.connections,
   })
+  await app.register(accessGroupHttp, {
+    directory: dependencies.modules.accessGroups,
+  })
   if (dependencies.identityProviders) {
     await app.register(identityProviderHttp, { registry: dependencies.identityProviders })
   }
@@ -496,6 +500,7 @@ export async function createManagementApi(dependencies: ManagementApiDependencie
   })
   await app.register(permissionPreviewHttp, {
     policy: dependencies.modules.botAccessPolicy,
+    accessGroups: dependencies.modules.accessGroups,
     identity: dependencies.modules.identity,
     organizations: dependencies.modules.organizations,
     access: dependencies.modules.access,

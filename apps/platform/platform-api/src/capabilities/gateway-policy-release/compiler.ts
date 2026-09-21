@@ -8,7 +8,7 @@ import type {
   CompiledSubjectContext,
   CompiledUsageContext,
   CompiledUsagePolicy,
-} from "../../../../../../packages/protocol/src/authorization"
+} from "@genioone/protocol/authorization"
 import { isCompiledAuthorizationBundle } from "../../../../../../runtimes/gateway/services/authorizer/signed-bundle"
 import {
   PROCESSOR_POLICY_BUNDLE_SCHEMA_VERSION,
@@ -38,6 +38,7 @@ import {
 } from "../gateway-projection/contract"
 import { mcpToolCapabilityId } from "../../../../../../runtimes/gateway/services/shared/mcp-tool-capability"
 import type { GatewayRoutingResourceOwnerRef } from "./routing-compiler"
+import { compareUtf8 } from "@genioone/protocol/canonical"
 
 /**
  * The compiler consumes one frozen, already-resolved Gateway projection set.
@@ -90,10 +91,6 @@ function safeTimestamp(value: unknown, label: string): asserts value is number {
 function principalIdentifier(value: string, label: string): void {
   identifier(value, label)
   if (value === "*") throw new Error(`${label} cannot use the reserved wildcard`)
-}
-
-function compareUtf8(left: string, right: string): number {
-  return Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"))
 }
 
 function compareTuple(left: readonly string[], right: readonly string[]): number {

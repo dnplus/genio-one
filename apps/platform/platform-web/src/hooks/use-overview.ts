@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 
-import type { OverviewSnapshot } from "@/domain/contracts"
+import type { IdentitySession, OverviewSnapshot } from "@/domain/contracts"
 import { LatestRequestGate } from "@/lib/latest-request"
 import { loadOverview } from "@/lib/product-api"
 import { isMockMode } from "@/lib/runtime-mode"
 import { createMockOverview } from "@/mocks/overview"
 
-export function useOverview(tenantId: string, enabled = true, demoMode = isMockMode) {
+export function useOverview(tenantId: string, enabled = true, demoMode = isMockMode, role?: IdentitySession["role"]) {
   const [data, setData] = useState<OverviewSnapshot | null>(() => demoMode ? createMockOverview() : null)
   const [loading, setLoading] = useState(!demoMode)
   const [refreshing, setRefreshing] = useState(false)
@@ -29,7 +29,7 @@ export function useOverview(tenantId: string, enabled = true, demoMode = isMockM
     const generation = requestGate.current.begin()
     setRefreshing(true)
     try {
-      const next = await loadOverview(normalizedTenantId)
+      const next = await loadOverview(normalizedTenantId, role)
       if (requestGate.current.isLatest(generation)) setData(next)
     } finally {
       if (requestGate.current.isLatest(generation)) {
@@ -37,14 +37,14 @@ export function useOverview(tenantId: string, enabled = true, demoMode = isMockM
         setRefreshing(false)
       }
     }
-  }, [canLoad, demoMode, normalizedTenantId])
+  }, [canLoad, demoMode, normalizedTenantId, role])
 
   useEffect(() => {
     requestGate.current.begin()
     setData(demoMode ? createMockOverview() : null)
     setLoading(!demoMode && canLoad)
     setRefreshing(false)
-  }, [canLoad, demoMode, normalizedTenantId])
+  }, [canLoad, demoMode, normalizedTenantId, role])
 
   useEffect(() => {
     void refresh()

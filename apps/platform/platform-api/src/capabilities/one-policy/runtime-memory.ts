@@ -3,6 +3,10 @@ import { PlatformApiError } from "../errors"
 import type { RuntimePolicyRevision } from "./runtime"
 import { RUNTIME_POLICY_ID } from "./runtime"
 import type { RuntimePolicyStore } from "./module"
+import { validateRuntimePolicyForPublication } from "./runtime-policy-validator"
+import type { GatewayAuthorizationAuditStore } from "../audit-events/module"
+import { policyChangeAuditEvent, policyEnabledAuditEvent, policySystemPublishAuditEvent } from "./lifecycle"
+import { createKeyedSerialExecutor } from "../../persistence/keyed-serial-executor"
 
 function nowSeconds(): number {
   return Math.floor(Date.now() / 1_000)
@@ -12,8 +16,10 @@ export function createInMemoryRuntimePolicyStore(options: {
   drafts?: MemoryPolicyDraftStore
   now?: () => number
   defaultPolicy?: (tenantId: string, now: number) => RuntimePolicyRevision
+  audit?: GatewayAuthorizationAuditStore
 } = {}): RuntimePolicyStore {
   const revisions = new Map<string, RuntimePolicyRevision[]>()
+  const mutations = createKeyedSerialExecutor()
   const now = options.now ?? nowSeconds
   const key = (tenantId: string, policyId: string) => `${tenantId}\0${policyId}`
   const defaultPolicy = options.defaultPolicy ?? ((tenantId: string, at: number): RuntimePolicyRevision => ({
@@ -38,7 +44,8 @@ export function createInMemoryRuntimePolicyStore(options: {
   }))
 
   const drafts = options.drafts ?? createPolicyDraftStore()
-  function publish({ tenantId, policyId, baseRevision, definition, publishedBy, displayName }: Parameters<RuntimePolicyStore["publish"]>[0]): RuntimePolicyRevision {
+  function prepareRevision({ tenantId, policyId, baseRevision, definition, publishedBy, displayName }: Parameters<RuntimePolicyStore["publish"]>[0]): RuntimePolicyRevision {
+    validateRuntimePolicyForPublication(definition)
     const values = revisions.get(key(tenantId, policyId)) ?? []
     const current = values[values.length - 1]
     if (!current && baseRevision !== 0) throw new PlatformApiError("POLICY_REVISION_CONFLICT", 409)
@@ -57,8 +64,12 @@ export function createInMemoryRuntimePolicyStore(options: {
       created_at: at,
       published_at: at,
     }
-    values.push(structuredClone(next))
-    revisions.set(key(tenantId, policyId), values)
+    return next
+  }
+
+  function commitRevision(next: RuntimePolicyRevision): RuntimePolicyRevision {
+    const revisionKey = key(next.tenant_id, next.policy_id)
+    revisions.set(revisionKey, [...(revisions.get(revisionKey) ?? []), structuredClone(next)])
     return structuredClone(next)
   }
 
@@ -91,33 +102,91 @@ export function createInMemoryRuntimePolicyStore(options: {
       return value ? structuredClone(value) : null
     },
     async ensureDefault({ tenantId }) {
-      const existing = await this.getLatest({ tenantId, policyId: RUNTIME_POLICY_ID })
-      if (existing) return existing
-      const value = defaultPolicy(tenantId, now())
-      revisions.set(key(tenantId, value.policy_id), [structuredClone(value)])
-      return structuredClone(value)
+      return mutations.run(key(tenantId, RUNTIME_POLICY_ID), async () => {
+        const existing = await this.getLatest({ tenantId, policyId: RUNTIME_POLICY_ID })
+        if (existing) return existing
+        return commitRevision(defaultPolicy(tenantId, now()))
+      })
     },
-    async publish(input) { return publish(input) },
-    async publishDraft({ tenantId, policyId, expectedVersion, publishedBy }) {
-      return drafts.consume(tenantId, runtimePolicyDraftKey(policyId), expectedVersion, (draft) =>
-        publish({ tenantId, policyId, publishedBy, ...requireRuntimePolicyDraft(draft, expectedVersion) }))
+    async publish(input) {
+      const revisionKey = key(input.tenantId, input.policyId)
+      return mutations.run(revisionKey, async () => {
+        const published = prepareRevision(input)
+        if (options.audit) {
+          await options.audit.record({
+            tenantId: input.tenantId,
+            event: policySystemPublishAuditEvent({
+              tenantId: input.tenantId,
+              policyKey: runtimePolicyDraftKey(input.policyId),
+              publishedRevision: published.revision,
+              content: input.definition,
+              actorSubjectId: input.publishedBy,
+              correlationId: input.correlationId ?? `policy-system-${input.policyId}-${published.revision}`,
+              occurredAt: now(),
+            }),
+          })
+        }
+        return commitRevision(published)
+      })
     },
-    async setEnabled({ tenantId, policyId, expectedRevision, enabled, publishedBy }) {
-      const values = revisions.get(key(tenantId, policyId)) ?? []
-      const current = values[values.length - 1]
-      if (!current || current.revision !== expectedRevision) throw new PlatformApiError("POLICY_REVISION_CONFLICT", 409)
-      const at = now()
-      const next: RuntimePolicyRevision = {
-        ...structuredClone(current),
-        revision: current.revision + 1,
-        enabled,
-        published_by_subject_id: publishedBy,
-        created_at: at,
-        published_at: at,
-      }
-      values.push(structuredClone(next))
-      revisions.set(key(tenantId, policyId), values)
-      return structuredClone(next)
+    async publishDraft({ tenantId, policyId, expectedVersion, expectedContentDigest, publishedBy, correlationId }) {
+      const revisionKey = key(tenantId, policyId)
+      return drafts.consumeAsync(tenantId, runtimePolicyDraftKey(policyId), expectedVersion, (draft) => mutations.run(revisionKey, async () => {
+        const published = prepareRevision({ tenantId, policyId, publishedBy, ...requireRuntimePolicyDraft(draft, expectedVersion, expectedContentDigest) })
+        if (options.audit) {
+          await options.audit.record({
+            tenantId,
+            event: policyChangeAuditEvent({
+              tenantId,
+              policyKey: runtimePolicyDraftKey(policyId),
+              draft,
+              action: "PUBLISHED",
+              actorSubjectId: publishedBy,
+              correlationId: correlationId ?? `policy-publish-${policyId}-${expectedVersion}`,
+              occurredAt: now(),
+              publishedRevision: published.revision,
+            }),
+          })
+        }
+        return commitRevision(published)
+      }))
+    },
+    async setEnabled({ tenantId, policyId, expectedRevision, enabled, publishedBy, correlationId }) {
+      return mutations.run(key(tenantId, policyId), async () => {
+        const values = revisions.get(key(tenantId, policyId)) ?? []
+        const current = values[values.length - 1]
+        if (!current || current.revision !== expectedRevision) throw new PlatformApiError("POLICY_REVISION_CONFLICT", 409)
+        const at = now()
+        const next: RuntimePolicyRevision = {
+          ...structuredClone(current),
+          revision: current.revision + 1,
+          enabled,
+          published_by_subject_id: publishedBy,
+          created_at: at,
+          published_at: at,
+        }
+        if (!options.audit) throw new PlatformApiError("POLICY_AUDIT_UNAVAILABLE", 503)
+        await options.audit.record({
+          tenantId,
+          event: policyEnabledAuditEvent({
+            tenantId,
+            policyKey: runtimePolicyDraftKey(policyId),
+            previousRevision: current.revision,
+            publishedRevision: next.revision,
+            enabled,
+            content: {
+              display_name: next.display_name,
+              enabled: next.enabled,
+              scope: next.scope,
+              rules: next.rules,
+            },
+            actorSubjectId: publishedBy,
+            correlationId,
+            occurredAt: at,
+          }),
+        })
+        return commitRevision(next)
+      })
     },
   }
 }

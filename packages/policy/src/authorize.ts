@@ -1,4 +1,4 @@
-import { observeOperation } from "../../telemetry/src/operation-observability"
+import { observeOperation } from "@genioone/telemetry/operation-observability"
 import { createHash } from "node:crypto"
 
 import type {
@@ -6,7 +6,7 @@ import type {
   AuthorizationInput,
   CompiledAuthorizationBundle,
   CompiledAuthorizationRule,
-} from "../../protocol/src/authorization"
+} from "@genioone/protocol/authorization"
 
 function matches(values: string[], value: string): boolean {
   return values.includes("*") || values.includes(value)
@@ -14,17 +14,21 @@ function matches(values: string[], value: string): boolean {
 
 function ruleMatches(rule: CompiledAuthorizationRule, input: AuthorizationInput): boolean {
   const isMcpRequest = input.requestProtocol === "MCP"
+  // Performance optimization: Check cheap primitive scalar fields (resource_id, capability_id)
+  // first to short-circuit before running array comparisons or tool checks.
+  if (rule.resource_id !== input.resourceId) return false
+  if (!isMcpRequest && rule.capability_id !== input.capabilityId) return false
+
   const toolAllowed = !isMcpRequest || (
     input.mcpMethod === "tools/call"
       ? input.mcpTool !== undefined && rule.mcp_tools?.includes(input.mcpTool) === true
       : (rule.mcp_tools?.length ?? 0) > 0
   )
+  if (!toolAllowed) return false
+
   return (
     matches(rule.subject_ids, input.subjectId) &&
-    matches(rule.acting_client_ids, input.actingClientId) &&
-    rule.resource_id === input.resourceId &&
-    (isMcpRequest || rule.capability_id === input.capabilityId) &&
-    toolAllowed
+    matches(rule.acting_client_ids, input.actingClientId)
   )
 }
 
@@ -100,7 +104,9 @@ function denied(
 function intersectGrants(left: readonly string[], right: readonly string[]): string[] {
   if (left.length === 0) return [...right]
   if (right.length === 0) return [...left]
-  return left.filter((value) => right.includes(value))
+  if (right.length < 32) return left.filter((value) => right.includes(value))
+  const rightSet = new Set(right)
+  return left.filter((value) => rightSet.has(value))
 }
 
 function agentActingChain(input: AuthorizationInput): AuthorizationDecision["agentActingChain"] {
@@ -177,9 +183,11 @@ function authorizeDecision(
       agentDecision.allowedPublicModels,
       principalDecision.allowedPublicModels,
     )
-    const allowedMcpTools = agentDecision.allowedMcpTools.filter((value) =>
-      principalDecision.allowedMcpTools.includes(value)
-    )
+    // Performance optimization: Use Set lookup for tool intersection when list is large.
+    const principalToolSet = principalDecision.allowedMcpTools.length >= 32 ? new Set(principalDecision.allowedMcpTools) : null
+    const allowedMcpTools = principalToolSet
+      ? agentDecision.allowedMcpTools.filter((value) => principalToolSet.has(value))
+      : agentDecision.allowedMcpTools.filter((value) => principalDecision.allowedMcpTools.includes(value))
     if (input.requestedPublicModel && allowedPublicModels.length === 0 &&
         agentDecision.allowedPublicModels.length > 0 && principalDecision.allowedPublicModels.length > 0) {
       return denied(bundle, input, "MODEL_NOT_ENTITLED")
@@ -212,8 +220,8 @@ function authorizeDecision(
   }
 
   const allowRules = matchingRules.filter((rule) => rule.disposition === "ALLOW")
-  const allowedMcpTools = [...new Set(allowRules.flatMap((rule) => rule.mcp_tools ?? []))]
-    .sort((left, right) => left.localeCompare(right))
+  // Performance optimization: Standard default string sort is ASCII lexicographical and significantly faster than localeCompare.
+  const allowedMcpTools = [...new Set(allowRules.flatMap((rule) => rule.mcp_tools ?? []))].sort()
   const allowsAnyModel = allowRules.some((rule) => rule.public_models.length === 0)
   const allowedPublicModels = allowsAnyModel
     ? []

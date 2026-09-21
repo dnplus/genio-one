@@ -7,7 +7,15 @@ import type { BotServerContext } from "./context"
 import type { RuntimeSession } from "./runtime-broker"
 import type { ManagedDesktop } from "./runtime"
 import { requireRuntimePolicyDecision } from "./runtime-policy"
-import type { RuntimePolicyDecision } from "./runtime-policy-contract"
+import {
+  defaultRuntimeCapabilityAction,
+  type RuntimeCapabilityId,
+} from "@genioone/protocol/runtime-capability-actions"
+import type {
+  RuntimePolicyDecision,
+  RuntimePolicyExecutableAction,
+} from "./runtime-policy-contract"
+import { runtimePolicyDecisionTarget } from "./runtime-policy-contract"
 
 const PAIRING_MS = 5 * 60_000
 const LEASE_MS = 60 * 60_000
@@ -31,7 +39,7 @@ function frame(data: WebSocket.RawData) {
   return Array.isArray(data) ? Buffer.concat(data) : Buffer.isBuffer(data) ? data : Buffer.from(data)
 }
 
-function capability(method: string): string | null {
+function capability(method: string): RuntimeCapabilityId | null {
   if (["initialize", "initialized", "environment/info"].includes(method)) return null
   if (method.startsWith("process/")) return "shell.exec"
   if (["fs/writeFile", "fs/createDirectory", "fs/remove", "fs/copy", "fs/rename"].includes(method)) return "filesystem.write"
@@ -45,27 +53,47 @@ export class LocalHands {
 
   constructor(private readonly context: BotServerContext) {}
 
-  private input(session: RuntimeSession, botId: string, capabilityId: string) {
+  private input(
+    session: RuntimeSession,
+    botId: string,
+    capabilityId: RuntimeCapabilityId,
+    action: RuntimePolicyExecutableAction,
+  ) {
     if (!this.context.botRegistry.getOwned(botId, session.principal)) throw new Error("BOT_NOT_FOUND")
-    return { principal: session.principal, botId, runtimeId: "codex", capabilityId, action: "invoke" as const, sessionId: session.id, accessToken: session.accessToken }
+    return { principal: session.principal, botId, runtimeId: "codex", capabilityId, action, sessionId: session.id, accessToken: session.accessToken }
   }
 
-  private async authorize(session: RuntimeSession, botId: string, capabilityId: string) {
+  private inputForDecision(session: RuntimeSession, botId: string, decision: RuntimePolicyDecision) {
+    const target = runtimePolicyDecisionTarget(decision)
+    return this.input(session, botId, target.capabilityId, target.action)
+  }
+
+  private async authorize(
+    session: RuntimeSession,
+    botId: string,
+    capabilityId: RuntimeCapabilityId,
+    action: RuntimePolicyExecutableAction,
+  ) {
     await assertCapability(this.context.capabilityGate, session.principal, PERSONAL_BOT_COMPUTER_USE, session.accessToken)
-    const decision = await this.context.runtimePolicy.authorize({ ...this.input(session, botId, capabilityId), correlationId: randomUUID() })
+    const input = this.input(session, botId, capabilityId, action)
+    const decision = await this.context.runtimePolicy.authorize({ ...input, correlationId: randomUUID() })
     try { return requireRuntimePolicyDecision(decision) }
     catch (error) {
-      if (decision.correlation_id) await this.context.runtimePolicy.report({ ...this.input(session, botId, capabilityId), correlationId: decision.correlation_id, outcome: "DENY", reasonCode: decision.reason_code })
+      if (decision.correlation_id) await this.context.runtimePolicy.report({ ...input, correlationId: decision.correlation_id, outcome: "DENY", reasonCode: decision.reason_code })
       throw error
     }
   }
 
-  private async report(lease: Lease, decision: RuntimePolicyDecision, outcome: "ALLOW" | "COMPLETED" | "FAILED", reasonCode?: string) {
+  private async reportDecision(session: RuntimeSession, botId: string, decision: RuntimePolicyDecision, outcome: "ALLOW" | "COMPLETED" | "FAILED", reasonCode?: string) {
     if (!decision.correlation_id) throw new Error("LOCAL_HANDS_AUDIT_CORRELATION_REQUIRED")
+    await this.context.runtimePolicy.report({ ...this.inputForDecision(session, botId, decision), correlationId: decision.correlation_id, outcome, ...(reasonCode ? { reasonCode } : {}) })
+  }
+
+  private async report(lease: Lease, decision: RuntimePolicyDecision, outcome: "ALLOW" | "COMPLETED" | "FAILED", reasonCode?: string) {
     try {
-      await this.context.runtimePolicy.report({ ...this.input(lease.session, lease.botId, decision.capability_id), correlationId: decision.correlation_id, outcome, ...(reasonCode ? { reasonCode } : {}) })
+      await this.reportDecision(lease.session, lease.botId, decision, outcome, reasonCode)
     } catch (error) {
-      console.warn(JSON.stringify({ event: "endpoint.receipt.unconfirmed", endpoint_id: lease.id, correlation_id: decision.correlation_id, outcome }))
+      console.warn(JSON.stringify({ event: "endpoint.receipt.unconfirmed", endpoint_id: lease.id, correlation_id: decision.correlation_id ?? null, outcome }))
       throw error
     }
     console.info(JSON.stringify({ event: "endpoint.execution.receipt", endpoint_id: lease.id, runtime_session_id: lease.session.id, bot_id: lease.botId, correlation_id: decision.correlation_id, outcome, reason_code: reasonCode ?? null }))
@@ -75,9 +103,8 @@ export class LocalHands {
     if (session.selectedBotId !== botId) throw new Error("BOT_NOT_SELECTED")
     if (session.leases.headless) throw new Error("LOCAL_HANDS_RUNTIME_CONFLICT")
     if (this.context.botRegistry.timeline.activeTurns(botId).length) throw new Error("LOCAL_HANDS_TURN_RUNNING")
-    const decision = await this.authorize(session, botId, "shell.exec")
-    if (!decision.correlation_id) throw new Error("LOCAL_HANDS_AUDIT_CORRELATION_REQUIRED")
-    await this.context.runtimePolicy.report({ ...this.input(session, botId, "shell.exec"), correlationId: decision.correlation_id, outcome: "ALLOW" })
+    const decision = await this.authorize(session, botId, "remote_hands.use", "expose")
+    await this.reportDecision(session, botId, decision, "COMPLETED", "REMOTE_HANDS_PAIRING_EXPOSED")
     for (const [token, pairing] of this.pairings) if (pairing.expiresAt <= Date.now() || pairing.session.id === session.id) this.pairings.delete(token)
     const token = randomBytes(32).toString("hex")
     const expiresAt = Date.now() + PAIRING_MS
@@ -105,6 +132,7 @@ export class LocalHands {
     clearInterval(lease.heartbeat)
     lease.desktop.details.execReady = false
     this.leases.delete(lease.id)
+    this.context.runtimeBroker.detachEndpoint(lease.session.id, lease.desktop)
     lease.consumer?.close(1008, reason)
     lease.endpoint.close(1008, reason)
     const unresolved = new Map([...Array.from(lease.pending.values(), ({ decision }) => decision), ...lease.processes.values()].map((decision) => [decision.correlation_id, decision]))
@@ -124,7 +152,11 @@ export class LocalHands {
     const { session, botId } = pairing
     if (this.context.runtimeBroker.get(session.id) !== session || session.selectedBotId !== botId || this.context.botRegistry.timeline.activeTurns(botId).length) throw new Error("LOCAL_HANDS_SESSION_CHANGED")
     await assertCapability(this.context.capabilityGate, session.principal, PERSONAL_BOT_COMPUTER_USE, session.accessToken)
-    if (endpoint.readyState !== WebSocket.OPEN) throw new Error("LOCAL_HANDS_DISCONNECTED")
+    const decision = await this.authorize(session, botId, "remote_hands.use", "use")
+    if (endpoint.readyState !== WebSocket.OPEN) {
+      await this.reportDecision(session, botId, decision, "FAILED", "LOCAL_HANDS_DISCONNECTED")
+      throw new Error("LOCAL_HANDS_DISCONNECTED")
+    }
     const id = `endpoint-${randomUUID()}`
     const expiresAt = Date.now() + LEASE_MS
     const lease: Lease = {
@@ -177,9 +209,20 @@ export class LocalHands {
     })
     endpoint.on("close", () => this.closeLease(lease, "LOCAL_HANDS_DISCONNECTED"))
     endpoint.on("error", () => this.closeLease(lease, "LOCAL_HANDS_DISCONNECTED"))
-    endpoint.send(JSON.stringify({ type: "ready", endpointId: id, expiresAt }))
-    try { this.context.runtimeBroker.attachEndpoint(session.id, lease.desktop) }
-    catch (error) { this.closeLease(lease, "LOCAL_HANDS_RUNTIME_CONFLICT"); throw error }
+    let completionReportAttempted = false
+    try {
+      this.context.runtimeBroker.attachEndpoint(session.id, lease.desktop, false)
+      completionReportAttempted = true
+      await this.reportDecision(session, botId, decision, "COMPLETED", "REMOTE_HANDS_ENDPOINT_ACCEPTED")
+      endpoint.send(JSON.stringify({ type: "ready", endpointId: id, expiresAt }))
+      this.context.runtimeBroker.notifyEndpoint(session.id, "genio/runtime/ready", { ...lease.desktop.details, runtimeSessionId: session.id })
+    } catch (error) {
+      if (!completionReportAttempted) {
+        try { await this.reportDecision(session, botId, decision, "FAILED", error instanceof Error ? error.message : "LOCAL_HANDS_ACCEPT_FAILED") } catch {}
+      }
+      this.closeLease(lease, "LOCAL_HANDS_RUNTIME_CONFLICT")
+      throw error
+    }
     console.info(JSON.stringify({ event: "endpoint.lease.ready", endpoint_id: id, runtime_session_id: session.id, bot_id: botId, expires_at: expiresAt }))
   }
 
@@ -201,7 +244,9 @@ export class LocalHands {
         const capabilityId = capability(message.method)
         if (capabilityId) {
           if (message.id === undefined || lease.pending.size >= 64) throw new Error("LOCAL_HANDS_REQUEST_INVALID")
-          const decision = await this.authorize(lease.session, lease.botId, capabilityId)
+          const action = defaultRuntimeCapabilityAction(capabilityId)
+          if (!action) throw new Error("RUNTIME_POLICY_CAPABILITY_INVALID")
+          const decision = await this.authorize(lease.session, lease.botId, capabilityId, action)
           if (lease.closed) throw new Error("LOCAL_HANDS_DISCONNECTED")
           const key = JSON.stringify(message.id)
           if (lease.pending.has(key)) throw new Error("LOCAL_HANDS_DUPLICATE_REQUEST")

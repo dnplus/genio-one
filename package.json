@@ -23,5 +23,5 @@
     "build": "pnpm --filter genio-one build && pnpm --filter genio-one-bot build && pnpm --filter @genioone/gateway build",
     "verify": "pnpm check && pnpm test && pnpm build"
   },
-  "packageManager": "pnpm@10.32.1"
+  "packageManager": "pnpm@12.4.2"
 }

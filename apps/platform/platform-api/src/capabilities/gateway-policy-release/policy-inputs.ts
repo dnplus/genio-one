@@ -15,8 +15,9 @@ import { ModelRoutingPolicySchema } from "../model-routing/contract"
 import type { ConnectionModelMapping, PublicModel } from "../models/contract"
 import { ConnectionModelMappingSchema, PublicModelSchema } from "../models/contract"
 import type { GatewayRoutingConnectionFact, GatewayRoutingPricingFact, GatewayRoutingResourceOwnerRef } from "./routing-compiler"
-import type { CompiledAgentDelegation, CompiledExecutionGrant, CompiledSubjectContext, CompiledUsageContext } from "../../../../../../packages/protocol/src/authorization"
+import type { CompiledAgentDelegation, CompiledExecutionGrant, CompiledSubjectContext, CompiledUsageContext } from "@genioone/protocol/authorization"
 import type { UsagePolicyLimits, UsagePolicyRevision, UsagePolicySelectors } from "../usage-governance/contract"
+import { compareUtf8 } from "@genioone/protocol/canonical"
 
 type DatabaseRow = Record<string, unknown>
 
@@ -300,10 +301,6 @@ function routingPolicy(row: DatabaseRow): ModelRoutingPolicy {
     throw new PlatformApiError("GATEWAY_POLICY_INPUT_INVALID", 500)
   }
   return value
-}
-
-function compareUtf8(left: string, right: string): number {
-  return Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"))
 }
 
 function resourceIds(

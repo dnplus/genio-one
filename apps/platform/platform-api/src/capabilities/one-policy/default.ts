@@ -1,10 +1,12 @@
 import { createPolicyDraftStore, requireBotPolicyDraft, type MemoryPolicyDraftStore, defaultBotRules, type BotPolicyRevision } from "./drafts"
 import { PlatformApiError } from "../errors"
 import type { Principal } from "../tenancy-auth/contract"
+import type { AccessGroupDirectory } from "../access-groups/module"
 import type { OnePolicyBotCapability, OnePolicyBotDecision, OnePolicyBotSeed } from "./contract"
 import {
   evaluateRuntimePolicies,
   runtimePolicyAuditEvent,
+  unconfiguredRuntimeDecision,
   type RuntimePolicyAuditEvent,
   type RuntimePolicyAuthorizeBody,
   type RuntimePolicyDecision,
@@ -15,6 +17,9 @@ import type { OnePolicy, OnePolicyRuntimeAuditSink, OnePolicySeedStore, RuntimeP
 import type { OnePolicyRuntimeReportVerifier } from "./module"
 import { createInMemoryRuntimePolicyStore } from "./runtime-memory"
 import { verifyRuntimeReport } from "../../../../../../runtimes/gateway/services/shared/runtime-report-attestation"
+import type { GatewayAuthorizationAuditStore } from "../audit-events/module"
+import { policyChangeAuditEvent, policyEnabledAuditEvent, policySystemPublishAuditEvent } from "./lifecycle"
+import { createKeyedSerialExecutor } from "../../persistence/keyed-serial-executor"
 
 export const PERSONAL_BOT_RESOURCE = "genio.personal-bot" as const
 export const PERSONAL_BOT_USE = "personal_bot.use" as const
@@ -87,13 +92,14 @@ function evaluateBotAccess(
 function runtimeInput(input: RuntimePolicyEffectiveQuery & {
   principal: Pick<Principal, "tenant_id" | "subject_id" | "client_id" | "role" | "organization_ids">
   correlation_id?: string | null
-}, evaluatedAt = Math.floor(Date.now() / 1_000)): Parameters<typeof evaluateRuntimePolicies>[1] {
+}, accessGroupIds: readonly string[], evaluatedAt = Math.floor(Date.now() / 1_000)): Parameters<typeof evaluateRuntimePolicies>[1] {
   return {
     tenant_id: input.principal.tenant_id,
     subject_id: input.principal.subject_id,
     client_id: input.principal.client_id,
     role: input.principal.role,
     organization_ids: input.principal.organization_ids,
+    access_group_ids: accessGroupIds,
     bot_id: input.bot_id,
     runtime_id: input.runtime_id,
     capability_id: input.capability_id,
@@ -138,16 +144,19 @@ export function createDefaultOnePolicy(options: {
   drafts?: MemoryPolicyDraftStore
   runtimeStore?: RuntimePolicyStore
   runtimeAuditSink?: OnePolicyRuntimeAuditSink
+  policyAuditSink?: GatewayAuthorizationAuditStore
   runtimeReportVerifier?: OnePolicyRuntimeReportVerifier
   runtimeReportKeyId?: string
   runtimeReportPublicKeyPem?: string
   connectionEnabled?: (input: { tenantId: string; botId: string }) => Promise<boolean> | boolean
   runtimeCapabilityAvailable?: (input: { tenantId: string; botId: string; runtimeId: string; capabilityId: string }) => Promise<boolean> | boolean
+  accessGroups?: Pick<AccessGroupDirectory, "groupsForSubject">
   now?: () => number
 } = {}): OnePolicy {
   const now = options.now ?? (() => Math.floor(Date.now() / 1_000))
   const values = new Map<string, OnePolicyBotSeed>()
   const revisions = new Map<string, BotPolicyRevision[]>()
+  const mutations = createKeyedSerialExecutor()
   const runtimeStore = options.runtimeStore ?? createInMemoryRuntimePolicyStore({ now })
   const runtimeReportVerifier = options.runtimeReportVerifier ?? (options.runtimeReportKeyId && options.runtimeReportPublicKeyPem ? {
     verify(input: { body: RuntimePolicyReportBody; keyId: string; signature: string }) {
@@ -156,12 +165,15 @@ export function createDefaultOnePolicy(options: {
   } satisfies OnePolicyRuntimeReportVerifier : undefined)
   const localRuntimeAudits = new Map<string, RuntimePolicyAuditEvent>()
   const drafts = options.drafts ?? createPolicyDraftStore()
-  function publishLocal({ tenantId, baseRevision, rules, publishedBy }: Parameters<OnePolicySeedStore["publish"]>[0]) {
+  function prepareLocalRevision({ tenantId, baseRevision, rules }: Parameters<OnePolicySeedStore["publish"]>[0]) {
     const current = values.get(tenantId)!
     if (current.policy_revision !== baseRevision) throw new PlatformApiError("POLICY_REVISION_CONFLICT", 409)
     const updated = { ...current, policy_revision: baseRevision + 1, rules: structuredClone(rules), updated_at: now() }
-    revisions.get(tenantId)!.unshift({ policy_revision: updated.policy_revision, rules: structuredClone(rules), published_by: publishedBy, published_at: now() })
-    values.set(tenantId, updated)
+    return updated
+  }
+  function commitLocalRevision(updated: OnePolicyBotSeed, publishedBy: string) {
+    revisions.get(updated.tenant_id)!.unshift({ policy_revision: updated.policy_revision, rules: structuredClone(updated.rules), published_by: publishedBy, published_at: updated.updated_at })
+    values.set(updated.tenant_id, updated)
     return structuredClone(updated)
   }
   const localStore: OnePolicySeedStore = {
@@ -175,26 +187,91 @@ export function createDefaultOnePolicy(options: {
       return structuredClone(created)
     },
     async publish(input) {
-      await localStore.getOrCreate(input)
-      return publishLocal(input)
+      return mutations.run(input.tenantId, async () => {
+        await localStore.getOrCreate(input)
+        const published = prepareLocalRevision(input)
+        if (options.policyAuditSink) {
+          await options.policyAuditSink.record({
+            tenantId: input.tenantId,
+            event: policySystemPublishAuditEvent({
+              tenantId: input.tenantId,
+              policyKey: POLICY_ID,
+              publishedRevision: published.policy_revision,
+              content: input.rules,
+              actorSubjectId: input.publishedBy,
+              correlationId: input.correlationId ?? `policy-system-${POLICY_ID}-${published.policy_revision}`,
+              occurredAt: now(),
+            }),
+          })
+        }
+        return commitLocalRevision(published, input.publishedBy)
+      })
     },
-    async publishDraft({ tenantId, expectedVersion, publishedBy }) {
-      await localStore.getOrCreate({ tenantId })
-      return drafts.consume(tenantId, POLICY_ID, expectedVersion, (draft) =>
-        publishLocal({ tenantId, publishedBy, ...requireBotPolicyDraft(draft, expectedVersion) }))
+    async publishDraft({ tenantId, expectedVersion, expectedContentDigest, publishedBy, correlationId }) {
+      return drafts.consumeAsync(tenantId, POLICY_ID, expectedVersion, (draft) => mutations.run(tenantId, async () => {
+        await localStore.getOrCreate({ tenantId })
+        const published = prepareLocalRevision({ tenantId, publishedBy, ...requireBotPolicyDraft(draft, expectedVersion, expectedContentDigest) })
+        if (options.policyAuditSink) {
+          await options.policyAuditSink.record({
+            tenantId,
+            event: policyChangeAuditEvent({
+              tenantId,
+              policyKey: POLICY_ID,
+              draft,
+              action: "PUBLISHED",
+              actorSubjectId: publishedBy,
+              correlationId: correlationId ?? `policy-publish-${POLICY_ID}-${expectedVersion}`,
+              occurredAt: now(),
+              publishedRevision: published.policy_revision,
+            }),
+          })
+        }
+        return commitLocalRevision(published, publishedBy)
+      }))
     },
-    async setEnabled({ tenantId, enabled }) {
-      const current = await localStore.getOrCreate({ tenantId })
-      const updated = { ...current, enabled, updated_at: now() }
-      values.set(tenantId, updated)
-      return structuredClone(updated)
+    async setEnabled({ tenantId, enabled, publishedBy, correlationId }) {
+      return mutations.run(tenantId, async () => {
+        const existing = values.get(tenantId)
+        const current = existing ? structuredClone(existing) : seed(tenantId, now())
+        const at = now()
+        const updated = {
+          ...current,
+          policy_revision: current.policy_revision + 1,
+          enabled,
+          updated_at: at,
+        }
+        if (!options.policyAuditSink) throw new PlatformApiError("POLICY_AUDIT_UNAVAILABLE", 503)
+        await options.policyAuditSink.record({
+          tenantId,
+          event: policyEnabledAuditEvent({
+            tenantId,
+            policyKey: POLICY_ID,
+            previousRevision: current.policy_revision,
+            publishedRevision: updated.policy_revision,
+            enabled,
+            content: { enabled: updated.enabled, rules: updated.rules },
+            actorSubjectId: publishedBy,
+            correlationId,
+            occurredAt: at,
+          }),
+        })
+        if (!existing) {
+          revisions.set(tenantId, [{
+            policy_revision: current.policy_revision,
+            rules: structuredClone(current.rules),
+            published_by: null,
+            published_at: current.created_at,
+          }])
+        }
+        return commitLocalRevision(updated, publishedBy)
+      })
     },
   }
   const store = options.seedStore ?? localStore
 
   async function recordRuntimeAudit(event: RuntimePolicyAuditEvent): Promise<void> {
-    localRuntimeAudits.set(`${event.tenant_id}\0${event.correlation_id}\0${event.phase}`, structuredClone(event))
     if (options.runtimeAuditSink) await options.runtimeAuditSink.record({ tenantId: event.tenant_id, event })
+    localRuntimeAudits.set(`${event.tenant_id}\0${event.correlation_id}\0${event.phase}`, structuredClone(event))
   }
 
   async function findRuntimeAuthorization(tenantId: string, correlationId: string): Promise<RuntimePolicyAuditEvent | null> {
@@ -242,7 +319,18 @@ export function createDefaultOnePolicy(options: {
     publishRuntimePolicyDraft: runtimeStore.publishDraft,
     setRuntimePolicyEnabled: runtimeStore.setEnabled,
     async evaluateRuntime(input) {
-      const evaluation = runtimeInput(input, now())
+      let accessGroupIds: string[] = []
+      if (options.accessGroups) {
+        try {
+          accessGroupIds = (await options.accessGroups.groupsForSubject({
+            tenantId: input.principal.tenant_id,
+            subjectId: input.principal.subject_id,
+          })).map((group) => group.access_group_id)
+        } catch {
+          return unconfiguredRuntimeDecision(runtimeInput(input, [], now()), "ACCESS_GROUP_RESOLUTION_FAILED")
+        }
+      }
+      const evaluation = runtimeInput(input, accessGroupIds, now())
       let connectionEnabled = true
       if (options.connectionEnabled) {
         connectionEnabled = false

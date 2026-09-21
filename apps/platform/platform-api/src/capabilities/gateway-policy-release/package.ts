@@ -14,8 +14,8 @@ import {
 import {
   GatewayReleaseReferenceSchema,
   type GatewayReleaseReference,
-} from "../../../../../../packages/protocol/src/gateway-release"
-import { GATEWAY_RELEASE_REFERENCE_SCHEMA_VERSION } from "../../../../../../packages/protocol/src/runtime-command"
+} from "@genioone/protocol/gateway-release"
+import { GATEWAY_RELEASE_REFERENCE_SCHEMA_VERSION } from "@genioone/protocol/runtime-command"
 import type {
   GatewayProjectionReleaseReference,
   ReleaseFileArtifact,
@@ -23,6 +23,7 @@ import type {
 import type { SavedGatewayPolicyRelease } from "./module"
 import { canonicalGatewayPolicyReleaseBytes } from "./planner"
 import { isPolicyReleaseManifest } from "../../../../../../runtimes/gateway/services/shared/policy-release"
+import { compareUtf8 } from "@genioone/protocol/canonical"
 
 /** Versioned wire format consumed by a Gateway release controller. */
 export const GATEWAY_RELEASE_PACKAGE_SCHEMA_VERSION =
@@ -147,17 +148,6 @@ function digest(value: unknown, label: string): asserts value is string {
 
 function sha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex")
-}
-
-function compareUtf8(left: string, right: string): number {
-  const leftBytes = new TextEncoder().encode(left)
-  const rightBytes = new TextEncoder().encode(right)
-  const length = Math.min(leftBytes.length, rightBytes.length)
-  for (let index = 0; index < length; index += 1) {
-    const difference = leftBytes[index]! - rightBytes[index]!
-    if (difference !== 0) return difference
-  }
-  return leftBytes.length - rightBytes.length
 }
 
 function projectionKey(reference: Pick<GatewayProjectionReleaseReference, "publication_id" | "projection_id">): string {

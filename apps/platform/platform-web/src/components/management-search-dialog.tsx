@@ -28,7 +28,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import type { OverviewSnapshot } from "@/domain/contracts"
+import type { AuditEvent, OverviewSnapshot } from "@/domain/contracts"
+import { isGovernanceAuditEvent } from "@/domain/audit-events"
 
 type SearchCategory = "ALL" | "PAGES" | "RESOURCES" | "IDENTITY" | "ACCESS" | "OPERATIONS" | "RECORDS"
 
@@ -82,6 +83,28 @@ const categoryIcons = Object.fromEntries(
 
 function searchable(...values: Array<string | null | undefined>) {
   return values.filter(Boolean).join(" ").toLocaleLowerCase()
+}
+
+export function auditSearchText(event: AuditEvent): string {
+  if (isGovernanceAuditEvent(event)) return searchable(
+    event.audit_event_id, event.correlation_id, event.kind, event.outcome,
+    event.subject?.subject_id, event.actor_subject?.subject_id,
+    event.kind === "POLICY_CHANGE" ? event.policy_key : event.access_group_id,
+  )
+  return searchable(
+    event.audit_event_id,
+    event.correlation_id,
+    event.kind,
+    event.outcome,
+    event.subject?.subject_id,
+    event.actor_subject?.subject_id,
+    event.acting_client?.acting_client_id,
+    event.resource_id,
+    event.capability_id,
+    event.device_id,
+    event.access_request_id,
+    event.entitlement_id,
+  )
 }
 
 export function ManagementSearchDialog({
@@ -178,7 +201,7 @@ export function ManagementSearchDialog({
       title: group.display_name,
       description: group.description || group.access_group_id,
       searchText: searchable(group.display_name, group.description, group.access_group_id),
-      page: "policy",
+      page: "people",
       filter: group.display_name,
     }))
 
@@ -299,20 +322,7 @@ export function ManagementSearchDialog({
       category: "RECORDS",
       title: event.kind,
       description: `${t(event.outcome)} · ${event.correlation_id}`,
-      searchText: searchable(
-        event.audit_event_id,
-        event.correlation_id,
-        event.kind,
-        event.outcome,
-        event.subject.subject_id,
-        event.actor_subject?.subject_id,
-        event.acting_client.acting_client_id,
-        event.resource_id,
-        event.capability_id,
-        event.device_id,
-        event.access_request_id,
-        event.entitlement_id,
-      ),
+      searchText: auditSearchText(event),
       page: "audit",
       filter: event.correlation_id,
     }))

@@ -13,9 +13,9 @@ import { createInMemoryGatewayProjector } from "../src/capabilities/gateway-proj
 import type { GatewayProjector } from "../src/capabilities/gateway-projection/module"
 import {
   createAiResourcePublicationWorkflow,
-  createInMemoryEnforcementChainReader,
   createInMemoryPublicationWorkflowStore,
 } from "../src/capabilities/publications/memory"
+import { createInMemoryEnforcementChainReader } from "../src/capabilities/enforcement/memory"
 import type { EnforcementChainReader, PublicationWorkflowStore } from "../src/capabilities/publications/module"
 import type { GatewayAggregatePublicationDelivery } from "../src/capabilities/gateway-policy-release/memory-delivery"
 import { createModelMemoryState } from "../src/capabilities/models/state"

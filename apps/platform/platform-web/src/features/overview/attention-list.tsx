@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item"
 import type { OverviewSnapshot } from "@/domain/contracts"
+import { isDecisionAuditEvent } from "@/domain/audit-events"
 
 type AttentionItem = {
   id: string
@@ -23,7 +24,7 @@ export function buildAttentionItems(data: OverviewSnapshot): AttentionItem[] {
   const unhealthyGateways = data.runtimes.filter((runtime) => runtime.runtime_kind === "GATEWAY" && (runtime.operator_state !== "READY" || !runtime.release_eligible)).length
   const offlineEndpoints = data.runtimes.filter((runtime) => runtime.runtime_kind === "ENDPOINT" && runtime.operator_state === "OFFLINE").length
   const pendingAccess = data.accessRequests.filter((request) => request.state === "PENDING").length
-  const missingCapabilities = new Set(data.auditEvents.flatMap((event) => event.missing_deployment_capability ? [event.missing_deployment_capability] : []))
+  const missingCapabilities = new Set(data.auditEvents.filter(isDecisionAuditEvent).flatMap((event) => event.missing_deployment_capability ? [event.missing_deployment_capability] : []))
   return [
     ...data.failures.map((failure) => ({
       id: `failure-${failure.source}`,

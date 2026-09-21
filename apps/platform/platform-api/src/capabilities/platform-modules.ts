@@ -16,6 +16,7 @@ import { createDurableEd25519Signer } from "./gateway-projection/signer"
 import { createInMemoryModelRouter } from "./model-routing/memory"
 import type { ModelRouter } from "./model-routing/module"
 import type { ModelRoutingPolicyStore } from "./model-routing/module"
+import type { ModelRoutingDecisionProvider } from "./model-routing/decision-provider"
 import { createInMemoryModelRoutingPolicyStore } from "./model-routing/policy-memory"
 import { createInMemoryPublicModelCatalog } from "./models/memory"
 import type { PublicModelCatalog } from "./models/module"
@@ -31,9 +32,9 @@ import { createModelMemoryState } from "./models/state"
 import { createResourceMemoryState } from "./resources/state"
 import {
   createAiResourcePublicationWorkflow,
-  createInMemoryEnforcementChainReader,
   createInMemoryPublicationWorkflowStore,
 } from "./publications/memory"
+import { createInMemoryEnforcementChainReader } from "./enforcement/memory"
 import type { AiResourcePublicationWorkflow } from "./publications/module"
 import { createInMemoryModelEntitlementCatalog } from "./entitlements/memory"
 import type { ModelEntitlementCatalog } from "./entitlements/module"
@@ -61,6 +62,8 @@ import type { GatewayMetricsStore } from "./metrics/module"
 import { createInMemoryGatewayMetricsStore } from "./metrics/memory"
 import type { IdentityDirectory } from "./identity/module"
 import { createInMemoryIdentityDirectory } from "./identity/memory"
+import { createAccessGroupDirectory, type AccessGroupDirectory } from "./access-groups/module"
+import { createInMemoryAccessGroupRepository } from "./access-groups/memory"
 import { createInMemoryGatewayAuthorizationAuditStore } from "./audit-events/memory"
 import type { GatewayAuthorizationAuditStore } from "./audit-events/module"
 import type { ApplicationRegistry } from "./applications/module"
@@ -151,6 +154,7 @@ export interface PlatformModuleGraph {
   traces: TraceStore
   metrics: GatewayMetricsStore
   identity: IdentityDirectory
+  accessGroups: AccessGroupDirectory
   auditEvents: GatewayAuthorizationAuditStore
   siem: SiemForwarder
   notifications: NotificationSubscriptionStore
@@ -176,6 +180,8 @@ export interface InMemoryPlatformOptions {
   runtimeReportKeyId?: string
   runtimeReportPublicKeyPem?: string
   connectionEnabled?: (input: { tenantId: string; botId: string }) => Promise<boolean> | boolean
+  modelRoutingDecisionProvider?: ModelRoutingDecisionProvider
+  modelRoutingDecisionMinimumConfidence?: number
 }
 
 export function createInMemoryPlatformModules(
@@ -183,6 +189,12 @@ export function createInMemoryPlatformModules(
 ): InMemoryPlatformModules {
   const organizations = createInMemoryOrganizationDirectory({ now: options.now })
   const identity = createInMemoryIdentityDirectory()
+  const auditEvents = createInMemoryGatewayAuthorizationAuditStore()
+  const accessGroups = createAccessGroupDirectory({
+    repository: createInMemoryAccessGroupRepository({ audit: auditEvents }),
+    identity,
+    now: options.now,
+  })
   const applications = createInMemoryApplicationRegistry({
     identity,
     organizations,
@@ -225,6 +237,8 @@ export function createInMemoryPlatformModules(
     state: modelState,
     models,
     now: options.now,
+    decisionProvider: options.modelRoutingDecisionProvider,
+    decisionMinimumConfidence: options.modelRoutingDecisionMinimumConfidence,
   })
   const modelRoutingPolicies = createInMemoryModelRoutingPolicyStore({ now: options.now })
   const entitlements = createInMemoryModelEntitlementCatalog({ now: options.now, models })
@@ -242,7 +256,13 @@ export function createInMemoryPlatformModules(
     now: options.now,
   })
   const enforcementCompiler = createEnforcementChainCompiler({ resources, connections })
-  const enforcementRevisionStore = createInMemoryEnforcementChainReader()
+  const policyDrafts = createPolicyDraftStore({ now: options.now, audit: auditEvents })
+  const enforcementRevisionStore = createInMemoryEnforcementChainReader({
+    drafts: policyDrafts,
+    compiler: enforcementCompiler,
+    audit: auditEvents,
+    now: options.now,
+  })
   const signer = createEphemeralEd25519Signer()
   const memorySigner = (keyId: string) => {
     const key = generateKeyPairSync("ed25519")
@@ -314,7 +334,6 @@ export function createInMemoryPlatformModules(
   const endpointRuntime = createInMemoryEndpointRuntimeStore({ now: options.now })
   const traces = createInMemoryTraceStore()
   const metrics = createInMemoryGatewayMetricsStore()
-  const auditEvents = createInMemoryGatewayAuthorizationAuditStore()
   const siem = createInMemorySiemForwarder({ now: options.now })
   const notifications = createInMemoryNotificationSubscriptionStore({ now: options.now })
   const configuration = createInMemoryTenantConfigurationStore({ now: options.now })
@@ -372,11 +391,12 @@ export function createInMemoryPlatformModules(
       keys: [{ key_id: releaseRootSigner.keyId, public_key_pem: releaseRootSigner.publicKeyPem }],
     },
   })
-  const policyDrafts = createPolicyDraftStore()
   const botAccessPolicy = createDefaultOnePolicy({
     drafts: policyDrafts,
-    runtimeStore: createInMemoryRuntimePolicyStore({ now: options.now, drafts: policyDrafts }),
+    runtimeStore: createInMemoryRuntimePolicyStore({ now: options.now, drafts: policyDrafts, audit: auditEvents }),
     runtimeAuditSink: auditEvents,
+    policyAuditSink: auditEvents,
+    accessGroups,
     connectionEnabled: options.connectionEnabled ?? (async ({ tenantId }) => {
       try {
         const connectionsForBot = await connections.list({ tenantId, resourceId: PERSONAL_BOT_RESOURCE_ID })
@@ -424,6 +444,7 @@ export function createInMemoryPlatformModules(
     traces,
     metrics,
     identity,
+    accessGroups,
     auditEvents,
     siem,
     notifications,

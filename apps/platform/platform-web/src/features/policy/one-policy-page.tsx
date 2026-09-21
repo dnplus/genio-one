@@ -18,10 +18,12 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { SearchableSelect } from "@/components/ui/searchable-select"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import type { IdentitySession, OnePolicyBotSeed, OverviewSnapshot, ResourceRegistration } from "@/domain/contracts"
 import { useRecordSelection } from "@/hooks/use-record-selection"
 import { ResourceEnforcementChainCard } from "@/features/resources/resource-enforcement-chain-card"
 import { BotPolicyEditor } from "./bot-policy-editor"
+import { PolicyAuthoringGovernanceCard } from "./policy-authoring-governance-card"
 import { RuntimePolicyEditor } from "./RuntimePolicyEditor"
 import { getFirstPartyBotPolicySeed, listLatestEnforcementChains, listPolicyDrafts, listRuntimePolicies, setFirstPartyBotPolicySeedEnabled, type EnforcementChainInventoryView, type PolicyDraftView, type RuntimePolicyRevision } from "@/lib/product-api"
 
@@ -122,29 +124,46 @@ export function OnePolicyPage({ canManageFirstPartyBotSeed, data, tenantId, iden
     finally { setSaving(false) }
   }
   return <div className="flex flex-col gap-5">
-    <PageHeader title={selected?.name ?? t("One Policy")} description={t("Manage policy rules and drafts, publish a reviewed revision, then inspect its effective execution.")}
-      backLabel={selectedId ? t("Back to policies") : undefined} onBack={selectedId ? () => select(null) : undefined}
-      actions={<><Button variant="outline" disabled={loading} onClick={() => void load()}><RefreshCwIcon />{t("Refresh")}</Button>{!selectedId ? <Button disabled={!editableResources.length && !canManageFirstPartyBotSeed} onClick={() => { setCreateKind("RESOURCE_CAPABILITY"); setCreateRuntimePolicyId(`one-policy.runtime.${crypto.randomUUID()}`); setCreateRuntimeDisplayName(""); setCreating(true) }}><PlusIcon />{t("New policy")}</Button> : null}</>} />
-    {notice ? <Alert role="status"><AlertDescription>{t(notice)}</AlertDescription></Alert> : null}
-    {error ? <Alert variant="destructive"><AlertDescription>{t(error)}</AlertDescription></Alert> : null}
-    {selectedId && !selected && !loading ? <DataEmpty icon={ShieldCheckIcon} title={t("Policy unavailable")} description={t("The policy may have been removed or is outside your current scope.")} /> : null}
-    {selected ? <>
-      <div className="flex flex-wrap items-center gap-3"><Badge variant="outline">{t(selected.source)}</Badge><Badge variant="outline">{t(selected.status)}</Badge>
-        {selected.resource ? <RelationValue id={selected.resource.resource_id} label={selected.resource.display_name} href={`?view=resources&resource=${encodeURIComponent(selected.resource.resource_id)}`} /> : null}
-      </div>
-      {selected.source === "RUNTIME_CAPABILITY" ? <RuntimePolicyEditor key={`${selected.runtimePolicyId ?? selected.id}:${loadRevision}`} tenantId={tenantId} policy={selected.runtimePolicy ?? null} policyId={selected.runtimePolicyId ?? selected.id.replace(/^runtime:/, "")} initialDisplayName={selected.runtimeDisplayName} canEdit={canManageFirstPartyBotSeed} data={data} refreshKey={loadRevision} onDraftSaved={load} onPublished={async () => { setRuntimeComposer(null); await load(); setNotice("Runtime policy revision published.") }} /> : selected.resource ? <>
-        <Alert><AlertDescription>{t("Access is evaluated against current Entitlements. These rules control processing, routing candidates and execution confirmation for this Capability.")}</AlertDescription></Alert>
-        <ResourceEnforcementChainCard key={selected.id} refreshKey={loadRevision} canEdit={canManage(selected.resource)} connections={data.connections} initialCapabilityId={selected.capabilityId} resource={selected.resource} tenantId={tenantId} onSaved={load} onDraftSaved={load} />
-      </> : botSeed ? <>
-        <BotPolicyEditor refreshKey={loadRevision} key={botSeed.policy_revision} tenantId={tenantId} policy={botSeed} canEdit={canManageFirstPartyBotSeed} data={data} onDraftSaved={load} onPublished={async () => { await load(); setNotice("Policy revision published.") }} />
-        {canManageFirstPartyBotSeed ? <div><Button variant="outline" onClick={() => setPendingEnabled(!botSeed.enabled)}>{t(botSeed.enabled ? "Disable policy" : "Enable policy")}</Button></div> : null}
-      </> : null}
-    </> : !selectedId ? <Card><CardHeader><CardTitle>{t("Policies")}</CardTitle></CardHeader><CardContent className="px-0">
+    <PageHeader title={t("One Policy")} description={t("Manage policy rules and drafts, publish a reviewed revision, then inspect its effective execution.")}
+      actions={<><Button variant="outline" disabled={loading} onClick={() => void load()}><RefreshCwIcon />{t("Refresh")}</Button><Button disabled={!editableResources.length && !canManageFirstPartyBotSeed} onClick={() => { setCreateKind("RESOURCE_CAPABILITY"); setCreateRuntimePolicyId(`one-policy.runtime.${crypto.randomUUID()}`); setCreateRuntimeDisplayName(""); setCreating(true) }}><PlusIcon />{t("New policy")}</Button></>} />
+    {!selectedId && error ? <Alert variant="destructive"><AlertDescription>{t(error)}</AlertDescription></Alert> : null}
+    {canManageFirstPartyBotSeed ? <PolicyAuthoringGovernanceCard tenantId={tenantId} onSaved={load} /> : null}
+    <Card><CardHeader><CardTitle>{t("Policies")}</CardTitle></CardHeader><CardContent className="px-0">
       <TableView stateKey={`${tenantId}:policies`} columns={columns} data={rows} getRowId={(row) => row.id} getRowLabel={(row) => row.name} onRowClick={(row) => select(row.id)} searchPlaceholder={t("Search policies")} noResults={t("No policies match the current filters.")} filters={[
         { columnId: "source", label: t("Source"), allLabel: t("All sources"), options: [{ value: "SYSTEM_SEED", label: t("SYSTEM_SEED") }, { value: "RESOURCE_CAPABILITY", label: t("RESOURCE_CAPABILITY") }, { value: "RUNTIME_CAPABILITY", label: t("RUNTIME_CAPABILITY") }] },
         { columnId: "status", label: t("Status"), allLabel: t("All states"), options: ["PUBLISHED", "NOT_CONFIGURED", "ENABLED", "DISABLED"].map((value) => ({ value, label: t(value) })) },
       ]} />
-    </CardContent></Card> : null}
+    </CardContent></Card>
+    <Sheet open={selectedId !== null} onOpenChange={(open) => { if (!open) select(null) }}>
+      <SheetContent data-testid="policy-detail-sheet" presentation="workspace-panel">
+        <SheetHeader className="border-b px-6 py-5 pr-14">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <SheetTitle className="text-[1.375rem] font-semibold tracking-tight sm:text-2xl">{selected?.name ?? t("Policy unavailable")}</SheetTitle>
+              <SheetDescription className="mt-1 max-w-3xl leading-6">{t("Manage policy rules and drafts, publish a reviewed revision, then inspect its effective execution.")}</SheetDescription>
+            </div>
+            <Button className="mr-8 shrink-0" variant="outline" disabled={loading} onClick={() => void load()}><RefreshCwIcon />{t("Refresh")}</Button>
+          </div>
+        </SheetHeader>
+        <div className="flex flex-col gap-5 px-6 py-5">
+          {notice ? <Alert role="status"><AlertDescription>{t(notice)}</AlertDescription></Alert> : null}
+          {error ? <Alert variant="destructive"><AlertDescription>{t(error)}</AlertDescription></Alert> : null}
+          {selectedId && !selected && !loading ? <DataEmpty icon={ShieldCheckIcon} title={t("Policy unavailable")} description={t("The policy may have been removed or is outside your current scope.")} /> : null}
+          {selected ? <>
+            <div className="flex flex-wrap items-center gap-3"><Badge variant="outline">{t(selected.source)}</Badge><Badge variant="outline">{t(selected.status)}</Badge>
+              {selected.resource ? <RelationValue id={selected.resource.resource_id} label={selected.resource.display_name} href={`?view=resources&resource=${encodeURIComponent(selected.resource.resource_id)}`} /> : null}
+            </div>
+            {selected.source === "RUNTIME_CAPABILITY" ? <RuntimePolicyEditor key={`${selected.runtimePolicyId ?? selected.id}:${loadRevision}`} tenantId={tenantId} policy={selected.runtimePolicy ?? null} policyId={selected.runtimePolicyId ?? selected.id.replace(/^runtime:/, "")} initialDisplayName={selected.runtimeDisplayName} canEdit={canManageFirstPartyBotSeed} data={data} refreshKey={loadRevision} onDraftSaved={load} onPublished={async () => { setRuntimeComposer(null); await load(); setNotice("Runtime policy revision published.") }} /> : selected.resource ? <>
+              <Alert><AlertDescription>{t("Access is evaluated against current Entitlements. These rules control processing, routing candidates and execution confirmation for this Capability.")}</AlertDescription></Alert>
+              <ResourceEnforcementChainCard key={selected.id} refreshKey={loadRevision} canEdit={canManage(selected.resource)} connections={data.connections} initialCapabilityId={selected.capabilityId} resource={selected.resource} tenantId={tenantId} onSaved={load} onDraftSaved={load} />
+            </> : botSeed ? <>
+              <BotPolicyEditor refreshKey={loadRevision} key={botSeed.policy_revision} tenantId={tenantId} policy={botSeed} canEdit={canManageFirstPartyBotSeed} data={data} onDraftSaved={load} onPublished={async () => { await load(); setNotice("Policy revision published.") }} />
+              {canManageFirstPartyBotSeed ? <div><Button variant="outline" onClick={() => setPendingEnabled(!botSeed.enabled)}>{t(botSeed.enabled ? "Disable policy" : "Enable policy")}</Button></div> : null}
+            </> : null}
+          </> : null}
+        </div>
+      </SheetContent>
+    </Sheet>
     <Dialog open={creating} onOpenChange={setCreating}><DialogContent><DialogHeader><DialogTitle>{t("New policy")}</DialogTitle><DialogDescription>{t(createKind === "RUNTIME_CAPABILITY" ? "Name the policy, then select its scope and capabilities. Identifiers are generated automatically." : "Choose a Resource and Capability to configure its policy. Existing policy drafts reopen in the same editor.")}</DialogDescription></DialogHeader>
       <FieldGroup><Field><FieldLabel>{t("Policy kind")}</FieldLabel><Select value={createKind} onValueChange={(value) => setCreateKind(value as typeof createKind)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="RESOURCE_CAPABILITY">{t("Resource Capability")}</SelectItem><SelectItem value="RUNTIME_CAPABILITY">{t("Runtime Capability")}</SelectItem></SelectGroup></SelectContent></Select></Field>
         {createKind === "RUNTIME_CAPABILITY" ? <><details><summary className="cursor-pointer text-sm">{t("Technical ID")}</summary><p className="break-all font-mono text-xs">{createRuntimePolicyId}</p></details><Field><FieldLabel>{t("Policy name")}</FieldLabel><Input value={createRuntimeDisplayName} onChange={(event) => setCreateRuntimeDisplayName(event.target.value)} /></Field><Button disabled={!createRuntimeDisplayName.trim()} onClick={() => { const policyId = createRuntimePolicyId.trim(); setRuntimeComposer({ policyId, displayName: createRuntimeDisplayName.trim() || policyId }); setCreating(false); select(`runtime:${policyId}`) }}>{t("Continue")}</Button></> : <><Field><FieldLabel>{t("Resource")}</FieldLabel><SearchableSelect value={createResourceId} options={editableResources.map((resource) => ({ value: resource.resource_id, label: resource.display_name, description: resource.kind }))} onValueChange={(id) => { setCreateResourceId(id); setCreateCapabilityId("") }} placeholder={t("Select a Resource")} searchPlaceholder={t("Search resources")} emptyLabel={t("No results.")} /></Field><Field><FieldLabel>{t("Capability")}</FieldLabel><SearchableSelect value={createCapabilityId} options={(createResource?.capabilities ?? []).map((capability) => ({ value: capability.capability_id, label: capability.display_name }))} onValueChange={setCreateCapabilityId} placeholder={t("Select a Capability")} searchPlaceholder={t("Search capabilities")} emptyLabel={t("No results.")} /></Field><Button disabled={!createResourceId || !createCapabilityId} onClick={() => { setCreating(false); select(JSON.stringify([createResourceId, createCapabilityId])) }}>{t("Continue")}</Button></>}

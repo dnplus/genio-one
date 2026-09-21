@@ -45,6 +45,9 @@ export interface EnforcementChainRevision {
   one_policy_revision: number
   chain: CompiledEnforcementChain
   chain_digest: string
+  published_by_subject_id: string | null
+  reviewed_by_subject_id: string | null
+  rollback_source_one_policy_revision: number | null
   created_at: number
   updated_at: number
 }
@@ -67,6 +70,12 @@ export interface EnforcementChainRevisionStore {
   save(input: {
     tenantId: string
     chain: CompiledEnforcementChain
+    provenance?: {
+      publishedBySubjectId: string | null
+      reviewedBySubjectId: string | null
+      rollbackSourceOnePolicyRevision: number | null
+      correlationId?: string
+    }
   }): Promise<EnforcementChainRevision>
   get(input: EnforcementChainRevisionKey): Promise<EnforcementChainRevision | null>
 }
@@ -79,4 +88,13 @@ export interface EnforcementChainRevisionReader extends EnforcementChainRevision
     resourceId: string
     capabilityId: string
   }): Promise<EnforcementChainRevision | null>
+  publishDraft(input: {
+    tenantId: string
+    resourceId: string
+    capabilityId: string
+    expectedVersion: number
+    expectedContentDigest: string
+    publishedBySubjectId: string
+    correlationId: string
+  }): Promise<EnforcementChainRevision>
 }

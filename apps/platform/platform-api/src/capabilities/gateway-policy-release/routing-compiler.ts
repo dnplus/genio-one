@@ -9,6 +9,7 @@ import {
   type GatewayRoutingScope,
 } from "../../../../../../runtimes/gateway/services/shared/gateway-routing-artifact"
 import type { ModelRoutingPolicy } from "../model-routing/contract"
+import { compareUtf8 } from "@genioone/protocol/canonical"
 import {
   ModelRoutingPolicySchema,
 } from "../model-routing/contract"
@@ -181,10 +182,6 @@ function timestamp(value: unknown, label: string): asserts value is number {
   if (!Number.isSafeInteger(value) || Number(value) < 0) {
     throw new Error(`${label} must be a non-negative safe integer`)
   }
-}
-
-function compareUtf8(left: string, right: string): number {
-  return Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"))
 }
 
 function compareTuple(left: readonly string[], right: readonly string[]): number {

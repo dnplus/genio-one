@@ -1,6 +1,6 @@
 import { ObservationLinks } from "./observation-links"
-import { observationContext, observeOperation, type ObservationContext } from "../../../packages/telemetry/src/operation-observability"
-import { createNativeTelemetryReceiver } from "../../../packages/telemetry/src/native-telemetry"
+import { observationContext, observeOperation, type ObservationContext } from "@genioone/telemetry/operation-observability"
+import { createNativeTelemetryReceiver } from "@genioone/telemetry/native-telemetry"
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
 import { mkdirSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -423,7 +423,7 @@ export function resolveGenioOneMcpUrl(environment: NodeJS.ProcessEnv = process.e
   try {
     const url = new URL(value)
     if (url.protocol !== "https:" && url.protocol !== "http:") return null
-    if (runtimeSessionId) return `${resolveBotRelayOrigin(environment)}/api/mcp-gateway/${encodeURIComponent(runtimeSessionId)}/mcp`
+    if (runtimeSessionId) return null
     return url.toString()
   } catch {
     return null
@@ -446,8 +446,6 @@ export function resolveGenioDiscoveryMcpUrl(environment: NodeJS.ProcessEnv, name
 export interface AppServerMcpConfiguration {
   discoveryMcpUrl?: string
   otelEndpoint?: string
-  mcpUrl?: string
-  bearerTokenEnvVar?: string
   modelProvider?: {
     id: string
     name: string
@@ -474,18 +472,6 @@ export function appServerArguments(configuration: AppServerMcpConfiguration) {
     argumentsList.push("-c", "otel.log_user_prompt=true")
   } else {
     for (const field of ["exporter", "trace_exporter", "metrics_exporter"]) argumentsList.push("-c", `otel.${field}="none"`)
-  }
-  if (configuration.mcpUrl && configuration.bearerTokenEnvVar) {
-    argumentsList.push(
-      "-c",
-      `mcp_servers.genio_one.url=${JSON.stringify(configuration.mcpUrl)}`,
-      "-c",
-      `mcp_servers.genio_one.bearer_token_env_var=${JSON.stringify(configuration.bearerTokenEnvVar)}`,
-      "-c",
-      'mcp_servers.genio_one.default_tools_approval_mode="writes"',
-      "-c",
-      "mcp_servers.genio_one.required=false",
-    )
   }
   if (configuration.discoveryMcpUrl) {
     argumentsList.push(

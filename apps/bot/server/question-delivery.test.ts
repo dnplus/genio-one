@@ -26,7 +26,7 @@ function setup() {
     },
     modelDirectory: { resolve: async () => [] },
     runtimePolicy: {
-      authorize: async () => ({ decision: "ALLOW", constraints: [], obligations: [], correlation_id: "question-test", capability_id: "codex.subscription", action: "use" }),
+      authorize: async () => ({ decision: "ALLOW", constraints: [], obligations: [], correlation_id: "question-test", capability_id: "codex.subscription", action: "use", runtime_id: "codex", target: "runtime:codex:codex.subscription" }),
       report: async () => {},
       read: async () => ({ decisions: [] }),
     },

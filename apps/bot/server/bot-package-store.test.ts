@@ -1,9 +1,20 @@
 import { describe, expect, test } from "bun:test"
+import { createHash } from "node:crypto"
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 
 import { loadBotPackages, materializeBotPackage, validateBotPackageManifest } from "./bot-package-store"
+
+type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue }
+
+function lexicalJson(value: JsonValue): string {
+  if (Array.isArray(value)) return `[${value.map(lexicalJson).join(",")}]`
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${lexicalJson(value[key]!)}`).join(",")}}`
+  }
+  return JSON.stringify(value)
+}
 
 describe("Bot package store", () => {
   test("loads the bundled catalog unless an explicit catalog overrides it", () => {
@@ -63,6 +74,23 @@ describe("Bot package store", () => {
       manifests[0]!.profile.title = "tampered"
       writeFileSync(copied, JSON.stringify(manifests))
       expect(() => loadBotPackages({ GENIO_BOT_PACKAGE_CATALOG: copied })).toThrow("BOT_PACKAGE_MANIFEST_DIGEST_MISMATCH")
+    } finally {
+      rmSync(workspace, { recursive: true, force: true })
+    }
+  })
+
+  test("accepts numeric extension fields signed by the existing lexical serializer", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "genio-bot-package-numeric-extension-"))
+    try {
+      const catalog = resolve(import.meta.dir, "../demo/catalog.json")
+      const copied = join(workspace, "catalog.json")
+      const manifests = JSON.parse(readFileSync(catalog, "utf8")) as Array<Record<string, JsonValue>>
+      const manifest = manifests[0]!
+      manifest.extensions = { 2: "two", 10: "ten" }
+      const { manifest_digest: _manifestDigest, ...unsigned } = manifest
+      manifest.manifest_digest = createHash("sha256").update(lexicalJson(unsigned)).digest("hex")
+      writeFileSync(copied, JSON.stringify(manifests))
+      expect(loadBotPackages({ GENIO_BOT_PACKAGE_CATALOG: copied }).map((entry) => entry.manifest.resourceId)).toEqual(["genio.demo.bot", "genio.demo.gemini-bot"])
     } finally {
       rmSync(workspace, { recursive: true, force: true })
     }

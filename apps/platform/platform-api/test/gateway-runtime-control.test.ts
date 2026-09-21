@@ -7,8 +7,8 @@ import { createDurableEd25519Signer } from "../src/capabilities/gateway-projecti
 import type {
   GatewayReleaseReference,
   GatewayRuntimeCommand,
-} from "../../../../packages/protocol/src/gateway-release"
-import { RUNTIME_PROTOCOL_SCHEMA_VERSION } from "../../../../packages/protocol/src/gateway-release"
+} from "@genioone/protocol/gateway-release"
+import { RUNTIME_PROTOCOL_SCHEMA_VERSION } from "@genioone/protocol/gateway-release"
 import { createInMemoryRuntimeControlStore } from "../src/capabilities/runtime-control/memory"
 import {
   runtimeProtocolDigest,

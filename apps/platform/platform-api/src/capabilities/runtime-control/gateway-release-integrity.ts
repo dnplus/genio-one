@@ -6,8 +6,9 @@ import {
 } from "node:crypto"
 
 import { PlatformApiError } from "../errors"
-import { isEd25519Signature } from "../../../../../../packages/protocol/src/ed25519-signature"
+import { isEd25519Signature } from "@genioone/protocol/ed25519-signature"
 import type { GatewayProjectionSigner } from "../gateway-projection/contract"
+import { canonicalJson } from "@genioone/protocol/canonical"
 import {
   RUNTIME_PROTOCOL_SCHEMA_VERSION,
   parseRuntimeProtocolMessage,
@@ -15,7 +16,7 @@ import {
   type GatewayRuntimeCommand,
   type GatewayRuntimeReport,
   type RuntimeProtocolMessage,
-} from "../../../../../../packages/protocol/src/gateway-release"
+} from "@genioone/protocol/gateway-release"
 
 export type RuntimeIntegrityCode =
   | "RUNTIME_PROTOCOL_INVALID"
@@ -32,24 +33,6 @@ class RuntimeIntegrityError extends PlatformApiError {
   }
 }
 
-function canonicalRuntimeValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map((item) => canonicalRuntimeValue(item))
-  if (value && typeof value === "object") {
-    const record = value as Record<string, unknown>
-    return Object.fromEntries(
-      Object.keys(record)
-        .filter((key) => record[key] !== undefined)
-        .sort()
-        .map((key) => [key, canonicalRuntimeValue(record[key])]),
-    )
-  }
-  return value
-}
-
-function canonicalRuntimeJson(value: unknown): string {
-  return JSON.stringify(canonicalRuntimeValue(value))
-}
-
 function envelopeWithoutIntegrity(message: Record<string, unknown>): Record<string, unknown> {
   const value = { ...message }
   delete value.digest
@@ -59,7 +42,7 @@ function envelopeWithoutIntegrity(message: Record<string, unknown>): Record<stri
 
 export function runtimeProtocolDigest(message: Record<string, unknown>): string {
   return createHash("sha256")
-    .update(canonicalRuntimeJson(envelopeWithoutIntegrity(message)))
+    .update(canonicalJson(envelopeWithoutIntegrity(message)))
     .digest("hex")
 }
 
@@ -73,7 +56,7 @@ export function runtimeProtocolSignaturePayload(message: Record<string, unknown>
   }
   const value = { ...message }
   delete value.signature
-  return canonicalRuntimeJson(value)
+  return canonicalJson(value)
 }
 
 function protocolRecord(value: object): Record<string, unknown> {

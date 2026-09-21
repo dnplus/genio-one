@@ -12,8 +12,8 @@ import type {
   AuthorizationInput,
   CompiledAuthorizationBundle,
   CompiledUsagePolicy,
-} from "../../../../packages/protocol/src/authorization"
-import { authorize } from "../../../../packages/policy/src/authorize"
+} from "@genioone/protocol/authorization"
+import { authorize } from "@genioone/policy/authorize"
 import type { AuthorizationBundleSource } from "./bundle-store"
 import {
   TRUSTED_RELEASE_HEADERS,
@@ -61,7 +61,7 @@ import {
   VERIFIED_CLIENT_HEADER,
   VERIFIED_SUBJECT_HEADER,
 } from "../shared/enforcement-headers"
-import type { GatewayReleaseReference } from "../../../../packages/protocol/src/runtime-command"
+import type { GatewayReleaseReference } from "@genioone/protocol/runtime-command"
 import {
   contextualGatewayRoutingScope,
   type GatewayRoutingArtifact,
@@ -69,7 +69,7 @@ import {
 } from "../shared/gateway-routing-artifact"
 import { MODEL_ROUTE_HANDOFF_HEADERS } from "../shared/model-route-handoff"
 import { MCP_OAUTH_HEADER_PREFIX } from "../shared/mcp-oauth-handoff"
-import { operationalError, writeOperationalEvent } from "../../../../packages/telemetry/src/operational-log"
+import { operationalError, writeOperationalEvent } from "@genioone/telemetry/operational-log"
 import {
   admitUsage,
   type UsageAdmissionReason,

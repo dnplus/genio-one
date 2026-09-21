@@ -1,6 +1,6 @@
 import { mkdir, readFile, rename, open } from "node:fs/promises"
 import { dirname } from "node:path"
-import type { ObservationContext } from "../../../packages/telemetry/src/operation-observability"
+import type { ObservationContext } from "@genioone/telemetry/operation-observability"
 
 type Link = { context: ObservationContext; expires: number }
 

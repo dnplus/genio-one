@@ -5,7 +5,7 @@ import { join } from "node:path"
 
 import { createBotApp } from "../app"
 import { BotRegistry } from "../bot-registry"
-import { CE_DEMO_USE_CASE_ID } from "../../../../packages/protocol/src/ce-demo"
+import { CE_DEMO_USE_CASE_ID } from "@genioone/protocol/ce-demo"
 
 const principal = {
   tenant_id: "tenant-uat",

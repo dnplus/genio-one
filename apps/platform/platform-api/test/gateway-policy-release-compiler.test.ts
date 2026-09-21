@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { isCompiledAuthorizationBundle } from "../../../../runtimes/gateway/services/authorizer/signed-bundle"
-import { authorize } from "../../../../packages/policy/src/authorize"
+import { authorize } from "@genioone/policy/authorize"
 import {
   validateProcessorPolicyBundle,
   type ProcessorPolicyBundle,

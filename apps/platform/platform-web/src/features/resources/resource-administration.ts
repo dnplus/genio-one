@@ -6,6 +6,7 @@ import type {
   ResourceRegistration,
 } from "@/domain/contracts"
 import { organizationAdministratorSubjectIds } from "@/domain/organization-roles"
+import { isDecisionAuditEvent } from "@/domain/audit-events"
 import {
   addConnectionModelMapping,
   createPublicModel,
@@ -193,7 +194,7 @@ export function resourceAccessSummary(data: OverviewSnapshot, resourceId: string
     (entitlement) => entitlement.resource_id === resourceId && entitlement.state === "ACTIVE",
   )
   const subjectIds = new Set(entitlements.map((entitlement) => entitlement.subject_id))
-  data.auditEvents.forEach((event) => {
+  data.auditEvents.filter(isDecisionAuditEvent).forEach((event) => {
     if (event.resource_id === resourceId) subjectIds.add(event.subject.subject_id)
   })
   data.activity.recent_activity.forEach((event) => {

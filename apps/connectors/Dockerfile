@@ -1,6 +1,6 @@
-FROM oven/bun:1.4.0 AS build
+FROM oven/bun:1.4.2 AS build
 WORKDIR /workspace
-RUN bun add --global pnpm@10.32.1
+RUN bun add --global pnpm@12.4.2
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/platform/package.json apps/platform/package.json
 COPY apps/bot/package.json apps/bot/package.json
@@ -16,7 +16,7 @@ COPY runtimes/gateway/services/shared runtimes/gateway/services/shared
 COPY packages packages
 RUN bun build apps/connectors/servicenow-csm/main.ts --target=bun --outfile=dist/servicenow-csm.js \
     && bun build apps/connectors/mail2000/main.ts --target=bun --outfile=dist/mail2000.js
-FROM oven/bun:1.4.0
+FROM oven/bun:1.4.2
 WORKDIR /app
 COPY --from=build --chown=bun:bun /workspace/dist ./
 USER bun

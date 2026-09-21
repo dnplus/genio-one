@@ -1,8 +1,8 @@
-FROM oven/bun:1.4.0 AS build
+FROM oven/bun:1.4.2 AS build
 
 WORKDIR /workspace
 
-RUN bun add --global pnpm@10.32.1
+RUN bun add --global pnpm@12.4.2
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/bot/package.json apps/bot/package.json
@@ -16,7 +16,7 @@ RUN cd apps/bot \
     && bun x vite build \
     && bun build server/index.ts --target=bun --outdir=dist/server
 
-FROM oven/bun:1.4.0 AS runtime
+FROM oven/bun:1.4.2 AS runtime
 
 WORKDIR /app
 ENV NODE_ENV=production \

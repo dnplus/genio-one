@@ -2,7 +2,7 @@ import {
   GATEWAY_RELEASE_REFERENCE_SCHEMA_VERSION,
   isGatewayReleaseReference,
   type GatewayReleaseReference,
-} from "../../../../packages/protocol/src/runtime-command"
+} from "@genioone/protocol/runtime-command"
 
 const TRUSTED_RELEASE_ID_HEADER = "x-genio-trusted-release-id"
 const TRUSTED_RELEASE_GATEWAY_HEADER = "x-genio-trusted-release-gateway-id"

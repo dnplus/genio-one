@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 
 import { resolveBotUsageContext, BotUsageContextError } from "./usage-context"
 import type { GenioPrincipal } from "./runtime-broker"
-import { CE_DEMO_USE_CASE_ID } from "../../../packages/protocol/src/ce-demo"
+import { CE_DEMO_USE_CASE_ID } from "@genioone/protocol/ce-demo"
 
 const principal: GenioPrincipal = {
   tenant_id: "tenant-uat",

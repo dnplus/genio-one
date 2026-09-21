@@ -3,6 +3,7 @@ import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, st
 import { dirname, resolve } from "node:path"
 
 import type { BotPackageManifest } from "./bot-registry"
+import { canonicalJson } from "@genioone/protocol/canonical"
 
 export interface ResolvedBotPackage {
   manifest: BotPackageManifest
@@ -32,15 +33,6 @@ function safeSegment(value: string, code: string) {
 function stringValue(value: unknown, field: string) {
   if (typeof value !== "string" || !value.trim()) throw new Error(`BOT_PACKAGE_${field.toUpperCase()}_REQUIRED`)
   return value.trim()
-}
-
-function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`
-  if (value && typeof value === "object") {
-    const record = value as Record<string, unknown>
-    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`).join(",")}}`
-  }
-  return JSON.stringify(value)
 }
 
 function verifyManifestDigest(value: Record<string, unknown>) {

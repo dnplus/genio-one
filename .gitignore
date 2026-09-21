@@ -47,6 +47,7 @@ internal/evidence/bot/artifacts/
 **/.local/
 **/artifacts/
 scratch/
+tmp/
 
 # Raw design package delivered for the 2026-09 refresh. Brand output lives in
 # packages/brand; the source package and its reference images stay local.

@@ -1,7 +1,12 @@
 import { PlatformApiError } from "../errors"
 import type { ConnectionModelMapping, PublicModel } from "../models/contract"
 import type { PublicModelCatalog } from "../models/module"
-import type { ClassifierResult, ModelRouteLease, ResolveModelRouteInput } from "./contract"
+import type {
+  ClassifierResult,
+  ModelRouteLease,
+  ResolveModelRouteInput,
+  SemanticRoutingRequest,
+} from "./contract"
 
 export interface RoutableModel {
   model: PublicModel
@@ -15,6 +20,7 @@ interface PreparedModelRouteBase {
     clientId: string
     publicModelId: string
   }
+  semanticRouting: SemanticRoutingRequest | null
 }
 
 export type PreparedModelRoute = PreparedModelRouteBase & (
@@ -117,9 +123,39 @@ export async function prepareModelRoute(
       "Semantic routing requires a session-scoped route lease",
     )
   }
+  if (input.semantic_routing && !input.session_id) {
+    throw new PlatformApiError(
+      "SEMANTIC_ROUTING_REQUIRES_SESSION",
+      422,
+      "Semantic routing requires a session-scoped route lease",
+    )
+  }
+  if (input.semantic_routing && input.classifier_result) {
+    throw new PlatformApiError(
+      "SEMANTIC_ROUTING_INPUT_CONFLICT",
+      422,
+      "Semantic routing cannot be combined with a caller-supplied classifier result",
+    )
+  }
+  if (input.semantic_routing && input.requested_public_model_id) {
+    throw new PlatformApiError(
+      "SEMANTIC_ROUTING_INPUT_CONFLICT",
+      422,
+      "Semantic routing cannot be combined with an explicit Public Model request",
+    )
+  }
+  if (input.semantic_routing && !input.semantic_routing.task.trim()) {
+    throw new PlatformApiError("SEMANTIC_ROUTING_TASK_REQUIRED", 422)
+  }
   const candidates = await eligibleModels(models, tenantId, input)
   if (input.session_id) {
-    return { candidates, context, deterministic: null, sessionId: input.session_id }
+    return {
+      candidates,
+      context,
+      deterministic: null,
+      semanticRouting: input.semantic_routing ?? null,
+      sessionId: input.session_id,
+    }
   }
 
   const selected = candidates[0]
@@ -127,6 +163,7 @@ export async function prepareModelRoute(
   return {
     candidates,
     context,
+    semanticRouting: null,
     sessionId: null,
     deterministic: {
       tenant_id: tenantId,

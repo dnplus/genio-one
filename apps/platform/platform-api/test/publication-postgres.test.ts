@@ -2,14 +2,14 @@ import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
 import test from "node:test"
 
-import { canonicalEnforcementChainDigest } from "../src/capabilities/enforcement/postgres"
+import { canonicalEnforcementChainDigest } from "../src/capabilities/enforcement/compiler"
 import type { CompiledEnforcementChain } from "../src/capabilities/enforcement/contract"
 import type {
   GatewayProjection,
   GatewayProjectionSnapshot,
 } from "../src/capabilities/gateway-projection/contract"
 import { PlatformApiError } from "../src/capabilities/errors"
-import { snapshotDigest } from "../src/capabilities/publications/memory"
+import { snapshotDigest } from "../src/capabilities/publications/snapshot-digest"
 import { createPostgresPublicationWorkflowStore } from "../src/capabilities/publications/postgres"
 import type { ResourceRegistration } from "../src/capabilities/resources/contract"
 import type { ResourceRegistry } from "../src/capabilities/resources/module"

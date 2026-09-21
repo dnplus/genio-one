@@ -12,7 +12,7 @@ RUN apt-get update \
     && echo "$(cat /tmp/kubectl.sha256)  /usr/local/bin/kubectl" | sha256sum --check \
     && chmod 0755 /usr/local/bin/kubectl
 
-FROM oven/bun:1.4.0
+FROM oven/bun:1.4.2
 
 WORKDIR /opt/genio-one
 COPY apps/platform/scripts/deployment-post-install.mjs ./scripts/deployment-post-install.mjs

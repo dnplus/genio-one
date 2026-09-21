@@ -1,4 +1,6 @@
-import { createHash, randomUUID } from "node:crypto"
+import { randomUUID } from "node:crypto"
+
+import { canonicalJson } from "@genioone/protocol/canonical"
 
 import { Check } from "typebox/value"
 
@@ -21,7 +23,8 @@ import type { ResourcePublicationRequest } from "../resources/publication-types"
 import type { ResourceRegistry } from "../resources/module"
 import type { GatewayPublicationDelivery } from "../gateway-policy-release/delivery"
 import { mapProviderCredentialProfileRow, PROVIDER_CREDENTIAL_PROFILE_COLUMNS } from "../provider-credentials/postgres"
-import { snapshotDigest } from "./memory"
+import { canonicalEnforcementChainDigest } from "../enforcement/compiler"
+import { snapshotDigestMatches } from "./snapshot-digest"
 import { ensurePublicationSuccessorInTransaction } from "./successor"
 import { lockGatewayPolicyRelease } from "../gateway-policy-release/transaction-lock"
 import type {
@@ -66,22 +69,6 @@ const PUBLICATION_COLUMNS = `
   row_revision,
   created_at,
   updated_at`
-
-function stable(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(stable)
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, item]) => [key, stable(item)]),
-    )
-  }
-  return value
-}
-
-function digest(value: unknown): string {
-  return createHash("sha256").update(JSON.stringify(stable(value))).digest("hex")
-}
 
 function jsonValue(value: unknown, code: string): unknown {
   if (typeof value !== "string") return value
@@ -147,7 +134,7 @@ function parseSnapshot(value: unknown): GatewayProjectionSnapshot {
     throw new PlatformApiError("PUBLICATION_SNAPSHOT_INVALID", 500)
   }
   const snapshot = parsed as GatewayProjectionSnapshot
-  if (snapshotDigest(snapshot) !== snapshot.snapshot_digest) {
+  if (!snapshotDigestMatches(snapshot, snapshot.snapshot_digest)) {
     throw new PlatformApiError("PUBLICATION_SNAPSHOT_INVALID", 500)
   }
   return snapshot
@@ -402,7 +389,7 @@ function sameSet<T>(current: T[], frozen: T[], identity: (value: T) => string): 
   const byId = new Map(frozen.map((value) => [identity(value), value]))
   return current.every((value) => {
     const other = byId.get(identity(value))
-    return other !== undefined && digest(value) === digest(other)
+    return other !== undefined && canonicalJson(value) === canonicalJson(other)
   })
 }
 
@@ -480,11 +467,11 @@ async function assertFrozenInputs(
     const frozenById = new Map(profileSnapshots.map((value) => [`${value.profile_id}:${value.revision}`, value]))
     const changed = currentProfiles.find((value) => {
       const frozen = frozenById.get(`${value.profile_id}:${value.revision}`)
-      return frozen === undefined || digest(value) !== digest(frozen)
+      return frozen === undefined || canonicalJson(value) !== canonicalJson(frozen)
     })
     const frozen = changed ? frozenById.get(`${changed.profile_id}:${changed.revision}`) : undefined
     const fields = changed && frozen
-      ? Object.keys(changed).filter((key) => digest(changed[key as keyof typeof changed]) !== digest(frozen[key as keyof typeof frozen]))
+      ? Object.keys(changed).filter((key) => canonicalJson(changed[key as keyof typeof changed]) !== canonicalJson(frozen[key as keyof typeof frozen]))
       : []
     const subject = changed
       ? `${changed.profile_id}:${changed.revision}${fields.length ? ` fields=${fields.join(",")}` : ""}`
@@ -559,9 +546,9 @@ async function assertFrozenInputs(
   if (
     !chain ||
     rowNumber(chain, "one_policy_revision") !== snapshot.policy_revision ||
-    rowString(chain, "chain_digest") !== digest(snapshot.one_policy_chain) ||
-    digest(jsonValue(chain.chain, "ENFORCEMENT_CHAIN_DATA_INVALID")) !==
-      digest(snapshot.one_policy_chain)
+    rowString(chain, "chain_digest") !== canonicalEnforcementChainDigest(snapshot.one_policy_chain) ||
+    canonicalJson(jsonValue(chain.chain, "ENFORCEMENT_CHAIN_DATA_INVALID")) !==
+      canonicalJson(snapshot.one_policy_chain)
   ) {
     stale("enforcement_chain", "ENFORCEMENT_CHAIN_CHANGED", "The Enforcement Chain changed after the publication snapshot was prepared")
   }

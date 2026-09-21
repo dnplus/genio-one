@@ -20,7 +20,7 @@ import {
   type GatewayReleaseReference,
   type GatewayRuntimeCommand,
   type GatewayRuntimeReport,
-} from "../../../../packages/protocol/src/gateway-release"
+} from "@genioone/protocol/gateway-release"
 
 const release = (overrides: Partial<GatewayReleaseReference> = {}): GatewayReleaseReference => ({
   schema_version: "genio.one.gateway-release-ref.v1",

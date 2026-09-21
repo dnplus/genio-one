@@ -138,7 +138,7 @@ function randomValue(length: number) {
   if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
     crypto.getRandomValues(bytes)
   } else {
-    for (let i = 0; i < length; i++) bytes[i] = Math.floor(Math.random() * 256)
+    throw new Error("Cryptographically secure random number generator is unavailable.")
   }
   return base64Url(bytes)
 }

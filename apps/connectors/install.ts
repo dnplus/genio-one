@@ -43,12 +43,130 @@ interface Discovery {
   candidates: Array<{ candidate_id: string; tool_name: string; revision_digest: string }>
 }
 
+interface EnforcementChainRevision {
+  one_policy_revision: number
+  chain: {
+    eligible_connection_ids: string[]
+    steps: unknown
+  }
+}
+
+interface ResourceCapabilityPolicyDefinition {
+  one_policy_revision: number
+  eligible_connection_ids?: string[]
+  steps: unknown
+}
+
+interface ResourceCapabilityPolicyDraft {
+  version: number
+  base_revision: number
+  content_digest: string
+  lifecycle: "DRAFT" | "VALIDATED" | "REVIEWED"
+  content: {
+    kind: string
+    definition: unknown
+  }
+}
+
 export interface StandardConnectorDefinition {
   name: string
   namespace: string
   capabilityLabel: string
   tools: readonly string[]
   downstreamIdentity: { mode: "USER_OAUTH" | "USER_PASSWORD"; oauth_client?: { issuer: string; authorization_endpoint: string; token_endpoint: string; client_id: string; scopes: string[] } }
+}
+
+function isNotFound(error: unknown) {
+  return error instanceof Error && /(?:^|_)HTTP_404:/.test(error.message)
+}
+
+async function missingIsNull<T>(request: Api, path: string) {
+  try {
+    return await request<T>(path)
+  } catch (error) {
+    if (isNotFound(error)) return null
+    throw error
+  }
+}
+
+function samePublishedChain(
+  current: EnforcementChainRevision,
+  definition: ResourceCapabilityPolicyDefinition,
+) {
+  if (!isDeepStrictEqual(current.chain.steps, definition.steps)) return false
+  if (!definition.eligible_connection_ids) return true
+  return isDeepStrictEqual(
+    [...current.chain.eligible_connection_ids].sort(),
+    [...definition.eligible_connection_ids].sort(),
+  )
+}
+
+function sameDraft(
+  draft: ResourceCapabilityPolicyDraft,
+  baseRevision: number,
+  definition: ResourceCapabilityPolicyDefinition,
+) {
+  return draft.base_revision === baseRevision &&
+    draft.content.kind === "RESOURCE_CAPABILITY" &&
+    isDeepStrictEqual(draft.content.definition, definition)
+}
+
+export async function ensureResourceCapabilityPolicy(
+  request: Api,
+  input: {
+    base: string
+    resourceId: string
+    capabilityId: string
+    steps: unknown
+    eligibleConnectionIds?: string[]
+  },
+) {
+  const path = `${input.base}/resources/${encodeURIComponent(input.resourceId)}/capabilities/${encodeURIComponent(input.capabilityId)}`
+  const current = await missingIsNull<EnforcementChainRevision>(request, `${path}/enforcement-chain`)
+  const baseRevision = current?.one_policy_revision ?? 0
+  const definition: ResourceCapabilityPolicyDefinition = {
+    one_policy_revision: baseRevision + 1,
+    ...(input.eligibleConnectionIds ? { eligible_connection_ids: [...input.eligibleConnectionIds].sort() } : {}),
+    steps: input.steps,
+  }
+  if (current && samePublishedChain(current, definition)) return current
+  const existing = await missingIsNull<ResourceCapabilityPolicyDraft>(request, `${path}/policy-draft`)
+  let draft = existing && sameDraft(existing, baseRevision, definition)
+    ? existing
+    : await request<ResourceCapabilityPolicyDraft>(`${path}/policy-draft`, {
+        method: "PUT",
+        body: JSON.stringify({
+          expected_version: existing?.version ?? 0,
+          base_revision: baseRevision,
+          content: { kind: "RESOURCE_CAPABILITY", definition },
+        }),
+      })
+  const transition = (action: "validate" | "review") => request<ResourceCapabilityPolicyDraft>(`${path}/policy-draft/${action}`, {
+    method: "POST",
+    body: JSON.stringify({
+      expected_version: draft.version,
+      expected_content_digest: draft.content_digest,
+    }),
+  })
+  if (draft.lifecycle === "DRAFT") draft = await transition("validate")
+  if (draft.lifecycle === "VALIDATED") draft = await transition("review")
+  if (draft.lifecycle !== "REVIEWED") throw new Error(`STANDARD_POLICY_DRAFT_LIFECYCLE_INVALID:${draft.lifecycle}`)
+  return request<EnforcementChainRevision>(`${path}/policy-draft/publish`, {
+    method: "POST",
+    body: JSON.stringify({
+      expected_version: draft.version,
+      expected_content_digest: draft.content_digest,
+    }),
+  })
+}
+
+function standardEnforcementSteps(config: CommonInstallConfig) {
+  const issuer = config.identityIssuer.replace(/\/$/, "")
+  return [
+    { step_id: "authenticate", kind: "AUTHENTICATE", phase: "REQUEST", implementation: "NATIVE", config: { schema_version: "genio.one.auth.jwt.v1", provider: "keycloak", issuer, audiences: [config.identityAudience], remote_jwks_uri: `${issuer}/protocol/openid-connect/certs`, subject_claim: "sub", client_claim: "azp" } },
+    { step_id: "authorize", kind: "AUTHORIZE", phase: "REQUEST", implementation: "EXT_AUTH", depends_on: ["authenticate"] },
+    { step_id: "route", kind: "ROUTE", phase: "ROUTING", implementation: "AIGW_NATIVE", depends_on: ["authorize"] },
+  ]
 }
 
 export async function installStandardConnector(configuration: CommonInstallConfig, definition: StandardConnectorDefinition, request: Api) {
@@ -75,7 +193,10 @@ export async function installStandardConnector(configuration: CommonInstallConfi
   }))
   if (resource.lifecycle === "PUBLISHED") {
     if (resource.publication_endpoint?.visibility !== "PUBLIC" || resource.publication_endpoint.hostname !== config.hostname || resource.publication_endpoint.base_path !== config.basePath) throw new Error("STANDARD_PUBLICATION_CONFLICT")
-    if (definition.tools.every((tool) => connection.mcp_selected_tools?.includes(tool)) && (!resource.publication_request || resource.publication_request.publication_state === "READY")) return { resourceId: resource.resource_id, connectionId: connection.connection_id, access: "AUTO_GRANT", lifecycle: resource.lifecycle }
+    if (definition.tools.every((tool) => connection.mcp_selected_tools?.includes(tool)) && (!resource.publication_request || resource.publication_request.publication_state === "READY")) {
+      await ensureResourceCapabilityPolicy(request, { base, resourceId: resource.resource_id, capabilityId: "mcp.invoke", steps: standardEnforcementSteps(config) })
+      return { resourceId: resource.resource_id, connectionId: connection.connection_id, access: "AUTO_GRANT", lifecycle: resource.lifecycle }
+    }
   }
   if (!["DRAFT", "PUBLISHED"].includes(resource.lifecycle)) throw new Error("STANDARD_RESOURCE_NOT_DRAFT")
   const connectionPath = `${resourcePath}/connections/${encodeURIComponent(connection.connection_id)}`
@@ -90,15 +211,21 @@ export async function installStandardConnector(configuration: CommonInstallConfi
   }
   if (discovery?.state !== "SUCCEEDED") throw new Error(`STANDARD_DISCOVERY_FAILED:${discovery?.error_code ?? "TIMEOUT"}`)
   const requiredTools = definition.tools
-  const tools = discovery.candidates.filter((candidate) => requiredTools.includes(candidate.tool_name))
-  if (new Set(tools.map((tool) => tool.tool_name)).size !== requiredTools.length) throw new Error("STANDARD_TOOLS_INCOMPLETE")
-  for (const tool of tools.filter((tool) => !connection.mcp_selected_tools?.includes(tool.tool_name))) await request(`${connectionPath}/mcp-discovery/candidates/${encodeURIComponent(tool.candidate_id)}/decision`, json({ expected_revision_digest: tool.revision_digest, state: "PUBLISHED" }))
-  const issuer = config.identityIssuer.replace(/\/$/, "")
-  if (resource.lifecycle === "DRAFT") await request(`${resourcePath}/capabilities/mcp.invoke/enforcement-chain`, json({ one_policy_revision: 1, steps: [
-    { step_id: "authenticate", kind: "AUTHENTICATE", phase: "REQUEST", implementation: "NATIVE", config: { schema_version: "genio.one.auth.jwt.v1", provider: "keycloak", issuer, audiences: [config.identityAudience], remote_jwks_uri: `${issuer}/protocol/openid-connect/certs`, subject_claim: "sub", client_claim: "azp" } },
-    { step_id: "authorize", kind: "AUTHORIZE", phase: "REQUEST", implementation: "EXT_AUTH", depends_on: ["authenticate"] },
-    { step_id: "route", kind: "ROUTE", phase: "ROUTING", implementation: "AIGW_NATIVE", depends_on: ["authorize"] },
-  ] }))
+  const requiredToolSet = new Set(requiredTools)
+  const selectedToolSet = connection.mcp_selected_tools ? new Set(connection.mcp_selected_tools) : null
+  const matchedToolNames = new Set<string>()
+  const pendingTools: typeof discovery.candidates = []
+  for (const candidate of discovery.candidates) {
+    if (requiredToolSet.has(candidate.tool_name)) {
+      matchedToolNames.add(candidate.tool_name)
+      if (!selectedToolSet?.has(candidate.tool_name)) {
+        pendingTools.push(candidate)
+      }
+    }
+  }
+  if (matchedToolNames.size !== requiredTools.length) throw new Error("STANDARD_TOOLS_INCOMPLETE")
+  await Promise.all(pendingTools.map((tool) => request(`${connectionPath}/mcp-discovery/candidates/${encodeURIComponent(tool.candidate_id)}/decision`, json({ expected_revision_digest: tool.revision_digest, state: "PUBLISHED" }))))
+  await ensureResourceCapabilityPolicy(request, { base, resourceId: resource.resource_id, capabilityId: "mcp.invoke", steps: standardEnforcementSteps(config) })
   if (!resource.publication_endpoint) await request(`${resourcePath}/publication-endpoint`, { method: "PUT", body: JSON.stringify({ gateway_id: config.gatewayId, hostname: config.hostname, base_path: config.basePath, visibility: "PUBLIC", dns_management: "EXTERNAL", dns_verification: "VERIFIED", dns_target: config.dnsTarget }) })
   else if (resource.publication_endpoint.visibility !== "PUBLIC" || resource.publication_endpoint.hostname !== config.hostname || resource.publication_endpoint.base_path !== config.basePath) throw new Error("STANDARD_PUBLICATION_CONFLICT")
   resource = await request<Resource>(resourcePath)

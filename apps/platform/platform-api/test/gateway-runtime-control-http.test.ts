@@ -11,8 +11,8 @@ import {
   type GatewayReleasePackage,
 } from "../src/capabilities/gateway-policy-release/package"
 import { createDurableEd25519Signer } from "../src/capabilities/gateway-projection/signer"
-import type { GatewayRuntimeCommand } from "../../../../packages/protocol/src/gateway-release"
-import { RUNTIME_PROTOCOL_SCHEMA_VERSION } from "../../../../packages/protocol/src/gateway-release"
+import type { GatewayRuntimeCommand } from "@genioone/protocol/gateway-release"
+import { RUNTIME_PROTOCOL_SCHEMA_VERSION } from "@genioone/protocol/gateway-release"
 import { gatewayAggregateRuntimeControlHttp } from "../src/capabilities/gateway-runtime-control/http"
 import { createInMemoryGatewayAggregateRuntimeControlStore } from "../src/capabilities/gateway-runtime-control/memory"
 import {

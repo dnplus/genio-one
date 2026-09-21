@@ -9,13 +9,13 @@ import {
   RuntimeProtocolValidationError as EndpointRuntimeProtocolValidationError,
   isRuntimeProtocolMessage as isEndpointRuntimeProtocolMessage,
   parseRuntimeProtocolMessage as parseEndpointRuntimeProtocolMessage,
-} from "../../../../packages/protocol/src/endpoint"
+} from "@genioone/protocol/endpoint"
 import {
   RuntimeProtocolSchema as GatewayRuntimeProtocolSchema,
   RuntimeProtocolValidationError as GatewayRuntimeProtocolValidationError,
   isRuntimeProtocolMessage as isGatewayRuntimeProtocolMessage,
   parseRuntimeProtocolMessage as parseGatewayRuntimeProtocolMessage,
-} from "../../../../packages/protocol/src/gateway-release"
+} from "@genioone/protocol/gateway-release"
 
 async function loadJson(relativePath: string): Promise<Record<string, unknown>> {
   return JSON.parse(

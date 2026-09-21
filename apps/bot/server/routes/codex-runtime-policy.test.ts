@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test"
 
-import { managedMcpServerName } from "../ce-demo-mcp"
 import { codexRoutes } from "./codex"
 
 const principal = {
@@ -221,19 +220,26 @@ describe("Codex runtime policy route", () => {
     }
   })
 
-  test("adds fixed CE MCP relays only after selecting the CE documents Bot", async () => {
-    const context = createContext([], [])
+  test("mounts the CE starter MCP relays from its package bindings after selecting the CE documents Bot", async () => {
+    const calls: Array<Record<string, unknown>> = []
+    const reports: Array<Record<string, unknown>> = []
+    const context = createContext(calls, reports)
     const bot = context.botRegistry.getOwned()
-    context.botRegistry.getOwned = () => ({ ...bot, sourceResourceId: "genio.demo.bot" })
+    context.botRegistry.getOwned = () => ({
+      ...bot,
+      sourceResourceId: "genio.demo.bot",
+      bindings: [
+        { resourceId: "genio.demo.context7", capabilityId: "context7", state: "INSTALLED", kind: "MCP" },
+        { resourceId: "genio.demo.archify", capabilityId: "archify", state: "INSTALLED", kind: "MCP" },
+      ],
+    })
     let handler: ((socket: FakeSocket) => void) | null = null
     await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
     const socket = new FakeSocket()
     handler!(socket)
-    const originalOrigin = process.env.GENIO_ONE_MCP_ORIGIN
     const originalUrl = process.env.GENIO_ONE_MCP_URL
     const originalRelay = process.env.GENIO_ONE_MCP_RELAY_ORIGIN
     const originalFetch = globalThis.fetch
-    process.env.GENIO_ONE_MCP_ORIGIN = "https://old-context7.example.test"
     process.env.GENIO_ONE_MCP_URL = "http://one.localhost:1975/mcp"
     process.env.GENIO_ONE_MCP_RELAY_ORIGIN = "https://bot.example.test"
     let catalogRequests = 0
@@ -244,11 +250,13 @@ describe("Codex runtime policy route", () => {
         return Response.json({ capabilities: [
           {
             resource_id: "genio.demo.context7",
+            capability_id: "context7",
             access: "ENTITLED",
             publication_endpoint: { hostname: "context7.stellar-freight.localhost", base_path: "/" },
           },
           {
             resource_id: "genio.demo.archify",
+            capability_id: "archify",
             access: "AUTO_GRANT",
             publication_endpoint: { hostname: "archify.stellar-freight.localhost", base_path: "/" },
           },
@@ -268,25 +276,72 @@ describe("Codex runtime policy route", () => {
       }))
       await waitFor(() => context.runtimeMessages.some((message) => message.id === 3))
       const forwarded = context.runtimeMessages.find((message) => message.id === 3) as { params: { config: Record<string, unknown> } }
-      expect(forwarded.params.config["mcp_servers.genio_context7"]).toMatchObject({
+      expect(forwarded.params.config["mcp_servers.genio_mcp_context7"]).toMatchObject({
         url: "https://bot.example.test/api/mcp-gateway/runtime-session/genio.demo.context7/mcp",
       })
-      expect(forwarded.params.config["mcp_servers.genio_archify"]).toMatchObject({
+      expect(forwarded.params.config["mcp_servers.genio_mcp_archify"]).toMatchObject({
         url: "https://bot.example.test/api/mcp-gateway/runtime-session/genio.demo.archify/mcp",
       })
       expect(catalogRequests).toBe(1)
-      expect(context.session.managedMcpEndpoints).toEqual({
-        "genio.demo.context7": { hostname: "context7.stellar-freight.localhost", base_path: "/" },
-        "genio.demo.archify": { hostname: "archify.stellar-freight.localhost", base_path: "/" },
+      expect(calls.filter((call) => call.capability_id === "mcp.invoke" && call.action === "expose")).toHaveLength(4)
+      expect(reports.filter((report) => report.capabilityId === "mcp.invoke" && report.action === "expose").map((report) => report.outcome)).toEqual(["ALLOW", "ALLOW", "COMPLETED", "COMPLETED"])
+      expect(context.session.managedMcpMounts).toEqual({
+        "genio.demo.context7": { resourceId: "genio.demo.context7", capabilityId: "context7", serverName: "genio_mcp_context7", hostname: "context7.stellar-freight.localhost", basePath: "/" },
+        "genio.demo.archify": { resourceId: "genio.demo.archify", capabilityId: "archify", serverName: "genio_mcp_archify", hostname: "archify.stellar-freight.localhost", basePath: "/" },
       })
     } finally {
       globalThis.fetch = originalFetch
-      if (originalOrigin === undefined) delete process.env.GENIO_ONE_MCP_ORIGIN
-      else process.env.GENIO_ONE_MCP_ORIGIN = originalOrigin
       if (originalUrl === undefined) delete process.env.GENIO_ONE_MCP_URL
       else process.env.GENIO_ONE_MCP_URL = originalUrl
       if (originalRelay === undefined) delete process.env.GENIO_ONE_MCP_RELAY_ORIGIN
       else process.env.GENIO_ONE_MCP_RELAY_ORIGIN = originalRelay
+      socket.close()
+    }
+  })
+
+  test("does not inject a managed MCP mount whose runtime exposure is denied", async () => {
+    const calls: Array<Record<string, unknown>> = []
+    const reports: Array<Record<string, unknown>> = []
+    const context = createContext(calls, reports, false, ["mcp.invoke"])
+    const bot = context.botRegistry.getOwned()
+    context.botRegistry.getOwned = () => ({
+      ...bot,
+      sourceResourceId: "genio.demo.bot",
+      bindings: [{ resourceId: "genio.demo.context7", capabilityId: "context7", state: "INSTALLED", kind: "MCP" }],
+    })
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalUrl = process.env.GENIO_ONE_MCP_URL
+    const originalFetch = globalThis.fetch
+    process.env.GENIO_ONE_MCP_URL = "http://one.localhost:1975/mcp"
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = new URL(String(input))
+      if (url.pathname.endsWith("/catalog")) return Response.json({ capabilities: [{
+        resource_id: "genio.demo.context7",
+        capability_id: "context7",
+        access: "ENTITLED",
+        publication_endpoint: { hostname: "context7.stellar-freight.localhost", base_path: "/" },
+      }] })
+      return Response.json(principal)
+    }) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: "bot-dylan" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
+      expect(context.session.managedMcpMounts).toEqual({})
+      expect(calls.some((call) => call.capability_id === "mcp.invoke" && call.action === "expose" && call.decision === "DENY")).toBe(true)
+      expect(reports.some((report) => report.capabilityId === "mcp.invoke" && report.action === "expose" && report.outcome === "DENY")).toBe(true)
+      socket.emit("message", JSON.stringify({ id: 3, method: "thread/start", params: { model: "gpt-5.6-luna", environments: [] } }))
+      await waitFor(() => context.runtimeMessages.some((message) => message.id === 3))
+      const forwarded = context.runtimeMessages.find((message) => message.id === 3) as { params: { config: Record<string, unknown> } }
+      expect(forwarded.params.config["mcp_servers.genio_mcp_context7"]).toBeUndefined()
+    } finally {
+      globalThis.fetch = originalFetch
+      if (originalUrl === undefined) delete process.env.GENIO_ONE_MCP_URL
+      else process.env.GENIO_ONE_MCP_URL = originalUrl
       socket.close()
     }
   })
@@ -339,16 +394,17 @@ describe("Codex runtime policy route", () => {
       }))
       await waitFor(() => context.runtimeMessages.some((message) => message.id === 3))
       const forwarded = context.runtimeMessages.find((message) => message.id === 3) as { params: { config: Record<string, unknown> } }
-      const serverName = managedMcpServerName("custom-notion-bot", notionResourceId)
-      expect(forwarded.params.config[`mcp_servers.${serverName}`]).toMatchObject({
+      expect(forwarded.params.config["mcp_servers.genio_mcp_notion"]).toMatchObject({
         url: `https://bot.example.test/api/mcp-gateway/runtime-session/${notionResourceId}/mcp`,
       })
-      expect(forwarded.params.config[`mcp_servers.${managedMcpServerName("custom-notion-bot", "resource-uninstalled")}`]).toBeUndefined()
-      expect(context.session.managedMcpEndpoints).toEqual({
+      expect(forwarded.params.config["mcp_servers.genio_mcp_uninstalled"]).toBeUndefined()
+      expect(context.session.managedMcpMounts).toEqual({
         [notionResourceId]: {
-          hostname: "notion.stellar-freight.localhost",
-          base_path: "/mcp",
+          resourceId: notionResourceId,
           capabilityId: "notion.search",
+          serverName: "genio_mcp_notion",
+          hostname: "notion.stellar-freight.localhost",
+          basePath: "/mcp",
         },
       })
     } finally {
@@ -702,7 +758,7 @@ describe("Codex runtime policy route", () => {
         },
       }))
       await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 3 && JSON.parse(line).error?.code))
-      expect(calls.some((call) => call.capability_id === "shell.exec" && call.action === "invoke" && call.decision === "DENY")).toBe(true)
+      expect(calls.some((call) => call.capability_id === "shell.exec" && call.action === "execute" && call.decision === "DENY")).toBe(true)
       expect(context.runtimeMessages.some((message) => message.id === 3)).toBe(false)
     } finally {
       globalThis.fetch = originalFetch

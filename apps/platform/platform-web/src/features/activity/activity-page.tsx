@@ -1,3 +1,6 @@
+import { isDecisionAuditEvent } from "@/domain/audit-events"
+import type { DecisionAuditEvent } from "@/domain/contracts"
+import { AuditQueryTable } from "./audit-query-table"
 import { } from "@/components/relation-value"
 import { PageHeader } from "@/components/page-header"
 import { subjectDisplayName } from "@/features/sections/section-chrome"
@@ -92,14 +95,14 @@ import {
 } from "@/lib/product-api"
 
 const apiActivityColumnHelper = createColumnHelper<DataTableFeatures, ApiGatewayActivityEvent>()
-const governedActivityColumnHelper = createColumnHelper<DataTableFeatures, AuditEvent>()
+const governedActivityColumnHelper = createColumnHelper<DataTableFeatures, DecisionAuditEvent>()
 const endpointActivityColumnHelper = createColumnHelper<DataTableFeatures, EndpointActivityEvent>()
 
-function isRuntimeAuditEvent(event: AuditEvent): boolean {
+function isRuntimeAuditEvent(event: DecisionAuditEvent): boolean {
   return event.kind === "RUNTIME_POLICY_DECISION"
 }
 
-function runtimeAuditPolicyLabel(event: AuditEvent): string {
+function runtimeAuditPolicyLabel(event: DecisionAuditEvent): string {
   if (!isRuntimeAuditEvent(event)) return event.decision?.policy_version ?? ""
   const label = event.policy_display_name ?? event.policy_id ?? "Runtime policy"
   return event.policy_revision === null || event.policy_revision === undefined
@@ -107,7 +110,7 @@ function runtimeAuditPolicyLabel(event: AuditEvent): string {
     : `${label} · r${event.policy_revision}`
 }
 
-function runtimeAuditActualOutcome(event: AuditEvent): string {
+function runtimeAuditActualOutcome(event: DecisionAuditEvent): string {
   return isRuntimeAuditEvent(event) ? event.report_outcome ?? "" : ""
 }
 
@@ -119,7 +122,7 @@ function GovernedGatewayActivityTable({
   search,
   onOpen,
 }: {
-  events: AuditEvent[]
+  events: DecisionAuditEvent[]
   resources: ResourceRegistration[]
   lane: "ai" | "access"
   accessTier: "T1" | "T2"
@@ -272,6 +275,7 @@ export function ActivityPage({
   accessTier?: "T1" | "T2"
 }) {
   const { t } = useTranslation()
+  const executionAuditEvents = useMemo(() => data.auditEvents.filter(isDecisionAuditEvent), [data.auditEvents])
   const latestGatewayPoint: EnforcementPointId = normalizeEnforcementPoint(data.apiActivity.events[0]?.enforcement_point_id) ?? "API_GATEWAY"
   const initialTab = mode === "audit" ? "audit" : mode === "metrics" || mode === "usage" ? "usage" : latestGatewayPoint
   const [activityTab, setActivityTab] = useState<EnforcementPointId>(() => {
@@ -288,7 +292,7 @@ export function ActivityPage({
   const [selectedAuditAccessRequest, setSelectedAuditAccessRequest] = useState<AccessRequest | null>(null)
   const [selectedApiActivity, setSelectedApiActivity] = useState<ApiGatewayActivityEvent | null>(null)
   const [classificationOpen, setClassificationOpen] = useState(false)
-  const auditedResource = data.auditEvents.find((event) => event.resource_id)?.resource_id
+  const auditedResource = executionAuditEvents.find((event) => event.resource_id)?.resource_id
   const [auditResourceId, setAuditResourceId] = useState(auditedResource ?? data.resources[0]?.resource_id ?? "")
   const [auditFrom, setAuditFrom] = useState(() => {
     const date = new Date()
@@ -404,8 +408,8 @@ export function ActivityPage({
     ].some((value) => value.toLowerCase().includes(query)),
   )
   const auditByCorrelation = useMemo(
-    () => new Map(data.auditEvents.map((event) => [event.correlation_id, event])),
-    [data.auditEvents],
+    () => new Map(executionAuditEvents.map((event) => [event.correlation_id, event])),
+    [executionAuditEvents],
   )
   const activityByCorrelation = useMemo(
     () => new Map(data.apiActivity.events.map((event) => [event.correlation_id, event])),
@@ -605,7 +609,7 @@ export function ActivityPage({
     }),
   ]), [data, t])
   const resourcesById = new Map(data.resources.map((resource) => [resource.resource_id, resource]))
-  const governedActivityMatchesSearch = (event: AuditEvent) => [
+  const governedActivityMatchesSearch = (event: DecisionAuditEvent) => [
     event.subject.subject_id,
     event.acting_client.acting_client_id ?? "",
     event.resource_id ?? "",
@@ -616,13 +620,13 @@ export function ActivityPage({
     event.outcome,
     event.correlation_id,
   ].some((value) => value.toLowerCase().includes(query))
-  const aiGatewayActivities = data.auditEvents.filter((event) =>
+  const aiGatewayActivities = executionAuditEvents.filter((event) =>
     matchesEnforcementPoint(event.enforcement_point_id, "AI_GATEWAY") && governedActivityMatchesSearch(event),
   )
-  const accessGatewayActivities = data.auditEvents.filter((event) =>
+  const accessGatewayActivities = executionAuditEvents.filter((event) =>
     matchesEnforcementPoint(event.enforcement_point_id, "ACCESS_GATEWAY") && governedActivityMatchesSearch(event),
   )
-  const decisions = (serverAuditEvents ?? data.auditEvents).filter((event) => {
+  const decisions = (serverAuditEvents ?? executionAuditEvents).filter(isDecisionAuditEvent).filter((event) => {
     const runtime = isRuntimeAuditEvent(event)
     if ((!event.decision && !runtime) || !matchesEnforcementPoint(event.enforcement_point_id, auditEnforcementPoint)) return false
     return [
@@ -722,6 +726,8 @@ export function ActivityPage({
   async function openAuditEvent(event: AuditEvent) {
     setSelectedAuditEvent(event)
     setSelectedAuditAccounting(null)
+    setSelectedAuditAccessRequest(null)
+    if (!isDecisionAuditEvent(event)) return
     setSelectedAuditAccessRequest(
       event.access_request_id
         ? data.accessRequests.find((request) => request.access_request_id === event.access_request_id) ?? null
@@ -804,7 +810,7 @@ export function ActivityPage({
   }
   function useLoadedAuditRange() {
     const timestamps = [
-      ...data.auditEvents
+      ...executionAuditEvents
         .filter((event) => event.resource_id === auditResourceId)
         .map((event) => event.occurred_at),
       ...data.apiActivity.events
@@ -924,7 +930,7 @@ export function ActivityPage({
             </Field>
           </FieldGroup>
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <Button variant="outline" onClick={useLoadedAuditRange} disabled={![...data.auditEvents, ...data.apiActivity.events].some((event) => event.resource_id === auditResourceId)}>
+            <Button variant="outline" onClick={useLoadedAuditRange} disabled={![...executionAuditEvents, ...data.apiActivity.events].some((event) => event.resource_id === auditResourceId)}>
               {t("Use loaded activity range")}
             </Button>
             <Button disabled={auditExportBusy || !auditFrom || !auditTo || !auditResourceId || auditFrom > auditTo} onClick={() => void downloadAuditExport()}>
@@ -1019,50 +1025,7 @@ export function ActivityPage({
               </div>
             ) : null}
             {auditQueryError ? <p className="text-sm text-destructive" role="alert">{t(auditQueryError)}</p> : null}
-            {serverAuditEvents?.length ? (
-              <div className="mt-6 min-w-0 rounded-lg border">
-                <div className="border-b px-4 py-3">
-                  <div className="font-medium">{t("Queried Audit Events")}</div>
-                  <div className="text-xs text-muted-foreground">{t("Open an event to inspect its verified identity and correlation.")}</div>
-                </div>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{t("Audit Event")}</TableHead>
-                      <TableHead>{t("Outcome")}</TableHead>
-                      <TableHead>{t("Policy / Target")}</TableHead>
-                      <TableHead>{t("Subject / Acting Client")}</TableHead>
-                      <TableHead>{t("Correlation")}</TableHead>
-                      <TableHead className="text-right">{t("Occurred")}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {serverAuditEvents.map((event) => (
-                      <TableRow
-                        key={event.audit_event_id}
-                        aria-label={t("View details")}
-                        className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-                        onClick={() => void openAuditEvent(event)}
-                        onKeyDown={(keyboardEvent) => {
-                          if (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") {
-                            keyboardEvent.preventDefault()
-                            void openAuditEvent(event)
-                          }
-                        }}
-                        tabIndex={0}
-                      >
-                        <TableCell><div className="font-mono text-xs">{event.audit_event_id}</div><div className="text-xs text-muted-foreground">{t(event.kind)}</div></TableCell>
-                        <TableCell><Badge variant={event.outcome === "FAILED" || event.outcome === "DENY" ? "destructive" : "outline"}>{t(event.outcome)}</Badge>{isRuntimeAuditEvent(event) && event.report_outcome ? <div className="mt-1 text-xs text-muted-foreground">{t("Result")}: {t(event.report_outcome)}</div> : null}</TableCell>
-                        <TableCell>{isRuntimeAuditEvent(event) ? <><div className="font-medium">{runtimeAuditPolicyLabel(event) || t("Unconfigured")}</div><div className="max-w-56 truncate font-mono text-xs text-muted-foreground" title={event.target ?? undefined}>{event.target ?? "—"}</div></> : <span className="font-mono text-xs">{runtimeAuditPolicyLabel(event) || "—"}</span>}</TableCell>
-                        <TableCell><div className="font-medium">{event.subject.subject_id}</div><div className="text-xs text-muted-foreground">{event.acting_client.acting_client_id ?? t("Unknown")}</div></TableCell>
-                        <TableCell className="max-w-64 truncate font-mono text-xs" title={event.correlation_id}>{event.correlation_id}</TableCell>
-                        <TableCell className="text-right text-muted-foreground">{relativeTime(event.occurred_at)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            ) : null}
+            {serverAuditEvents?.length ? <AuditQueryTable events={serverAuditEvents} onOpen={(event) => void openAuditEvent(event)} /> : null}
           </div>
         </CardContent>
       </Card>

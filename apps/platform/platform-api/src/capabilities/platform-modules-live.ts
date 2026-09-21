@@ -13,6 +13,7 @@ import type {
   ValkeyModelRouterOptions,
   ValkeySessionLeaseClient,
 } from "./model-routing/valkey"
+import type { ModelRoutingDecisionProvider } from "./model-routing/decision-provider"
 import {
   createPostgresPlatformModules,
 } from "./platform-modules-postgres"
@@ -52,6 +53,8 @@ import { createValkeyUsageCounterStore, type ValkeyEvalClient } from "../../../.
 import { createClickHouseTraceStore } from "./traces/clickhouse"
 import { createClickHouseGatewayMetricsStore } from "./metrics/clickhouse"
 import { createPostgresIdentityDirectory } from "./identity/postgres"
+import { createAccessGroupDirectory } from "./access-groups/module"
+import { createPostgresAccessGroupRepository } from "./access-groups/postgres"
 import { createPostgresSiemForwarder } from "./siem/postgres"
 import { createPostgresNotificationSubscriptionStore } from "./notifications/postgres"
 import { createPostgresTenantConfigurationStore } from "./configuration/postgres"
@@ -116,6 +119,8 @@ export interface LivePlatformModuleGraphOptions
   subjectAliases?: Readonly<Record<string, readonly string[]>>
   renderer?: GatewayProjectionRendererOptions
   leaseIdFactory?: ValkeyModelRouterOptions["idFactory"]
+  modelRoutingDecisionProvider?: ModelRoutingDecisionProvider
+  modelRoutingDecisionMinimumConfidence?: number
   connectionVerifier?: ConnectionVerifier
   publicationDnsVerifier?: PublicationDnsVerifier
   mcpOAuthEncryptionKey: Uint8Array
@@ -232,15 +237,20 @@ export function createPlatformModuleGraph(
     models: postgres.models,
     now: options.now,
     idFactory: options.leaseIdFactory,
+    decisionProvider: options.modelRoutingDecisionProvider,
+    decisionMinimumConfidence: options.modelRoutingDecisionMinimumConfidence,
   })
   const enforcementCompiler = createEnforcementChainCompiler({
     resources: postgres.resources,
     connections: postgres.connections,
   })
+  const auditEvents = createPostgresGatewayAuthorizationAuditStore({ sql: postgres.sql })
+  const policyDrafts = createPolicyDraftStore({ sql: postgres.sql, now: options.now, audit: auditEvents })
   const enforcementRevisionStore = createPostgresEnforcementChainRevisionStore({
     sql: postgres.sql,
     now: options.now,
     releasePublisher: createAggregateGatewayLifecycleReleasePublisher(aggregateCoordinator),
+    audit: auditEvents,
   })
   const publicationStore = createPostgresPublicationWorkflowStore({
     sql: postgres.sql,
@@ -286,8 +296,7 @@ export function createPlatformModuleGraph(
     sql: postgres.sql,
     now: options.now,
   })
-  const auditEvents = createPostgresGatewayAuthorizationAuditStore({ sql: postgres.sql })
-  const runtimePolicyStore = createPostgresRuntimePolicyStore({ sql: postgres.sql, now: options.now })
+  const runtimePolicyStore = createPostgresRuntimePolicyStore({ sql: postgres.sql, now: options.now, audit: auditEvents })
   const activityMaterializer = options.clickhouse
     ? createClickHouseGatewayActivityMaterializer({
         ...options.clickhouse,
@@ -306,6 +315,11 @@ export function createPlatformModuleGraph(
     ? createClickHouseGatewayMetricsStore(options.clickhouse)
     : { summarize: async () => { throw Object.assign(new Error("TELEMETRY_STORE_UNAVAILABLE"), { statusCode: 503 }) } }
   const identity = createPostgresIdentityDirectory({ sql: postgres.sql })
+  const accessGroups = createAccessGroupDirectory({
+    repository: createPostgresAccessGroupRepository({ sql: postgres.sql, audit: auditEvents }),
+    identity,
+    now: options.now,
+  })
   const agentDelegations = createAgentDelegationDirectory({
     repository: createPostgresAgentDelegationRepository({
       sql: postgres.sql,
@@ -362,9 +376,11 @@ export function createPlatformModuleGraph(
     seedStore: createPostgresOnePolicySeedStore({
       sql: options.sql,
       now: options.now,
+      audit: auditEvents,
     }),
     runtimeStore: runtimePolicyStore,
     runtimeAuditSink: auditEvents,
+    accessGroups,
     ...(options.runtimeReportKeyId ? { runtimeReportKeyId: options.runtimeReportKeyId } : {}),
     ...(options.runtimeReportPublicKeyPem ? { runtimeReportPublicKeyPem: options.runtimeReportPublicKeyPem } : {}),
     connectionEnabled: async ({ tenantId }) => {
@@ -392,7 +408,7 @@ export function createPlatformModuleGraph(
     modelRouter,
     modelRoutingPolicies: postgres.modelRoutingPolicies,
     enforcementCompiler,
-    policyDrafts: createPolicyDraftStore(options.sql),
+    policyDrafts,
     enforcementRevisionStore,
     gatewayProjector,
     gatewayProjections: publicationStore,
@@ -415,6 +431,7 @@ export function createPlatformModuleGraph(
     traces,
     metrics,
     identity,
+    accessGroups,
     agentDelegations,
     executionGrants,
     auditEvents,

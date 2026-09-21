@@ -41,8 +41,8 @@ import {
   ROUTE_PROVIDER_CREDENTIAL_PROFILE_REVISION_HEADER,
   ROUTE_PROVIDER_CREDENTIAL_STRATEGY_DIGEST_HEADER,
 } from "../shared/model-route-handoff"
-import { operationalError, writeOperationalEvent } from "../../../../packages/telemetry/src/operational-log"
-import { gatewayDetailActivityReference } from "../../../../packages/telemetry/src/otlp-detail-capture"
+import { operationalError, writeOperationalEvent } from "@genioone/telemetry/operational-log"
+import { gatewayDetailActivityReference } from "@genioone/telemetry/otlp-detail-capture"
 import type { GatewayActivityIngest } from "../shared/gateway-activity"
 import { narrowGatewayRoutingScopeByObligations } from "../shared/gateway-routing-artifact"
 

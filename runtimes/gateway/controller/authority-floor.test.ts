@@ -1,16 +1,16 @@
 import assert from "node:assert/strict"
-import { generateKeyPairSync, sign } from "node:crypto"
+import { generateKeyPairSync, sign, type KeyObject } from "node:crypto"
 import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
 
-import type { CompiledAuthorizationBundle } from "../../../packages/protocol/src/authorization"
+import type { CompiledAuthorizationBundle } from "@genioone/protocol/authorization"
 import type { GatewayReleasePackage } from "../../../apps/platform/platform-api/src/capabilities/gateway-policy-release/package"
-import type { GatewayRuntimeCommand } from "../../../packages/protocol/src/runtime-command"
+import type { GatewayRuntimeCommand } from "@genioone/protocol/runtime-command"
 import { createGatewayRuntimeFileAuthorityFloor } from "./authority-floor"
 
-function compactJws(payload: unknown, keyId: string, privateKey: ReturnType<typeof generateKeyPairSync>["privateKey"]): string {
+function compactJws(payload: unknown, keyId: string, privateKey: KeyObject): string {
   const header = Buffer.from(JSON.stringify({ alg: "EdDSA", kid: keyId })).toString("base64url")
   const body = Buffer.from(JSON.stringify(payload)).toString("base64url")
   const signature = sign(null, Buffer.from(`${header}.${body}`), privateKey).toString("base64url")

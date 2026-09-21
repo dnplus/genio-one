@@ -12,7 +12,7 @@ import {
   GatewayRuntimeReportSchema,
   type GatewayObservedState,
   type GatewayRuntimeReport,
-} from "../../../packages/protocol/src/gateway-release"
+} from "@genioone/protocol/gateway-release"
 import {
   runtimeProtocolDigest,
   runtimeProtocolSignaturePayload,
@@ -21,8 +21,8 @@ import {
   gatewayReleaseReferencesEqual,
   verifyGatewayRuntimeCommand,
   type GatewayRuntimeCommand,
-} from "../../../packages/protocol/src/runtime-command"
-import type { VerificationKeyRing } from "../../../packages/protocol/src/compact-jws"
+} from "@genioone/protocol/runtime-command"
+import type { VerificationKeyRing } from "@genioone/protocol/compact-jws"
 
 export interface GatewayRuntimeSigner {
   readonly keyId: string

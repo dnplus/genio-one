@@ -3,6 +3,7 @@ import type { Static } from "typebox"
 
 const Identifier = Type.String({ minLength: 1, maxLength: 256 })
 const Timestamp = Type.Integer({ minimum: 0 })
+const Probability = Type.Number({ minimum: 0, maximum: 1 })
 
 const ModelRouteModeSchema = Type.Union([
   Type.Literal("DETERMINISTIC"),
@@ -15,6 +16,50 @@ const ClassifierResultSchema = Type.Object({
   public_model_ids: Type.Array(Identifier, { minItems: 1 }),
 })
 
+const SemanticRoutingRequestSchema = Type.Object({
+  task: Type.String({ minLength: 1, maxLength: 16_384 }),
+}, { additionalProperties: false })
+
+const RoutingProbabilitySchema = Type.Object({
+  public_model_id: Identifier,
+  probability: Probability,
+}, { additionalProperties: false })
+
+const TaskKindSchema = Type.Union([
+  Type.Literal("GENERAL"),
+  Type.Literal("REASONING"),
+  Type.Literal("TOOL_USE"),
+  Type.Literal("VISION"),
+  Type.Literal("TRANSCRIPTION"),
+])
+
+const ModelRoutingDecisionAnnotationsSchema = Type.Object({
+  task_kind: TaskKindSchema,
+  task_kind_confidence: Probability,
+  complexity_score: Type.Number({ minimum: 0, maximum: 2 }),
+  complexity_confidence: Probability,
+  requires_tools_probability: Probability,
+}, { additionalProperties: false })
+
+const ModelRoutingDecisionReceiptSchema = Type.Object({
+  provider_id: Identifier,
+  requested_model: Identifier,
+  resolved_model: Identifier,
+  suggested_public_model_id: Identifier,
+  selected_public_model_id: Identifier,
+  task_digest: Type.String({ pattern: "^[a-f0-9]{64}$" }),
+  request_id: Type.Optional(Identifier),
+  applied: Type.Boolean(),
+  confidence: Probability,
+  probabilities: Type.Array(RoutingProbabilitySchema, { minItems: 1, maxItems: 128 }),
+  annotations: ModelRoutingDecisionAnnotationsSchema,
+  usage: Type.Object({
+    input_tokens: Type.Integer({ minimum: 0 }),
+    output_tokens: Type.Integer({ minimum: 0 }),
+  }, { additionalProperties: false }),
+  decided_at: Timestamp,
+}, { additionalProperties: false })
+
 export const ResolveModelRouteSchema = Type.Object({
   subject_id: Identifier,
   client_id: Identifier,
@@ -25,6 +70,7 @@ export const ResolveModelRouteSchema = Type.Object({
   entitled_public_model_ids: Type.Array(Identifier, { minItems: 1 }),
   lease_seconds: Type.Optional(Type.Integer({ minimum: 1, maximum: 86_400 })),
   classifier_result: Type.Optional(ClassifierResultSchema),
+  semantic_routing: Type.Optional(SemanticRoutingRequestSchema),
 }, { additionalProperties: false })
 
 export const ModelRouteLeaseSchema = Type.Object({
@@ -47,6 +93,7 @@ export const ModelRouteLeaseSchema = Type.Object({
   expires_at: Type.Optional(Timestamp),
   reused: Type.Boolean(),
   route_mode: ModelRouteModeSchema,
+  decision_receipt: Type.Optional(ModelRoutingDecisionReceiptSchema),
 })
 
 export const ModelRoutingPathSchema = Type.Object({
@@ -131,6 +178,9 @@ export const ModelRoutingPolicyMutationSchema = Type.Object({
 export type ResolveModelRouteInput = Static<typeof ResolveModelRouteSchema>
 export type ModelRouteLease = Static<typeof ModelRouteLeaseSchema>
 export type ClassifierResult = Static<typeof ClassifierResultSchema>
+export type SemanticRoutingRequest = Static<typeof SemanticRoutingRequestSchema>
+export type ModelRoutingDecisionAnnotations = Static<typeof ModelRoutingDecisionAnnotationsSchema>
+export type ModelRoutingDecisionReceipt = Static<typeof ModelRoutingDecisionReceiptSchema>
 export type ModelRoutingPolicyMode = Static<typeof ModelRouteModeSchema>
 export type ModelRoutingPolicy = Static<typeof ModelRoutingPolicySchema>
 export type CreateModelRoutingPolicyInput = Static<typeof CreateModelRoutingPolicySchema>

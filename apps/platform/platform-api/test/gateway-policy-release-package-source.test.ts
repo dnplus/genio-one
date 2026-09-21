@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { createHash, generateKeyPairSync, sign as signPayload } from "node:crypto"
 import test from "node:test"
 
-import type { VerificationKeyRing } from "../../../../packages/protocol/src/compact-jws"
+import type { VerificationKeyRing } from "@genioone/protocol/compact-jws"
 import type {
   CompactJwsSigner,
   GatewayPolicyReleaseInput,

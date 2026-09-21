@@ -65,20 +65,6 @@ function checksum(sql: string): string {
   return createHash("sha256").update(sql).digest("hex")
 }
 
-/**
- * A migration file's bytes are part of its history, but editors and image
- * builders occasionally add or remove one final newline. Accept only that
- * narrow, semantics-preserving drift so an already-applied migration does not
- * brick a deployment; any other content change remains fail-closed.
- */
-function matchesHistoricalChecksum(sql: string, historicalChecksum: string): boolean {
-  if (checksum(sql) === historicalChecksum) return true
-  const variants = sql.endsWith("\n")
-    ? [sql + "\n", sql.slice(0, -1)]
-    : [sql + "\n"]
-  return variants.some((variant) => checksum(variant) === historicalChecksum)
-}
-
 export function createMigration(input: MigrationDefinition): Migration {
   if (!Number.isInteger(input.id) || input.id < 1) {
     throw new MigrationDefinitionError("Migration id must be a positive integer")
@@ -179,7 +165,7 @@ async function applyMigrations(
         `Database contains migration ${migrationId}, but no matching file is present`,
       )
     }
-    if (row.name !== migration.name || !matchesHistoricalChecksum(migration.sql, row.checksum)) {
+    if (row.name !== migration.name || row.checksum !== migration.checksum) {
       throw new MigrationChecksumDriftError(
         migrationId,
         row.checksum,

@@ -1,4 +1,4 @@
-import { instrumentModuleGraph, observeOperation } from "../../../packages/telemetry/src/operation-observability"
+import { instrumentModuleGraph, observeOperation } from "@genioone/telemetry/operation-observability"
 import { ImapFlow } from "imapflow"
 import { decodeMail2000Message } from "./message"
 import type { Mail2000Credential } from "./server"
@@ -29,7 +29,17 @@ export function createMail2000Imap(config: { host: string; port: number }, facto
   const api = {
     listMailboxes: (credential: Mail2000Credential) => connected(credential, async (client) => {
       const rows = await client.list()
-      return rows.filter((row) => !row.flags.has("\\Noselect")).map((row) => ({ path: row.path, name: row.name, ...(row.specialUse ? { specialUse: row.specialUse } : {}) }))
+      const result: Array<{ path: string; name: string; specialUse?: string }> = []
+      for (const row of rows) {
+        if (!row.flags.has("\\Noselect")) {
+          const item: { path: string; name: string; specialUse?: string } = { path: row.path, name: row.name }
+          if (row.specialUse !== undefined) {
+            item.specialUse = row.specialUse
+          }
+          result.push(item)
+        }
+      }
+      return result
     }),
     search: (credential: Mail2000Credential, args: { folder: string; text?: string; from?: string; unseen?: boolean; limit: number }) => connected(credential, async (client) => {
       const lock = await client.getMailboxLock(args.folder, { readOnly: true })
@@ -40,7 +50,10 @@ export function createMail2000Imap(config: { host: string; port: number }, facto
         const messages = []
         for (const uid of selected) {
           const result = await client.fetchOne(String(uid), { envelope: true, flags: true, size: true }, { uid: true })
-          if (result) messages.push({ uid, subject: result.envelope?.subject ?? "", from: result.envelope?.from ?? [], date: result.envelope?.date?.toISOString() ?? null, size: result.size, flags: [...result.flags ?? []] })
+          if (result) {
+            const date = result.envelope?.date
+            messages.push({ uid, subject: result.envelope?.subject ?? "", from: result.envelope?.from ?? [], date: date instanceof Date ? date.toISOString() : date ?? null, size: result.size, flags: [...result.flags ?? []] })
+          }
         }
         return { folder: args.folder, uid_validity: String(client.mailbox.uidValidity), total: uids.length, messages }
       } finally { lock.release() }

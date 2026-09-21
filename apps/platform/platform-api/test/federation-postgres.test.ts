@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { PlatformApiError } from "../src/capabilities/errors"
-import { createPostgresFederationService } from "../src/capabilities/federation/postgres"
+import { createPostgresFederationService, normalizeTrust } from "../src/capabilities/federation/postgres"
 import type { SqlAdapter, SqlQueryResult, SqlTransaction } from "../src/persistence/sql-adapter"
 
 type Row = Record<string, unknown>
@@ -233,4 +233,65 @@ test("replayed workload assertion fails before entitlement lookup or token mint"
   )
   assert.equal(brokerCalled, false)
   assert.equal(sql.calls.some(({ text }) => text.includes("from genio_one_application_api_credentials")), false)
+})
+
+test("normalizeTrust correctly normalizes valid trust revision input and trims fields", () => {
+  const normalized = normalizeTrust({
+    display_name: "  My Trust  ",
+    issuer: "https://issuer.example.test/",
+    jwks_uri: "https://issuer.example.test/jwks",
+    audiences: [" aud2 ", "aud1"],
+    algorithms: ["RS256", "ES256"],
+    external_subject_id: " sub-1 ",
+    required_claims: [
+      { name: " role ", value: " admin " },
+      { name: " env ", value: " prod " },
+    ],
+    max_assertion_ttl_seconds: 300,
+  })
+
+  assert.equal(normalized.displayName, "My Trust")
+  assert.equal(normalized.issuer, "https://issuer.example.test")
+  assert.equal(normalized.jwksUri, "https://issuer.example.test/jwks")
+  assert.deepEqual(normalized.audiences, ["aud1", "aud2"])
+  assert.deepEqual(normalized.algorithms, ["ES256", "RS256"])
+  assert.equal(normalized.externalSubjectId, "sub-1")
+  assert.deepEqual(normalized.requiredClaims, [
+    { name: "env", value: "prod" },
+    { name: "role", value: "admin" },
+  ])
+  assert.equal(normalized.maxAssertionTtlSeconds, 300)
+})
+
+test("normalizeTrust rejects duplicate audiences, empty audiences, duplicate algorithms, and duplicate claims", () => {
+  const base = {
+    display_name: "Trust",
+    issuer: "https://issuer.example.test",
+    jwks_uri: "https://issuer.example.test/jwks",
+    audiences: ["aud1"],
+    algorithms: ["RS256" as const],
+    external_subject_id: "sub1",
+    required_claims: [{ name: "env", value: "prod" }],
+    max_assertion_ttl_seconds: 300,
+  }
+
+  assert.throws(
+    () => normalizeTrust({ ...base, audiences: ["aud1", " aud1 "] }),
+    (err: unknown) => err instanceof PlatformApiError && err.code === "FEDERATION_TRUST_DUPLICATE_SELECTOR",
+  )
+
+  assert.throws(
+    () => normalizeTrust({ ...base, audiences: ["   "] }),
+    (err: unknown) => err instanceof PlatformApiError && err.code === "FEDERATION_TRUST_DUPLICATE_SELECTOR",
+  )
+
+  assert.throws(
+    () => normalizeTrust({ ...base, algorithms: ["RS256", "RS256"] }),
+    (err: unknown) => err instanceof PlatformApiError && err.code === "FEDERATION_TRUST_DUPLICATE_SELECTOR",
+  )
+
+  assert.throws(
+    () => normalizeTrust({ ...base, required_claims: [{ name: "env", value: "1" }, { name: " env ", value: "2" }] }),
+    (err: unknown) => err instanceof PlatformApiError && err.code === "FEDERATION_TRUST_DUPLICATE_SELECTOR",
+  )
 })

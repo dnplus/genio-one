@@ -10,7 +10,7 @@ CE 文件預設為英文，本頁提供對應的繁體中文說明。英文 Bot 
 
 CE 包含 Platform 控制平面、本機管理的 Gateway Runtime 與 Genio Bot。你需要準備主機、支援服務容器，以及所選模型供應者或外部 MCP 服務需要的憑證與連線權限。專案不包含供應者金鑰，也未提供代管服務或預先發布的映像檔。
 
-開始前請使用具備 Docker Engine、Docker Compose、Git、Node.js、pnpm `10.32.1` 與 Bun `1.4.0` 的 Linux 或 macOS 主機。完整前置條件與服務入口請看[本機快速入門](quickstart.md)。
+開始前請使用具備 Docker Engine、Docker Compose、Git、Node.js、pnpm `12.4.2` 與 Bun `1.4.2` 的 Linux 或 macOS 主機。完整前置條件與服務入口請看[本機快速入門](quickstart.md)。
 
 ## 第一條可驗證路徑
 

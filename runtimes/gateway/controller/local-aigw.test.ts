@@ -15,9 +15,8 @@ import {
   attachMcpRouteSecurityPolicies,
   gatewayServiceEntrypoint,
   localCredentialSecrets,
-  stopProcessTree,
-  waitForEnvoyRunReadiness,
 } from "./local-aigw"
+import { stopProcessTree, waitForEnvoyRunReadiness } from "./process-lifecycle"
 
 async function startReadyServer(): Promise<{ port: number; close(): Promise<void> }> {
   const server = createServer((request, response) => {

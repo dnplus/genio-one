@@ -1,4 +1,4 @@
-import { observeOperation, observedFetch } from "../../../packages/telemetry/src/operation-observability"
+import { observeOperation, observedFetch } from "@genioone/telemetry/operation-observability"
 import {
   createPrivateKey,
   createPublicKey,
@@ -8,8 +8,8 @@ import { readFile } from "node:fs/promises"
 import { resolve } from "node:path"
 import { serve } from "bun"
 
-import type { VerificationKeyRing } from "../../../packages/protocol/src/compact-jws"
-import type { GatewayRuntimeCommand } from "../../../packages/protocol/src/runtime-command"
+import type { VerificationKeyRing } from "@genioone/protocol/compact-jws"
+import type { GatewayRuntimeCommand } from "@genioone/protocol/runtime-command"
 import { createLocalAigwApplier } from "./local-aigw"
 import { createKubernetesGatewayApplier } from "./kubernetes"
 import {
@@ -23,7 +23,7 @@ import { createRuntimeTokenSource, type RuntimeTokenSource } from "./runtime-tok
 import { startLeaseHeartbeat } from "./lease-heartbeat"
 import { discoverMcpConnection, discoverMcpWithUserAuthorization } from "./mcp-discovery"
 import { materializeGatewayBootstrap } from "./bootstrap"
-import { operationalError, writeOperationalEvent } from "../../../packages/telemetry/src/operational-log"
+import { operationalError, writeOperationalEvent } from "@genioone/telemetry/operational-log"
 import type {
   CompleteMcpDiscoveryInput,
   McpDiscoveryOperation,
@@ -266,12 +266,16 @@ async function probeConnectionHealth(
 }
 
 function connectionHealthHostAllowed(endpoint: string): boolean {
-  const hostname = new URL(endpoint).hostname.toLowerCase()
-  const configured = (process.env.GENIO_ONE_CONNECTION_HEALTH_ALLOWED_HOSTS ?? "")
-    .split(",")
-    .map((value) => value.trim().toLowerCase())
-    .filter(Boolean)
-  return ["127.0.0.1", "localhost", "::1"].includes(hostname) || configured.includes(hostname)
+  try {
+    const hostname = new URL(endpoint).hostname.toLowerCase()
+    const configured = (process.env.GENIO_ONE_CONNECTION_HEALTH_ALLOWED_HOSTS ?? "")
+      .split(",")
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean)
+    return ["127.0.0.1", "localhost", "::1"].includes(hostname) || configured.includes(hostname)
+  } catch {
+    return false
+  }
 }
 
 async function observeConnectionHealthBatch(
@@ -577,13 +581,15 @@ function startObservationRelay(
       if (request.method === "GET" && pathname === "/mcp-oauth/headers") {
         const resourceId = url.searchParams.get("resource_id")?.trim()
         const subjectId = url.searchParams.get("subject_id")?.trim()
+        const mcpMethod = url.searchParams.get("mcp_method")?.trim()
         if (
           !resourceId ||
           !subjectId ||
           resourceId.length > 256 ||
           subjectId.length > 256 ||
           /[\u0000\r\n]/.test(resourceId) ||
-          /[\u0000\r\n]/.test(subjectId)
+          /[\u0000\r\n]/.test(subjectId) ||
+          (mcpMethod && (mcpMethod.length > 256 || /[\u0000\r\n]/.test(mcpMethod)))
         ) {
           return new Response("Bad Request", { status: 400 })
         }
@@ -592,7 +598,6 @@ function startObservationRelay(
         )
         target.searchParams.set("resource_id", resourceId)
         target.searchParams.set("subject_id", subjectId)
-        const mcpMethod = url.searchParams.get("mcp_method")
         if (mcpMethod) target.searchParams.set("mcp_method", mcpMethod)
         const response = await observedFetch("genio-one-gateway-runtime", target, { headers: await tokens.headers() })
         return new Response(await response.text(), {

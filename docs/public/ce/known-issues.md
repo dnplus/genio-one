@@ -78,7 +78,7 @@ Follow-up: document the network prerequisite, retain checksum verification, and 
 
 The local Gateway publication used a per-resource hostname with `/` as its canonical MCP endpoint. The CE Bot initially built `/mcp/<resource-id>`, which returned Gateway `404 route_not_found`. The first relay retry also omitted the Gateway listener port and attempted `127.0.0.1:80`.
 
-Follow-up: keep explicit `GENIO_ONE_MCP_ORIGIN` targets rooted at the publication hostname and preserve the legacy path-based fallback for `GENIO_ONE_MCP_URL`. Re-run Context7 and Product Management after any endpoint or relay change.
+Resolved: each mount now takes its hostname and base path from the resource's own catalog publication endpoint, and reaches it over the scheme and port configured in `GENIO_ONE_MCP_URL`. Re-run Context7 and Product Management after any endpoint or relay change.
 
 ### Private Context7 publication needs an explicit demo setup step
 
@@ -86,11 +86,11 @@ The local Context7 connection was healthy, but its publication was `PRIVATE`. Th
 
 Follow-up: either ship a clearly documented demo entitlement step or provide a safe, local-only starter fixture whose visibility and entitlements are explicit. Do not weaken the default publication security silently.
 
-### A global MCP origin cannot represent multiple publication hosts
+### A global MCP origin cannot represent multiple publication hosts — resolved
 
-The current `GENIO_ONE_MCP_ORIGIN` override targets a single publication hostname. Both Context7 and Archify mounts resolve to that same origin, so the Context7-only validation does not prove Archify routing. Do not present the optional Archify path as verified in this configuration.
+The former `GENIO_ONE_MCP_ORIGIN` override targeted a single publication hostname, so Context7 and Archify both resolved to that same origin and a Context7-only validation did not prove Archify routing.
 
-Follow-up: resolve each authorized Resource's actual published hostname and base path through the catalog/session contract, instead of applying one origin to every MCP resource. Keep missing or unauthorized publication endpoints fail-closed.
+Resolved: the override is gone. Each authorized Resource is resolved from the tenant catalog to its own published hostname and base path, validated against transport data smuggled through either field, and mounted only when the Bot also holds an installed MCP binding for it. Missing or unauthorized publication endpoints stay fail-closed. Archify still needs its own routing check, because it is only provisioned when an Archify credential is configured.
 
 ### Envoy rejects the current Context7 certificate — TLS fix implemented
 

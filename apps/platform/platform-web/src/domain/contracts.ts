@@ -5,6 +5,7 @@ import type {
   GetGatewayActivitySessionTimeline200,
   GetGatewayTransactionTrends200PointsItem,
   GetRoutingReconstruction200,
+  ListAccessGroups200Item,
   ListGatewayActivities200,
   ListGatewayActivities200EventsItem,
   ListActivityOutcomeAttributions200Item,
@@ -258,6 +259,7 @@ export interface ApiVersionMigrationNotice extends ApiVersionMigrationPlan {
 }
 
 export interface ConnectionSummary {
+  status: "DRAFT" | "READY" | "DEGRADED" | "DISABLED"
   connector_configuration?: ConnectorConfiguration
   connection_id: string
   display_name: string
@@ -464,7 +466,12 @@ export interface OnePolicyBotSeed {
   updated_at: number
 }
 
-export interface AuditEvent {
+type ApiAuditEvent = Extract<import("@/generated/management-api").ListGatewayAuthorizationAuditEvents200, unknown[]>[number]
+export type GovernanceAuditEvent = Extract<ApiAuditEvent, { kind: "POLICY_CHANGE" | "ACCESS_GROUP_CHANGE" }>
+
+export type AuditEvent = DecisionAuditEvent | GovernanceAuditEvent
+
+export interface DecisionAuditEvent {
   audit_event_id: string
   correlation_id: string
   kind: string
@@ -1285,21 +1292,17 @@ export interface CreateAgentDelegationInput {
   expiresAt: number
 }
 
-export interface LocalAccessGroup {
-  tenant_id: string
-  access_group_id: string
-  display_name: string
-  description: string
-  created_at: number
-  updated_at: number
-}
+export type LocalAccessGroup = ListAccessGroups200Item
+export type LocalAccessGroupMembershipSource = LocalAccessGroup["membership_sources"][number]
+export type LocalAccessGroupMembershipSourceKind = LocalAccessGroupMembershipSource["kind"]
 
 export interface LocalAccessGroupMembership {
   tenant_id: string
   access_group_id: string
   subject_id: string
-  source: "MANUAL" | "CSV_IMPORT" | "EXTERNAL_GROUP" | "ATTRIBUTE"
+  source: LocalAccessGroupMembershipSourceKind
   source_reference: string
+  source_revision: number
   assigned_by: { subject_id: string; evidence_level: "VERIFIED" }
   assigned_at: number
 }
@@ -1648,7 +1651,7 @@ export interface OverviewSnapshot {
   aiUsage: AiUsageDashboard | null
   gatewayMetrics: GatewayMetricsSummary | null
   auditEvents: AuditEvent[]
-  endpointSecurityEvents: AuditEvent[]
+  endpointSecurityEvents: DecisionAuditEvent[]
   siemDestination: SiemDestination | null
   siemDeliveries: SiemDelivery[]
   accessRequests: AccessRequest[]

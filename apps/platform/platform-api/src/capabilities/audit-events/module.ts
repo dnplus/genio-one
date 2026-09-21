@@ -1,7 +1,11 @@
-import type { AuthorizationAuditEvent, GatewayAuthorizationAuditIngest, RuntimePolicyAuditEvent } from "./contract"
+import type { AccessGroupAuditEvent, AuthorizationAuditEvent, GatewayAuthorizationAuditIngest, PolicyChangeAuditEvent, RuntimePolicyAuditEvent } from "./contract"
+import type { SqlTransaction } from "../../persistence/sql-adapter"
+
+export type AuthorizationAuditIngest = GatewayAuthorizationAuditIngest | RuntimePolicyAuditEvent | PolicyChangeAuditEvent | AccessGroupAuditEvent
 
 export interface GatewayAuthorizationAuditStore {
-  record(input: { tenantId: string; event: GatewayAuthorizationAuditIngest | RuntimePolicyAuditEvent }): Promise<AuthorizationAuditEvent>
+  record(input: { tenantId: string; event: AuthorizationAuditIngest }): Promise<AuthorizationAuditEvent>
+  recordInTransaction?(input: { transaction: SqlTransaction; tenantId: string; event: AuthorizationAuditIngest }): Promise<AuthorizationAuditEvent>
   findRuntimeAuthorization(input: { tenantId: string; correlationId: string }): Promise<RuntimePolicyAuditEvent | null>
   findRuntimeReport(input: { tenantId: string; correlationId: string }): Promise<RuntimePolicyAuditEvent | null>
   query(input: {

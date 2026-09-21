@@ -7,6 +7,10 @@ import type {
 import type { ModelRouter } from "./module"
 import type { ModelMemoryState } from "../models/state"
 import { prepareModelRoute } from "./candidates"
+import {
+  applySemanticModelDecision,
+  type ModelRoutingDecisionProvider,
+} from "./decision-provider"
 
 export interface ModelRouteLeaseKeyInput {
   tenantId: string
@@ -36,6 +40,8 @@ export interface ModelRouterMemoryOptions {
   models: PublicModelCatalog
   now?: () => number
   idFactory?: (sequence: number) => string
+  decisionProvider?: ModelRoutingDecisionProvider
+  decisionMinimumConfidence?: number
 }
 
 export function createInMemoryModelRouter(options: ModelRouterMemoryOptions): ModelRouter {
@@ -83,7 +89,14 @@ export function createInMemoryModelRouter(options: ModelRouterMemoryOptions): Mo
       }
       if (current) options.state.leases.delete(leaseKey)
 
-      const selected = candidates[0]
+      const routed = await applySemanticModelDecision({
+        request: prepared.semanticRouting,
+        provider: options.decisionProvider,
+        minimumConfidence: options.decisionMinimumConfidence ?? 0.6,
+        candidates,
+        decidedAt: currentTime,
+      })
+      const selected = routed.candidates[0]
       if (!selected) throw new PlatformApiError("NO_ELIGIBLE_MODEL", 403)
 
       options.state.leaseSequence += 1
@@ -104,6 +117,7 @@ export function createInMemoryModelRouter(options: ModelRouterMemoryOptions): Mo
         expires_at: currentTime + (input.value.lease_seconds ?? 3_600),
         reused: false,
         route_mode: "SESSION_LEASE",
+        ...(routed.receipt ? { decision_receipt: routed.receipt } : {}),
       }
       options.state.leases.set(leaseKey, lease)
       return lease

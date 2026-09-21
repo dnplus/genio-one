@@ -269,6 +269,7 @@ export async function botRoutes(app: FastifyInstance, context: BotServerContext)
         principal,
         botId: bot.id,
         runtimeId: "codex",
+        action: "expose",
         accessToken: requestAccessToken(request),
       })
       reply.header("cache-control", "private, no-store").header("vary", "authorization")

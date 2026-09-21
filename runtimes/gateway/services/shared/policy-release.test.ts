@@ -5,7 +5,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
 
-import type { CompiledAuthorizationBundle } from "../../../../packages/protocol/src/authorization"
+import type { CompiledAuthorizationBundle } from "@genioone/protocol/authorization"
 import {
   validateProcessorPolicyBundle,
   type ProcessorPolicyBundle,

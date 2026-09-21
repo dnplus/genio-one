@@ -192,6 +192,9 @@ export const EnforcementChainRevisionSchema = Type.Object({
   one_policy_revision: Type.Integer({ minimum: 1 }),
   chain: CompiledEnforcementChainSchema,
   chain_digest: Type.String({ minLength: 64, maxLength: 64 }),
+  published_by_subject_id: Type.Union([Identifier, Type.Null()]),
+  reviewed_by_subject_id: Type.Union([Identifier, Type.Null()]),
+  rollback_source_one_policy_revision: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
   created_at: Type.Integer({ minimum: 0 }),
   updated_at: Type.Integer({ minimum: 0 }),
 })

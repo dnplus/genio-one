@@ -1,8 +1,8 @@
 FROM node:24-alpine AS build
 
-COPY --from=oven/bun:1.4.0-alpine /usr/local/bin/bun /usr/local/bin/bun
+COPY --from=oven/bun:1.4.2-alpine /usr/local/bin/bun /usr/local/bin/bun
 
-RUN corepack enable && corepack prepare pnpm@10.32.1 --activate
+RUN corepack enable && corepack prepare pnpm@12.4.2 --activate
 
 WORKDIR /workspace
 
@@ -22,7 +22,7 @@ COPY apps/platform/scripts/build-gateway-services.mjs ./scripts/build-gateway-se
 
 RUN bun scripts/build-gateway-services.mjs
 
-FROM oven/bun:1.4.0-alpine
+FROM oven/bun:1.4.2-alpine
 
 RUN addgroup -S -g 65532 genio \
   && adduser -S -D -H -u 65532 -G genio genio

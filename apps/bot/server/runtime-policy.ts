@@ -7,10 +7,15 @@ import {
 } from "../../../runtimes/gateway/services/shared/runtime-report-attestation"
 
 import {
+  defaultRuntimeCapabilityAction,
+} from "@genioone/protocol/runtime-capability-actions"
+
+import {
   RUNTIME_POLICY_ACTIONS,
   RUNTIME_POLICY_CAPABILITY_IDS,
   RUNTIME_POLICY_RUNTIME_ID,
   type RuntimePolicyAction,
+  type RuntimePolicyCapabilityId,
   type RuntimePolicyConstraint,
   type RuntimePolicyDecision,
   type RuntimePolicyReadInput,
@@ -18,6 +23,7 @@ import {
   type RuntimePolicyResolveInput,
   type RuntimePolicyResolver,
   type RuntimePolicySnapshot,
+  runtimePolicyDecisionTarget,
 } from "./runtime-policy-contract"
 
 export class RuntimePolicyUnavailableError extends Error {
@@ -73,10 +79,10 @@ function validAction(value: unknown): value is RuntimePolicyAction {
   return typeof value === "string" && (RUNTIME_POLICY_ACTIONS as readonly string[]).includes(value)
 }
 
-function defaultReadAction(capabilityId: string): RuntimePolicyAction {
-  if (capabilityId === "codex.subscription") return "use"
-  if (capabilityId === "model.invoke") return "invoke"
-  return "expose"
+function defaultReadAction(capabilityId: RuntimePolicyCapabilityId) {
+  const action = defaultRuntimeCapabilityAction(capabilityId)
+  if (!action) throw new RuntimePolicyUnavailableError("RUNTIME_POLICY_CAPABILITY_INVALID")
+  return action
 }
 
 function parseObligations(value: unknown): RuntimePolicyDecision["obligations"] | null {
@@ -355,6 +361,15 @@ export function createRuntimePolicyClient(options: RuntimePolicyClientOptions = 
 }
 
 export function requireRuntimePolicyDecision(decision: RuntimePolicyDecision): RuntimePolicyDecision {
+  let target: ReturnType<typeof runtimePolicyDecisionTarget>
+  try {
+    target = runtimePolicyDecisionTarget(decision)
+  } catch {
+    throw new RuntimePolicyUnavailableError("RUNTIME_POLICY_RESPONSE_INVALID")
+  }
+  if (decision.target !== `runtime:${decision.runtime_id}:${target.capabilityId}`) {
+    throw new RuntimePolicyUnavailableError("RUNTIME_POLICY_RESPONSE_INVALID")
+  }
   const enforceable = withEnforceableRuntimeRequirements(decision)
   if (enforceable.decision === "ALLOW") return enforceable
   throw new RuntimePolicyDeniedError(enforceable)

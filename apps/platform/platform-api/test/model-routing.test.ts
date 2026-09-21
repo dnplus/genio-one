@@ -6,6 +6,7 @@ import type { ConnectionModelMapping, PublicModel } from "../src/capabilities/mo
 import type { PublicModelCatalog } from "../src/capabilities/models/module"
 import { createModelMemoryState } from "../src/capabilities/models/state"
 import { createInMemoryModelRouter } from "../src/capabilities/model-routing/memory"
+import type { ModelRoutingDecisionProvider } from "../src/capabilities/model-routing/decision-provider"
 import { createInMemoryProviderProfileCatalog } from "../src/capabilities/providers/memory"
 
 const tenantId = "tenant-acme"
@@ -64,14 +65,95 @@ function modelCatalog(models: PublicModel[]): PublicModelCatalog {
   }
 }
 
-function router() {
+function router(decisionProvider?: ModelRoutingDecisionProvider) {
   const state = createModelMemoryState()
   const modelRouter = createInMemoryModelRouter({
     state,
     models: modelCatalog([publicModel("model-a"), publicModel("model-b")]),
+    decisionProvider,
+    decisionMinimumConfidence: 0.6,
   })
   return { state, modelRouter }
 }
+
+test("semantic routing creates one sticky model and annotation receipt without widening entitlement", async () => {
+  let calls = 0
+  const { modelRouter } = router({
+    provider_id: "test-system-one",
+    requested_model: "decision-v1",
+    async decide() {
+      calls += 1
+      return {
+        resolved_model: "decision-v1.2",
+        suggested_public_model_id: "model-b",
+        confidence: 0.92,
+        probabilities: { "model-a": 0.08, "model-b": 0.92 },
+        annotations: {
+          task_kind: "REASONING",
+          task_kind_confidence: 0.9,
+          complexity_score: 1.8,
+          complexity_confidence: 0.84,
+          requires_tools_probability: 0.71,
+        },
+        usage: { input_tokens: 200, output_tokens: 20 },
+      }
+    },
+  })
+  const value = {
+    subject_id: "subject-1",
+    client_id: "client-1",
+    public_model_id: "public-chat",
+    session_id: "semantic-session",
+    entitled_public_model_ids: ["model-a", "model-b"],
+    semantic_routing: { task: "Investigate a failed deployment" },
+  }
+  const first = await modelRouter.resolve({ tenantId, value })
+  const reused = await modelRouter.resolve({
+    tenantId,
+    value: { ...value, semantic_routing: { task: "A changed prompt cannot reroute the session" } },
+  })
+  assert.equal(first.selected_public_model_id, "model-b")
+  assert.equal(first.decision_receipt?.provider_id, "test-system-one")
+  assert.equal(first.decision_receipt?.resolved_model, "decision-v1.2")
+  assert.equal(first.decision_receipt?.annotations.task_kind, "REASONING")
+  assert.equal(reused.selected_public_model_id, "model-b")
+  assert.equal(reused.reused, true)
+  assert.deepEqual(reused.decision_receipt, first.decision_receipt)
+  assert.equal(calls, 1)
+})
+
+test("semantic routing requires a configured provider and unambiguous input", async () => {
+  const { modelRouter } = router()
+  const value = {
+    subject_id: "subject-1",
+    client_id: "client-1",
+    public_model_id: "public-chat",
+    session_id: "semantic-session",
+    entitled_public_model_ids: ["model-a", "model-b"],
+    semantic_routing: { task: "Route this task" },
+  }
+  await assert.rejects(
+    modelRouter.resolve({ tenantId, value }),
+    { code: "MODEL_ROUTING_DECISION_UNAVAILABLE" },
+  )
+  await assert.rejects(
+    modelRouter.resolve({
+      tenantId,
+      value: {
+        ...value,
+        classifier_result: { mode: "ORDER" as const, public_model_ids: ["model-b"] },
+      },
+    }),
+    { code: "SEMANTIC_ROUTING_INPUT_CONFLICT" },
+  )
+  await assert.rejects(
+    modelRouter.resolve({
+      tenantId,
+      value: { ...value, requested_public_model_id: "model-a" },
+    }),
+    { code: "SEMANTIC_ROUTING_INPUT_CONFLICT" },
+  )
+})
 
 test("stateless model resolution is deterministic and does not create a lease", async () => {
   const { state, modelRouter } = router()

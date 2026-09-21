@@ -1,4 +1,4 @@
-import { requireRuntimePolicyDraft, runtimePolicyDraftKey, type PolicyDraft } from "./drafts"
+import { requireRuntimePolicyDraft, runtimePolicyDraftKey, policyDraftFromStoredValue } from "./drafts"
 import { Type } from "typebox"
 import * as Value from "typebox/value"
 
@@ -12,6 +12,9 @@ import {
   type RuntimePolicyDefinition,
   type RuntimePolicyRevision,
 } from "./runtime"
+import { validateRuntimePolicyForPublication } from "./runtime-policy-validator"
+import type { GatewayAuthorizationAuditStore } from "../audit-events/module"
+import { policyChangeAuditEvent, policyEnabledAuditEvent, policySystemPublishAuditEvent } from "./lifecycle"
 
 type Row = Record<string, unknown>
 
@@ -100,10 +103,11 @@ async function latest(
   return result.rows[0] ? mapRevision(result.rows[0]) : null
 }
 
-export function createPostgresRuntimePolicyStore(options: { sql: SqlAdapter; now?: () => number }): RuntimePolicyStore {
+export function createPostgresRuntimePolicyStore(options: { sql: SqlAdapter; now?: () => number; audit?: GatewayAuthorizationAuditStore }): RuntimePolicyStore {
   const now = options.now ?? (() => Math.floor(Date.now() / 1_000))
   async function publish(transaction: SqlTransaction, { tenantId, policyId, baseRevision, definition, publishedBy, displayName }: Parameters<RuntimePolicyStore["publish"]>[0]): Promise<RuntimePolicyRevision> {
     if (!Value.Check(RuntimePolicyDefinitionSchema, definition)) throw new PlatformApiError("RUNTIME_POLICY_DEFINITION_INVALID", 422)
+    validateRuntimePolicyForPublication(definition)
     await transaction.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [JSON.stringify([tenantId, policyId])])
     const current = await latest(transaction, tenantId, policyId, true)
     if ((!current && baseRevision !== 0) || (current && current.revision !== baseRevision)) throw new PlatformApiError("POLICY_REVISION_CONFLICT", 409)
@@ -178,27 +182,67 @@ export function createPostgresRuntimePolicyStore(options: { sql: SqlAdapter; now
       return raced
     },
     async publish(input) {
-      return options.sql.transaction((transaction) => publish(transaction, input))
+      return options.sql.transaction(async (transaction) => {
+        const published = await publish(transaction, input)
+        if (options.audit) {
+          if (!options.audit.recordInTransaction) throw new PlatformApiError("POLICY_AUDIT_TRANSACTION_UNAVAILABLE", 500)
+          await options.audit.recordInTransaction({
+            transaction,
+            tenantId: input.tenantId,
+            event: policySystemPublishAuditEvent({
+              tenantId: input.tenantId,
+              policyKey: runtimePolicyDraftKey(input.policyId),
+              publishedRevision: published.revision,
+              content: input.definition,
+              actorSubjectId: input.publishedBy,
+              correlationId: input.correlationId ?? `policy-system-${input.policyId}-${published.revision}`,
+              occurredAt: now(),
+            }),
+          })
+        }
+        return published
+      })
     },
-    async publishDraft({ tenantId, policyId, expectedVersion, publishedBy }) {
+    async publishDraft({ tenantId, policyId, expectedVersion, expectedContentDigest, publishedBy, correlationId }) {
       return options.sql.transaction(async (transaction) => {
         const key = runtimePolicyDraftKey(policyId)
-        const result = await transaction.query<{ value: PolicyDraft }>(
+        const result = await transaction.query<{ value: unknown }>(
           "select value from genio_one_policy_drafts where tenant_id = $1 and policy_key = $2 for update",
           [tenantId, key],
         )
-        const definition = requireRuntimePolicyDraft(result.rows[0]?.value ?? null, expectedVersion)
+        const draft = policyDraftFromStoredValue(result.rows[0]?.value ?? null)
+        if (!draft) throw new PlatformApiError("POLICY_DRAFT_CONFLICT", 409)
+        const definition = requireRuntimePolicyDraft(draft, expectedVersion, expectedContentDigest)
         const published = await publish(transaction, { tenantId, policyId, publishedBy, ...definition })
+        if (options.audit) {
+          if (!options.audit.recordInTransaction) throw new PlatformApiError("POLICY_AUDIT_TRANSACTION_UNAVAILABLE", 500)
+          await options.audit.recordInTransaction({
+            transaction,
+            tenantId,
+            event: policyChangeAuditEvent({
+              tenantId,
+              policyKey: runtimePolicyDraftKey(policyId),
+              draft,
+              action: "PUBLISHED",
+              actorSubjectId: publishedBy,
+              correlationId: correlationId ?? `policy-publish-${policyId}-${expectedVersion}`,
+              occurredAt: now(),
+              publishedRevision: published.revision,
+            }),
+          })
+        }
         const removed = await transaction.query(
-          "update genio_one_policy_drafts set value = 'null'::jsonb where tenant_id = $1 and policy_key = $2 and (value->>'version')::int = $3 returning policy_key",
-          [tenantId, key, expectedVersion],
+          "update genio_one_policy_drafts set value = 'null'::jsonb where tenant_id = $1 and policy_key = $2 and (value->>'version')::int = $3 and value->>'content_digest' = $4 and value->>'lifecycle' = 'REVIEWED' returning policy_key",
+          [tenantId, key, expectedVersion, expectedContentDigest],
         )
         if (removed.rowCount !== 1) throw new PlatformApiError("POLICY_DRAFT_CONFLICT", 409)
         return published
       })
     },
-    async setEnabled({ tenantId, policyId, expectedRevision, enabled, publishedBy }) {
+    async setEnabled({ tenantId, policyId, expectedRevision, enabled, publishedBy, correlationId }) {
       return options.sql.transaction(async (transaction) => {
+        const audit = options.audit
+        if (!audit?.recordInTransaction) throw new PlatformApiError("POLICY_AUDIT_UNAVAILABLE", 503)
         await transaction.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [JSON.stringify([tenantId, policyId])])
         const current = await latest(transaction, tenantId, policyId, true)
         if (!current || current.revision !== expectedRevision) throw new PlatformApiError("POLICY_REVISION_CONFLICT", 409)
@@ -211,7 +255,28 @@ export function createPostgresRuntimePolicyStore(options: { sql: SqlAdapter; now
           [tenantId, policyId, current.revision + 1, current.display_name, current.provenance, enabled, JSON.stringify(current.scope), JSON.stringify(current.rules), publishedBy, at],
         )
         if (!result.rows[0]) throw new PlatformApiError("RUNTIME_POLICY_PUBLISH_FAILED", 500)
-        return mapRevision(result.rows[0])
+        const next = mapRevision(result.rows[0])
+        await audit.recordInTransaction({
+          transaction,
+          tenantId,
+          event: policyEnabledAuditEvent({
+            tenantId,
+            policyKey: runtimePolicyDraftKey(policyId),
+            previousRevision: current.revision,
+            publishedRevision: next.revision,
+            enabled,
+            content: {
+              display_name: next.display_name,
+              enabled: next.enabled,
+              scope: next.scope,
+              rules: next.rules,
+            },
+            actorSubjectId: publishedBy,
+            correlationId,
+            occurredAt: at,
+          }),
+        })
+        return next
       })
     },
   }

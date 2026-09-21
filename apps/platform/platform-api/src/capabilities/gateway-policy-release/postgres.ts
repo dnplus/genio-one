@@ -542,21 +542,36 @@ async function saveWithTransaction(
     ],
   )
 
-  if (inserted.rowCount === 1) {
-    for (const projection of plan.manifest.gateway_projections) {
-      await transaction.query(
-        `insert into genio_one_gateway_policy_release_projections
-           (tenant_id, release_id, publication_id, projection_id,
-            projection_revision, projection_digest)
-         values ($1, $2, $3, $4, $5, $6)`,
-        [
+  if (inserted.rowCount === 1 && plan.manifest.gateway_projections.length > 0) {
+    const projections = plan.manifest.gateway_projections
+    const batchSize = 1000
+    for (let i = 0; i < projections.length; i += batchSize) {
+      const batch = projections.slice(i, i + batchSize)
+      const valuePlaceholders: string[] = []
+      const params: unknown[] = []
+      let paramIndex = 1
+
+      for (const projection of batch) {
+        valuePlaceholders.push(
+          `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5})`,
+        )
+        params.push(
           plan.target.tenant_id,
           plan.release_id,
           projection.publication_id,
           projection.projection_id,
           projection.revision,
           projection.digest,
-        ],
+        )
+        paramIndex += 6
+      }
+
+      await transaction.query(
+        `insert into genio_one_gateway_policy_release_projections
+           (tenant_id, release_id, publication_id, projection_id,
+            projection_revision, projection_digest)
+         values ${valuePlaceholders.join(", ")}`,
+        params,
       )
     }
   }

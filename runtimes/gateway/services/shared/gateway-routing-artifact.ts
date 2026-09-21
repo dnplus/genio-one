@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 
 import { Type, type Static, type TProperties } from "typebox"
 import { Check } from "typebox/value"
+import { canonicalBytes, compareUtf8 } from "@genioone/protocol/canonical"
 
 /**
  * Runtime-neutral, immutable routing input. The aggregate release wraps this
@@ -213,26 +214,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value)
 }
 
-function compareUtf8(left: string, right: string): number {
-  return Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"))
-}
-
-function stableValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(stableValue)
-  if (isRecord(value)) {
-    return Object.fromEntries(
-      Object.keys(value)
-        .filter((key) => value[key] !== undefined)
-        .sort(compareUtf8)
-        .map((key) => [key, stableValue(value[key])]),
-    )
-  }
-  return value
-}
-
-function canonicalGatewayRoutingArtifactBytes(value: unknown): Uint8Array {
-  return new TextEncoder().encode(JSON.stringify(stableValue(value)))
-}
+const canonicalGatewayRoutingArtifactBytes = canonicalBytes
 
 export function gatewayRoutingCandidateSetDigest(
   candidates: readonly GatewayRoutingPublicModelCandidate[],

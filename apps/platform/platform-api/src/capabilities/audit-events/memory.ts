@@ -1,12 +1,22 @@
 import type { GatewayAuthorizationAuditStore } from "./module"
 import type { RuntimePolicyAuditEvent } from "../one-policy/runtime"
+import { canonicalJson } from "@genioone/protocol/canonical"
+import { PlatformApiError } from "../errors"
 
 export function createInMemoryGatewayAuthorizationAuditStore(): GatewayAuthorizationAuditStore {
   const events = new Map<string, Awaited<ReturnType<GatewayAuthorizationAuditStore["record"]>>>()
   return {
     async record({ tenantId, event }) {
       const value = { ...structuredClone(event), tenant_id: tenantId }
-      events.set(`${tenantId}\0${event.audit_event_id}`, value)
+      const key = `${tenantId}\0${event.audit_event_id}`
+      const existing = events.get(key)
+      if (existing) {
+        if (canonicalJson(existing) !== canonicalJson(value)) {
+          throw new PlatformApiError("AUDIT_EVENT_CONFLICT", 409)
+        }
+        return structuredClone(existing)
+      }
+      events.set(key, value)
       return structuredClone(value)
     },
     async query(input) {

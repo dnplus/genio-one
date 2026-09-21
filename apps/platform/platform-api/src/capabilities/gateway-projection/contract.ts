@@ -20,7 +20,7 @@ import type { ProviderCredentialProfileRevision } from "../provider-credentials/
 import {
   Ed25519SignatureSchema,
   type Ed25519Signature,
-} from "../../../../../../packages/protocol/src/ed25519-signature"
+} from "@genioone/protocol/ed25519-signature"
 
 const Identifier = Type.String({ minLength: 1, maxLength: 256 })
 const KubernetesName = Type.String({ minLength: 1, maxLength: 253 })

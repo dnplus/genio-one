@@ -9,8 +9,8 @@ import {
 import {
   verifyCompactEdDsaJws,
   type VerificationKeyRing,
-} from "../../../../packages/protocol/src/compact-jws"
-import type { GatewayReleaseReference } from "../../../../packages/protocol/src/runtime-command"
+} from "@genioone/protocol/compact-jws"
+import type { GatewayReleaseReference } from "@genioone/protocol/runtime-command"
 import type { GatewayRoutingScope } from "../shared/gateway-routing-artifact"
 
 export type ProcessorPolicyStoreOptions = PolicyReleaseLoaderOptions

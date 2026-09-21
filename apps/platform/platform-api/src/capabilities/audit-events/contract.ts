@@ -1,5 +1,6 @@
 import { Type, type Static } from "typebox"
 import { RuntimePolicyAuditEventSchema, type RuntimePolicyAuditEvent } from "../one-policy/runtime"
+import { AccessGroupAuditEventSchema, type AccessGroupAuditEvent } from "../access-groups/audit"
 
 const Identifier = Type.String({ minLength: 1, maxLength: 256 })
 const NullableIdentifier = Type.Union([Identifier, Type.Null()])
@@ -95,9 +96,40 @@ export const GatewayAuthorizationAuditEventSchema = Type.Intersect([
   Type.Object({ tenant_id: Identifier }),
 ])
 
+export const PolicyChangeAuditEventSchema = Type.Object({
+  tenant_id: Identifier,
+  audit_event_id: Identifier,
+  correlation_id: Identifier,
+  kind: Type.Literal("POLICY_CHANGE"),
+  outcome: Type.Literal("SUCCESS"),
+  subject: EvidenceSchema,
+  actor_subject: EvidenceSchema,
+  policy_key: Type.String({ minLength: 1, maxLength: 4_096 }),
+  action: Type.Union([
+    Type.Literal("DRAFT_SAVED"),
+    Type.Literal("VALIDATED"),
+    Type.Literal("REVIEWED"),
+    Type.Literal("PUBLISHED"),
+    Type.Literal("DISCARDED"),
+    Type.Literal("SETTINGS_UPDATED"),
+    Type.Literal("SYSTEM_PUBLISHED"),
+    Type.Literal("ENABLED"),
+    Type.Literal("DISABLED"),
+  ]),
+  policy_draft_version: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+  base_revision: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
+  published_revision: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+  lifecycle: Type.Union([Type.Literal("DRAFT"), Type.Literal("VALIDATED"), Type.Literal("REVIEWED"), Type.Null()]),
+  content_digest: Type.String({ pattern: "^[a-f0-9]{64}$" }),
+  enabled: Type.Optional(Type.Boolean()),
+  occurred_at: Type.Integer({ minimum: 0 }),
+}, { additionalProperties: false })
+
 export const AuthorizationAuditEventSchema = Type.Union([
   GatewayAuthorizationAuditEventSchema,
   RuntimePolicyAuditEventSchema,
+  PolicyChangeAuditEventSchema,
+  AccessGroupAuditEventSchema,
 ])
 
 export const GatewayAuthorizationAuditPathSchema = Type.Object({
@@ -141,6 +173,8 @@ export const GatewayAuthorizationAuditQueryResponseSchema = Type.Object({
 
 export type GatewayAuthorizationAuditIngest = Static<typeof GatewayAuthorizationAuditIngestSchema>
 export type GatewayAuthorizationAuditEvent = Static<typeof GatewayAuthorizationAuditEventSchema>
+export type PolicyChangeAuditEvent = Static<typeof PolicyChangeAuditEventSchema>
+export type { AccessGroupAuditEvent }
 export type AuthorizationAuditEvent = Static<typeof AuthorizationAuditEventSchema>
 export type GatewayAuthorizationAuditQueryResponse = Static<typeof GatewayAuthorizationAuditQueryResponseSchema>
 export type { RuntimePolicyAuditEvent }

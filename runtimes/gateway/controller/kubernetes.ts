@@ -6,7 +6,7 @@ import { dirname, join } from "node:path"
 
 import { stringify } from "yaml"
 
-import type { GatewayComponentObservation } from "../../../packages/protocol/src/gateway-release"
+import type { GatewayComponentObservation } from "@genioone/protocol/gateway-release"
 import { POLICY_RELEASE_FILES } from "../services/shared/policy-release"
 import type { HttpFetch } from "../services/shared/http-fetch"
 import { mergeGatewayNativeResources } from "./native-resources"

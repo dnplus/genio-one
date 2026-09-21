@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
 import { CODEX_CORE_CAPABILITY_DEFS, CODEX_CORE_KINDS } from "./codex-runtime-catalog"
+import { RUNTIME_CAPABILITY_IDS } from "@genioone/protocol/runtime-capability-actions"
 import {
   DEFAULT_RUNTIME_EXPOSE_POLICY,
   assertHumanPrimaryCopy,
@@ -34,6 +35,13 @@ describe("Epic C bot capability surface", () => {
     expect(browser?.statusLabel).toBe("無法使用")
     expect(browser?.ctaLabel).toBe("無法使用")
     expect(browser?.status).toBe("unavailable")
+  })
+
+  test("runtime surface covers the shared capability registry", () => {
+    const ids = ["codex.subscription", ...CODEX_CORE_CAPABILITY_DEFS.map((definition) => definition.id)]
+    expect(ids).toEqual([...RUNTIME_CAPABILITY_IDS])
+    expect(ids).toContain("mcp.invoke")
+    expect(ids).toContain("remote_hands.use")
   })
 
   test("default policy matches A-1 draft allow/deny", () => {

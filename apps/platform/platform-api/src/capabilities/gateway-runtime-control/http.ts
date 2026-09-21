@@ -18,7 +18,7 @@ import {
   GatewayRuntimeCommandSchema,
   GatewayRuntimeReportSchema,
   parseGatewayRuntimeReport,
-} from "../../../../../../packages/protocol/src/gateway-release"
+} from "@genioone/protocol/gateway-release"
 import {
   GatewayAggregateObservedStateRecordSchema,
   GatewayAggregateReportHistoryRecordSchema,

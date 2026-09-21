@@ -5,6 +5,7 @@ import {
   isModelCandidateEffect,
 } from "../shared/model-candidate-effect"
 import type { DataClassificationReceipt } from "../shared/data-classification"
+import { compareUtf8 } from "@genioone/protocol/canonical"
 
 const PROCESSOR_POLICY_SCHEMA_VERSION = 1 as const
 export const PROCESSOR_POLICY_BUNDLE_SCHEMA_VERSION = 1 as const
@@ -160,10 +161,6 @@ export function validateProcessorPolicy(input: unknown): ProcessorPolicy {
 
 function scopeKey(scope: ProcessorPolicyScope): string {
   return `${scope.resource_id}\u0000${scope.capability_id}`
-}
-
-function compareUtf8(left: string, right: string): number {
-  return Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"))
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

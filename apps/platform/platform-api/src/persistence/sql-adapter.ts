@@ -1,4 +1,4 @@
-import { observeOperation } from "../../../../../packages/telemetry/src/operation-observability"
+import { observeOperation } from "@genioone/telemetry/operation-observability"
 import postgres, { type Options, type Sql, type TransactionSql } from "postgres"
 
 /**

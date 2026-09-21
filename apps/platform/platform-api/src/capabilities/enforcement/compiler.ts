@@ -2,6 +2,8 @@ import { createHash } from "node:crypto"
 
 import { Check } from "typebox/value"
 
+import { canonicalJson } from "@genioone/protocol/canonical"
+
 import { PlatformApiError } from "../errors"
 import { CompiledEnforcementChainSchema } from "./contract"
 import type {
@@ -14,6 +16,7 @@ import type {
   ProcessStep,
 } from "./contract"
 import type { EnforcementChainCompiler, EnforcementChainScope } from "./module"
+import { isEnforcementConnectionReady } from "./connection-eligibility"
 
 const NATIVE_JWT_CONFIG_KEYS = [
   "schema_version",
@@ -483,16 +486,7 @@ async function assertScope(
     ) {
       throw new PlatformApiError("ENFORCEMENT_CONNECTION_MISMATCH", 422)
     }
-    const certificateStatus = connection.certificate?.status
-    const certificateUsable = certificateStatus === undefined ||
-      ["NOT_CONFIGURED", "VALID", "EXPIRING"].includes(certificateStatus)
-    if (
-      connection.status !== "READY" ||
-      connection.lifecycle !== "ENABLED" ||
-      connection.verification_state !== "VERIFIED" ||
-      connection.health_state !== "HEALTHY" ||
-      !certificateUsable
-    ) {
+    if (!isEnforcementConnectionReady(connection)) {
       throw new PlatformApiError(
         "ENFORCEMENT_CONNECTION_NOT_READY",
         409,
@@ -509,17 +503,9 @@ export function createEnforcementChainCompiler(
     async listEligibleConnectionIds({ tenantId, resourceId }): Promise<string[]> {
       const connections = await scope.connections.list({ tenantId, resourceId })
       const readyConnectionIds = connections
-        .filter((connection) => {
-          const certificateStatus = connection.certificate?.status
-          const certificateUsable = certificateStatus === undefined ||
-            ["NOT_CONFIGURED", "VALID", "EXPIRING"].includes(certificateStatus)
-          return connection.status === "READY" &&
-            connection.lifecycle === "ENABLED" &&
-            connection.verification_state === "VERIFIED" &&
-            connection.health_state === "HEALTHY" &&
-            certificateUsable
-        })
+        .filter(isEnforcementConnectionReady)
         .map((connection) => connection.connection_id)
+        .sort()
       if (readyConnectionIds.length === 0) {
         throw new PlatformApiError(
           "ENFORCEMENT_CONNECTION_CANDIDATES_REQUIRED",
@@ -534,42 +520,45 @@ export function createEnforcementChainCompiler(
       tenantId: string
       value: CompileEnforcementChainInput
     }): Promise<CompiledEnforcementChain> {
-      const value = input.value
-      // Resolve ownership before validating or emitting the chain.  Resource
-      // and Connection registries are tenant-scoped, and the returned records
-      // are checked as defense in depth against an adapter that accidentally
-      // returns an out-of-scope row.
       await assertScope(scope, input)
-      const ids = new Set<string>()
-      for (const step of value.steps) {
-        if (ids.has(step.step_id)) throw new PlatformApiError("DUPLICATE_ENFORCEMENT_STEP", 422)
-        ids.add(step.step_id)
-      }
-      // The array is the sole sequence authority. Keeping a second numeric
-      // order on every step makes drag/drop edits ambiguous and can disagree
-      // with the serialized chain.
-      const steps = [...value.steps]
-      assertDraftDataProtectionConfigs(steps)
-      assertDependencies(steps)
-      assertChainSemantics(steps)
-
-      const filterOrders = externalFilterOrders(steps)
-      return {
-        chain_id: chainId(
-          input.tenantId,
-          value.resource_id,
-          value.capability_id,
-          value.one_policy_revision,
-        ),
-        tenant_id: input.tenantId,
-        resource_id: value.resource_id,
-        capability_id: value.capability_id,
-        eligible_connection_ids: [...value.eligible_connection_ids],
-        one_policy_revision: value.one_policy_revision,
-        steps,
-        request_filter_order: filterOrders.request,
-        response_filter_order: filterOrders.response,
-      }
+      return compileValidatedEnforcementChain(input)
     },
   }
+}
+
+export function compileValidatedEnforcementChain(input: {
+  tenantId: string
+  value: CompileEnforcementChainInput
+}): CompiledEnforcementChain {
+  const value = input.value
+  const ids = new Set<string>()
+  for (const step of value.steps) {
+    if (ids.has(step.step_id)) throw new PlatformApiError("DUPLICATE_ENFORCEMENT_STEP", 422)
+    ids.add(step.step_id)
+  }
+  const steps = [...value.steps]
+  assertDraftDataProtectionConfigs(steps)
+  assertDependencies(steps)
+  assertChainSemantics(steps)
+  const filterOrders = externalFilterOrders(steps)
+  return {
+    chain_id: chainId(
+      input.tenantId,
+      value.resource_id,
+      value.capability_id,
+      value.one_policy_revision,
+    ),
+    tenant_id: input.tenantId,
+    resource_id: value.resource_id,
+    capability_id: value.capability_id,
+    eligible_connection_ids: [...value.eligible_connection_ids],
+    one_policy_revision: value.one_policy_revision,
+    steps,
+    request_filter_order: filterOrders.request,
+    response_filter_order: filterOrders.response,
+  }
+}
+
+export function canonicalEnforcementChainDigest(chain: CompiledEnforcementChain): string {
+  return createHash("sha256").update(canonicalJson(chain)).digest("hex")
 }

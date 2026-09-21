@@ -1,6 +1,47 @@
-import { createBrowserObserver } from "../../../../../packages/telemetry/src/browser-observability"
-import type { ConnectorConfiguration, ConnectorKind, DemoProjectStatus } from "@/domain/contracts"
+import type { ConnectorConfiguration, ConnectorKind, DemoProjectStatus, IdentitySession } from "@/domain/contracts"
+import { isDecisionAuditEvent } from "@/domain/audit-events"
+import {
+  getGetRuntimePolicyDraftUrl,
+  getGetV1TenantsTenantIdOnePolicyFirstPartyBotDraftUrl,
+  getGetV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftUrl,
+  getPolicyAuthoringSettings as getPolicyAuthoringSettingsRequest,
+  getRuntimePolicy as getRuntimePolicyRequest,
+  getRuntimePolicyDraft as getRuntimePolicyDraftRequest,
+  getRuntimePolicyRevision as getRuntimePolicyRevisionRequest,
+  getV1TenantsTenantIdOnePolicyDrafts as getPolicyDraftsRequest,
+  getV1TenantsTenantIdOnePolicyFirstPartyBotRevisions as getBotPolicyRevisionsRequest,
+  listAccessGroups as listAccessGroupsRequest,
+  listRuntimePolicies as listRuntimePoliciesRequest,
+  listRuntimePolicyRevisions as listRuntimePolicyRevisionsRequest,
+  discardRuntimePolicyDraft as discardRuntimePolicyDraftRequest,
+  publishRuntimePolicyDraft as publishRuntimePolicyDraftRequest,
+  replaceAccessGroupMembers as replaceAccessGroupMembersRequest,
+  reviewRuntimePolicyDraft as reviewRuntimePolicyDraftRequest,
+  saveAccessGroup as saveAccessGroupRequest,
+  savePolicyAuthoringSettings as savePolicyAuthoringSettingsRequest,
+  saveRuntimePolicyDraft as saveRuntimePolicyDraftRequest,
+  setRuntimePolicyEnabled as setRuntimePolicyEnabledRequest,
+  validateRuntimePolicyDraft as validateRuntimePolicyDraftRequest,
+} from "@/generated/management-api"
+import type {
+  GetPolicyAuthoringSettings200,
+  GetRuntimePolicy200,
+  GetV1TenantsTenantIdOnePolicyFirstPartyBotDraft200,
+  GetV1TenantsTenantIdOnePolicyFirstPartyBotRevisions200Item,
+  PutV1TenantsTenantIdOnePolicyFirstPartyBotDraftBody,
+  DiscardRuntimePolicyDraftBody,
+  PublishRuntimePolicyDraftBody,
+  ReplaceAccessGroupMembersBody,
+  ReviewRuntimePolicyDraftBody,
+  SaveAccessGroupBody,
+  SavePolicyAuthoringSettingsBody,
+  SaveRuntimePolicyDraftBody,
+  SetRuntimePolicyEnabledBody,
+  ValidateRuntimePolicyDraftBody,
+} from "@/generated/management-api"
 import { preservePolicySteps } from "./policy-steps"
+import { ProductApiError, managementToken, requestJson } from "./management-api-transport"
+export { ProductApiError }
 import type { BotPolicyRules } from "@/domain/contracts"
 import type {
   AiUsageDashboard,
@@ -39,6 +80,7 @@ import type {
   ImportOpenApiResourceInput,
   InvocationAccountingRecord,
   LocalAccessGroupInventory,
+  LocalAccessGroup,
   McpDiscoveryOperation,
   McpOAuthAuthorization,
   McpOAuthBinding,
@@ -74,63 +116,9 @@ import { isMockMode } from "@/lib/runtime-mode"
 import { createMockOrganization, updateMockOrganization } from "@/mocks/organization-store"
 import { createMockAiUsageDashboard, createMockGatewayMetrics, createMockTraces } from "@/mocks/observability"
 import { mockApiGatewayTransactionDetail } from "@/mocks/overview"
-import { loadBrowserOidcConfiguration, refreshBrowserSession } from "@/lib/browser-oidc"
+import { loadBrowserOidcConfiguration } from "@/lib/browser-oidc"
 
 const defaultGatewayMetricsWindowSeconds = 7 * 24 * 60 * 60
-
-export class ProductApiError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-    readonly violations: ReadonlyArray<{
-      code: string
-      message: string
-      field?: string
-    }> = [],
-  ) {
-    super(message)
-  }
-}
-
-function managementToken() {
-  return sessionStorage.getItem("genioone.management_token")?.trim() ?? ""
-}
-
-const browserObserver = createBrowserObserver({ service: "genio-one-platform-web", token: managementToken, endpoint: tenantId => tenantId ? `/v1/tenants/${encodeURIComponent(tenantId)}/browser-telemetry` : "" })
-
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = managementToken()
-  const send = (accessToken: string) => {
-    const headers = new Headers(init?.headers)
-    headers.set("accept", "application/json")
-    if (init?.body) headers.set("content-type", "application/json")
-    if (accessToken) headers.set("authorization", `Bearer ${accessToken}`)
-    return browserObserver.fetch(path, { ...init, headers })
-  }
-
-  let response = await send(token)
-  if (response.status === 401 && token) {
-    const refreshedToken = await refreshBrowserSession("/management", true)
-    if (refreshedToken) response = await send(refreshedToken)
-  }
-  const body = await response.json().catch(() => null)
-  if (!response.ok) {
-    const message =
-      body && typeof body === "object" && "code" in body
-        ? String(body.code)
-        : "PRODUCT_API_REQUEST_FAILED"
-    const violations = body && typeof body === "object" && "violations" in body &&
-      Array.isArray(body.violations)
-      ? body.violations.filter((item: unknown): item is { code: string; message: string; field?: string } =>
-          typeof item === "object" && item !== null &&
-          "code" in item && typeof item.code === "string" &&
-          "message" in item && typeof item.message === "string",
-        )
-      : []
-    throw new ProductApiError(message, response.status, violations)
-  }
-  return body as T
-}
 
 export function loadDemoProject(tenantId: string) {
   return requestJson<DemoProjectStatus>(`/v1/tenants/${encodeURIComponent(tenantId)}/demo-project`)
@@ -150,7 +138,7 @@ export function skipDemoProject(tenantId: string) {
 }
 
 function normalizeAuditEvent(value: AuditEvent): AuditEvent {
-  if (value.kind !== "RUNTIME_POLICY_DECISION") return value
+  if (!isDecisionAuditEvent(value) || value.kind !== "RUNTIME_POLICY_DECISION") return value
   return {
     ...value,
     target_subject_id: value.target_subject_id ?? null,
@@ -212,11 +200,40 @@ function notInstalled<T>(value: T) {
   return Promise.resolve({ value, failure: null as OverviewFailure | null })
 }
 
+function accessGroupInventory(tenantId: string, groups: LocalAccessGroup[]): LocalAccessGroupInventory {
+  return {
+    tenant_id: tenantId,
+    groups,
+    memberships: groups.flatMap((group) => group.membership_sources.flatMap((source) => source.subject_ids.map((subjectId) => ({
+      tenant_id: group.tenant_id,
+      access_group_id: group.access_group_id,
+      subject_id: subjectId,
+      source: source.kind,
+      source_reference: source.source_id,
+      source_revision: source.revision,
+      assigned_by: { subject_id: source.updated_by, evidence_level: "VERIFIED" as const },
+      assigned_at: source.updated_at,
+    })))),
+  }
+}
+
+export async function listAccessGroups(tenantId: string): Promise<LocalAccessGroup[]> {
+  return (await listAccessGroupsRequest(tenantId)).data
+}
+
+export async function saveAccessGroup(tenantId: string, accessGroupId: string, value: SaveAccessGroupBody): Promise<LocalAccessGroup> {
+  return (await saveAccessGroupRequest(tenantId, accessGroupId, value)).data
+}
+
+export async function replaceAccessGroupMembers(tenantId: string, accessGroupId: string, value: ReplaceAccessGroupMembersBody): Promise<LocalAccessGroup> {
+  return (await replaceAccessGroupMembersRequest(tenantId, accessGroupId, value)).data
+}
+
 export function loadResources(tenantId: string) {
   return requestJson<ResourceRegistration[]>(`/v1/tenants/${encodeURIComponent(tenantId)}/resources`)
 }
 
-export async function loadOverview(tenantId: string): Promise<OverviewSnapshot> {
+export async function loadOverview(tenantId: string, role?: IdentitySession["role"]): Promise<OverviewSnapshot> {
   const tenant = encodeURIComponent(tenantId)
   const base = `/v1/tenants/${tenant}`
   const analyticsTo = Math.floor(Date.now() / 1000)
@@ -276,7 +293,9 @@ export async function loadOverview(tenantId: string): Promise<OverviewSnapshot> 
       settled("Agent Delegations", requestJson<AgentDelegation[]>(`${base}/agent-delegations`), []),
       settled("Execution Grant Requests", requestJson<ExecutionGrantRequest[]>(`${base}/execution-grant-requests`), []),
       notInstalled([] as AgentExtensionVersion[]),
-      notInstalled({ tenant_id: tenantId, groups: [], memberships: [] } as LocalAccessGroupInventory),
+      role === "TENANT_ADMINISTRATOR"
+        ? settled("Access groups", listAccessGroups(tenantId), [] as LocalAccessGroup[])
+        : Promise.resolve({ value: [] as LocalAccessGroup[], failure: null as OverviewFailure | null }),
       settled(
         "Organizations",
         requestJson<Organization[]>(`${base}/organizations`),
@@ -327,6 +346,7 @@ export async function loadOverview(tenantId: string): Promise<OverviewSnapshot> 
         supported_obligations: string[]
       }>>(`${base}/resources/${encodeURIComponent(resource.resource_id)}/connections`)
       return values.map((connection): ConnectionSummary => ({
+        status: connection.status,
         connection_id: connection.connection_id,
         display_name: connection.display_name,
         kind: resource.kind,
@@ -372,6 +392,7 @@ export async function loadOverview(tenantId: string): Promise<OverviewSnapshot> 
     gatewayMetrics: gatewayMetrics.value,
     auditEvents: auditEvents.value.map(normalizeAuditEvent),
     endpointSecurityEvents: [...endpointEnrolledEvents.value, ...endpointRevokedEvents.value, ...endpointSessionRejectedEvents.value]
+      .filter(isDecisionAuditEvent)
       .filter((event, index, events) => events.findIndex((candidate) => candidate.audit_event_id === event.audit_event_id) === index)
       .sort((left, right) => right.occurred_at - left.occurred_at)
       .slice(0, 50),
@@ -386,7 +407,7 @@ export async function loadOverview(tenantId: string): Promise<OverviewSnapshot> 
     agentDelegations: agentDelegations.value,
     executionGrantRequests: executionGrantRequests.value,
     agentExtensions: agentExtensions.value,
-    accessGroups: accessGroups.value,
+    accessGroups: accessGroupInventory(tenantId, accessGroups.value),
     organizations: organizations.value,
     applications: applications.value,
     runtimes: runtimes.value,
@@ -2309,64 +2330,16 @@ export function testResourceConnection(tenantId: string, resourceId: string, con
 
 export type { BotPolicyRules } from "@/domain/contracts"
 
-export type RuntimePolicyAction = "expose" | "invoke" | "load_extension" | "use" | "execute"
-export type RuntimePolicyEffect = "ALLOW" | "DENY"
-export type RuntimePolicyRole = "TENANT_ADMINISTRATOR" | "ORGANIZATION_ADMINISTRATOR" | "USER"
-
-export interface RuntimePolicyScope {
-  subject_ids: string[]
-  organization_ids: string[]
-  roles: RuntimePolicyRole[]
-  client_ids: string[]
-  bot_ids: string[]
-  runtime_ids: string[]
-}
-
-export type RuntimePolicyConstraint =
-  | { kind: "path_allowlist"; parameters: { paths: string[] } }
-  | { kind: "command_allowlist"; parameters: { commands: string[] } }
-  | { kind: "command_deny"; parameters: { commands: string[] } }
-  | { kind: "network"; parameters: { allow: string[]; deny: string[] } }
-  | { kind: "approval_required"; parameters: { enabled: boolean } }
-  | { kind: "read_only"; parameters: { enabled: boolean } }
-  | { kind: "cwd"; parameters: { path: string } }
-  | { kind: "template"; parameters: { template: string } }
-  | { kind: "ttl"; parameters: { ttl_seconds: number } }
-
-export type RuntimePolicyObligation =
-  | { kind: "audit"; enforcement_point_id?: string; parameters: { event_kind?: "expose" | "invoke" | "denied" } }
-  | { kind: "require_approval"; enforcement_point_id?: string; parameters: { reason?: string } }
-  | { kind: "redact"; enforcement_point_id?: string; parameters: { fields: string[] } }
-  | { kind: "usage"; enforcement_point_id?: string; parameters: { meter: string } }
-
-export interface RuntimePolicyRule {
-  group_id?: string
-  individual_settings?: boolean
-  rule_id: string
-  target: { runtime_id: string; capability_id: string }
-  actions: RuntimePolicyAction[]
-  effect: RuntimePolicyEffect
-  constraints: RuntimePolicyConstraint[]
-  obligations: RuntimePolicyObligation[]
-}
-
-export interface RuntimePolicyDefinition {
-  display_name?: string
-  scope: RuntimePolicyScope
-  rules: RuntimePolicyRule[]
-}
-
-export interface RuntimePolicyRevision extends RuntimePolicyDefinition {
-  tenant_id: string
-  policy_id: string
-  revision: number
-  display_name: string
-  provenance: "SYSTEM_SEED" | "TENANT_AUTHORED"
-  enabled: boolean
-  published_by_subject_id: string | null
-  created_at: number
-  published_at: number
-}
+type RuntimePolicyDraftContent = Extract<SaveRuntimePolicyDraftBody["content"], { kind: "RUNTIME_CAPABILITY" }>
+export type RuntimePolicyDefinition = RuntimePolicyDraftContent["definition"]
+export type RuntimePolicyScope = RuntimePolicyDefinition["scope"]
+export type RuntimePolicyRule = RuntimePolicyDefinition["rules"][number]
+export type RuntimePolicyAction = RuntimePolicyRule["actions"][number]
+export type RuntimePolicyEffect = RuntimePolicyRule["effect"]
+export type RuntimePolicyRole = RuntimePolicyScope["roles"][number]
+export type RuntimePolicyConstraint = RuntimePolicyRule["constraints"][number]
+export type RuntimePolicyObligation = RuntimePolicyRule["obligations"][number]
+export type RuntimePolicyRevision = GetRuntimePolicy200
 
 export interface RuntimePolicyDecision {
   tenant_id: string
@@ -2397,23 +2370,50 @@ export interface ResourcePolicyDefinition {
   eligible_connection_ids?: string[]
   steps: EnforcementChainRevisionView["chain"]["steps"]
 }
-export interface PolicyDraftView {
-  policy_key: string
-  version: number
-  base_revision: number
-  updated_at: number
+export type PolicyAuthoringSettings = GetPolicyAuthoringSettings200
+type PolicyDraftResponse = Exclude<GetV1TenantsTenantIdOnePolicyFirstPartyBotDraft200, null>
+export type PolicyDraftView = Omit<PolicyDraftResponse, "content"> & {
   content: { kind: "BOT_ACCESS"; definition: BotPolicyRules } | { kind: "RESOURCE_CAPABILITY"; definition: ResourcePolicyDefinition } | { kind: "RUNTIME_CAPABILITY"; definition: RuntimePolicyDraftDefinition }
 }
+export type PolicyDraftEvidence = Exclude<PolicyDraftResponse["validation"], null>
+export type PolicyDraftSaveInput = Pick<PutV1TenantsTenantIdOnePolicyFirstPartyBotDraftBody, "expected_version" | "base_revision"> & { content: PolicyDraftView["content"] }
+
+function projectPolicyDraft(value: PolicyDraftResponse): PolicyDraftView {
+  return value as PolicyDraftView
+}
+
+function projectOptionalPolicyDraft(value: PolicyDraftResponse | null): PolicyDraftView | null {
+  return value ? projectPolicyDraft(value) : null
+}
+
 export function policyDraftPath(tenantId: string, target?: { resourceId: string; capabilityId: string }) {
-  const base = `/v1/tenants/${encodeURIComponent(tenantId)}`
-  return target ? `${base}/resources/${encodeURIComponent(target.resourceId)}/capabilities/${encodeURIComponent(target.capabilityId)}/policy-draft` : `${base}/one-policy/first-party-bot/draft`
+  return target
+    ? getGetV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolicyDraftUrl(tenantId, target.resourceId, target.capabilityId)
+    : getGetV1TenantsTenantIdOnePolicyFirstPartyBotDraftUrl(tenantId)
 }
-export function getPolicyDraft(path: string) { return requestJson<PolicyDraftView | null>(path) }
-export function savePolicyDraft(path: string, value: Pick<PolicyDraftView, "base_revision" | "content"> & { expected_version: number }) {
-  return requestJson<PolicyDraftView>(path, { method: "PUT", body: JSON.stringify(value) })
+export async function getPolicyAuthoringSettings(tenantId: string): Promise<PolicyAuthoringSettings> {
+  return (await getPolicyAuthoringSettingsRequest(tenantId)).data
 }
-export function publishPolicyDraft<T>(path: string, version: number) {
-  return requestJson<T>(`${path}/publish`, { method: "POST", body: JSON.stringify({ expected_version: version }) })
+export async function savePolicyAuthoringSettings(tenantId: string, value: SavePolicyAuthoringSettingsBody): Promise<PolicyAuthoringSettings> {
+  return (await savePolicyAuthoringSettingsRequest(tenantId, value)).data
+}
+export async function getPolicyDraft(path: string): Promise<PolicyDraftView | null> {
+  return projectOptionalPolicyDraft(await requestJson<PolicyDraftResponse | null>(path))
+}
+export async function savePolicyDraft(path: string, value: PolicyDraftSaveInput): Promise<PolicyDraftView> {
+  return projectPolicyDraft(await requestJson<PolicyDraftResponse>(path, { method: "PUT", body: JSON.stringify(value) }))
+}
+export function validatePolicyDraft(path: string, version: number, contentDigest: string) {
+  const body: ValidateRuntimePolicyDraftBody = { expected_version: version, expected_content_digest: contentDigest }
+  return requestJson<PolicyDraftResponse>(`${path}/validate`, { method: "POST", body: JSON.stringify(body) }).then(projectPolicyDraft)
+}
+export function reviewPolicyDraft(path: string, version: number, contentDigest: string) {
+  const body: ReviewRuntimePolicyDraftBody = { expected_version: version, expected_content_digest: contentDigest }
+  return requestJson<PolicyDraftResponse>(`${path}/review`, { method: "POST", body: JSON.stringify(body) }).then(projectPolicyDraft)
+}
+export function publishPolicyDraft<T>(path: string, version: number, contentDigest: string) {
+  const body: PublishRuntimePolicyDraftBody = { expected_version: version, expected_content_digest: contentDigest }
+  return requestJson<T>(`${path}/publish`, { method: "POST", body: JSON.stringify(body) })
 }
 export async function buildResourcePolicyDefinition(revision: number, processSteps: readonly EditableEnforcementProcessStep[], inboundSecurity: ApiInboundSecurity | undefined, requireConfirmation: boolean, connectionIds: string[], previous?: EnforcementChainRevisionView | null): Promise<ResourcePolicyDefinition> {
   const generated = await standardEnforcementSteps(processSteps, inboundSecurity, requireConfirmation)
@@ -2424,65 +2424,74 @@ export function validateResourcePolicy(tenantId: string, resourceId: string, cap
   return requestJson<unknown>(`/v1/tenants/${encodeURIComponent(tenantId)}/ai-gateway/enforcement-chain/preview`, { method: "POST", body: JSON.stringify({ ...definition, resource_id: resourceId, capability_id: capabilityId }) })
 }
 
-export interface BotPolicyRevisionView {
-  policy_revision: number
-  rules: BotPolicyRules
-  published_by: string | null
-  published_at: number
-}
-export function listBotPolicyRevisions(tenantId: string) {
-  return requestJson<BotPolicyRevisionView[]>(`/v1/tenants/${encodeURIComponent(tenantId)}/one-policy/first-party-bot/revisions`)
+export type BotPolicyRevisionView = GetV1TenantsTenantIdOnePolicyFirstPartyBotRevisions200Item
+export async function listBotPolicyRevisions(tenantId: string): Promise<BotPolicyRevisionView[]> {
+  return (await getBotPolicyRevisionsRequest(tenantId)).data
 }
 
-export function listPolicyDrafts(tenantId: string) {
-  return requestJson<Array<Omit<PolicyDraftView, "content">>>(`/v1/tenants/${encodeURIComponent(tenantId)}/one-policy/drafts`)
+export async function listPolicyDrafts(tenantId: string): Promise<Array<Omit<PolicyDraftView, "content">>> {
+  return (await getPolicyDraftsRequest(tenantId)).data as Array<Omit<PolicyDraftView, "content">>
 }
 export function discardPolicyDraft(path: string, version: number) {
-  return requestJson<{ discarded: boolean }>(`${path}/discard`, { method: "POST", body: JSON.stringify({ expected_version: version }) })
+  const body: DiscardRuntimePolicyDraftBody = { expected_version: version }
+  return requestJson<{ discarded: boolean }>(`${path}/discard`, { method: "POST", body: JSON.stringify(body) })
 }
 
 export function runtimePolicyPath(tenantId: string, policyId: string) {
   return `/v1/tenants/${encodeURIComponent(tenantId)}/one-policy/runtime-policies/${encodeURIComponent(policyId)}`
 }
 
-export function listRuntimePolicies(tenantId: string) {
-  return requestJson<RuntimePolicyRevision[]>(`/v1/tenants/${encodeURIComponent(tenantId)}/one-policy/runtime-policies`)
+export async function listRuntimePolicies(tenantId: string): Promise<RuntimePolicyRevision[]> {
+  return (await listRuntimePoliciesRequest(tenantId)).data
 }
 
-export function getRuntimePolicy(tenantId: string, policyId: string) {
-  return requestJson<RuntimePolicyRevision>(runtimePolicyPath(tenantId, policyId))
+export async function getRuntimePolicy(tenantId: string, policyId: string): Promise<RuntimePolicyRevision> {
+  return (await getRuntimePolicyRequest(tenantId, policyId)).data
 }
 
-export function setRuntimePolicyEnabled(tenantId: string, policyId: string, expectedRevision: number, enabled: boolean) {
-  return requestJson<RuntimePolicyRevision>(runtimePolicyPath(tenantId, policyId), { method: "PATCH", body: JSON.stringify({ expected_revision: expectedRevision, enabled }) })
+export async function setRuntimePolicyEnabled(tenantId: string, policyId: string, expectedRevision: number, enabled: boolean): Promise<RuntimePolicyRevision> {
+  const body: SetRuntimePolicyEnabledBody = { expected_revision: expectedRevision, enabled }
+  return (await setRuntimePolicyEnabledRequest(tenantId, policyId, body)).data
 }
 
-export function listRuntimePolicyRevisions(tenantId: string, policyId: string) {
-  return requestJson<RuntimePolicyRevision[]>(`${runtimePolicyPath(tenantId, policyId)}/revisions`)
+export async function listRuntimePolicyRevisions(tenantId: string, policyId: string): Promise<RuntimePolicyRevision[]> {
+  return (await listRuntimePolicyRevisionsRequest(tenantId, policyId)).data
 }
 
-export function getRuntimePolicyRevision(tenantId: string, policyId: string, revision: number) {
-  return requestJson<RuntimePolicyRevision | null>(`${runtimePolicyPath(tenantId, policyId)}/revisions/${revision}`)
+export async function getRuntimePolicyRevision(tenantId: string, policyId: string, revision: number): Promise<RuntimePolicyRevision | null> {
+  return (await getRuntimePolicyRevisionRequest(tenantId, policyId, revision)).data
 }
 
 export function runtimePolicyDraftPath(tenantId: string, policyId: string) {
-  return `${runtimePolicyPath(tenantId, policyId)}/draft`
+  return getGetRuntimePolicyDraftUrl(tenantId, policyId)
 }
 
-export function getRuntimePolicyDraft(tenantId: string, policyId: string) {
-  return requestJson<PolicyDraftView | null>(runtimePolicyDraftPath(tenantId, policyId))
+export async function getRuntimePolicyDraft(tenantId: string, policyId: string): Promise<PolicyDraftView | null> {
+  return projectOptionalPolicyDraft((await getRuntimePolicyDraftRequest(tenantId, policyId)).data)
 }
 
-export function saveRuntimePolicyDraft(tenantId: string, policyId: string, value: { expected_version: number; base_revision: number; content: { kind: "RUNTIME_CAPABILITY"; definition: RuntimePolicyDraftDefinition } }) {
-  return requestJson<PolicyDraftView>(runtimePolicyDraftPath(tenantId, policyId), { method: "PUT", body: JSON.stringify(value) })
+export async function saveRuntimePolicyDraft(tenantId: string, policyId: string, value: SaveRuntimePolicyDraftBody): Promise<PolicyDraftView> {
+  return projectPolicyDraft((await saveRuntimePolicyDraftRequest(tenantId, policyId, value)).data)
 }
 
-export function discardRuntimePolicyDraft(tenantId: string, policyId: string, version: number) {
-  return requestJson<{ discarded: boolean }>(`${runtimePolicyDraftPath(tenantId, policyId)}/discard`, { method: "POST", body: JSON.stringify({ expected_version: version }) })
+export async function discardRuntimePolicyDraft(tenantId: string, policyId: string, version: number): Promise<{ discarded: boolean }> {
+  const body: DiscardRuntimePolicyDraftBody = { expected_version: version }
+  return (await discardRuntimePolicyDraftRequest(tenantId, policyId, body)).data
 }
 
-export function publishRuntimePolicyDraft(tenantId: string, policyId: string, version: number) {
-  return requestJson<RuntimePolicyRevision>(`${runtimePolicyDraftPath(tenantId, policyId)}/publish`, { method: "POST", body: JSON.stringify({ expected_version: version }) })
+export async function validateRuntimePolicyDraft(tenantId: string, policyId: string, version: number, contentDigest: string): Promise<PolicyDraftView> {
+  const body: ValidateRuntimePolicyDraftBody = { expected_version: version, expected_content_digest: contentDigest }
+  return projectPolicyDraft((await validateRuntimePolicyDraftRequest(tenantId, policyId, body)).data)
+}
+
+export async function reviewRuntimePolicyDraft(tenantId: string, policyId: string, version: number, contentDigest: string): Promise<PolicyDraftView> {
+  const body: ReviewRuntimePolicyDraftBody = { expected_version: version, expected_content_digest: contentDigest }
+  return projectPolicyDraft((await reviewRuntimePolicyDraftRequest(tenantId, policyId, body)).data)
+}
+
+export async function publishRuntimePolicyDraft(tenantId: string, policyId: string, version: number, contentDigest: string): Promise<RuntimePolicyRevision> {
+  const body: PublishRuntimePolicyDraftBody = { expected_version: version, expected_content_digest: contentDigest }
+  return (await publishRuntimePolicyDraftRequest(tenantId, policyId, body)).data
 }
 
 export interface InstalledConnector {
@@ -2504,6 +2513,7 @@ export interface UserPermissionPreview {
   actor_subject_id: string
   role: string
   organization_ids: string[]
+  access_group_ids: string[]
   runtime_id: string
   client_id: string
   bot_id: string

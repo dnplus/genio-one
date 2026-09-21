@@ -5,9 +5,9 @@ import test from "node:test"
 import { PlatformApiError } from "../src/capabilities/errors"
 import type { CompiledEnforcementChain } from "../src/capabilities/enforcement/contract"
 import {
-  canonicalEnforcementChainDigest,
   createPostgresEnforcementChainRevisionStore,
 } from "../src/capabilities/enforcement/postgres"
+import { canonicalEnforcementChainDigest } from "../src/capabilities/enforcement/compiler"
 import { lockGatewayPolicyRelease } from "../src/capabilities/gateway-policy-release/transaction-lock"
 import { createPostgresSqlAdapter } from "../src/persistence/sql-adapter"
 import type { SqlAdapter, SqlQueryResult, SqlTransaction } from "../src/persistence/sql-adapter"
@@ -221,7 +221,7 @@ test("published enforcement chain saves lock its Gateway before the Resource for
     .map((call, index) => ({ call, index }))
     .filter(({ call }) => call.text.includes("from genio_one_publications"))
   const gatewayLock = sql.calls.findIndex((call) =>
-    call.text.includes("pg_advisory_xact_lock"),
+    call.text.includes("pg_advisory_xact_lock") && call.parameters[0] === "tenant:tenant-acme|gateway:gateway-acme",
   )
   const insert = sql.calls.findIndex((call) =>
     call.text.includes("insert into genio_one_enforcement_chain_revisions"),
@@ -386,6 +386,9 @@ test(
           eligible_connection_ids jsonb not null,
           chain jsonb not null,
           chain_digest text not null,
+          published_by_subject_id text,
+          reviewed_by_subject_id text,
+          rollback_source_one_policy_revision bigint,
           created_at timestamptz not null default now(),
           updated_at timestamptz not null default now(),
           primary key (tenant_id, resource_id, capability_id, one_policy_revision),

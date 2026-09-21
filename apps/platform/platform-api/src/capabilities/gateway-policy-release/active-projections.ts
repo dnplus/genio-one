@@ -7,6 +7,7 @@ import {
   type GatewayProjection,
 } from "../gateway-projection/contract"
 import { lockGatewayPolicyRelease } from "./transaction-lock"
+import { compareUtf8 } from "@genioone/protocol/canonical"
 
 type DatabaseRow = Record<string, unknown>
 
@@ -17,10 +18,6 @@ export interface GatewayActiveProjectionSetSource {
     gatewayId: string
     candidate?: GatewayProjection
   }): Promise<GatewayProjection[]>
-}
-
-function compareUtf8(left: string, right: string): number {
-  return Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"))
 }
 
 function parsePayload(value: unknown): GatewayProjection {

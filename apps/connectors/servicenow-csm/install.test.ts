@@ -6,10 +6,46 @@ const config = { platformOrigin: "https://cp.test", tenantId: "tenant", ownerOrg
 test("standard installer publishes through CP with default Auto Grant and reuses installed resources", async () => {
   let resource: any
   let connection: any
+  let enforcement: any
+  let draft: any
   const mutations: string[] = []
   const api = async <T>(path: string, init?: RequestInit): Promise<T> => {
     const body = init?.body ? JSON.parse(String(init.body)) : undefined
     if (init?.method) mutations.push(path)
+    if (path.endsWith("/enforcement-chain")) {
+      if (!enforcement) throw new Error(`STANDARD_INSTALL_HTTP_404:${path}`)
+      return enforcement as T
+    }
+    if (path.endsWith("/policy-draft")) {
+      if (!init) {
+        if (!draft) throw new Error(`STANDARD_INSTALL_HTTP_404:${path}`)
+        return draft as T
+      }
+      draft = {
+        version: (draft?.version ?? 0) + 1,
+        base_revision: body.base_revision,
+        content_digest: `draft-${(draft?.version ?? 0) + 1}`,
+        lifecycle: "DRAFT",
+        content: body.content,
+      }
+      return draft as T
+    }
+    if (path.endsWith("/policy-draft/validate")) {
+      draft = { ...draft, lifecycle: "VALIDATED" }
+      return draft as T
+    }
+    if (path.endsWith("/policy-draft/review")) {
+      draft = { ...draft, lifecycle: "REVIEWED" }
+      return draft as T
+    }
+    if (path.endsWith("/policy-draft/publish")) {
+      enforcement = {
+        one_policy_revision: draft.content.definition.one_policy_revision,
+        chain: { eligible_connection_ids: [connection.connection_id], steps: draft.content.definition.steps },
+      }
+      draft = undefined
+      return enforcement as T
+    }
     if (path.endsWith("/resources")) {
       if (!init) return (resource ? [resource] : []) as T
       resource = { ...body, resource_id: "resource", lifecycle: "DRAFT" }
@@ -34,6 +70,7 @@ test("standard installer publishes through CP with default Auto Grant and reuses
   expect((await installServiceNow(config, api)).access).toBe("AUTO_GRANT")
   expect(connection.downstream_identity.mode).toBe("USER_OAUTH")
   expect(mutations.some((path) => path.includes("entitlements"))).toBe(false)
+  expect(mutations.filter((path) => path.includes("policy-draft")).map((path) => path.split("/").at(-1))).toEqual(["policy-draft", "validate", "review", "publish"])
   const previous = mutations.length
   expect((await installServiceNow(config, api)).lifecycle).toBe("PUBLISHED")
   expect(mutations.length).toBe(previous)

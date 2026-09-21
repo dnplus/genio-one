@@ -189,6 +189,7 @@ allowBuilds:
   protobufjs: true
   tree-sitter: true
   tree-sitter-json: true
+  workerd: true
 `
 }
 
@@ -218,7 +219,7 @@ function publicRootPackage() {
       build: "pnpm --filter genio-one build && pnpm --filter genio-one-bot build && pnpm --filter @genioone/gateway build",
       verify: "pnpm check && pnpm test && pnpm build",
     },
-    packageManager: "pnpm@10.32.1",
+    packageManager: "pnpm@12.4.2",
   }
 }
 
@@ -250,7 +251,13 @@ GenioOne is a self-hosted platform for managing AI agents, MCP tools, and model 
 
 ## Quickstart
 
-You need macOS or Linux, Docker with Compose, Git, Node.js, pnpm **10.32.1**, and Bun **1.4.0**.
+You need macOS or Linux, Docker with Compose, Git, Node.js, pnpm **12.4.2**, and Bun **1.4.2**.
+
+\`\`\`sh
+curl -fsSL https://genio.sh/install.sh | sh
+\`\`\`
+
+This clones the repository, installs dependencies, and prepares \`.env.local\` files. It does not start services; run \`pnpm dev\` yourself. See \`install.sh --help\` for \`--dir\` and \`--ref\` options, or set up manually:
 
 \`\`\`sh
 git clone https://github.com/dnplus/genio-one.git
@@ -339,7 +346,13 @@ GenioOne 是可自行架設的 AI 代理、MCP 工具與模型存取管理平台
 
 ## 快速開始
 
-準備 macOS 或 Linux、Docker 與 Compose、Git、Node.js、pnpm **10.32.1** 及 Bun **1.4.0**。
+準備 macOS 或 Linux、Docker 與 Compose、Git、Node.js、pnpm **12.4.2** 及 Bun **1.4.2**。
+
+\`\`\`sh
+curl -fsSL https://genio.sh/install.sh | sh
+\`\`\`
+
+這個指令會 clone repo、安裝依賴並準備 \`.env.local\`，不會啟動服務；最後請自行執行 \`pnpm dev\`。可用 \`install.sh --help\` 查看安裝選項，或手動安裝：
 
 \`\`\`sh
 git clone https://github.com/dnplus/genio-one.git

@@ -9,7 +9,7 @@ import { createStaticPrincipalAuthenticator } from "../src/capabilities/tenancy-
 
 test("the first-party One Policy gives the local Tenant Administrator the default Bot route", async () => {
   const modules = createInMemoryPlatformModules()
-  const botAccessPolicy = createDefaultOnePolicy()
+  const botAccessPolicy = createDefaultOnePolicy({ policyAuditSink: modules.auditEvents })
   const app = await createManagementApi({
     modules: { ...modules, botAccessPolicy },
     resourceCatalog: modules.resources,
@@ -79,6 +79,33 @@ test("the first-party One Policy gives the local Tenant Administrator the defaul
     })
     assert.equal(disabled.statusCode, 200)
     assert.equal(disabled.json().enabled, false)
+    assert.equal(disabled.json().policy_revision, 2)
+    const disableAudit = await app.inject({
+      method: "GET",
+      url: "/v1/tenants/tenant-keycloak-local/audit-events?kind=POLICY_CHANGE",
+      headers: { authorization: "Bearer bot-admin" },
+    })
+    assert.equal(disableAudit.statusCode, 200, disableAudit.body)
+    const disabledEvent = disableAudit.json().find((event: { action: string }) => event.action === "DISABLED")
+    assert.deepEqual(disabledEvent && {
+      tenant_id: disabledEvent.tenant_id,
+      policy_key: disabledEvent.policy_key,
+      enabled: disabledEvent.enabled,
+      subject_id: disabledEvent.subject.subject_id,
+      actor_subject_id: disabledEvent.actor_subject.subject_id,
+      base_revision: disabledEvent.base_revision,
+      published_revision: disabledEvent.published_revision,
+      correlation_id: typeof disabledEvent.correlation_id === "string" && disabledEvent.correlation_id.length > 0,
+    }, {
+      tenant_id: "tenant-keycloak-local",
+      policy_key: "one-policy.first-party.bot-default",
+      enabled: false,
+      subject_id: "person-platform-admin",
+      actor_subject_id: "person-platform-admin",
+      base_revision: 1,
+      published_revision: 2,
+      correlation_id: true,
+    })
 
     const deniedWhenDisabled = await app.inject({
       method: "GET",
@@ -105,6 +132,17 @@ test("the first-party One Policy gives the local Tenant Administrator the defaul
     })
     assert.equal(reenabled.statusCode, 200)
     assert.equal(reenabled.json().enabled, true)
+    assert.equal(reenabled.json().policy_revision, 3)
+    const reenabledAudit = await app.inject({
+      method: "GET",
+      url: "/v1/tenants/tenant-keycloak-local/audit-events?kind=POLICY_CHANGE",
+      headers: { authorization: "Bearer bot-admin" },
+    })
+    assert.equal(reenabledAudit.statusCode, 200, reenabledAudit.body)
+    const enabledEvent = reenabledAudit.json().find((event: { action: string }) => event.action === "ENABLED")
+    assert.equal(enabledEvent?.enabled, true)
+    assert.equal(enabledEvent?.base_revision, 2)
+    assert.equal(enabledEvent?.published_revision, 3)
   } finally {
     await app.close()
   }

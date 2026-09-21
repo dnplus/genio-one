@@ -1,5 +1,6 @@
 import { RelationValue } from "@/components/relation-value"
 import { useRecordSelection } from "@/hooks/use-record-selection"
+import { isDecisionAuditEvent } from "@/domain/audit-events"
 import { createColumnHelper } from "@tanstack/react-table"
 import { DatabaseIcon, FilePenLineIcon, GitForkIcon, GlobeIcon, LockKeyholeIcon, PencilIcon, PlusIcon, SendIcon } from "lucide-react"
 import { useMemo, useState } from "react"
@@ -450,7 +451,7 @@ function ResourceDetail({
   const [publicationEditing, setPublicationEditing] = useState(false)
   const [publicModelRevision, setPublicModelRevision] = useState(0)
   const connections = data.connections.filter((connection) => connection.resource_id === resource.resource_id)
-  const activity = data.auditEvents.filter((event) => event.resource_id === resource.resource_id)
+  const activity = data.auditEvents.filter(isDecisionAuditEvent).filter((event) => event.resource_id === resource.resource_id)
   const access = resourceAccessSummary(data, resource.resource_id)
   const {
     canManageDraft,

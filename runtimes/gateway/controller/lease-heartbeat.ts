@@ -20,8 +20,8 @@ export interface LeaseHeartbeat {
  */
 export function startLeaseHeartbeat(options: LeaseHeartbeatOptions): LeaseHeartbeat {
   const intervalMs = options.intervalMs ?? 10_000
-  const schedule = options.schedule ?? setTimeout
-  const cancel = options.cancel ?? clearTimeout
+  const schedule: NonNullable<LeaseHeartbeatOptions["schedule"]> = options.schedule ?? setTimeout
+  const cancel: NonNullable<LeaseHeartbeatOptions["cancel"]> = options.cancel ?? clearTimeout
   const controller = new AbortController()
   let stopped = false
   let timer: ReturnType<typeof setTimeout> | undefined

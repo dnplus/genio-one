@@ -1,9 +1,11 @@
-import { requireBotPolicyDraft, type PolicyDraft, defaultBotRules, type BotRules, type BotPolicyRevision } from "./drafts"
+import { requireBotPolicyDraft, policyDraftFromStoredValue, defaultBotRules, type BotRules, type BotPolicyRevision } from "./drafts"
 import { PlatformApiError } from "../errors"
 import type { SqlAdapter, SqlTransaction } from "../../persistence/sql-adapter"
 import type { OnePolicyBotSeed } from "./contract"
 import { POLICY_ID, POLICY_REVISION } from "./default"
 import type { OnePolicySeedStore } from "./module"
+import type { GatewayAuthorizationAuditStore } from "../audit-events/module"
+import { policyChangeAuditEvent, policyEnabledAuditEvent, policySystemPublishAuditEvent } from "./lifecycle"
 
 type Row = Record<string, unknown>
 
@@ -40,6 +42,7 @@ const COLUMNS = `tenant_id, policy_id, policy_revision, seed, enabled, rules, cr
 export function createPostgresOnePolicySeedStore(options: {
   sql: SqlAdapter
   now?: () => number
+  audit?: GatewayAuthorizationAuditStore
 }): OnePolicySeedStore {
   const now = options.now ?? (() => Math.floor(Date.now() / 1_000))
   async function publish(transaction: SqlTransaction, { tenantId, baseRevision, rules, publishedBy }: Parameters<OnePolicySeedStore["publish"]>[0]) {
@@ -76,30 +79,122 @@ export function createPostgresOnePolicySeedStore(options: {
       return result.rows.map((row): BotPolicyRevision => ({ policy_revision: Number(row.policy_revision), rules: row.rules as BotRules, published_by: row.published_by ? text(row, "published_by") : null, published_at: Number(row.published_at) }))
     },
     async publish(input) {
-      return options.sql.transaction((transaction) => publish(transaction, input))
-    },
-    async publishDraft({ tenantId, expectedVersion, publishedBy }) {
       return options.sql.transaction(async (transaction) => {
-        const result = await transaction.query<{ value: PolicyDraft }>("select value from genio_one_policy_drafts where tenant_id = $1 and policy_key = $2 for update", [tenantId, POLICY_ID])
-        const definition = requireBotPolicyDraft(result.rows[0]?.value ?? null, expectedVersion)
+        const published = await publish(transaction, input)
+        if (options.audit) {
+          if (!options.audit.recordInTransaction) throw new PlatformApiError("POLICY_AUDIT_TRANSACTION_UNAVAILABLE", 500)
+          await options.audit.recordInTransaction({
+            transaction,
+            tenantId: input.tenantId,
+            event: policySystemPublishAuditEvent({
+              tenantId: input.tenantId,
+              policyKey: POLICY_ID,
+              publishedRevision: published.policy_revision,
+              content: input.rules,
+              actorSubjectId: input.publishedBy,
+              correlationId: input.correlationId ?? `policy-system-${POLICY_ID}-${published.policy_revision}`,
+              occurredAt: now(),
+            }),
+          })
+        }
+        return published
+      })
+    },
+    async publishDraft({ tenantId, expectedVersion, expectedContentDigest, publishedBy, correlationId }) {
+      return options.sql.transaction(async (transaction) => {
+        const result = await transaction.query<{ value: unknown }>("select value from genio_one_policy_drafts where tenant_id = $1 and policy_key = $2 for update", [tenantId, POLICY_ID])
+        const draft = policyDraftFromStoredValue(result.rows[0]?.value ?? null)
+        if (!draft) throw new PlatformApiError("POLICY_DRAFT_CONFLICT", 409)
+        const definition = requireBotPolicyDraft(draft, expectedVersion, expectedContentDigest)
         const published = await publish(transaction, { tenantId, publishedBy, ...definition })
-        const removed = await transaction.query("update genio_one_policy_drafts set value = 'null'::jsonb where tenant_id = $1 and policy_key = $2 and (value->>'version')::int = $3 returning policy_key", [tenantId, POLICY_ID, expectedVersion])
+        if (options.audit) {
+          if (!options.audit.recordInTransaction) throw new PlatformApiError("POLICY_AUDIT_TRANSACTION_UNAVAILABLE", 500)
+          await options.audit.recordInTransaction({
+            transaction,
+            tenantId,
+            event: policyChangeAuditEvent({
+              tenantId,
+              policyKey: POLICY_ID,
+              draft,
+              action: "PUBLISHED",
+              actorSubjectId: publishedBy,
+              correlationId: correlationId ?? `policy-publish-${POLICY_ID}-${expectedVersion}`,
+              occurredAt: now(),
+              publishedRevision: published.policy_revision,
+            }),
+          })
+        }
+        const removed = await transaction.query("update genio_one_policy_drafts set value = 'null'::jsonb where tenant_id = $1 and policy_key = $2 and (value->>'version')::int = $3 and value->>'content_digest' = $4 and value->>'lifecycle' = 'REVIEWED' returning policy_key", [tenantId, POLICY_ID, expectedVersion, expectedContentDigest])
         if (removed.rowCount !== 1) throw new PlatformApiError("POLICY_DRAFT_CONFLICT", 409)
         return published
       })
     },
-    async setEnabled({ tenantId, enabled }) {
-      const at = now()
-      const result = await options.sql.query<Row>(
-        `insert into genio_one_first_party_policy_seeds
-           (tenant_id, policy_id, policy_revision, seed, enabled, created_at, updated_at)
-         values ($1, $2, $3, true, $4, to_timestamp($5), to_timestamp($5))
-         on conflict (tenant_id, policy_id) do update
-           set enabled = excluded.enabled, updated_at = excluded.updated_at
-         returning ${COLUMNS}`,
-        [tenantId, POLICY_ID, POLICY_REVISION, enabled, at],
-      )
-      return mapSeed(result.rows[0]!)
+    async setEnabled({ tenantId, enabled, publishedBy, correlationId }) {
+      return options.sql.transaction(async (transaction) => {
+        const audit = options.audit
+        if (!audit?.recordInTransaction) throw new PlatformApiError("POLICY_AUDIT_UNAVAILABLE", 503)
+        await transaction.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [JSON.stringify([tenantId, POLICY_ID])])
+        const initialAt = now()
+        await transaction.query(
+          `insert into genio_one_first_party_policy_seeds
+             (tenant_id, policy_id, policy_revision, seed, enabled, created_at, updated_at)
+           values ($1, $2, $3, true, true, to_timestamp($4), to_timestamp($4))
+           on conflict (tenant_id, policy_id) do nothing`,
+          [tenantId, POLICY_ID, POLICY_REVISION, initialAt],
+        )
+        const currentResult = await transaction.query<Row>(
+          `select ${COLUMNS} from genio_one_first_party_policy_seeds
+            where tenant_id = $1 and policy_id = $2
+            for update`,
+          [tenantId, POLICY_ID],
+        )
+        if (!currentResult.rows[0]) throw new PlatformApiError("FIRST_PARTY_POLICY_SEED_NOT_FOUND", 500)
+        const current = mapSeed(currentResult.rows[0])
+        if (current.policy_revision === POLICY_REVISION) {
+          await transaction.query(
+            `insert into genio_one_bot_policy_revisions
+               (tenant_id, policy_id, policy_revision, rules, published_by, published_at)
+             values ($1, $2, $3, $4::text::jsonb, null, $5)
+             on conflict do nothing`,
+            [tenantId, POLICY_ID, POLICY_REVISION, JSON.stringify(current.rules), current.created_at],
+          )
+        }
+        const at = now()
+        const result = await transaction.query<Row>(
+          `update genio_one_first_party_policy_seeds
+              set policy_revision = policy_revision + 1,
+                  enabled = $3,
+                  updated_at = to_timestamp($4)
+            where tenant_id = $1 and policy_id = $2 and policy_revision = $5
+          returning ${COLUMNS}`,
+          [tenantId, POLICY_ID, enabled, at, current.policy_revision],
+        )
+        if (!result.rows[0]) throw new PlatformApiError("POLICY_REVISION_CONFLICT", 409)
+        const next = mapSeed(result.rows[0])
+        const history = await transaction.query(
+          `insert into genio_one_bot_policy_revisions
+             (tenant_id, policy_id, policy_revision, rules, published_by, published_at)
+           values ($1, $2, $3, $4::text::jsonb, $5, $6)`,
+          [tenantId, POLICY_ID, next.policy_revision, JSON.stringify(next.rules), publishedBy, at],
+        )
+        if (history.rowCount !== 1) throw new PlatformApiError("POLICY_REVISION_CONFLICT", 409)
+        await audit.recordInTransaction({
+          transaction,
+          tenantId,
+          event: policyEnabledAuditEvent({
+            tenantId,
+            policyKey: POLICY_ID,
+            previousRevision: current.policy_revision,
+            publishedRevision: next.policy_revision,
+            enabled,
+            content: { enabled: next.enabled, rules: next.rules },
+            actorSubjectId: publishedBy,
+            correlationId,
+            occurredAt: at,
+          }),
+        })
+        return next
+      })
     },
   }
 }

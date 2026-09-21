@@ -12,6 +12,7 @@ import { createDurableEd25519Signer } from "./capabilities/gateway-projection/si
 import type { BootstrapSubjectInput } from "./capabilities/identity/contract"
 import { createInMemoryPlatformModules } from "./capabilities/platform-modules"
 import { createPlatformModuleGraph } from "./capabilities/platform-modules-live"
+import { typeSafeModelRoutingFromEnvironment } from "./capabilities/model-routing/typesafe-decision-provider"
 import {
   createEnvironmentPrincipalAuthenticator,
   oidcSubjectAliasesFromEnvironment,
@@ -417,7 +418,14 @@ async function createMemoryDevApi(environment: NodeJS.ProcessEnv, logger: boolea
   if (environment.NODE_ENV === "production") {
     throw new Error("memory-dev mode is forbidden when NODE_ENV=production")
   }
-  const modules = createInMemoryPlatformModules(runtimeReportAttestationOptionsFromEnvironment(environment))
+  const semanticRouting = typeSafeModelRoutingFromEnvironment(environment)
+  const modules = createInMemoryPlatformModules({
+    ...runtimeReportAttestationOptionsFromEnvironment(environment),
+    ...(semanticRouting ? {
+      modelRoutingDecisionProvider: semanticRouting.provider,
+      modelRoutingDecisionMinimumConfidence: semanticRouting.minimumConfidence,
+    } : {}),
+  })
   return createManagementApi({
     logger,
     modules,
@@ -536,6 +544,7 @@ export async function createConfiguredManagementApi(
       adminPassword: requiredEnvironment(environment, "GENIO_ONE_KEYCLOAK_ADMIN_PASSWORD"),
       identityProviderId: environment.GENIO_ONE_KEYCLOAK_IDENTITY_PROVIDER_ID ?? "keycloak-local",
     })
+    const semanticRouting = typeSafeModelRoutingFromEnvironment(environment)
     const modules = createPlatformModuleGraph({
       sql,
       valkey: {
@@ -564,6 +573,10 @@ export async function createConfiguredManagementApi(
         "GENIO_ONE_GATEWAY_RELEASE_TTL_SECONDS",
         3_600,
       ),
+      ...(semanticRouting ? {
+        modelRoutingDecisionProvider: semanticRouting.provider,
+        modelRoutingDecisionMinimumConfidence: semanticRouting.minimumConfidence,
+      } : {}),
       mcpOAuthEncryptionKey: encryptionKeyEnvironment(
         environment,
         "GENIO_ONE_MCP_OAUTH_ENCRYPTION_KEY",

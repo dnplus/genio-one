@@ -3,7 +3,7 @@ import { dirname } from "node:path"
 
 import { verifyAuthorizationBundle } from "../services/authorizer/signed-bundle"
 import { advanceAuthorityFloor, parseAuthorityFloor, type AuthorityFloor } from "../services/shared/authority-floor"
-import type { VerificationKeyRing } from "../../../packages/protocol/src/compact-jws"
+import type { VerificationKeyRing } from "@genioone/protocol/compact-jws"
 import type { GatewayRuntimeAuthorityFloorStore } from "./runtime"
 
 export function createGatewayRuntimeFileAuthorityFloor(path: string): GatewayRuntimeAuthorityFloorStore {

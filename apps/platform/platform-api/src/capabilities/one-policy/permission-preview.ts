@@ -8,8 +8,9 @@ import type { GatewayAuthorizationAuditStore } from "../audit-events/module"
 import { OnePolicyBotDecisionSchema } from "./contract"
 import type { OnePolicy } from "./module"
 import { PlatformApiError } from "../errors"
+import type { AccessGroupDirectory } from "../access-groups/module"
 import { RuntimePolicyDecisionSchema, PERSONAL_BOT_RESOURCE_ID, RUNTIME_POLICY_CAPABILITY_IDS, runtimePolicyAuditEvent } from "./runtime"
-import { capabilityActions } from "../../../../../../packages/protocol/src/runtime-capability-actions"
+import { capabilityActions } from "@genioone/protocol/runtime-capability-actions"
 
 const Identifier = Type.String({ minLength: 1, maxLength: 256 })
 const CapabilitySchema = Type.Object({
@@ -24,6 +25,7 @@ const CapabilitySchema = Type.Object({
 
 export const permissionPreviewHttp: FastifyPluginAsync<{
   policy: OnePolicy
+  accessGroups: Pick<AccessGroupDirectory, "groupsForSubject">
   identity: IdentityDirectory
   organizations: OrganizationDirectory
   access: AccessGovernanceStore
@@ -41,6 +43,7 @@ export const permissionPreviewHttp: FastifyPluginAsync<{
         actor_subject_id: Identifier,
         role: Type.String(),
         organization_ids: Type.Array(Identifier),
+        access_group_ids: Type.Array(Identifier),
         runtime_id: Identifier,
         client_id: Identifier,
         bot_id: Identifier,
@@ -70,10 +73,11 @@ export const permissionPreviewHttp: FastifyPluginAsync<{
       role: authorization.tenant_administrator ? "TENANT_ADMINISTRATOR" as const : membership.administrator_organization_ids.length ? "ORGANIZATION_ADMINISTRATOR" as const : "USER" as const,
       organization_ids: authorization.tenant_administrator ? [] : membership.organization_ids,
     }
-    const [catalog, policies, botAccess] = await Promise.all([
+    const [catalog, policies, botAccess, accessGroups] = await Promise.all([
       options.access.catalog({ tenantId, actor: { subjectId, clientId: principal.client_id, role: principal.role, organizationIds: principal.organization_ids } }),
       options.policy.listRuntimePolicies(tenantId),
       options.policy.resolveBotAccess({ tenantId, principal, capabilityId: "personal_bot.use" }),
+      options.accessGroups.groupsForSubject({ tenantId, subjectId }),
     ])
     const targets = new Map<string, Set<ReturnType<typeof capabilityActions>[number]>>()
     for (const capabilityId of RUNTIME_POLICY_CAPABILITY_IDS) targets.set(capabilityId, new Set(capabilityActions(capabilityId)))
@@ -103,6 +107,7 @@ export const permissionPreviewHttp: FastifyPluginAsync<{
     return {
       subject_id: subjectId, subject_display_name: subject.profile.display_name ?? subject.profile.email ?? subjectId,
       actor_subject_id: admin.subject_id, role: principal.role, organization_ids: principal.organization_ids,
+      access_group_ids: accessGroups.map((group) => group.access_group_id),
       runtime_id: request.body.runtime_id, client_id: principal.client_id, bot_id: request.body.bot_id,
       evaluated_at: Math.floor(Date.now() / 1000),
       capabilities: catalog.capabilities.map((value) => ({

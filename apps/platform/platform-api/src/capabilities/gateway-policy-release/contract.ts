@@ -1,6 +1,6 @@
-import type { CompiledAuthorizationBundle } from "../../../../../../packages/protocol/src/authorization"
+import type { CompiledAuthorizationBundle } from "@genioone/protocol/authorization"
 import type { ProcessorPolicyBundle } from "../../../../../../runtimes/gateway/services/processor/contract"
-import type { VerificationKeyRing } from "../../../../../../packages/protocol/src/compact-jws"
+import type { VerificationKeyRing } from "@genioone/protocol/compact-jws"
 import type {
   PolicyReleaseGatewayConfiguration,
   PolicyReleaseManifest,

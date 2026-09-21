@@ -1,13 +1,4 @@
-function stable(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`
-  if (value && typeof value === "object") {
-    return `{${Object.entries(value as Record<string, unknown>)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, item]) => `${JSON.stringify(key)}:${stable(item)}`)
-      .join(",")}}`
-  }
-  return JSON.stringify(value)
-}
+import { canonicalJson } from "@genioone/protocol/canonical"
 
 function identity(resource: Record<string, any>): string {
   const apiVersion = resource.apiVersion
@@ -62,7 +53,7 @@ function mergeCompatible(
   if (left === undefined) return structuredClone(right)
   if (right === undefined) return structuredClone(left)
   if (Array.isArray(left) || Array.isArray(right)) {
-    if (stable(left) !== stable(right)) throw mergeConflict(resource)
+    if (canonicalJson(left) !== canonicalJson(right)) throw mergeConflict(resource)
     return structuredClone(left)
   }
   if (
@@ -83,7 +74,7 @@ function mergeCompatible(
     }
     return merged
   }
-  if (stable(left) !== stable(right)) throw mergeConflict(resource)
+  if (canonicalJson(left) !== canonicalJson(right)) throw mergeConflict(resource)
   return structuredClone(left)
 }
 
@@ -104,7 +95,7 @@ function mergeFilterOrder(
       if (typeof name !== "string" || !name) throw mergeConflict(resource)
       const value = structuredClone(entry) as Record<string, unknown>
       const existing = byName.get(name)
-      if (existing && stable(existing) !== stable(value)) throw mergeConflict(resource)
+      if (existing && canonicalJson(existing) !== canonicalJson(value)) throw mergeConflict(resource)
       byName.set(name, value)
     }
   }
@@ -119,8 +110,8 @@ function mergeMetrics(resources: readonly Record<string, any>[]): Record<string,
     .map((resource) => resource.spec?.telemetry?.metrics)
     .filter((value): value is Record<string, any> => value !== undefined)
   if (values.length === 0) return undefined
-  const canonical = stable(values[0])
-  if (values.some((value) => stable(value) !== canonical)) {
+  const canonical = canonicalJson(values[0])
+  if (values.some((value) => canonicalJson(value) !== canonical)) {
     throw new Error(`GATEWAY_NATIVE_RESOURCE_CONFLICT:${displayIdentity(resources[0]!)}`)
   }
   return structuredClone(values[0])
@@ -136,8 +127,8 @@ function mergeTracing(resources: readonly Record<string, any>[]): Record<string,
     delete clone.customTags
     return clone
   }
-  const canonical = stable(withoutTags(values[0]!))
-  if (values.some((value) => stable(withoutTags(value)) !== canonical)) {
+  const canonical = canonicalJson(withoutTags(values[0]!))
+  if (values.some((value) => canonicalJson(withoutTags(value)) !== canonical)) {
     throw new Error(`GATEWAY_NATIVE_RESOURCE_CONFLICT:${displayIdentity(resources[0]!)}`)
   }
   const merged = structuredClone(values[0]!)
@@ -145,7 +136,7 @@ function mergeTracing(resources: readonly Record<string, any>[]): Record<string,
   for (const value of values) {
     for (const [name, tag] of Object.entries(value.customTags ?? {})) {
       const previous = customTags[name]
-      if (previous !== undefined && stable(previous) !== stable(tag)) {
+      if (previous !== undefined && canonicalJson(previous) !== canonicalJson(tag)) {
         throw new Error(`GATEWAY_NATIVE_RESOURCE_CONFLICT:${displayIdentity(resources[0]!)}`)
       }
       customTags[name] = structuredClone(tag)
@@ -191,7 +182,7 @@ function mergeAccessLogSettings(
       const options = structuredClone(setting)
       delete options.format
       delete options.sinks
-      const key = stable(options)
+      const key = canonicalJson(options)
       const current = byOptions.get(key) ?? {
         options,
         sinks: new Map<string, unknown>(),
@@ -275,15 +266,15 @@ function mergeGlobalContract(resources: readonly Record<string, any>[]): Record<
   const revisions = resources.map(globalContractRevision)
   const highest = Math.max(...revisions)
   if (highest === 0) {
-    const canonical = stable(resources[0])
-    if (resources.some((resource) => stable(resource) !== canonical)) {
+    const canonical = canonicalJson(resources[0])
+    if (resources.some((resource) => canonicalJson(resource) !== canonical)) {
       throw mergeConflict(resources[0]!)
     }
     return resources[0]!
   }
   const current = resources.filter((_, index) => revisions[index] === highest)
-  const canonical = stable(current[0])
-  if (current.some((resource) => stable(resource) !== canonical)) {
+  const canonical = canonicalJson(current[0])
+  if (current.some((resource) => canonicalJson(resource) !== canonical)) {
     throw mergeConflict(current[0]!)
   }
   return current[0]!
@@ -306,8 +297,8 @@ export function mergeGatewayNativeResources(
     if (duplicates.length === 1) return duplicates[0]!
     if (duplicates[0]!.kind === "EnvoyProxy") return mergeEnvoyProxy(duplicates)
     if (duplicates[0]!.kind === "GatewayConfig" || duplicates[0]!.kind === "ClientTrafficPolicy") return mergeGlobalContract(duplicates)
-    const canonical = stable(duplicates[0])
-    if (duplicates.some((resource) => stable(resource) !== canonical)) {
+    const canonical = canonicalJson(duplicates[0])
+    if (duplicates.some((resource) => canonicalJson(resource) !== canonical)) {
       throw new Error(`GATEWAY_NATIVE_RESOURCE_CONFLICT:${displayIdentity(duplicates[0]!)}`)
     }
     return duplicates[0]!

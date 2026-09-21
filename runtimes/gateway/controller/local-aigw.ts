@@ -1,11 +1,17 @@
 import { spawn, type ChildProcess } from "node:child_process"
 import { createHash } from "node:crypto"
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
-import { createConnection } from "node:net"
 import { join } from "node:path"
 
 import { mergeGatewayNativeResources } from "./native-resources"
 import { withGatewayDetailCapture } from "./detail-capture"
+import {
+  stopChild,
+  stopProcessTree,
+  waitForEnvoyRunReadiness,
+  waitForHealth,
+  waitForListener,
+} from "./process-lifecycle"
 import {
   aigwEphemeralRunId,
   aigwRuntimeEnvironment,
@@ -14,15 +20,15 @@ import {
   removeAigwEphemeralRuntimeDirectory,
   type AigwEphemeralRuntimeDirectory,
 } from "./aigw-runtime-cache"
-import { operationalError, writeOperationalEvent } from "../../../packages/telemetry/src/operational-log"
+import { operationalError, writeOperationalEvent } from "@genioone/telemetry/operational-log"
 
 import { stringify } from "yaml"
 import { Check } from "typebox/value"
 
-import type { GatewayComponentObservation } from "../../../packages/protocol/src/gateway-release"
+import type { GatewayComponentObservation } from "@genioone/protocol/gateway-release"
 import type { GatewayActivityIngest } from "../../../apps/platform/platform-api/src/capabilities/activities/contract"
 import { POLICY_RELEASE_FILES } from "../services/shared/policy-release"
-import { gatewayDetailActivityReference } from "../../../packages/telemetry/src/otlp-detail-capture"
+import { gatewayDetailActivityReference } from "@genioone/telemetry/otlp-detail-capture"
 import {
   DataClassificationReceiptSchema,
   type DataClassificationReceipt,
@@ -186,141 +192,6 @@ function standaloneApiRouteName(name: string): string {
   return `ai-eg-mcp-api-${createHash("sha256").update(name).digest("hex").slice(0, 32)}`
 }
 
-const PROCESS_TREE_STOP_TIMEOUT_MS = 5_000
-
-function processHasExited(child: Pick<ChildProcess, "exitCode" | "signalCode">): boolean {
-  return child.exitCode !== null || child.signalCode !== null
-}
-
-function terminateProcessTree(
-  child: ChildProcess | undefined,
-  signal: NodeJS.Signals = "SIGTERM",
-): void {
-  if (!child) return
-  if (process.platform === "win32" || child.pid === undefined) {
-    if (!processHasExited(child)) child.kill(signal)
-    return
-  }
-  try {
-    process.kill(-child.pid, signal)
-  } catch {
-    if (!processHasExited(child)) child.kill(signal)
-  }
-}
-
-function processTreeHasExited(child: ChildProcess): boolean {
-  if (process.platform === "win32" || child.pid === undefined) return processHasExited(child)
-  try {
-    process.kill(-child.pid, 0)
-    return false
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "ESRCH"
-  }
-}
-
-async function waitForProcessTreeExit(child: ChildProcess, timeoutMs: number): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs
-  while (Date.now() < deadline) {
-    if (processTreeHasExited(child)) return true
-    await new Promise((resolve) => setTimeout(resolve, Math.min(50, deadline - Date.now())))
-  }
-  return processTreeHasExited(child)
-}
-
-export async function stopProcessTree(
-  child: ChildProcess | undefined,
-  timeoutMs = PROCESS_TREE_STOP_TIMEOUT_MS,
-): Promise<void> {
-  if (!child) return
-  terminateProcessTree(child, "SIGTERM")
-  if (await waitForProcessTreeExit(child, timeoutMs)) return
-  terminateProcessTree(child, "SIGKILL")
-  if (await waitForProcessTreeExit(child, timeoutMs)) return
-  throw new Error("aigw process group did not exit after SIGKILL")
-}
-
-async function waitForHealth(
-  origin: string,
-  process: ChildProcess,
-  timeoutMs: number,
-): Promise<void> {
-  const deadline = Date.now() + timeoutMs
-  while (Date.now() < deadline) {
-    if (process.exitCode !== null) {
-      throw new Error(`aigw run exited before readiness with code ${process.exitCode}`)
-    }
-    try {
-      const response = await fetch(`${origin}/health`, {
-        signal: AbortSignal.timeout(1_000),
-      })
-      if (response.ok) return
-    } catch {
-      // The admin listener is expected to refuse connections while starting.
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250))
-  }
-  throw new Error("aigw run did not become ready before the deadline")
-}
-
-function envoyAdminOrigin(address: string): string | undefined {
-  const match = /^127\.0\.0\.1:(\d{1,5})\s*$/.exec(address)
-  if (!match) return undefined
-  const port = Number(match[1])
-  if (!Number.isInteger(port) || port < 1 || port > 65_535) return undefined
-  return `http://127.0.0.1:${port}`
-}
-
-export async function waitForEnvoyRunReadiness(
-  runtimeDirectory: string,
-  runId: string,
-  process: Pick<ChildProcess, "exitCode">,
-  timeoutMs: number,
-): Promise<void> {
-  const deadline = Date.now() + timeoutMs
-  const adminAddressPath = join(runtimeDirectory, runId, "admin-address.txt")
-  while (Date.now() < deadline) {
-    if (process.exitCode !== null) {
-      throw new Error(`aigw run exited before Envoy readiness with code ${process.exitCode}`)
-    }
-    try {
-      const origin = envoyAdminOrigin(await readFile(adminAddressPath, "utf8"))
-      if (origin) {
-        const response = await fetch(`${origin}/ready`, {
-          signal: AbortSignal.timeout(1_000),
-        })
-        if (response.ok) return
-      }
-    } catch {}
-    await new Promise((resolve) => setTimeout(resolve, 250))
-  }
-  throw new Error("aigw Envoy run did not become ready before the deadline")
-}
-
-async function waitForListener(
-  port: number,
-  process: ChildProcess,
-  timeoutMs: number,
-): Promise<void> {
-  const deadline = Date.now() + timeoutMs
-  while (Date.now() < deadline) {
-    if (process.exitCode !== null) {
-      throw new Error(`aigw run exited before Envoy readiness with code ${process.exitCode}`)
-    }
-    const connected = await new Promise<boolean>((resolve) => {
-      const socket = createConnection({ host: "127.0.0.1", port })
-      const finish = (value: boolean) => {
-        socket.destroy()
-        resolve(value)
-      }
-      socket.setTimeout(1_000, () => finish(false))
-      socket.once("connect", () => finish(true))
-      socket.once("error", () => finish(false))
-    })
-    if (connected) return
-    await new Promise((resolve) => setTimeout(resolve, 250))
-  }
-  throw new Error("Envoy listener did not become ready before the deadline")
-}
 
 function localGatewayInfrastructure(input: {
   gatewayId: string
@@ -737,20 +608,18 @@ export function createLocalAigwApplier(options: LocalAigwOptions): GatewayReleas
   }>()
   let stopActivityReader: (() => void) | undefined
 
-  async function stopActiveProcessTree(): Promise<void> {
-    if (activeCleanup) {
-      await activeCleanup
-      return
-    }
-    const child = active
-    if (!child) return
-    const cleanup = stopProcessTree(child)
-    activeCleanup = cleanup
-    try {
-      await cleanup
-    } finally {
+  function reapProcessTree(child: ChildProcess): Promise<void> {
+    if (activeCleanup) return activeCleanup
+    const cleanup = stopProcessTree(child).finally(() => {
       if (activeCleanup === cleanup) activeCleanup = undefined
-    }
+    })
+    activeCleanup = cleanup
+    return cleanup
+  }
+
+  function stopActiveProcessTree(): Promise<void> {
+    if (activeCleanup) return activeCleanup
+    return active ? reapProcessTree(active) : Promise.resolve()
   }
 
   function activityForRelease(
@@ -1347,21 +1216,11 @@ export function createLocalAigwApplier(options: LocalAigwOptions): GatewayReleas
       child.once("exit", () => {
         if (active === child) {
           active = undefined
-          if (!activeCleanup) {
-            const cleanup = stopProcessTree(child)
-            activeCleanup = cleanup
-            void cleanup.then(
-              () => {
-                if (activeCleanup === cleanup) activeCleanup = undefined
-              },
-              (error) => {
-                writeOperationalEvent("gateway-runtime", "WARN", "genio.one.gateway-runtime.aigw-process-group-cleanup-failed", {
-                  ...operationalError(error),
-                })
-                if (activeCleanup === cleanup) activeCleanup = undefined
-              },
-            )
-          }
+          void reapProcessTree(child).catch((error) => {
+            writeOperationalEvent("gateway-runtime", "WARN", "genio.one.gateway-runtime.aigw-process-group-cleanup-failed", {
+              ...operationalError(error),
+            })
+          })
         }
         if (activeRuntimeDirectory === runtimeDirectory) activeRuntimeDirectory = undefined
         void removeRuntimeDirectory()
@@ -1393,12 +1252,12 @@ export function createLocalAigwApplier(options: LocalAigwOptions): GatewayReleas
       } catch (error) {
         try {
           await stopProcessTree(child)
+          await removeRuntimeDirectory()
         } catch (cleanupError) {
           writeOperationalEvent("gateway-runtime", "WARN", "genio.one.gateway-runtime.aigw-process-group-cleanup-failed", {
             ...operationalError(cleanupError),
           })
         }
-        await removeRuntimeDirectory()
         throw error
       }
       active = child
@@ -1424,14 +1283,11 @@ export function createLocalAigwApplier(options: LocalAigwOptions): GatewayReleas
         await removeAigwEphemeralRuntimeDirectory(activeRuntimeDirectory).catch(() => undefined)
         activeRuntimeDirectory = undefined
       }
-      if (authorizer && authorizer.exitCode === null) {
-        authorizer.kill("SIGTERM")
-        await new Promise<void>((resolve) => authorizer?.once("exit", () => resolve()))
-      }
-      if (processor && processor.exitCode === null) {
-        processor.kill("SIGTERM")
-        await new Promise<void>((resolve) => processor?.once("exit", () => resolve()))
-      }
+      await Promise.all([authorizer, processor].map((child) => stopChild(child).catch((error) => {
+        writeOperationalEvent("gateway-runtime", "WARN", "genio.one.gateway-runtime.gateway-service-cleanup-failed", {
+          ...operationalError(error),
+        })
+      })))
     },
   }
 }

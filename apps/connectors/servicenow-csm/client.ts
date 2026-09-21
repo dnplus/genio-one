@@ -1,4 +1,4 @@
-import { observedFetch } from "../../../packages/telemetry/src/operation-observability"
+import { observedFetch } from "@genioone/telemetry/operation-observability"
 export type HttpRequest = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 
 export interface CaseQuery {

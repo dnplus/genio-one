@@ -7,8 +7,8 @@ import {
   type RoutingRejectionObservation,
   type UsageRejectionObservation,
 } from "./grpc"
-import type { AuthorizationDecisionEvent } from "../../../../packages/protocol/src/authorization"
-import type { AuthorizationInput } from "../../../../packages/protocol/src/authorization"
+import type { AuthorizationDecisionEvent } from "@genioone/protocol/authorization"
+import type { AuthorizationInput } from "@genioone/protocol/authorization"
 import { policyReleaseLoaderOptionsFromEnvironment } from "../shared/policy-release"
 import { startGatewaySidecarReadinessServer } from "../shared/release-readiness"
 import { createValkeyExecutionGrantConsumer, createValkeyUsageCounterStore } from "../shared/usage-governance-valkey"

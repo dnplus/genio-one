@@ -7,7 +7,34 @@ import { createInMemoryPlatformModules } from "../src/capabilities/platform-modu
 import { createStaticPrincipalAuthenticator } from "../src/capabilities/tenancy-auth/memory"
 
 async function createTestManagementApi() {
-  const modules = createInMemoryPlatformModules()
+  const modules = createInMemoryPlatformModules({
+    modelRoutingDecisionProvider: {
+      provider_id: "test-system-one",
+      requested_model: "decision-v1",
+      async decide({ candidates }) {
+        const selected = candidates[0]
+        assert.ok(selected)
+        return {
+          resolved_model: "decision-v1.1",
+          suggested_public_model_id: selected.public_model_id,
+          confidence: 0.95,
+          probabilities: Object.fromEntries(candidates.map((candidate, index) => [
+            candidate.public_model_id,
+            index === 0 ? 1 : 0,
+          ])),
+          annotations: {
+            task_kind: "TOOL_USE",
+            task_kind_confidence: 0.91,
+            complexity_score: 1.2,
+            complexity_confidence: 0.8,
+            requires_tools_probability: 0.97,
+          },
+          usage: { input_tokens: 120, output_tokens: 12 },
+        }
+      },
+    },
+    modelRoutingDecisionMinimumConfidence: 0.6,
+  })
   const reportPublicKeyPem = generateKeyPairSync("ed25519").publicKey
     .export({ type: "spki", format: "pem" })
     .toString()
@@ -258,11 +285,40 @@ test("AI Gateway vertical slice publishes only a signed immutable snapshot", { t
   )
   assert.equal(routingPolicy.response.statusCode, 200, JSON.stringify(routingPolicy.body))
 
+  const policyPath = `/v1/tenants/tenant-acme/resources/${resource.resource_id}/capabilities/chat/policy-draft`
+  const savedDraft = await jsonResponse(
+    app,
+    "PUT",
+    policyPath,
+    {
+      expected_version: 0,
+      base_revision: 0,
+      content: {
+        kind: "RESOURCE_CAPABILITY",
+        definition: { one_policy_revision: 1, steps: enforcementSteps() },
+      },
+    },
+  )
+  assert.equal(savedDraft.response.statusCode, 200, JSON.stringify(savedDraft.body))
+  const validatedDraft = await jsonResponse(
+    app,
+    "POST",
+    `${policyPath}/validate`,
+    { expected_version: savedDraft.body.version, expected_content_digest: savedDraft.body.content_digest },
+  )
+  assert.equal(validatedDraft.response.statusCode, 200, JSON.stringify(validatedDraft.body))
+  const reviewedDraft = await jsonResponse(
+    app,
+    "POST",
+    `${policyPath}/review`,
+    { expected_version: validatedDraft.body.version, expected_content_digest: validatedDraft.body.content_digest },
+  )
+  assert.equal(reviewedDraft.response.statusCode, 200, JSON.stringify(reviewedDraft.body))
   const chainResult = await jsonResponse(
     app,
     "POST",
-    `/v1/tenants/tenant-acme/resources/${resource.resource_id}/capabilities/chat/enforcement-chain`,
-    { one_policy_revision: 1, steps: enforcementSteps() },
+    `${policyPath}/publish`,
+    { expected_version: reviewedDraft.body.version, expected_content_digest: reviewedDraft.body.content_digest },
   )
   assert.equal(chainResult.response.statusCode, 200, JSON.stringify(chainResult.body))
   assert.deepEqual(chainResult.body.chain.eligible_connection_ids, [
@@ -380,9 +436,8 @@ test("AI Gateway vertical slice publishes only a signed immutable snapshot", { t
     "/v1/tenants/tenant-acme/model-routing/resolve",
     {
       public_model_id: model.model_id,
-      requested_public_model_id: model.model_id,
       session_id: "session-1",
-      // Untrusted caller input is stripped and replaced by the resolver.
+      semantic_routing: { task: "Use tools to investigate the current incident" },
       entitled_public_model_ids: ["caller-injected-model"],
     },
   )
@@ -400,6 +455,10 @@ test("AI Gateway vertical slice publishes only a signed immutable snapshot", { t
   assert.equal(secondRoute.response.statusCode, 200, JSON.stringify(secondRoute.body))
   assert.equal(firstRoute.body.selected_public_model_id, model.model_id)
   assert.equal(firstRoute.body.provider_model, "llama3.2:3b")
+  assert.equal(firstRoute.body.decision_receipt.provider_id, "test-system-one")
+  assert.equal(firstRoute.body.decision_receipt.resolved_model, "decision-v1.1")
+  assert.equal(firstRoute.body.decision_receipt.annotations.task_kind, "TOOL_USE")
+  assert.equal(firstRoute.body.decision_receipt.selected_public_model_id, model.model_id)
   assert.equal(secondRoute.body.lease_id, firstRoute.body.lease_id)
   assert.equal(secondRoute.body.reused, true)
 

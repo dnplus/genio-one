@@ -1,3 +1,0 @@
-drop table if exists genio_one_platform_runtime_report_history;
-drop table if exists genio_one_platform_runtime_observed_states;
-drop table if exists genio_one_platform_runtime_commands;

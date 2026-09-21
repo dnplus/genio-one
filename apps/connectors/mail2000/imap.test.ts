@@ -18,6 +18,13 @@ function fixture() {
       return { uid: 9, size: 200000, source: query.source ? Buffer.from("Subject: Test\r\n\r\nBody") : undefined, flags: new Set(["\\Seen"]), envelope: { subject: "Test" } }
     },
     async messageDelete(uids: number[], options: { uid: boolean }) { expect(uids).toEqual([9]); expect(options.uid).toBe(true); deleted++; return true },
+    async list() {
+      return [
+        { path: "INBOX", name: "INBOX", flags: new Set<string>() },
+        { path: "Drafts", name: "Drafts", flags: new Set<string>(["\\Drafts"]), specialUse: "\\Drafts" },
+        { path: "NoselectFolder", name: "NoselectFolder", flags: new Set<string>(["\\Noselect"]) },
+      ]
+    },
   }
   const api = createMail2000Imap({ host: "mail.test", port: 993 }, () => client as unknown as ImapFlow)
   return { api, counts: () => ({ released, loggedOut, deleted, locks }) }
@@ -25,6 +32,14 @@ function fixture() {
 const credential = { username: "user", password: "test" }
 const reference = { folder: "INBOX", uid: 9, uid_validity: "42" }
 
+test("listMailboxes filters Noselect and maps path, name, and specialUse", async () => {
+  const { api } = fixture()
+  const mailboxes = await api.listMailboxes(credential)
+  expect(mailboxes).toEqual([
+    { path: "INBOX", name: "INBOX" },
+    { path: "Drafts", name: "Drafts", specialUse: "\\Drafts" },
+  ])
+})
 test("stale mailbox UIDVALIDITY refuses deletion and releases the lock", async () => {
   const { api, counts } = fixture()
   await expect(api.delete(credential, { ...reference, uid_validity: "41" })).rejects.toThrow("MAIL2000_MAILBOX_CHANGED")

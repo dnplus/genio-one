@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify"
 
-import { CE_DEMO_PROMPTS, CE_DEMO_RESOURCE_IDS, CE_DEMO_USE_CASE_ID, type CeDemoPromptId } from "../../../../packages/protocol/src/ce-demo"
+import { CE_DEMO_PROMPTS, CE_DEMO_RESOURCE_IDS, CE_DEMO_USE_CASE_ID, type CeDemoPromptId } from "@genioone/protocol/ce-demo"
 import { requestAccessToken, verifyGenioOneAccessToken } from "../auth"
 import type { BotServerContext } from "../context"
 import { packageCatalogForRequest } from "./catalog"

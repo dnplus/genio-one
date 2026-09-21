@@ -66,6 +66,29 @@ function principals() {
   })
 }
 
+async function reviewRuntimeDraft(
+  app: import("fastify").FastifyInstance,
+  draftPath: string,
+  draft: { version: number; content_digest: string },
+) {
+  const validated = await app.inject({
+    method: "POST",
+    url: `${draftPath}/validate`,
+    headers: adminHeaders,
+    payload: { expected_version: draft.version, expected_content_digest: draft.content_digest },
+  })
+  assert.equal(validated.statusCode, 200, validated.body)
+  const validatedValue = validated.json() as { version: number; content_digest: string }
+  const reviewed = await app.inject({
+    method: "POST",
+    url: `${draftPath}/review`,
+    headers: adminHeaders,
+    payload: { expected_version: validatedValue.version, expected_content_digest: validatedValue.content_digest },
+  })
+  assert.equal(reviewed.statusCode, 200, reviewed.body)
+  return reviewed.json() as { version: number; content_digest: string }
+}
+
 function platformModulesWithBotConnection(
   initialLifecycle: "ENABLED" | "DISABLED" = "ENABLED",
   options: { runtimeReportKeyId?: string; runtimeReportPublicKeyPem?: string } = {},
@@ -120,13 +143,15 @@ test("runtime policy catalog composes scoped rows with deny precedence and nulla
 
     const denyDraft = await app.inject({ method: "PUT", url: `/v1/tenants/${tenantId}/one-policy/runtime-policies/runtime-anrita-deny/draft`, headers: adminHeaders, payload: { expected_version: 0, base_revision: 0, content: runtimeDefinition({ subject_ids: ["person-uat-anrita"], organization_ids: [], roles: [], client_ids: [], bot_ids: [], runtime_ids: [] }, "DENY") } })
     assert.equal(denyDraft.statusCode, 200, denyDraft.body)
-    const denyRevision = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-policies/runtime-anrita-deny/draft/publish`, headers: adminHeaders, payload: { expected_version: 1 } })
+    const denyReviewed = await reviewRuntimeDraft(app, `/v1/tenants/${tenantId}/one-policy/runtime-policies/runtime-anrita-deny/draft`, denyDraft.json())
+    const denyRevision = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-policies/runtime-anrita-deny/draft/publish`, headers: adminHeaders, payload: { expected_version: denyReviewed.version, expected_content_digest: denyReviewed.content_digest } })
     assert.equal(denyRevision.statusCode, 200, denyRevision.body)
     assert.equal(denyRevision.json().revision, 1)
 
     const allowDraft = await app.inject({ method: "PUT", url: `/v1/tenants/${tenantId}/one-policy/runtime-policies/runtime-anrita-allow/draft`, headers: adminHeaders, payload: { expected_version: 0, base_revision: 0, content: runtimeDefinition({ subject_ids: ["person-uat-anrita"], organization_ids: [], roles: [], client_ids: [], bot_ids: [], runtime_ids: [] }) } })
     assert.equal(allowDraft.statusCode, 200, allowDraft.body)
-    const allowRevision = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-policies/runtime-anrita-allow/draft/publish`, headers: adminHeaders, payload: { expected_version: 1 } })
+    const allowReviewed = await reviewRuntimeDraft(app, `/v1/tenants/${tenantId}/one-policy/runtime-policies/runtime-anrita-allow/draft`, allowDraft.json())
+    const allowRevision = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-policies/runtime-anrita-allow/draft/publish`, headers: adminHeaders, payload: { expected_version: allowReviewed.version, expected_content_digest: allowReviewed.content_digest } })
     assert.equal(allowRevision.statusCode, 200, allowRevision.body)
 
     const denied = await app.inject({ method: "GET", url: effectiveUrl, headers: { authorization: "Bearer anrita" } })
@@ -136,7 +161,8 @@ test("runtime policy catalog composes scoped rows with deny precedence and nulla
 
     const dylanPolicy = await app.inject({ method: "PUT", url: `/v1/tenants/${tenantId}/one-policy/runtime-policies/runtime-dylan-allow/draft`, headers: adminHeaders, payload: { expected_version: 0, base_revision: 0, content: runtimeDefinition({ subject_ids: ["person-uat-dylan"], organization_ids: [], roles: [], client_ids: [], bot_ids: [], runtime_ids: [] }) } })
     assert.equal(dylanPolicy.statusCode, 200, dylanPolicy.body)
-    const dylanPublished = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-policies/runtime-dylan-allow/draft/publish`, headers: adminHeaders, payload: { expected_version: 1 } })
+    const dylanReviewed = await reviewRuntimeDraft(app, `/v1/tenants/${tenantId}/one-policy/runtime-policies/runtime-dylan-allow/draft`, dylanPolicy.json())
+    const dylanPublished = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-policies/runtime-dylan-allow/draft/publish`, headers: adminHeaders, payload: { expected_version: dylanReviewed.version, expected_content_digest: dylanReviewed.content_digest } })
     assert.equal(dylanPublished.statusCode, 200, dylanPublished.body)
 
     const dylanAllowed = await app.inject({ method: "GET", url: effectiveUrl, headers: { authorization: "Bearer dylan" } })
@@ -160,7 +186,8 @@ test("authorize is idempotent, report binds the verified decision, and policy di
   try {
     const saved = await app.inject({ method: "PUT", url: `${policyPath}/draft`, headers: adminHeaders, payload: { expected_version: 0, base_revision: 0, content: runtimeDefinition({ subject_ids: ["person-uat-dylan"], organization_ids: [], roles: [], client_ids: [], bot_ids: [], runtime_ids: [] }) } })
     assert.equal(saved.statusCode, 200, saved.body)
-    const published = await app.inject({ method: "POST", url: `${policyPath}/draft/publish`, headers: adminHeaders, payload: { expected_version: 1 } })
+    const reviewed = await reviewRuntimeDraft(app, `${policyPath}/draft`, saved.json())
+    const published = await app.inject({ method: "POST", url: `${policyPath}/draft/publish`, headers: adminHeaders, payload: { expected_version: reviewed.version, expected_content_digest: reviewed.content_digest } })
     assert.equal(published.statusCode, 200, published.body)
 
     const authorizeBody = { correlation_id: "corr-runtime-1", bot_id: "managed-genio-bot", runtime_id: "codex", capability_id: "codex.subscription", action: "use" }
@@ -200,6 +227,27 @@ test("authorize is idempotent, report binds the verified decision, and policy di
     assert.equal(afterDisable.json().decision, "DENY")
     assert.equal(afterDisable.json().reason_code, "POLICY_DISABLED")
     assert.equal(afterDisable.json().policy_revision, 2)
+
+    const policyAudit = await app.inject({ method: "GET", url: `/v1/tenants/${tenantId}/audit-events?kind=POLICY_CHANGE`, headers: adminHeaders })
+    assert.equal(policyAudit.statusCode, 200, policyAudit.body)
+    const disabledEvent = policyAudit.json().find((event: { action: string }) => event.action === "DISABLED")
+    assert.deepEqual(disabledEvent && {
+      policy_key: disabledEvent.policy_key,
+      enabled: disabledEvent.enabled,
+      subject_id: disabledEvent.subject.subject_id,
+      actor_subject_id: disabledEvent.actor_subject.subject_id,
+      base_revision: disabledEvent.base_revision,
+      published_revision: disabledEvent.published_revision,
+      correlation_id: typeof disabledEvent.correlation_id === "string" && disabledEvent.correlation_id.length > 0,
+    }, {
+      policy_key: "runtime-capability:runtime-reportable",
+      enabled: false,
+      subject_id: "person-admin",
+      actor_subject_id: "person-admin",
+      base_revision: 1,
+      published_revision: 2,
+      correlation_id: true,
+    })
 
     const audit = await app.inject({ method: "GET", url: `/v1/tenants/${tenantId}/audit-events?correlation_id=corr-runtime-1`, headers: adminHeaders })
     assert.equal(audit.statusCode, 200, audit.body)
@@ -320,7 +368,8 @@ test("the installed Genio Bot lifecycle gates P_B_USE and runtime policy for Bot
     })
     const saved = await app.inject({ method: "PUT", url: `${runtimePath}/draft`, headers: adminHeaders, payload: { expected_version: 0, base_revision: 0, content: runtimeDefinition({ subject_ids: ["person-uat-dylan"], organization_ids: [], roles: [], client_ids: [], bot_ids: [], runtime_ids: [] }) } })
     assert.equal(saved.statusCode, 200, saved.body)
-    const published = await app.inject({ method: "POST", url: `${runtimePath}/draft/publish`, headers: adminHeaders, payload: { expected_version: 1 } })
+    const reviewed = await reviewRuntimeDraft(app, `${runtimePath}/draft`, saved.json())
+    const published = await app.inject({ method: "POST", url: `${runtimePath}/draft/publish`, headers: adminHeaders, payload: { expected_version: reviewed.version, expected_content_digest: reviewed.content_digest } })
     assert.equal(published.statusCode, 200, published.body)
 
     const enabledAccess = await app.inject({ method: "GET", url: accessUrl, headers: { authorization: "Bearer dylan" } })

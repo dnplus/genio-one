@@ -2,7 +2,7 @@ import { createHash } from "node:crypto"
 import { lstatSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { resolve } from "node:path"
 
-import { CE_DEMO_RESOURCE_IDS, CE_DEMO_VERSION } from "../../../packages/protocol/src/ce-demo"
+import { CE_DEMO_RESOURCE_IDS, CE_DEMO_VERSION } from "@genioone/protocol/ce-demo"
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue }
 
@@ -87,4 +87,4 @@ const manifests = [
 
 const output = `${JSON.stringify(manifests, null, 2)}\n`
 writeFileSync(resolve(demoRoot, "catalog.json"), output)
-writeFileSync(resolve(import.meta.dir, "../../../packages/protocol/src/ce-demo-package.json"), output)
+writeFileSync(resolve(import.meta.dir, "@genioone/protocol/ce-demo-package.json"), output)

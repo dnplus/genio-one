@@ -8,7 +8,7 @@ import {
   GatewayReleaseReferenceSchema,
   parseGatewayRuntimeReport,
   type GatewayRuntimeReport,
-} from "../../../../../../packages/protocol/src/gateway-release"
+} from "@genioone/protocol/gateway-release"
 import type { RuntimeControlStore } from "../runtime-control/contract"
 import {
   gatewayReleaseReferencesEqual,

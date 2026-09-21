@@ -106,7 +106,7 @@ export function createClickHouseGatewayActivityMaterializer(options: {
           offset: 0,
           limit: 1,
         })).events[0]
-        if (!audit || audit.kind === "RUNTIME_POLICY_DECISION" || !audit.resource_id || !audit.capability_id) continue
+        if (!audit || audit.kind !== "ONE_POLICY_DECISION" || !audit.resource_id || !audit.capability_id) continue
         const activityCandidates = candidates.filter(
           (row) => value(row.attributes, "genio.event.kind") === "ai_gateway_activity",
         )

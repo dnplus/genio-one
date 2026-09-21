@@ -80,11 +80,11 @@ describe("RuntimePolicyClient", () => {
       fetch: async (_input, init) => {
         method = init?.method ?? ""
         const body = init?.body ? JSON.parse(String(init.body)) as { correlation_id?: string } : {}
-        return new Response(JSON.stringify(decision({ action: "invoke", correlation_id: body.correlation_id, constraints: [{ kind: "path_allowlist", parameters: { paths: ["/workspace"] } }] })), { status: 200 })
+        return new Response(JSON.stringify(decision({ action: "execute", correlation_id: body.correlation_id, constraints: [{ kind: "path_allowlist", parameters: { paths: ["/workspace"] } }] })), { status: 200 })
       },
     })
 
-    const result = await client.authorize({ principal, botId: "bot-dylan", capabilityId: "shell.exec", action: "invoke", correlationId: "corr-constraints" })
+    const result = await client.authorize({ principal, botId: "bot-dylan", capabilityId: "shell.exec", action: "execute", correlationId: "corr-constraints" })
     expect(method).toBe("POST")
     expect(result.decision).toBe("DENY")
     expect(result.reason_code).toBe("RUNTIME_POLICY_CONSTRAINT_UNSUPPORTED")
@@ -92,6 +92,11 @@ describe("RuntimePolicyClient", () => {
 
   test("requires enforceable constraints before treating an ALLOW as executable", () => {
     expect(() => requireRuntimePolicyDecision(decision({ constraints: [{ kind: "path_allowlist", parameters: { paths: ["/workspace"] } }] }))).toThrow("RUNTIME_POLICY_CONSTRAINT_UNSUPPORTED")
+  })
+
+  test("fails closed before execution when a decision action or target is not registered", () => {
+    expect(() => requireRuntimePolicyDecision(decision({ action: "invoke" }))).toThrow("RUNTIME_POLICY_RESPONSE_INVALID")
+    expect(() => requireRuntimePolicyDecision(decision({ target: "runtime:codex:model.invoke" }))).toThrow("RUNTIME_POLICY_RESPONSE_INVALID")
   })
 
   test("keeps the typed audit obligation enforceable for authorize and report", async () => {
@@ -105,20 +110,20 @@ describe("RuntimePolicyClient", () => {
         const headers = new Headers(init?.headers)
         requests.push({ method: init?.method ?? "GET", body, keyId: headers.get("x-genio-runtime-report-key-id"), signature: headers.get("x-genio-runtime-report-signature") })
         return new Response(JSON.stringify(decision({
-          action: "invoke",
+          action: "execute",
           correlation_id: "corr-audit",
           obligations: [{ kind: "audit", enforcement_point_id: "AGENT_RUNTIME", parameters: {} }],
         })), { status: 200 })
       },
     })
 
-    const authorized = await client.authorize({ principal, botId: "bot-dylan", capabilityId: "shell.exec", action: "invoke", correlationId: "corr-audit" })
+    const authorized = await client.authorize({ principal, botId: "bot-dylan", capabilityId: "shell.exec", action: "execute", correlationId: "corr-audit" })
     expect(authorized.decision).toBe("ALLOW")
     await client.report({
       principal,
       botId: "bot-dylan",
       capabilityId: "shell.exec",
-      action: "invoke",
+      action: "execute",
       correlationId: authorized.correlation_id!,
       outcome: "COMPLETED",
     })
@@ -131,7 +136,7 @@ describe("RuntimePolicyClient", () => {
       bot_id: "bot-dylan",
       runtime_id: "codex",
       capability_id: "shell.exec",
-      action: "invoke",
+      action: "execute",
       outcome: "COMPLETED",
     })
   })
@@ -139,13 +144,13 @@ describe("RuntimePolicyClient", () => {
   test("fails closed for obligations without an implemented enforcement point", async () => {
     const client = createRuntimePolicyClient({
       fetch: async () => new Response(JSON.stringify(decision({
-        action: "invoke",
+        action: "execute",
         correlation_id: "corr-obligation",
         obligations: [{ kind: "require_approval", parameters: {} }],
       })), { status: 200 }),
     })
 
-    const result = await client.authorize({ principal, botId: "bot-dylan", capabilityId: "shell.exec", action: "invoke", correlationId: "corr-obligation" })
+    const result = await client.authorize({ principal, botId: "bot-dylan", capabilityId: "shell.exec", action: "execute", correlationId: "corr-obligation" })
     expect(result.decision).toBe("DENY")
     expect(result.reason_code).toBe("RUNTIME_POLICY_OBLIGATION_UNSUPPORTED")
   })
@@ -184,6 +189,7 @@ describe("RuntimePolicyClient", () => {
         const url = new URL(String(input))
         return new Response(JSON.stringify(decision({
           capability_id: url.searchParams.get("capability_id"),
+          action: url.searchParams.get("action"),
           target: `runtime:codex:${url.searchParams.get("capability_id")}`,
         })), { status: 200 })
       },
@@ -195,7 +201,7 @@ describe("RuntimePolicyClient", () => {
     expect(snapshot.decisions.map((item) => item.capability_id)).toEqual(["shell.exec", "filesystem.read"])
   })
 
-  test("selects use for subscription, invoke for model access, and expose for native capabilities", async () => {
+  test("selects each runtime capability's executable action by default", async () => {
     const requests: Array<{ capabilityId: string | null; action: string | null }> = []
     const client = createRuntimePolicyClient({
       origin: "http://platform.test",
@@ -221,12 +227,12 @@ describe("RuntimePolicyClient", () => {
     expect(requests).toEqual([
       { capabilityId: "codex.subscription", action: "use" },
       { capabilityId: "model.invoke", action: "invoke" },
-      { capabilityId: "shell.exec", action: "expose" },
+      { capabilityId: "shell.exec", action: "execute" },
     ])
     expect(snapshot.decisions.map((item) => [item.capability_id, item.action])).toEqual([
       ["codex.subscription", "use"],
       ["model.invoke", "invoke"],
-      ["shell.exec", "expose"],
+      ["shell.exec", "execute"],
     ])
   })
 

@@ -1,7 +1,7 @@
 import type { GatewayActivityHttpMessageDetail } from "./detail-contract"
 import type { GatewayActivityDetailStore } from "./detail-module"
 import type { HttpFetch } from "../../../../../../runtimes/gateway/services/shared/http-fetch"
-import { GATEWAY_DETAIL_RETENTION_SECONDS } from "../../../../../../packages/telemetry/src/otlp-detail-capture"
+import { GATEWAY_DETAIL_RETENTION_SECONDS } from "@genioone/telemetry/otlp-detail-capture"
 
 interface OTelTraceRow {
   captured_at_millis: number | string

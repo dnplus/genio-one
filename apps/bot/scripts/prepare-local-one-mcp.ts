@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto"
+import { isDeepStrictEqual } from "node:util"
 
 const platformOrigin = process.env.GENIO_ONE_PLATFORM_ORIGIN?.trim() || "http://127.0.0.1:58082"
 const keycloakOrigin = process.env.GENIO_ONE_KEYCLOAK_ORIGIN?.trim() || "http://127.0.0.1:58080"
@@ -59,6 +60,76 @@ interface McpDiscovery {
     revision_digest: string
     state: string
   }>
+}
+
+interface EnforcementChainRevision {
+  one_policy_revision: number
+  chain: {
+    steps: unknown
+  }
+}
+
+interface ResourceCapabilityPolicyDraft {
+  version: number
+  base_revision: number
+  content_digest: string
+  lifecycle: "DRAFT" | "VALIDATED" | "REVIEWED"
+  content: {
+    kind: string
+    definition: unknown
+  }
+}
+
+async function missingIsNull<T>(path: string) {
+  try {
+    return await request<T>(path)
+  } catch (error) {
+    if (error instanceof Error && /^404\s/.test(error.message)) return null
+    throw error
+  }
+}
+
+async function ensureResourceCapabilityPolicy(
+  resourceId: string,
+  capabilityId: string,
+  steps: unknown,
+) {
+  const path = `/v1/tenants/${tenantId}/resources/${encodeURIComponent(resourceId)}/capabilities/${encodeURIComponent(capabilityId)}`
+  const current = await missingIsNull<EnforcementChainRevision>(`${path}/enforcement-chain`)
+  const baseRevision = current?.one_policy_revision ?? 0
+  const definition = { one_policy_revision: baseRevision + 1, steps }
+  if (current && isDeepStrictEqual(current.chain.steps, steps)) return current
+  const existing = await missingIsNull<ResourceCapabilityPolicyDraft>(`${path}/policy-draft`)
+  let draft = existing &&
+    existing.base_revision === baseRevision &&
+    existing.content.kind === "RESOURCE_CAPABILITY" &&
+    isDeepStrictEqual(existing.content.definition, definition)
+    ? existing
+    : await request<ResourceCapabilityPolicyDraft>(`${path}/policy-draft`, {
+        method: "PUT",
+        body: JSON.stringify({
+          expected_version: existing?.version ?? 0,
+          base_revision: baseRevision,
+          content: { kind: "RESOURCE_CAPABILITY", definition },
+        }),
+      })
+  const transition = (action: "validate" | "review") => request<ResourceCapabilityPolicyDraft>(`${path}/policy-draft/${action}`, {
+    method: "POST",
+    body: JSON.stringify({
+      expected_version: draft.version,
+      expected_content_digest: draft.content_digest,
+    }),
+  })
+  if (draft.lifecycle === "DRAFT") draft = await transition("validate")
+  if (draft.lifecycle === "VALIDATED") draft = await transition("review")
+  if (draft.lifecycle !== "REVIEWED") throw new Error(`MCP_POLICY_DRAFT_LIFECYCLE_INVALID ${draft.lifecycle}`)
+  return request<EnforcementChainRevision>(`${path}/policy-draft/publish`, {
+    method: "POST",
+    body: JSON.stringify({
+      expected_version: draft.version,
+      expected_content_digest: draft.content_digest,
+    }),
+  })
 }
 
 let resource = (await request<Resource[]>(`/v1/tenants/${tenantId}/resources`))
@@ -166,43 +237,37 @@ if (publishedToolCapabilities.length !== tools.length) {
 
 const issuer = `${keycloakOrigin}/realms/genio-one`
 for (const capability of capabilities) {
-  await request(`/v1/tenants/${tenantId}/resources/${resource.resource_id}/capabilities/${capability.capability_id}/enforcement-chain`, {
-    method: "POST",
-    body: JSON.stringify({
-      one_policy_revision: 1,
-      steps: [
-        {
-          step_id: "authenticate",
-          kind: "AUTHENTICATE",
-          phase: "REQUEST",
-          implementation: "NATIVE",
-          config: {
-            schema_version: "genio.one.auth.jwt.v1",
-            provider: "keycloak",
-            issuer,
-            audiences: ["genio-one-product-api"],
-            remote_jwks_uri: `${issuer}/protocol/openid-connect/certs`,
-            subject_claim: "sub",
-            client_claim: "azp",
-          },
-        },
-        {
-          step_id: "authorize",
-          kind: "AUTHORIZE",
-          phase: "REQUEST",
-          implementation: "EXT_AUTH",
-          depends_on: ["authenticate"],
-        },
-        {
-          step_id: "route",
-          kind: "ROUTE",
-          phase: "ROUTING",
-          implementation: "AIGW_NATIVE",
-          depends_on: ["authorize"],
-        },
-      ],
-    }),
-  })
+  await ensureResourceCapabilityPolicy(resource.resource_id, capability.capability_id, [
+    {
+      step_id: "authenticate",
+      kind: "AUTHENTICATE",
+      phase: "REQUEST",
+      implementation: "NATIVE",
+      config: {
+        schema_version: "genio.one.auth.jwt.v1",
+        provider: "keycloak",
+        issuer,
+        audiences: ["genio-one-product-api"],
+        remote_jwks_uri: `${issuer}/protocol/openid-connect/certs`,
+        subject_claim: "sub",
+        client_claim: "azp",
+      },
+    },
+    {
+      step_id: "authorize",
+      kind: "AUTHORIZE",
+      phase: "REQUEST",
+      implementation: "EXT_AUTH",
+      depends_on: ["authenticate"],
+    },
+    {
+      step_id: "route",
+      kind: "ROUTE",
+      phase: "ROUTING",
+      implementation: "AIGW_NATIVE",
+      depends_on: ["authorize"],
+    },
+  ])
 }
 
 if (resource.lifecycle === "DRAFT") {

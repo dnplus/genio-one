@@ -14,9 +14,9 @@ import type {
 export interface OnePolicySeedStore {
   revisions(tenantId: string): Promise<BotPolicyRevision[]>
   getOrCreate(input: { tenantId: string }): Promise<OnePolicyBotSeed>
-  publish(input: { tenantId: string; baseRevision: number; rules: BotRules; publishedBy: string }): Promise<OnePolicyBotSeed>
-  publishDraft(input: { tenantId: string; expectedVersion: number; publishedBy: string }): Promise<OnePolicyBotSeed>
-  setEnabled(input: { tenantId: string; enabled: boolean }): Promise<OnePolicyBotSeed>
+  publish(input: { tenantId: string; baseRevision: number; rules: BotRules; publishedBy: string; correlationId?: string }): Promise<OnePolicyBotSeed>
+  publishDraft(input: { tenantId: string; expectedVersion: number; expectedContentDigest: string; publishedBy: string; correlationId?: string }): Promise<OnePolicyBotSeed>
+  setEnabled(input: { tenantId: string; enabled: boolean; publishedBy: string; correlationId: string }): Promise<OnePolicyBotSeed>
 }
 
 export interface RuntimePolicyStore {
@@ -32,14 +32,16 @@ export interface RuntimePolicyStore {
     definition: RuntimePolicyDefinition
     publishedBy: string
     displayName?: string
+    correlationId?: string
   }): Promise<RuntimePolicyRevision>
-  publishDraft(input: { tenantId: string; policyId: string; expectedVersion: number; publishedBy: string }): Promise<RuntimePolicyRevision>
+  publishDraft(input: { tenantId: string; policyId: string; expectedVersion: number; expectedContentDigest: string; publishedBy: string; correlationId?: string }): Promise<RuntimePolicyRevision>
   setEnabled(input: {
     tenantId: string
     policyId: string
     expectedRevision: number
     enabled: boolean
     publishedBy: string
+    correlationId: string
   }): Promise<RuntimePolicyRevision>
 }
 
@@ -55,10 +57,10 @@ export interface OnePolicyRuntimeReportVerifier {
 
 export interface OnePolicy {
   listFirstPartyBotPolicyRevisions(tenantId: string): Promise<BotPolicyRevision[]>
-  publishFirstPartyBotPolicy(input: { tenantId: string; baseRevision: number; rules: BotRules; publishedBy: string }): Promise<OnePolicyBotSeed>
-  publishFirstPartyBotPolicyDraft(input: { tenantId: string; expectedVersion: number; publishedBy: string }): Promise<OnePolicyBotSeed>
+  publishFirstPartyBotPolicy(input: { tenantId: string; baseRevision: number; rules: BotRules; publishedBy: string; correlationId?: string }): Promise<OnePolicyBotSeed>
+  publishFirstPartyBotPolicyDraft(input: { tenantId: string; expectedVersion: number; expectedContentDigest: string; publishedBy: string; correlationId?: string }): Promise<OnePolicyBotSeed>
   getFirstPartyBotSeed(input: { tenantId: string }): Promise<OnePolicyBotSeed>
-  setFirstPartyBotSeedEnabled(input: { tenantId: string; enabled: boolean }): Promise<OnePolicyBotSeed>
+  setFirstPartyBotSeedEnabled(input: { tenantId: string; enabled: boolean; publishedBy: string; correlationId: string }): Promise<OnePolicyBotSeed>
   resolveBotAccess(input: {
     tenantId: string
     principal: Pick<Principal, "subject_id" | "client_id" | "role">
@@ -74,14 +76,16 @@ export interface OnePolicy {
     baseRevision: number
     definition: RuntimePolicyDefinition
     publishedBy: string
+    correlationId?: string
   }): Promise<RuntimePolicyRevision>
-  publishRuntimePolicyDraft(input: { tenantId: string; policyId: string; expectedVersion: number; publishedBy: string }): Promise<RuntimePolicyRevision>
+  publishRuntimePolicyDraft(input: { tenantId: string; policyId: string; expectedVersion: number; expectedContentDigest: string; publishedBy: string; correlationId?: string }): Promise<RuntimePolicyRevision>
   setRuntimePolicyEnabled(input: {
     tenantId: string
     policyId: string
     expectedRevision: number
     enabled: boolean
     publishedBy: string
+    correlationId: string
   }): Promise<RuntimePolicyRevision>
   evaluateRuntime(input: RuntimePolicyEffectiveQuery & {
     principal: Pick<Principal, "tenant_id" | "subject_id" | "client_id" | "role" | "organization_ids">

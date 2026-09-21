@@ -8,7 +8,7 @@ import { ValkeyGatewayModelRouteResolver } from "./model-route-lease"
 import { policyReleaseLoaderOptionsFromEnvironment } from "../shared/policy-release"
 import { startGatewaySidecarReadinessServer } from "../shared/release-readiness"
 import { startProcessorHttpBridge } from "./http"
-import { createOtlpGatewayDetailCapture } from "../../../../packages/telemetry/src/otlp-detail-capture"
+import { createOtlpGatewayDetailCapture } from "@genioone/telemetry/otlp-detail-capture"
 import { createValkeyUsageCounterStore } from "../shared/usage-governance-valkey"
 
 const listen = process.env.GENIO_ONE_AI_PROCESSOR_LISTEN ?? "0.0.0.0:8082"

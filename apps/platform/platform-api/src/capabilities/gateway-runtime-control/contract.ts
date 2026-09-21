@@ -7,9 +7,9 @@ import {
   GatewayRuntimeCommandSchema,
   GatewayRuntimeReportSchema,
   type GatewayRuntimeReport,
-} from "../../../../../../packages/protocol/src/gateway-release"
+} from "@genioone/protocol/gateway-release"
 import type { RuntimeRegistrationKey } from "../runtime-control/contract"
-import { RUNTIME_PROTOCOL_SCHEMA_VERSION } from "../../../../../../packages/protocol/src/runtime-command"
+import { RUNTIME_PROTOCOL_SCHEMA_VERSION } from "@genioone/protocol/runtime-command"
 
 const Identifier = Type.String({
   minLength: 1,

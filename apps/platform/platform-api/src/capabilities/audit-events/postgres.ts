@@ -1,6 +1,8 @@
-import type { SqlAdapter } from "../../persistence/sql-adapter"
+import type { SqlAdapter, SqlTransaction } from "../../persistence/sql-adapter"
 import type { AuthorizationAuditEvent, RuntimePolicyAuditEvent } from "./contract"
 import type { GatewayAuthorizationAuditStore } from "./module"
+import { canonicalJson } from "@genioone/protocol/canonical"
+import { PlatformApiError } from "../errors"
 
 interface AuditRow extends Record<string, unknown> {
   tenant_id: string
@@ -14,19 +16,43 @@ function mapRow(row: AuditRow): AuthorizationAuditEvent {
   return { ...event, tenant_id: row.tenant_id, occurred_at: Number(row.occurred_at) }
 }
 
+async function recordAuthorizationAuditEvent(
+  executor: Pick<SqlAdapter, "query"> | SqlTransaction,
+  input: Parameters<GatewayAuthorizationAuditStore["record"]>[0],
+): Promise<AuthorizationAuditEvent> {
+  const { tenantId, event } = input
+  const value = { ...event, tenant_id: tenantId }
+  const result = await executor.query<AuditRow>(
+    `insert into genio_one_gateway_authorization_audit_events
+       (tenant_id, audit_event_id, correlation_id, occurred_at, event)
+     values ($1,$2,$3,$4,$5::text::jsonb)
+     on conflict (tenant_id, audit_event_id) do nothing
+     returning tenant_id, audit_event_id, event, occurred_at`,
+    [tenantId, event.audit_event_id, event.correlation_id, event.occurred_at, JSON.stringify(value)],
+  )
+  if (result.rows[0]) return mapRow(result.rows[0])
+  const existing = await executor.query<AuditRow>(
+    `select tenant_id, audit_event_id, event, occurred_at
+       from genio_one_gateway_authorization_audit_events
+      where tenant_id = $1 and audit_event_id = $2`,
+    [tenantId, event.audit_event_id],
+  )
+  const row = existing.rows[0]
+  if (!row) throw new PlatformApiError("AUDIT_EVENT_WRITE_RACE", 500)
+  const mapped = mapRow(row)
+  if (canonicalJson(mapped) !== canonicalJson(value)) {
+    throw new PlatformApiError("AUDIT_EVENT_CONFLICT", 409)
+  }
+  return mapped
+}
+
 export function createPostgresGatewayAuthorizationAuditStore(options: { sql: SqlAdapter }): GatewayAuthorizationAuditStore {
   return {
-    async record({ tenantId, event }) {
-      const value = { ...event, tenant_id: tenantId }
-      const result = await options.sql.query<AuditRow>(
-        `insert into genio_one_gateway_authorization_audit_events
-           (tenant_id, audit_event_id, correlation_id, occurred_at, event)
-         values ($1,$2,$3,$4,$5::text::jsonb)
-         on conflict (tenant_id, audit_event_id) do update set event = excluded.event
-         returning tenant_id, audit_event_id, event, occurred_at`,
-        [tenantId, event.audit_event_id, event.correlation_id, event.occurred_at, JSON.stringify(value)],
-      )
-      return mapRow(result.rows[0]!)
+    async record(input) {
+      return recordAuthorizationAuditEvent(options.sql, input)
+    },
+    async recordInTransaction(input) {
+      return recordAuthorizationAuditEvent(input.transaction, input)
     },
     async query(input) {
       const conditions = ["tenant_id = $1"]

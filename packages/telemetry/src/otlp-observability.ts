@@ -5,6 +5,7 @@ import { resolve } from "node:path"
 import { OtlpOutbox } from "./otlp-outbox"
 
 const attribute = (key: string, value: string | number) => ({ key, value: typeof value === "number" ? { intValue: String(value) } : { stringValue: value } })
+const METRIC_ATTRIBUTE_KEYS = new Set(["http.request.method", "http.route", "http.response.status_code"])
 const outboxes = new Map<string, OtlpOutbox>()
 const spoolRoots = new Map<string, Set<string>>()
 
@@ -63,7 +64,7 @@ export function recordHttpObservation(input: { service: string; tenantId: string
   const scope = { name: "genio.http", version: "1" }
   exportOtel("traces", { resourceSpans: [{ resource, scopeSpans: [{ scope, spans: [{ traceId: input.traceId, spanId: input.spanId, ...(input.parentSpanId ? { parentSpanId: input.parentSpanId } : {}), name: `${input.method} ${input.route}`, kind: 2, startTimeUnixNano: String(input.startedAt), endTimeUnixNano: String(input.endedAt), attributes, status: { code: input.status >= 400 ? 2 : 1 } }] }] }] }, input.origin)
   exportOtel("logs", { resourceLogs: [{ resource, scopeLogs: [{ scope, logRecords: [{ timeUnixNano: String(input.endedAt), traceId: input.traceId, spanId: input.spanId, severityNumber: input.status >= 500 ? 17 : input.status >= 400 ? 13 : 9, severityText: input.status >= 500 ? "ERROR" : input.status >= 400 ? "WARN" : "INFO", body: { stringValue: "genio.http.request" }, attributes }] }] }] }, input.origin)
-  exportOtel("metrics", { resourceMetrics: [{ resource, scopeMetrics: [{ scope, metrics: [{ name: "http.server.request.duration", unit: "s", histogram: { aggregationTemporality: 1, dataPoints: [{ startTimeUnixNano: String(input.startedAt), timeUnixNano: String(input.endedAt), count: "1", sum: Number(input.endedAt - input.startedAt) / 1e9, bucketCounts: ["1"], explicitBounds: [], attributes: attributes.filter(value => ["http.request.method", "http.route", "http.response.status_code"].includes(value.key)) }] } }] }] }] }, input.origin)
+  exportOtel("metrics", { resourceMetrics: [{ resource, scopeMetrics: [{ scope, metrics: [{ name: "http.server.request.duration", unit: "s", histogram: { aggregationTemporality: 1, dataPoints: [{ startTimeUnixNano: String(input.startedAt), timeUnixNano: String(input.endedAt), count: "1", sum: Number(input.endedAt - input.startedAt) / 1e9, bucketCounts: ["1"], explicitBounds: [], attributes: attributes.filter(value => METRIC_ATTRIBUTE_KEYS.has(value.key)) }] } }] }] }] }, input.origin)
 }
 
 export function traceIdentity(traceparent: unknown) {
@@ -72,7 +73,12 @@ export function traceIdentity(traceparent: unknown) {
 }
 
 export function recordOperationalLog(service: string, level: "INFO" | "WARN" | "ERROR", event: string, fields: Readonly<Record<string, unknown>>) {
-  const attributes = Object.entries(fields).filter(([, value]) => value !== undefined && value !== null).map(([key, value]) => attribute(key, typeof value === "string" || typeof value === "number" ? value : JSON.stringify(value)))
+  const attributes: ReturnType<typeof attribute>[] = []
+  for (const [key, value] of Object.entries(fields)) {
+    if (value !== undefined && value !== null) {
+      attributes.push(attribute(key, typeof value === "string" || typeof value === "number" ? value : JSON.stringify(value)))
+    }
+  }
   exportOtel("logs", { resourceLogs: [{ resource: otelResource(`genio-one-${service}`, String(fields.tenant_id ?? process.env.GENIO_ONE_TENANT_ID ?? "unassigned")), scopeLogs: [{ scope: { name: "genio.operational" }, logRecords: [{ timeUnixNano: String(BigInt(Date.now()) * 1_000_000n), severityNumber: level === "ERROR" ? 17 : level === "WARN" ? 13 : 9, severityText: level, body: { stringValue: event }, attributes }] }] }] })
 }
 

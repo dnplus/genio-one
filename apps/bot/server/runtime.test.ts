@@ -12,12 +12,9 @@ import {
 } from "./runtime"
 
 describe("Codex app-server launch", () => {
-  const configuration = {
-    mcpUrl: "https://one.example.test/mcp",
-    bearerTokenEnvVar: "GENIO_ONE_MCP_BEARER_TOKEN",
-  }
+  const configuration = {}
 
-  test("reuses the verified GenioOne session for MCP without a second OAuth flow", () => {
+  test("does not inject a generic GenioOne MCP server", () => {
     expect(appServerArguments(configuration)).toEqual([
       "app-server",
       "-c",
@@ -32,21 +29,12 @@ describe("Codex app-server launch", () => {
       'otel.trace_exporter="none"',
       "-c",
       'otel.metrics_exporter="none"',
-      "-c",
-      'mcp_servers.genio_one.url="https://one.example.test/mcp"',
-      "-c",
-      'mcp_servers.genio_one.bearer_token_env_var="GENIO_ONE_MCP_BEARER_TOKEN"',
-      "-c",
-      'mcp_servers.genio_one.default_tools_approval_mode="writes"',
-      "-c",
-      "mcp_servers.genio_one.required=false",
     ])
   })
 
   test("quotes the self-hosted desktop command without embedding credentials", () => {
     const command = appServerCommand({
-      ...configuration,
-      mcpUrl: "https://one.example.test/mcp?tenant=acme's",
+      discoveryMcpUrl: "https://one.example.test/mcp?tenant=acme's",
     })
     expect(command).toContain("'codex' 'app-server'")
     expect(command).toContain("one.example.test")
@@ -118,7 +106,7 @@ describe("Codex app-server launch", () => {
     }
   })
 
-  test("omits GenioOne MCP config when mcpUrl is absent so chat can still start", () => {
+  test("starts chat without a generic MCP config", () => {
     expect(appServerArguments({})).toEqual([
       "app-server",
       "-c",
@@ -144,13 +132,13 @@ describe("Codex app-server launch", () => {
     })).toBe("https://one.example.test/mcp")
   })
 
-  test("uses the Bot relay for session-bound MCP instead of child-process bearer state", () => {
+  test("retires the generic session-bound relay while retaining catalog Discovery", () => {
     const environment = {
       GENIO_BOT_PORT: "5191",
       GENIO_ONE_MCP_URL: "https://one.example.test/mcp",
       GENIO_ONE_PLATFORM_ORIGIN: "https://platform.example.test",
     } as NodeJS.ProcessEnv
-    expect(resolveGenioOneMcpUrl(environment, "runtime/session")).toBe("http://127.0.0.1:5191/api/mcp-gateway/runtime%2Fsession/mcp")
+    expect(resolveGenioOneMcpUrl(environment, "runtime/session")).toBeNull()
     expect(resolveGenioDiscoveryMcpUrl(environment, {
       tenantId: "tenant/a",
       subjectId: "person-a",
@@ -169,8 +157,8 @@ test("native OTel export is explicitly configured with prompt logging enabled", 
   expect(args).toContain("otel.log_user_prompt=true")
 })
 
- test("Discovery is attached separately without replacing enterprise MCP", () => {
-  const args = appServerArguments({ mcpUrl: "https://one.example/mcp", bearerTokenEnvVar: "GENIO_ONE_MCP_BEARER_TOKEN", discoveryMcpUrl: "http://platform/v1/tenants/tenant/discovery/mcp" })
+ test("Discovery is attached without a generic enterprise MCP", () => {
+  const args = appServerArguments({ discoveryMcpUrl: "http://platform/v1/tenants/tenant/discovery/mcp" })
   expect(args).toContain('mcp_servers.genio_discovery.url="http://platform/v1/tenants/tenant/discovery/mcp"')
-  expect(args).toContain('mcp_servers.genio_one.url="https://one.example/mcp"')
+  expect(args.some((argument) => argument.startsWith("mcp_servers.genio_one."))).toBe(false)
 })

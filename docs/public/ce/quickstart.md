@@ -2,7 +2,7 @@
 
 ## Before you start
 
-Use a Linux or macOS host with Docker Engine and Docker Compose available to your user, Git, Node.js, pnpm `10.32.1`, and Bun `1.4.0`. The local Gateway Runtime downloads the native Envoy AI Gateway binary; its supported host combinations are Linux or macOS (`darwin`) on `x64` or `arm64`.
+Use a Linux or macOS host with Docker Engine and Docker Compose available to your user, Git, Node.js, pnpm `12.4.2`, and Bun `1.4.2`. The local Gateway Runtime downloads the native Envoy AI Gateway binary; its supported host combinations are Linux or macOS (`darwin`) on `x64` or `arm64`.
 
 Windows users should use a supported Linux environment with Docker access. Check the tools before installing:
 

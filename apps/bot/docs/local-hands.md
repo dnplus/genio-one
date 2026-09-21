@@ -29,6 +29,7 @@
 ## 已實作的邊界
 
 - 配對碼為 256-bit、有效 5 分鐘且只可使用一次，綁定已登入的 runtime session 與選定 Bot。配對及連線時核對 Bot ownership；每個 process／filesystem RPC 都重新查 One Policy。
+- Runtime capability registry 目前是固定清單，未知或 adapter 動態回報的 capability 一律不授權。`remote_hands.use/expose` 只建立一次性配對，Endpoint 接受時以 `remote_hands.use/use` 重驗；實際命令與檔案 RPC 仍各自重新授權。
 - 同一使用者一次只接一個 Headless lease。Endpoint lease 最長 1 小時；WebSocket 每 15 秒探測存活，超過 30 秒沒有 Pong 時關閉。停止、斷線或拒絕授權後停止本機 executor；尚未確認的工作不會換到雲端執行。
 - Browser 無法選擇內部 executor secret；Bot server 才將私有連線 URL 送給 app-server。內部 bridge 拒絕帶 Origin 或來自非 loopback 的請求。
 - `environment/add`、environment ownership 與 native sandbox params 沿用既有 Bot 路徑。Endpoint 的實際 cwd 由本機 canonical path 回報，server 將它固定為 runtime workspace root。工作資料夾是 native sandbox 的寫入根目錄；額外權限仍走原生核准流程。

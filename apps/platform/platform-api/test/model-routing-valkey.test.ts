@@ -9,6 +9,7 @@ import {
   valkeyModelRouteLeaseKey,
   type ValkeySessionLeaseClient,
 } from "../src/capabilities/model-routing/valkey"
+import type { ModelRoutingDecisionProvider } from "../src/capabilities/model-routing/decision-provider"
 
 const tenantId = "tenant-acme"
 
@@ -104,14 +105,53 @@ function baseInput() {
   }
 }
 
-function router(client: FakeValkey, now = 100) {
+function router(client: FakeValkey, now = 100, decisionProvider?: ModelRoutingDecisionProvider) {
   return createValkeyModelRouter({
     client,
     models: modelCatalog([publicModel("model-a"), publicModel("model-b")]),
     now: () => now,
     idFactory: () => "lease-fixed",
+    decisionProvider,
+    decisionMinimumConfidence: 0.6,
   })
 }
+
+test("Valkey stores and reuses the semantic decision receipt without re-evaluating", async () => {
+  const client = new FakeValkey()
+  let calls = 0
+  const modelRouter = router(client, 100, {
+    provider_id: "test-system-one",
+    requested_model: "decision-v1",
+    async decide() {
+      calls += 1
+      return {
+        resolved_model: "decision-v1",
+        suggested_public_model_id: "model-b",
+        confidence: 0.9,
+        probabilities: { "model-a": 0.1, "model-b": 0.9 },
+        annotations: {
+          task_kind: "TOOL_USE",
+          task_kind_confidence: 0.93,
+          complexity_score: 1.4,
+          complexity_confidence: 0.8,
+          requires_tools_probability: 0.98,
+        },
+        usage: { input_tokens: 180, output_tokens: 16 },
+      }
+    },
+  })
+  const value = {
+    ...baseInput(),
+    semantic_routing: { task: "Use the browser to inspect a deployed application" },
+  }
+  const first = await modelRouter.resolve({ tenantId, value })
+  const reused = await modelRouter.resolve({ tenantId, value })
+  assert.equal(first.selected_public_model_id, "model-b")
+  assert.equal(first.decision_receipt?.annotations.task_kind, "TOOL_USE")
+  assert.deepEqual(reused.decision_receipt, first.decision_receipt)
+  assert.equal(reused.reused, true)
+  assert.equal(calls, 1)
+})
 
 test("stateless resolution is deterministic and never touches Valkey", async () => {
   const client = new FakeValkey()

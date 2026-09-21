@@ -1,3 +1,5 @@
+import { compareUtf8 } from "@genioone/protocol/canonical"
+
 export const AUTHORITY_FLOOR_SCHEMA_VERSION = "genio.one.authority-floor.v1" as const
 
 export interface AuthorityFloor {
@@ -9,10 +11,6 @@ export interface AuthorityFloor {
 
 function identifier(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= 256 && value.trim() === value && !/[\u0000-\u001f\u007f]/.test(value)
-}
-
-function compareUtf8(left: string, right: string): number {
-  return Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"))
 }
 
 export function parseAuthorityFloor(value: unknown): AuthorityFloor {

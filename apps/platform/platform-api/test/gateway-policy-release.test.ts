@@ -5,7 +5,7 @@ import test from "node:test"
 import {
   verifyCompactEdDsaJws,
   type VerificationKeyRing,
-} from "../../../../packages/protocol/src/compact-jws"
+} from "@genioone/protocol/compact-jws"
 import {
   validateProcessorPolicyBundle,
   type ProcessorPolicy,

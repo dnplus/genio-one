@@ -10,7 +10,7 @@ English is the canonical CE documentation and demo language. The [繁體中文 v
 
 CE includes the Platform control plane, a locally managed Gateway Runtime, and Genio Bot. You provide the host, supporting containers, provider credentials, connection approvals, and any external MCP service access. The repository does not contain provider secrets or claim that a connection is usable merely because it is configured.
 
-Before starting, use a Linux or macOS host with Docker Engine, Docker Compose, Git, Node.js, pnpm `10.32.1`, and Bun `1.4.0`. The [Quickstart](quickstart.md) is the source of truth for local prerequisites and service addresses.
+Before starting, use a Linux or macOS host with Docker Engine, Docker Compose, Git, Node.js, pnpm `12.4.2`, and Bun `1.4.2`. The [Quickstart](quickstart.md) is the source of truth for local prerequisites and service addresses.
 
 ## The first useful path
 

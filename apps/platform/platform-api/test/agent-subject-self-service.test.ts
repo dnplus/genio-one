@@ -39,7 +39,7 @@ async function createApp(lifecycle: () => "ENABLED" | "DISABLED", identityLookup
     tenantId: "tenant-other",
     subjects: [{ subject_id: "person-other", kind: "PERSON", role: "USER" }],
   })
-  const botAccessPolicy = createDefaultOnePolicy()
+  const botAccessPolicy = createDefaultOnePolicy({ policyAuditSink: modules.auditEvents })
   await botAccessPolicy.publishFirstPartyBotPolicy({
     tenantId,
     baseRevision: 1,
@@ -147,7 +147,12 @@ test("the self-service body cannot supply an identity kind, subject, or actor", 
 test("the self-service boundary denies a caller when One Policy is disabled", async () => {
   const { app, modules, botAccessPolicy } = await createApp(() => "ENABLED")
   try {
-    await botAccessPolicy.setFirstPartyBotSeedEnabled({ tenantId, enabled: false })
+    await botAccessPolicy.setFirstPartyBotSeedEnabled({
+      tenantId,
+      enabled: false,
+      publishedBy: "test-admin",
+      correlationId: "self-service-policy-disable",
+    })
     const response = await app.inject({
       method: "POST",
       url: `/v1/tenants/${tenantId}/me/agents`,

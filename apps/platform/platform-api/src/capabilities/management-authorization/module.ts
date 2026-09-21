@@ -611,6 +611,10 @@ export function createManagementAuthorization(
         }
         return
       }
+      if (route.rest[0] === "access-groups") {
+        assertTenantAdministrator(principal)
+        return
+      }
       // Login methods apply to the whole realm rather than to one Organization,
       // so reading and changing them stays with the Tenant Administrator.
       if (route.rest[0] === "identity-providers") {

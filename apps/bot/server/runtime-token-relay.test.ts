@@ -4,7 +4,35 @@ import { RuntimeBroker } from "./runtime-broker"
 import { modelGatewayRelayRoutes } from "./model-gateway-relay"
 import type { BotServerContext } from "./context"
 
-test("MCP relay follows current owner token without restarting native runtime and rejects a closed session", async () => {
+function allowRuntimePolicy() {
+  return {
+    async authorize(input: Record<string, unknown>) {
+      return {
+        tenant_id: "tenant",
+        subject_id: "owner",
+        client_id: "genio-one-bot",
+        bot_id: input.botId,
+        runtime_id: "codex",
+        policy_id: "one-policy.runtime.capabilities",
+        policy_display_name: "Runtime capabilities",
+        policy_revision: 1,
+        capability_id: input.capabilityId,
+        action: input.action,
+        target: `runtime:codex:${input.capabilityId}`,
+        decision: "ALLOW" as const,
+        reason_code: "RULE_ALLOW:mcp",
+        constraints: [],
+        obligations: [],
+        correlation_id: input.correlationId,
+        session_id: input.sessionId,
+        evaluated_at: 1_757_000_000,
+      }
+    },
+    async report() {},
+  }
+}
+
+test("retires the generic relay while catalog Discovery follows the current session token", async () => {
   const broker = new RuntimeBroker({ provision: async () => { throw new Error("not used") } })
   const app = Fastify()
   const principal = { tenant_id: "tenant", subject_id: "owner", acting_client_id: "genio-one-bot", scopes: [] }
@@ -25,18 +53,20 @@ test("MCP relay follows current owner token without restarting native runtime an
     await modelGatewayRelayRoutes(app, { runtimeBroker: broker } as BotServerContext)
     const request = { method: "POST" as const, url: `/api/mcp-gateway/${session.id}/mcp`, headers: { authorization: "Bearer first-token" }, payload: { jsonrpc: "2.0", id: 1, method: "tools/list" } }
     const discoveryRequest = { ...request, url: `/api/discovery-mcp/${session.id}/mcp` }
-    expect((await app.inject(request)).statusCode).toBe(200)
+    expect((await app.inject(request)).statusCode).toBe(410)
     expect((await app.inject(discoveryRequest)).statusCode).toBe(200)
     const resumed = await broker.start(principal, { onMessage() {}, onExit() {} }, () => { throw new Error("must reuse runtime") }, "second-token")
     expect(resumed.id).toBe(session.id)
-    expect((await app.inject(request)).statusCode).toBe(200)
+    expect((await app.inject(request)).statusCode).toBe(410)
     expect((await app.inject(discoveryRequest)).statusCode).toBe(200)
-    expect(tokens).toEqual(["Bearer first-token", "Bearer first-token", "Bearer second-token", "Bearer second-token"])
+    expect((await app.inject({ ...discoveryRequest, payload: { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "unexpected", arguments: {} } } })).statusCode).toBe(403)
+    expect(tokens).toEqual(["Bearer first-token", "Bearer second-token"])
     expect(starts).toBe(1)
     expect(closes).toBe(0)
     await broker.stop(session.id)
-    expect((await app.inject(request)).statusCode).toBe(404)
-    expect(tokens).toHaveLength(4)
+    expect((await app.inject(request)).statusCode).toBe(410)
+    expect((await app.inject(discoveryRequest)).statusCode).toBe(404)
+    expect(tokens).toHaveLength(2)
     expect(closes).toBe(1)
   } finally {
     globalThis.fetch = originalFetch
@@ -48,15 +78,13 @@ test("MCP relay follows current owner token without restarting native runtime an
   }
 })
 
-test("CE MCP relay uses each selected resource publication endpoint with its configured gateway transport", async () => {
+test("MCP relay uses each mount's publication endpoint with the configured gateway transport", async () => {
   const broker = new RuntimeBroker({ provision: async () => { throw new Error("not used") } })
   const app = Fastify()
   const principal = { tenant_id: "tenant", subject_id: "owner", acting_client_id: "genio-one-bot", scopes: [] }
-  const originalOrigin = process.env.GENIO_ONE_MCP_ORIGIN
   const originalUrl = process.env.GENIO_ONE_MCP_URL
   const originalFetch = globalThis.fetch
   const targets: Array<{ url: string; host: string | null }> = []
-  process.env.GENIO_ONE_MCP_ORIGIN = "https://old-context7.example.test"
   process.env.GENIO_ONE_MCP_URL = "http://one.localhost:1975/mcp"
   globalThis.fetch = (async (input, init) => {
     targets.push({ url: String(input), host: new Headers(init?.headers).get("host") })
@@ -65,15 +93,18 @@ test("CE MCP relay uses each selected resource publication endpoint with its con
   try {
     const session = await broker.start(principal, { onMessage() {}, onExit() {} }, () => ({ send: async () => {}, close: async () => {} }), "token")
     session.selectedBotId = "ce-bot"
-    Object.assign(session, {
-      managedMcpEndpoints: {
-        "genio.demo.context7": { hostname: "context7.stellar-freight.localhost", base_path: "/" },
-        "genio.demo.archify": { hostname: "archify.stellar-freight.localhost", base_path: "/" },
-      },
-    })
+    session.managedMcpMounts = {
+      "genio.demo.context7": { resourceId: "genio.demo.context7", capabilityId: "context7", serverName: "genio_mcp_context7", hostname: "context7.stellar-freight.localhost", basePath: "/" },
+      "genio.demo.archify": { resourceId: "genio.demo.archify", capabilityId: "archify", serverName: "genio_mcp_archify", hostname: "archify.stellar-freight.localhost", basePath: "/" },
+    }
+    const bindings = [
+      { resourceId: "genio.demo.context7", capabilityId: "context7", state: "INSTALLED", kind: "MCP" },
+      { resourceId: "genio.demo.archify", capabilityId: "archify", state: "INSTALLED", kind: "MCP" },
+    ]
     await modelGatewayRelayRoutes(app, {
       runtimeBroker: broker,
-      botRegistry: { getOwned: () => ({ sourceResourceId: "genio.demo.bot", bindings: [] }) },
+      botRegistry: { getOwned: () => ({ sourceResourceId: "genio.demo.bot", bindings }) },
+      runtimePolicy: allowRuntimePolicy(),
     } as unknown as BotServerContext)
     const request = {
       method: "POST" as const,
@@ -91,15 +122,13 @@ test("CE MCP relay uses each selected resource publication endpoint with its con
     expect(targets).toHaveLength(2)
   } finally {
     globalThis.fetch = originalFetch
-    if (originalOrigin === undefined) delete process.env.GENIO_ONE_MCP_ORIGIN
-    else process.env.GENIO_ONE_MCP_ORIGIN = originalOrigin
     if (originalUrl === undefined) delete process.env.GENIO_ONE_MCP_URL
     else process.env.GENIO_ONE_MCP_URL = originalUrl
     await app.close(); await broker.close()
   }
 })
 
-test("generic MCP relay preserves the method, headers, route, and current binding", async () => {
+test("resource-scoped MCP relay preserves the method, headers, route, and current binding", async () => {
   const broker = new RuntimeBroker({ provision: async () => { throw new Error("not used") } })
   const app = Fastify()
   const principal = { tenant_id: "tenant", subject_id: "owner", acting_client_id: "genio-one-bot", scopes: [] }
@@ -123,12 +152,13 @@ test("generic MCP relay preserves the method, headers, route, and current bindin
   try {
     const session = await broker.start(principal, { onMessage() {}, onExit() {} }, () => ({ send: async () => {}, close: async () => {} }), "active-token")
     session.selectedBotId = "notion-bot"
-    session.managedMcpEndpoints = {
-      [notionResourceId]: { hostname: "notion.stellar-freight.localhost", base_path: "/mcp", capabilityId: "notion.search" },
+    session.managedMcpMounts = {
+      [notionResourceId]: { resourceId: notionResourceId, capabilityId: "notion.search", serverName: "genio_mcp_notion", hostname: "notion.stellar-freight.localhost", basePath: "/mcp" },
     }
     await modelGatewayRelayRoutes(app, {
       runtimeBroker: broker,
       botRegistry: { getOwned: () => ({ sourceResourceId: "custom-notion-bot", bindings }) },
+      runtimePolicy: allowRuntimePolicy(),
     } as unknown as BotServerContext)
     const request = {
       method: "POST" as const,

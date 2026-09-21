@@ -1,14 +1,14 @@
-import { observedFetch } from "../../../packages/telemetry/src/operation-observability"
+import { observedFetch } from "@genioone/telemetry/operation-observability"
 import { chatStreamToResponses } from "./model-response-stream"
 import { randomUUID } from "node:crypto"
 import { Readable } from "node:stream"
 import type { FastifyInstance } from "fastify"
 
 import type { BotServerContext } from "./context"
-import { isManagedMcpResourceForBot, managedMcpTarget } from "./ce-demo-mcp"
+import { authorizedManagedMcpMount, managedMcpTarget } from "./managed-mcp"
 import type { RuntimeSession } from "./runtime-broker"
 import { requireRuntimePolicyDecision } from "./runtime-policy"
-import type { RuntimePolicyDecision } from "./runtime-policy-contract"
+import { runtimePolicyDecisionTarget, type RuntimePolicyDecision } from "./runtime-policy-contract"
 import {
   CONSUMER_ORGANIZATION_HEADER,
   CORRELATION_HEADER,
@@ -29,6 +29,15 @@ function textFromContent(value: unknown): string {
     if (typeof item.value === "string") return item.value
     return ""
   }).join("")
+}
+
+function isCatalogDiscoveryRequest(request: any): boolean {
+  if (request.method !== "POST" || !request.body || typeof request.body !== "object" || Array.isArray(request.body)) return false
+  const body = request.body as JsonRecord
+  if (["initialize", "notifications/initialized", "ping", "tools/list"].includes(body.method as string)) return true
+  if (body.method !== "tools/call" || !body.params || typeof body.params !== "object" || Array.isArray(body.params)) return false
+  const name = (body.params as JsonRecord).name
+  return name === "search_resources" || name === "get_resource"
 }
 
 function responseInputToMessages(input: unknown, instructions: unknown): Array<JsonRecord> {
@@ -119,7 +128,7 @@ function loopbackTarget(target: URL): { url: URL; host: string | null } {
   return { url, host }
 }
 
-async function forwardMcpRequest(request: any, reply: any, session: RuntimeSession, configured: string) {
+async function fetchMcpResponse(request: any, session: RuntimeSession, configured: string): Promise<Response> {
   const configuredTarget = new URL(configured)
   const requestUrl = new URL(request.url, "http://127.0.0.1")
   configuredTarget.search = requestUrl.search
@@ -138,13 +147,89 @@ async function forwardMcpRequest(request: any, reply: any, session: RuntimeSessi
     : typeof request.body === "string" || Buffer.isBuffer(request.body)
       ? request.body as BodyInit
       : request.body === undefined ? undefined : JSON.stringify(request.body)
-  const upstream = await observedFetch("genio-one-bot", resolvedTarget.url, { method, headers, body })
+  return observedFetch("genio-one-bot", resolvedTarget.url, { method, headers, body })
+}
+
+function sendMcpResponse(reply: any, upstream: Response, stream?: Readable) {
   for (const [key, value] of upstream.headers) {
     if (["connection", "content-length", "transfer-encoding", "upgrade"].includes(key.toLowerCase())) continue
     reply.header(key, value)
   }
   if (!upstream.body) return reply.code(upstream.status).send()
-  return reply.code(upstream.status).send(Readable.fromWeb(upstream.body as unknown as Parameters<typeof Readable.fromWeb>[0]))
+  return reply.code(upstream.status).send(stream ?? Readable.fromWeb(upstream.body as unknown as Parameters<typeof Readable.fromWeb>[0]))
+}
+
+async function forwardMcpRequest(request: any, reply: any, session: RuntimeSession, configured: string) {
+  return sendMcpResponse(reply, await fetchMcpResponse(request, session, configured))
+}
+
+function reportedMcpResponseStream(
+  body: ReadableStream<Uint8Array>,
+  report: (outcome: "COMPLETED" | "FAILED", reasonCode?: string) => Promise<void>,
+) {
+  const reader = body.getReader()
+  let reported = false
+  let completionAttempted = false
+  let cancelled = false
+  let cancellationAttempted = false
+  const reportFailure = async (reasonCode: string) => {
+    if (reported || completionAttempted) return
+    reported = true
+    await report("FAILED", reasonCode)
+  }
+  const source = (async function*() {
+    try {
+      for (;;) {
+        const next = await reader.read()
+        if (next.done) {
+          if (cancelled) {
+            await reportFailure("MCP_GATEWAY_UPSTREAM_STREAM_CANCELLED")
+            return
+          }
+          completionAttempted = true
+          await report("COMPLETED")
+          reported = true
+          return
+        }
+        yield Buffer.from(next.value)
+      }
+    } catch (error) {
+      try {
+        await reportFailure(cancelled ? "MCP_GATEWAY_UPSTREAM_STREAM_CANCELLED" : "MCP_GATEWAY_UPSTREAM_STREAM_FAILED")
+      } catch {
+        throw new Error("RUNTIME_POLICY_REPORT_UNAVAILABLE")
+      }
+      throw error
+    } finally {
+      if (!reported && !completionAttempted) {
+        cancelled = true
+        try { await reader.cancel() } catch {}
+        try {
+          await reportFailure("MCP_GATEWAY_UPSTREAM_STREAM_CANCELLED")
+        } catch {
+          throw new Error("RUNTIME_POLICY_REPORT_UNAVAILABLE")
+        }
+      }
+    }
+  })()
+  const stream = Readable.from(source)
+  const cancel = () => {
+    if (!reported && !completionAttempted && !cancellationAttempted) {
+      cancellationAttempted = true
+      cancelled = true
+      void (async () => {
+        try { await reader.cancel() } catch {}
+        try { await reportFailure("MCP_GATEWAY_UPSTREAM_STREAM_CANCELLED") } catch {}
+      })()
+    }
+  }
+  const destroy = stream.destroy.bind(stream)
+  stream.destroy = (error?: Error) => {
+    cancel()
+    return destroy(error)
+  }
+  stream.once("close", cancel)
+  return stream
 }
 
 export async function modelGatewayRelayRoutes(app: FastifyInstance, context: BotServerContext) {
@@ -167,12 +252,13 @@ export async function modelGatewayRelayRoutes(app: FastifyInstance, context: Bot
     let decision: RuntimePolicyDecision | undefined
     const report = async (outcome: "COMPLETED" | "DENY" | "FAILED", reasonCode?: string) => {
       if (!decision?.correlation_id) throw new Error("RUNTIME_POLICY_CORRELATION_INVALID")
+      const target = runtimePolicyDecisionTarget(decision)
       await context.runtimePolicy.report({
         principal: session.principal,
         botId,
         runtimeId: "codex",
-        capabilityId: decision.capability_id,
-        action: decision.action,
+        capabilityId: target.capabilityId,
+        action: target.action,
         sessionId: session.id,
         correlationId: decision.correlation_id,
         accessToken: session.accessToken,
@@ -264,21 +350,99 @@ export async function modelGatewayRelayRoutes(app: FastifyInstance, context: Bot
     const { runtimeSessionId, resourceId } = request.params as { runtimeSessionId: string; resourceId: string }
     const session = context.runtimeBroker.get(runtimeSessionId)
     if (!session?.accessToken) return reply.code(404).send({ error: "MCP_RUNTIME_SESSION_NOT_FOUND" })
-    const bot = session.selectedBotId ? context.botRegistry.getOwned(session.selectedBotId, session.principal) : null
-    if (!bot || !isManagedMcpResourceForBot(bot.sourceResourceId, bot.bindings, resourceId, session.managedMcpEndpoints)) return reply.code(403).send({ error: "MCP_RESOURCE_NOT_ALLOWED" })
-    const configured = managedMcpTarget(resourceId, session.managedMcpEndpoints)
+    const botId = session.selectedBotId
+    if (!botId) return reply.code(403).send({ error: "MCP_RESOURCE_NOT_ALLOWED" })
+    const bot = context.botRegistry.getOwned(botId, session.principal)
+    const mount = bot ? authorizedManagedMcpMount(resourceId, session.managedMcpMounts ?? {}, bot.bindings) : null
+    if (!mount) return reply.code(403).send({ error: "MCP_RESOURCE_NOT_ALLOWED" })
+    const configured = managedMcpTarget(mount)
     if (!configured) return reply.code(503).send({ error: "MCP_PUBLICATION_ENDPOINT_UNAVAILABLE" })
-    return forwardMcpRequest(request, reply, session, configured)
+    const correlationId = randomUUID()
+    let decision: RuntimePolicyDecision | undefined
+    const report = async (outcome: "COMPLETED" | "DENY" | "FAILED", reasonCode?: string) => {
+      if (!decision?.correlation_id) throw new Error("RUNTIME_POLICY_CORRELATION_INVALID")
+      const target = runtimePolicyDecisionTarget(decision)
+      await context.runtimePolicy.report({
+        principal: session.principal,
+        botId,
+        runtimeId: "codex",
+        capabilityId: target.capabilityId,
+        action: target.action,
+        sessionId: session.id,
+        correlationId: decision.correlation_id,
+        accessToken: session.accessToken,
+        outcome,
+        ...(reasonCode ? { reasonCode } : {}),
+      })
+    }
+    try {
+      decision = await context.runtimePolicy.authorize({
+        principal: session.principal,
+        botId,
+        runtimeId: "codex",
+        capabilityId: "mcp.invoke",
+        action: "invoke",
+        sessionId: session.id,
+        correlationId,
+        accessToken: session.accessToken,
+      })
+      if (decision.correlation_id !== correlationId) throw new Error("RUNTIME_POLICY_CORRELATION_INVALID")
+      requireRuntimePolicyDecision(decision)
+    } catch (error) {
+      const policyDecision = decision
+      if (policyDecision) {
+        try {
+          await report("DENY", error instanceof Error ? error.message : "RUNTIME_POLICY_DENIED")
+        } catch {
+          return reply.code(503).send({ error: "RUNTIME_POLICY_REPORT_UNAVAILABLE" })
+        }
+      }
+      if (policyDecision?.decision === "DENY" || error instanceof Error && error.message.startsWith("RUNTIME_POLICY_")) {
+        return reply.code(403).send({ error: policyDecision?.reason_code ?? (error instanceof Error ? error.message : "RUNTIME_POLICY_DENIED") })
+      }
+      return reply.code(503).send({ error: "RUNTIME_POLICY_UNAVAILABLE" })
+    }
+    let upstream: Response
+    try {
+      upstream = await fetchMcpResponse(request, session, configured)
+    } catch {
+      try {
+        await report("FAILED", "MCP_GATEWAY_UPSTREAM_UNAVAILABLE")
+      } catch {
+        return reply.code(503).send({ error: "RUNTIME_POLICY_REPORT_UNAVAILABLE" })
+      }
+      return reply.code(502).send({ error: "MCP_GATEWAY_UPSTREAM_UNAVAILABLE" })
+    }
+    if (!upstream.ok) {
+      try {
+        await report("FAILED", `MCP_GATEWAY_UPSTREAM_${upstream.status}`)
+      } catch {
+        void upstream.body?.cancel()
+        return reply.code(503).send({ error: "RUNTIME_POLICY_REPORT_UNAVAILABLE" })
+      }
+      return sendMcpResponse(reply, upstream)
+    }
+    if (!upstream.body) {
+      try {
+        await report("COMPLETED")
+      } catch {
+        return reply.code(503).send({ error: "RUNTIME_POLICY_REPORT_UNAVAILABLE" })
+      }
+      return sendMcpResponse(reply, upstream)
+    }
+    return sendMcpResponse(reply, upstream, reportedMcpResponseStream(upstream.body, report))
   })
 
-  for (const kind of ["mcp-gateway", "discovery-mcp"] as const) app.all(`/api/${kind}/:runtimeSessionId/mcp`, async (request, reply) => {
+  app.all("/api/mcp-gateway/:runtimeSessionId/mcp", async (_request, reply) => {
+    return reply.code(410).send({ error: "MCP_GENERIC_RELAY_RETIRED" })
+  })
+
+  app.all("/api/discovery-mcp/:runtimeSessionId/mcp", async (request, reply) => {
     const { runtimeSessionId } = request.params as { runtimeSessionId: string }
     const session = context.runtimeBroker.get(runtimeSessionId)
     if (!session?.accessToken) return reply.code(404).send({ error: "MCP_RUNTIME_SESSION_NOT_FOUND" })
-    const configured = kind === "discovery-mcp"
-      ? new URL(`/v1/tenants/${encodeURIComponent(session.principal.tenant_id)}/discovery/mcp`, process.env.GENIO_ONE_PLATFORM_ORIGIN || "http://127.0.0.1:58082").toString()
-      : process.env.GENIO_ONE_MCP_URL?.trim()
-    if (!configured) return reply.code(503).send({ error: "GENIO_ONE_MCP_URL_REQUIRED" })
+    if (!isCatalogDiscoveryRequest(request)) return reply.code(403).send({ error: "DISCOVERY_CATALOG_EXPOSE_ONLY" })
+    const configured = new URL(`/v1/tenants/${encodeURIComponent(session.principal.tenant_id)}/discovery/mcp`, process.env.GENIO_ONE_PLATFORM_ORIGIN || "http://127.0.0.1:58082").toString()
     return forwardMcpRequest(request, reply, session, configured)
   })
 }

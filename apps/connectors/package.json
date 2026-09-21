@@ -20,19 +20,19 @@
     "build": "bun build servicenow-csm/main.ts --target=bun --outfile=dist/servicenow-csm.js && bun build mail2000/main.ts --target=bun --outfile=dist/mail2000.js && bun build archify/main.ts --target=bun --outfile=dist/archify.js"
   },
   "dependencies": {
+    "@genioone/telemetry": "workspace:*",
     "@modelcontextprotocol/sdk": "1.30.0",
-    "imapflow": "1.2.17",
-    "mailparser": "3.9.6",
-    "nodemailer": "8.0.4",
-    "tsdav": "^2.3.1",
-    "typebox": "1.3.19",
-    "zod": "3.25.76",
-    "@genioone/telemetry": "workspace:*"
+    "imapflow": "2.0.5",
+    "mailparser": "3.9.28",
+    "nodemailer": "10.0.10",
+    "tsdav": "^2.3.3",
+    "typebox": "1.3.34",
+    "zod": "4.6.5"
   },
   "devDependencies": {
-    "@types/bun": "1.3.10",
+    "@types/bun": "1.4.2",
     "@types/mailparser": "^3.4.6",
-    "@types/nodemailer": "^8.0.1",
+    "@types/nodemailer": "^8.0.2",
     "typescript": "7.0.2"
   }
 }

@@ -2,13 +2,13 @@ import {
   AUTHORIZATION_BUNDLE_SCHEMA_VERSION,
   type CompiledAuthorizationBundle,
   type CompiledAuthorizationRule,
-} from "../../../../packages/protocol/src/authorization"
+} from "@genioone/protocol/authorization"
 import {
   verifyCompactEdDsaJws,
   type VerificationKeyRing,
-} from "../../../../packages/protocol/src/compact-jws"
+} from "@genioone/protocol/compact-jws"
 
-export type { VerificationKeyRing } from "../../../../packages/protocol/src/compact-jws"
+export type { VerificationKeyRing } from "@genioone/protocol/compact-jws"
 
 function nonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0 && value === value.trim()

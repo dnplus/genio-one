@@ -16,7 +16,16 @@ import type {
 } from "./module"
 import type { ResourceRegistry } from "../resources/module"
 import { Type } from "typebox"
-import { PolicyDraftSchema, SavePolicyDraftSchema, PublishPolicyDraftSchema, resourcePolicyKey, type PolicyDraftStore } from "../one-policy/drafts"
+import {
+  DiscardPolicyDraftSchema,
+  PolicyDraftSchema,
+  PolicyDraftTransitionSchema,
+  PublishPolicyDraftSchema,
+  SavePolicyDraftSchema,
+  resourcePolicyKey,
+  type PolicyDraftStore,
+} from "../one-policy/drafts"
+import { assertExpectedPolicyDraft } from "../one-policy/lifecycle"
 
 export interface EnforcementHttpOptions {
   drafts?: PolicyDraftStore
@@ -44,7 +53,7 @@ export const enforcementHttp: FastifyPluginAsync<EnforcementHttpOptions> = async
     const drafts = options.drafts
     routes.get("/v1/tenants/:tenant_id/one-policy/drafts", { schema: {
       tags: ["One Policy"], params: Type.Object({ tenant_id: Type.String() }),
-      response: { 200: Type.Array(Type.Pick(PolicyDraftSchema, ["policy_key", "version", "base_revision", "updated_at"])) },
+      response: { 200: Type.Array(Type.Pick(PolicyDraftSchema, ["policy_key", "version", "base_revision", "lifecycle", "content_digest", "updated_at"])) },
     } }, async (request) => {
       const items = await drafts.list(request.params.tenant_id)
       const administrator = request.principal!.role === "TENANT_ADMINISTRATOR"
@@ -53,10 +62,14 @@ export const enforcementHttp: FastifyPluginAsync<EnforcementHttpOptions> = async
       return items.filter((item) => {
         if (item.content.kind === "BOT_ACCESS") return administrator
         try { return allowed.has(JSON.parse(item.policy_key)[0]) } catch { return false }
-      }).map(({ policy_key, version, base_revision, updated_at }) => ({ policy_key, version, base_revision, updated_at }))
+      }).map(({ policy_key, version, base_revision, lifecycle, content_digest, updated_at }) => ({ policy_key, version, base_revision, lifecycle, content_digest, updated_at }))
     })
-    routes.post(`${draftPath}/discard`, { schema: { tags: ["One Policy"], params: EnforcementChainPathSchema, body: PublishPolicyDraftSchema, response: { 200: Type.Object({ discarded: Type.Boolean() }) } } }, async (request) => {
-      const removed = await drafts.remove(request.params.tenant_id, resourcePolicyKey(request.params.resource_id, request.params.capability_id), request.body.expected_version)
+    routes.post(`${draftPath}/discard`, { schema: { tags: ["One Policy"], params: EnforcementChainPathSchema, body: DiscardPolicyDraftSchema, response: { 200: Type.Object({ discarded: Type.Boolean() }) } } }, async (request) => {
+      const key = resourcePolicyKey(request.params.resource_id, request.params.capability_id)
+      const removed = await drafts.remove(request.params.tenant_id, key, request.body.expected_version, {
+        actorSubjectId: request.principal!.subject_id,
+        correlationId: request.id,
+      })
       if (!removed) throw new PlatformApiError("POLICY_DRAFT_CONFLICT", 409)
       return { discarded: true }
     })
@@ -66,7 +79,43 @@ export const enforcementHttp: FastifyPluginAsync<EnforcementHttpOptions> = async
       if (request.body.content.kind !== "RESOURCE_CAPABILITY") throw new PlatformApiError("POLICY_KIND_MISMATCH", 422)
       const latest = await options.revisionStore?.getLatest({ tenantId: request.params.tenant_id, resourceId: request.params.resource_id, capabilityId: request.params.capability_id })
       if ((latest?.one_policy_revision ?? 0) !== request.body.base_revision || request.body.content.definition.one_policy_revision !== request.body.base_revision + 1) throw new PlatformApiError("POLICY_REVISION_CONFLICT", 409)
-      return drafts.save(request.params.tenant_id, resourcePolicyKey(request.params.resource_id, request.params.capability_id), request.body)
+      const key = resourcePolicyKey(request.params.resource_id, request.params.capability_id)
+      return drafts.save(request.params.tenant_id, key, request.body, {
+        actorSubjectId: request.principal!.subject_id,
+        correlationId: request.id,
+      })
+    })
+    routes.post(`${draftPath}/validate`, { schema: { tags: ["One Policy"], params: EnforcementChainPathSchema, body: PolicyDraftTransitionSchema, response: { 200: PolicyDraftSchema } } }, async (request) => {
+      const tenantId = request.params.tenant_id
+      const resourceId = request.params.resource_id
+      const capabilityId = request.params.capability_id
+      const key = resourcePolicyKey(resourceId, capabilityId)
+      const current = await drafts.get(tenantId, key)
+      if (!current) throw new PlatformApiError("POLICY_DRAFT_CONFLICT", 409)
+      assertExpectedPolicyDraft(current, { expectedVersion: request.body.expected_version, expectedContentDigest: request.body.expected_content_digest })
+      if (current.content.kind !== "RESOURCE_CAPABILITY") throw new PlatformApiError("POLICY_KIND_MISMATCH", 422)
+      await options.compiler.compile({
+        tenantId,
+        value: {
+          ...current.content.definition,
+          resource_id: resourceId,
+          capability_id: capabilityId,
+          eligible_connection_ids: current.content.definition.eligible_connection_ids ?? await options.compiler.listEligibleConnectionIds({ tenantId, resourceId }),
+        },
+      })
+      return drafts.validate(tenantId, key, {
+        expectedVersion: request.body.expected_version,
+        expectedContentDigest: request.body.expected_content_digest,
+        context: { actorSubjectId: request.principal!.subject_id, correlationId: request.id },
+      })
+    })
+    routes.post(`${draftPath}/review`, { schema: { tags: ["One Policy"], params: EnforcementChainPathSchema, body: PolicyDraftTransitionSchema, response: { 200: PolicyDraftSchema } } }, async (request) => {
+      const key = resourcePolicyKey(request.params.resource_id, request.params.capability_id)
+      return drafts.review(request.params.tenant_id, key, {
+        expectedVersion: request.body.expected_version,
+        expectedContentDigest: request.body.expected_content_digest,
+        context: { actorSubjectId: request.principal!.subject_id, correlationId: request.id },
+      })
     })
     routes.post(`${draftPath}/publish`, { schema: { tags: ["One Policy"], params: EnforcementChainPathSchema, body: PublishPolicyDraftSchema, response: { 200: EnforcementChainRevisionSchema } } }, async (request) => {
       const tenantId = request.params.tenant_id
@@ -74,19 +123,17 @@ export const enforcementHttp: FastifyPluginAsync<EnforcementHttpOptions> = async
       const capabilityId = request.params.capability_id
       const key = resourcePolicyKey(resourceId, capabilityId)
       const draft = await drafts.get(tenantId, key)
-      if (!draft || draft.version !== request.body.expected_version) throw new PlatformApiError("POLICY_DRAFT_CONFLICT", 409)
-      if (draft.content.kind !== "RESOURCE_CAPABILITY") throw new PlatformApiError("POLICY_KIND_MISMATCH", 422)
+      if (!draft) throw new PlatformApiError("POLICY_DRAFT_CONFLICT", 409)
       const store = options.revisionStore ?? revisionStoreRequired()
-      const definition = draft.content.definition
-      const latest = await store.getLatest({ tenantId, resourceId, capabilityId })
-      if (latest && latest.one_policy_revision > definition.one_policy_revision) throw new PlatformApiError("POLICY_REVISION_CONFLICT", 409)
-      const chain = await options.compiler.compile({ tenantId, value: {
-        ...definition, resource_id: resourceId, capability_id: capabilityId,
-        eligible_connection_ids: definition.eligible_connection_ids ?? await options.compiler.listEligibleConnectionIds({ tenantId, resourceId }),
-      } })
-      const published = await store.save({ tenantId, chain })
-      await drafts.remove(tenantId, key, draft.version)
-      return published
+      return store.publishDraft({
+        tenantId,
+        resourceId,
+        capabilityId,
+        expectedVersion: request.body.expected_version,
+        expectedContentDigest: request.body.expected_content_digest,
+        publishedBySubjectId: request.principal!.subject_id,
+        correlationId: request.id,
+      })
     })
   }
 
@@ -147,33 +194,14 @@ export const enforcementHttp: FastifyPluginAsync<EnforcementHttpOptions> = async
     {
       schema: {
         operationId: "saveEnforcementChainRevision",
-        summary: "Persist an immutable, tenant-scoped Enforcement Chain revision",
-        description:
-          "Resource and Capability come from the route. The compiler freezes the eligible Resource-owned Connection set; replaying the same revision is idempotent and changing it is rejected.",
+        summary: "Retired direct Enforcement Chain write route",
         tags: ["One Policy"],
         params: EnforcementChainPathSchema,
         body: EnforcementChainMutationBodySchema,
-        response: { 200: EnforcementChainRevisionSchema },
+        response: { 410: Type.Object({ code: Type.String() }) },
       },
     },
-    async (request) => {
-      const store = options.revisionStore ?? revisionStoreRequired()
-      const eligibleConnectionIds = request.body.eligible_connection_ids ?? await options.compiler.listEligibleConnectionIds({
-          tenantId: request.params.tenant_id,
-          resourceId: request.params.resource_id,
-        })
-      const chain = await options.compiler.compile({
-        tenantId: request.params.tenant_id,
-        value: {
-          resource_id: request.params.resource_id,
-          capability_id: request.params.capability_id,
-          eligible_connection_ids: eligibleConnectionIds,
-          one_policy_revision: request.body.one_policy_revision,
-          steps: request.body.steps,
-        },
-      })
-      return store.save({ tenantId: request.params.tenant_id, chain })
-    },
+    async () => { throw new PlatformApiError("ENFORCEMENT_DIRECT_WRITE_RETIRED", 410) },
   )
 
   const previewSchema = {

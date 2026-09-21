@@ -1,20 +1,28 @@
 import { createPrivateKey, createPublicKey, sign, verify } from "node:crypto"
 
+import { compareUtf8 } from "@genioone/protocol/canonical"
+
 export const RUNTIME_REPORT_KEY_ID_HEADER = "x-genio-runtime-report-key-id" as const
 export const RUNTIME_REPORT_SIGNATURE_HEADER = "x-genio-runtime-report-signature" as const
 
-function canonicalValue(value: unknown): string {
+type KeyOrder = (left: string, right: string) => number
+
+function canonicalValue(value: unknown, order: KeyOrder): string {
   if (value === null || typeof value === "string" || typeof value === "boolean" || typeof value === "number") return JSON.stringify(value)
-  if (Array.isArray(value)) return `[${value.map(canonicalValue).join(",")}]`
+  if (Array.isArray(value)) return `[${value.map((item) => canonicalValue(item, order)).join(",")}]`
   if (typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>).sort(([left], [right]) => left.localeCompare(right))
-    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonicalValue(item)}`).join(",")}}`
+    const entries = Object.entries(value as Record<string, unknown>).sort(([left], [right]) => order(left, right))
+    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonicalValue(item, order)}`).join(",")}}`
   }
   throw new Error("RUNTIME_REPORT_CANONICAL_VALUE_INVALID")
 }
 
 export function canonicalRuntimeReportPayload(value: Record<string, unknown>): string {
-  return canonicalValue(value)
+  return canonicalValue(value, compareUtf8)
+}
+
+function legacyRuntimeReportPayload(value: Record<string, unknown>): string {
+  return canonicalValue(value, (left, right) => left.localeCompare(right))
 }
 
 export function signRuntimeReport(value: Record<string, unknown>, privateKeyPem: string): string {
@@ -32,7 +40,11 @@ export function verifyRuntimeReport(
   try {
     const key = createPublicKey(publicKeyPem)
     if (key.asymmetricKeyType !== "ed25519") return false
-    return verify(null, Buffer.from(canonicalRuntimeReportPayload(value)), key, Buffer.from(signature, "base64url"))
+    const bytes = Buffer.from(signature, "base64url")
+    return (
+      verify(null, Buffer.from(canonicalRuntimeReportPayload(value)), key, bytes) ||
+      verify(null, Buffer.from(legacyRuntimeReportPayload(value)), key, bytes)
+    )
   } catch {
     return false
   }

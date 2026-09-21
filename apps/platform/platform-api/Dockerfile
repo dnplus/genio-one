@@ -1,10 +1,10 @@
-FROM oven/bun:1.4.0 AS build
+FROM oven/bun:1.4.2 AS build
 
 WORKDIR /workspace
 
 # pnpm remains the monorepo dependency and lockfile authority. Bun owns the
 # TypeScript runtime and bundling loop inside this image.
-RUN bun add --global pnpm@10.32.1
+RUN bun add --global pnpm@12.4.2
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/platform/package.json apps/platform/package.json
@@ -32,7 +32,7 @@ RUN cd apps/platform \
     && bun build platform-api/src/migrate.ts --target=bun --outdir=platform-api/dist \
     && bun build platform-api/src/pricing-sync.ts --target=bun --outdir=platform-api/dist
 
-FROM oven/bun:1.4.0 AS runtime
+FROM oven/bun:1.4.2 AS runtime
 
 WORKDIR /app
 ENV NODE_ENV=production \

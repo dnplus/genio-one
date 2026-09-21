@@ -1,14 +1,13 @@
-import { createHash } from "node:crypto"
+import { canonicalJson } from "@genioone/protocol/canonical"
 
 import { PlatformApiError } from "../errors"
 import type { PlatformApiViolation } from "../errors"
 import type { GatewayProjection, GatewayProjectionSnapshot } from "../gateway-projection/contract"
-import { validateCompiledEnforcementChainSemantics } from "../enforcement/compiler"
-import type { EnforcementChainRevision } from "../enforcement/module"
 import type { ResourcePublicationRequest } from "../resources/publication-types"
 import type { ResourceRegistration } from "../resources/contract"
 import type { ResourceRegistry } from "../resources/module"
-import { governedResourceContent, resourceContentDigest } from "../resources/resource-content"
+import { resourceContentDigest } from "../resources/resource-content"
+import { snapshotDigest, snapshotDigestMatches } from "./snapshot-digest"
 import type { ResourceConnectionRegistry } from "../connections/module"
 import type { PublicModelCatalog } from "../models/module"
 import type { ResourceMemoryState, ResourcePublicationBuildAttempt } from "../resources/state"
@@ -21,47 +20,6 @@ import type {
   PublicationWorkflowStore,
 } from "./module"
 import type { PublicationWorkflowRequest } from "./contract"
-
-function stable(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(stable)
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, entry]) => [key, stable(entry)]),
-    )
-  }
-  return value
-}
-
-function digest(value: unknown): string {
-  return createHash("sha256").update(JSON.stringify(stable(value))).digest("hex")
-}
-
-function snapshotContent(snapshot: Omit<GatewayProjectionSnapshot, "snapshot_digest">): unknown {
-  return {
-    tenant_id: snapshot.tenant_id,
-    publication_id: snapshot.publication_id,
-    request_id: snapshot.request_id,
-    resource_id: snapshot.resource_id,
-    capability_id: snapshot.capability_id,
-    endpoint_revision: snapshot.endpoint_revision,
-    resource_revision: snapshot.resource_revision,
-    policy_revision: snapshot.policy_revision,
-    resource_digest: snapshot.resource_digest,
-    resource: governedResourceContent(snapshot.resource),
-    publication_endpoint: snapshot.publication_endpoint,
-    one_policy_chain: snapshot.one_policy_chain,
-    connections: snapshot.connections,
-    provider_credential_profiles: snapshot.provider_credential_profiles,
-    models: snapshot.models,
-    model_mappings: snapshot.model_mappings,
-  }
-}
-
-export function snapshotDigest(snapshot: Omit<GatewayProjectionSnapshot, "snapshot_digest">): string {
-  return digest(snapshotContent(snapshot))
-}
 
 function resourceKey(tenantId: string, resourceId: string): string {
   return `${tenantId}:${resourceId}`
@@ -205,7 +163,7 @@ export function createInMemoryPublicationWorkflowStore(
       if (
         snapshot.tenant_id !== input.tenantId ||
         snapshot.publication_id !== input.publicationId ||
-        snapshotDigest(snapshot) !== snapshot.snapshot_digest
+        !snapshotDigestMatches(snapshot, snapshot.snapshot_digest)
       ) {
         throw new PlatformApiError("PUBLICATION_SNAPSHOT_INVALID", 500)
       }
@@ -398,7 +356,7 @@ export function createInMemoryPublicationWorkflowStore(
           candidate.resource_id === input.resourceId &&
           candidate.publication_id === input.projection.publication_id,
       )
-      if (!snapshot || snapshot.snapshot_digest !== snapshotDigest(snapshot)) {
+      if (!snapshot || !snapshotDigestMatches(snapshot, snapshot.snapshot_digest)) {
         throw new PlatformApiError("PUBLICATION_SNAPSHOT_INVALID", 409)
       }
       if (input.projection.publication_id !== snapshot.publication_id) {
@@ -433,7 +391,7 @@ export function createInMemoryPublicationWorkflowStore(
       if (
         currentEndpointRevision !== snapshot.endpoint_revision ||
         !current.publication_endpoint ||
-        digest(current.publication_endpoint) !== digest(snapshot.publication_endpoint)
+        canonicalJson(current.publication_endpoint) !== canonicalJson(snapshot.publication_endpoint)
       ) {
         throw new PlatformApiError("PUBLICATION_SNAPSHOT_STALE", 409)
       }
@@ -447,7 +405,7 @@ export function createInMemoryPublicationWorkflowStore(
       )
       if (snapshot.connections.some((connection) => {
         const currentConnection = currentConnectionById.get(connection.connection_id)
-        return !currentConnection || digest(currentConnection) !== digest(connection)
+        return !currentConnection || canonicalJson(currentConnection) !== canonicalJson(connection)
       })) {
         throw new PlatformApiError("PUBLICATION_SNAPSHOT_STALE", 409)
       }
@@ -464,7 +422,7 @@ export function createInMemoryPublicationWorkflowStore(
         currentModels.length !== snapshot.models.length ||
         currentModels.some((model) => {
           const snapshotModel = snapshot.models.find((candidate) => candidate.model_id === model.model_id)
-          return !snapshotModel || digest(model) !== digest(snapshotModel)
+          return !snapshotModel || canonicalJson(model) !== canonicalJson(snapshotModel)
         })
       ) {
         throw new PlatformApiError("PUBLICATION_SNAPSHOT_STALE", 409)
@@ -485,7 +443,7 @@ export function createInMemoryPublicationWorkflowStore(
           const frozen = snapshot.model_mappings.find(
             (candidate) => candidate.mapping_id === mapping.mapping_id,
           )
-          return !frozen || digest(mapping) !== digest(frozen)
+          return !frozen || canonicalJson(mapping) !== canonicalJson(frozen)
         })
       ) {
         throw new PlatformApiError("PUBLICATION_SNAPSHOT_STALE", 409)
@@ -500,7 +458,7 @@ export function createInMemoryPublicationWorkflowStore(
         if (
           !latestChain ||
           latestChain.one_policy_revision !== snapshot.policy_revision ||
-          digest(latestChain.chain) !== digest(snapshot.one_policy_chain)
+          canonicalJson(latestChain.chain) !== canonicalJson(snapshot.one_policy_chain)
         ) {
           throw new PlatformApiError("PUBLICATION_SNAPSHOT_STALE", 409)
         }
@@ -933,84 +891,6 @@ export function createAiResourcePublicationWorkflow(
         })
         throw error
       }
-    },
-  }
-}
-
-/** Backwards-compatible name for the development composition. */
-
-/** Small immutable in-memory chain reader used by memory-dev composition. */
-export function createInMemoryEnforcementChainReader(): EnforcementChainReader {
-  const revisions = new Map<string, EnforcementChainRevision>()
-  const cloneRevision = (revision: EnforcementChainRevision): EnforcementChainRevision =>
-    structuredClone(revision)
-  return {
-    async listInventory({ tenantId }) {
-      const latest = new Map<string, EnforcementChainRevision>()
-      for (const revision of revisions.values()) {
-        if (revision.tenant_id !== tenantId) continue
-        const key = `${revision.resource_id}:${revision.capability_id}`
-        const current = latest.get(key)
-        if (!current || revision.one_policy_revision > current.one_policy_revision) {
-          latest.set(key, revision)
-        }
-      }
-      return [...latest.values()]
-        .sort((left, right) =>
-          left.resource_id.localeCompare(right.resource_id) ||
-          left.capability_id.localeCompare(right.capability_id))
-        .map((revision) => ({
-          tenant_id: tenantId,
-          resource_id: revision.resource_id,
-          capability_id: revision.capability_id,
-          one_policy_revision: revision.one_policy_revision,
-          status: "READY" as const,
-          revision: cloneRevision(revision),
-          issue_code: null,
-        }))
-    },
-    async save({ tenantId, chain }) {
-      if (chain.tenant_id !== tenantId) throw new PlatformApiError("ENFORCEMENT_TENANT_MISMATCH", 422)
-      validateCompiledEnforcementChainSemantics(chain)
-      const key = `${tenantId}:${chain.resource_id}:${chain.capability_id}:${chain.one_policy_revision}`
-      const existing = revisions.get(key)
-      const chainDigest = digest(chain)
-      if (existing) {
-        if (existing.chain_digest !== chainDigest) {
-          throw new PlatformApiError("ENFORCEMENT_CHAIN_REVISION_IMMUTABLE", 409)
-        }
-        return cloneRevision(existing)
-      }
-      const timestamp = Math.floor(Date.now() / 1000)
-      const revision: EnforcementChainRevision = {
-        tenant_id: tenantId,
-        resource_id: chain.resource_id,
-        capability_id: chain.capability_id,
-        one_policy_revision: chain.one_policy_revision,
-        chain: structuredClone(chain),
-        chain_digest: chainDigest,
-        created_at: timestamp,
-        updated_at: timestamp,
-      }
-      revisions.set(key, revision)
-      return cloneRevision(revision)
-    },
-    async getLatest({ tenantId, resourceId, capabilityId }) {
-      const revision = [...revisions.values()]
-        .filter(
-          (revision) =>
-            revision.tenant_id === tenantId &&
-            revision.resource_id === resourceId &&
-            revision.capability_id === capabilityId,
-        )
-        .sort((left, right) => right.one_policy_revision - left.one_policy_revision)[0] ?? null
-      return revision ? cloneRevision(revision) : null
-    },
-    async get({ tenantId, resourceId, capabilityId, onePolicyRevision }) {
-      const revision = revisions.get(
-        `${tenantId}:${resourceId}:${capabilityId}:${onePolicyRevision}`,
-      ) ?? null
-      return revision ? cloneRevision(revision) : null
     },
   }
 }

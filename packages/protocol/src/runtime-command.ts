@@ -5,6 +5,7 @@ import {
 } from "node:crypto"
 
 import type { VerificationKeyRing } from "./compact-jws"
+import { canonicalJson, compareUtf8 } from "./canonical"
 import {
   isEd25519Signature,
   type Ed25519Signature,
@@ -119,27 +120,6 @@ function isGatewayRuntimeCommand(value: unknown): value is GatewayRuntimeCommand
     isGatewayReleaseReference(value.desired_release) &&
     value.revision === String(value.desired_release.head_revision)
   )
-}
-
-function compareUtf8(left: string, right: string): number {
-  return Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"))
-}
-
-function canonicalValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalValue)
-  if (isRecord(value)) {
-    return Object.fromEntries(
-      Object.keys(value)
-        .filter((key) => value[key] !== undefined)
-        .sort(compareUtf8)
-        .map((key) => [key, canonicalValue(value[key])]),
-    )
-  }
-  return value
-}
-
-function canonicalJson(value: unknown): string {
-  return JSON.stringify(canonicalValue(value))
 }
 
 function withoutIntegrity(command: GatewayRuntimeCommand): Record<string, unknown> {

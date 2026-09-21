@@ -21,6 +21,7 @@ import type {
 } from "./module"
 import { canonicalGatewayPolicyReleaseBytes } from "./planner"
 import { createGatewayPublicationReleaseCoordinator } from "./publication-commit"
+import { compareUtf8 } from "@genioone/protocol/canonical"
 
 export interface GatewayAggregatePublicationDelivery {
   deliver(input: {
@@ -55,10 +56,6 @@ const memoryTransaction = {
     throw new Error("memory aggregate release adapter does not execute SQL")
   },
 } as SqlTransaction
-
-function compareUtf8(left: string, right: string): number {
-  return Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"))
-}
 
 function sha256(value: unknown): string {
   return createHash("sha256")

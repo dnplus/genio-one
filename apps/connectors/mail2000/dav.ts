@@ -1,4 +1,4 @@
-import { instrumentModuleGraph, observedFetch } from "../../../packages/telemetry/src/operation-observability"
+import { instrumentModuleGraph, observedFetch } from "@genioone/telemetry/operation-observability"
 import { createDAVClient } from "tsdav"
 import type { Mail2000Credential } from "./server"
 

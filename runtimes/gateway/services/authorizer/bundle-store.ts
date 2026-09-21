@@ -1,11 +1,11 @@
-import type { CompiledAuthorizationBundle } from "../../../../packages/protocol/src/authorization"
+import type { CompiledAuthorizationBundle } from "@genioone/protocol/authorization"
 import { readFile } from "node:fs/promises"
 import {
   FilePolicyReleaseLoader,
   type PolicyReleaseObservation,
   type PolicyReleaseLoaderOptions,
 } from "../shared/policy-release"
-import type { GatewayReleaseReference } from "../../../../packages/protocol/src/runtime-command"
+import type { GatewayReleaseReference } from "@genioone/protocol/runtime-command"
 import type { GatewayRoutingArtifact } from "../shared/gateway-routing-artifact"
 import { applyAuthorityFloor, parseAuthorityFloor } from "../shared/authority-floor"
 

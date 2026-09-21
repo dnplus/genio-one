@@ -37,9 +37,10 @@ test("preview uses canonical user membership, distinct operations and actor-owne
     assert.equal(result.runtime_decisions.find((value: any) => value.capability_id === "codex.subscription" && value.action === "use").decision, "ALLOW")
     assert.equal(result.runtime_decisions.find((value: any) => value.capability_id === "codex.subscription" && value.action === "expose").decision, "DENY")
     const audit = await modules.auditEvents.query({ tenantId, subjectId: "admin", offset: 0, limit: 100 })
-    assert.equal(audit.events.length, result.runtime_decisions.length)
-    assert.ok(audit.events.every((event: any) => event.phase === "PREVIEW" && event.actor_subject.subject_id === "admin" && event.target_subject_id === "user"))
-    assert.equal(await modules.auditEvents.findRuntimeAuthorization({ tenantId, correlationId: audit.events[0]!.correlation_id }), null)
+    const previews = audit.events.filter((event: any) => event.phase === "PREVIEW")
+    assert.equal(previews.length, result.runtime_decisions.length)
+    assert.ok(previews.every((event: any) => event.actor_subject.subject_id === "admin" && event.target_subject_id === "user"))
+    assert.equal(await modules.auditEvents.findRuntimeAuthorization({ tenantId, correlationId: previews[0]!.correlation_id }), null)
     assert.equal((await modules.auditEvents.query({ tenantId, subjectId: "user", offset: 0, limit: 100 })).events.length, 0)
     const seed = await modules.botAccessPolicy.getFirstPartyBotSeed({ tenantId })
     await modules.botAccessPolicy.publishFirstPartyBotPolicy({ tenantId, baseRevision: seed.policy_revision, rules: { ...seed.rules, allowed_subject_ids: ["user"] }, publishedBy: "admin" })
@@ -63,7 +64,7 @@ test("preview rejects non-admin, cross-tenant and unknown subjects; response con
     }
     const response = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/permission-preview`, headers: { authorization: "Bearer admin" }, payload })
     assert.equal(response.headers["cache-control"], "no-store")
-    assert.deepEqual(Object.keys(response.json()).sort(), ["actor_subject_id", "bot_access", "bot_id", "capabilities", "client_id", "evaluated_at", "organization_ids", "role", "runtime_decisions", "runtime_id", "subject_display_name", "subject_id"].sort())
+    assert.deepEqual(Object.keys(response.json()).sort(), ["access_group_ids", "actor_subject_id", "bot_access", "bot_id", "capabilities", "client_id", "evaluated_at", "organization_ids", "role", "runtime_decisions", "runtime_id", "subject_display_name", "subject_id"].sort())
     assert.doesNotMatch(response.body, /access_token|refresh_token|conversation|attachment|memory/)
   } finally { await app.close() }
 })
@@ -73,13 +74,17 @@ test("group metadata survives draft publication without widening explicit permis
   try {
     const rules = [
       { rule_id: "model", group_id: "team", target: { runtime_id: "codex", capability_id: "model.invoke" }, actions: ["invoke"], effect: "ALLOW", constraints: [], obligations: [{ kind: "audit", parameters: {} }] },
-      { rule_id: "subscription", group_id: "team", individual_settings: true, target: { runtime_id: "codex", capability_id: "codex.subscription" }, actions: ["use"], effect: "ALLOW", constraints: [{ kind: "approval_required", parameters: { enabled: true } }], obligations: [{ kind: "audit", parameters: {} }] },
+      { rule_id: "subscription", group_id: "team", individual_settings: true, target: { runtime_id: "codex", capability_id: "codex.subscription" }, actions: ["use"], effect: "ALLOW", constraints: [], obligations: [{ kind: "audit", parameters: {} }] },
     ]
     const url = `/v1/tenants/${tenantId}/one-policy/runtime-policies/group-roundtrip`
     const headers = { authorization: "Bearer admin" }
     const draft = await app.inject({ method: "PUT", url: `${url}/draft`, headers, payload: { expected_version: 0, base_revision: 0, content: { kind: "RUNTIME_CAPABILITY", definition: { display_name: "Group roundtrip", scope: { subject_ids: ["user"], organization_ids: [], roles: [], client_ids: [], bot_ids: [], runtime_ids: ["codex"] }, rules } } } })
     assert.equal(draft.statusCode, 200, draft.body)
-    const published = await app.inject({ method: "POST", url: `${url}/draft/publish`, headers, payload: { expected_version: draft.json().version } })
+    const validated = await app.inject({ method: "POST", url: `${url}/draft/validate`, headers, payload: { expected_version: draft.json().version, expected_content_digest: draft.json().content_digest } })
+    assert.equal(validated.statusCode, 200, validated.body)
+    const reviewed = await app.inject({ method: "POST", url: `${url}/draft/review`, headers, payload: { expected_version: validated.json().version, expected_content_digest: validated.json().content_digest } })
+    assert.equal(reviewed.statusCode, 200, reviewed.body)
+    const published = await app.inject({ method: "POST", url: `${url}/draft/publish`, headers, payload: { expected_version: reviewed.json().version, expected_content_digest: reviewed.json().content_digest } })
     assert.equal(published.statusCode, 200, published.body)
     assert.deepEqual(published.json().rules, rules)
     const effective = await app.inject({ method: "GET", url: `/v1/tenants/${tenantId}/one-policy/runtime-effective?bot_id=genio.personal-bot&runtime_id=codex&capability_id=model.invoke&action=expose`, headers: { authorization: "Bearer user" } })

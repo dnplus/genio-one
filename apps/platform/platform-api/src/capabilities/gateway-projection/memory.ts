@@ -8,7 +8,7 @@ import {
 } from "../../../../../../runtimes/gateway/services/shared/model-route-handoff"
 import { mcpOAuthHeaderName } from "../../../../../../runtimes/gateway/services/shared/mcp-oauth-handoff"
 import { isModelCandidateEffect } from "../../../../../../runtimes/gateway/services/shared/model-candidate-effect"
-import { isEd25519Signature } from "../../../../../../packages/protocol/src/ed25519-signature"
+import { isEd25519Signature } from "@genioone/protocol/ed25519-signature"
 
 import { PlatformApiError } from "../errors"
 import {
@@ -29,6 +29,7 @@ import type {
 } from "./contract"
 import type { GatewayProjectionSource, GatewayProjectionRequest } from "./contract"
 import type { GatewayProjector } from "./module"
+import { canonicalJson, compareUtf8 } from "@genioone/protocol/canonical"
 
 const AI_GATEWAY_ROUTE_API_VERSION = "aigateway.envoyproxy.io/v1beta1"
 const ENVOY_GATEWAY_API_VERSION = "gateway.envoyproxy.io/v1alpha1"
@@ -83,32 +84,7 @@ const DEFAULT_LLM_REQUEST_COSTS = [
   { metadataKey: "llm_total_token", type: "TotalToken" },
 ] as const
 
-function compareUtf8(left: string, right: string): number {
-  const leftBytes = new TextEncoder().encode(left)
-  const rightBytes = new TextEncoder().encode(right)
-  const length = Math.min(leftBytes.length, rightBytes.length)
-  for (let index = 0; index < length; index += 1) {
-    const difference = leftBytes[index]! - rightBytes[index]!
-    if (difference !== 0) return difference
-  }
-  return leftBytes.length - rightBytes.length
-}
-
-function stableValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(stableValue)
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .sort(([left], [right]) => compareUtf8(left, right))
-        .map(([key, item]) => [key, stableValue(item)]),
-    )
-  }
-  return value
-}
-
-export function canonicalGatewayProjectionJson(value: unknown): string {
-  return JSON.stringify(stableValue(value))
-}
+export const canonicalGatewayProjectionJson = canonicalJson
 
 function digest(value: unknown): string {
   return createHash("sha256").update(canonicalGatewayProjectionJson(value)).digest("hex")

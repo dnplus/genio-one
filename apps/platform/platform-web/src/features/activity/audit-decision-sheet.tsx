@@ -1,4 +1,7 @@
 import { useTranslation } from "react-i18next"
+import { isGovernanceAuditEvent } from "@/domain/audit-events"
+import type { DecisionAuditEvent } from "@/domain/contracts"
+import { GovernanceAuditSheet } from "./governance-audit-sheet"
 
 import { Badge } from "@/components/ui/badge"
 import {
@@ -49,7 +52,7 @@ function RuntimeAuditDetails({
   event,
   data,
 }: {
-  event: AuditEvent
+  event: DecisionAuditEvent
   data: Pick<OverviewSnapshot, "applications" | "connections" | "identity" | "resources">
 }) {
   const { t } = useTranslation()
@@ -118,6 +121,7 @@ export function AuditDecisionSheet({
 }) {
   const { t } = useTranslation()
   if (!event) return null
+  if (isGovernanceAuditEvent(event)) return <GovernanceAuditSheet event={event} data={data} open={open} onOpenChange={onOpenChange} />
   if (event.kind === "RUNTIME_POLICY_DECISION") {
     return <Sheet open={open} onOpenChange={onOpenChange}><RuntimeAuditDetails event={event} data={data} /></Sheet>
   }

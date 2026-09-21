@@ -3,6 +3,7 @@ import { createHash } from "node:crypto"
 import type { SqlAdapter } from "../../persistence/sql-adapter"
 import type { AccountingLedger } from "./accounting"
 import type { CanonicalCharge, CostValuation, InvocationAccounting, UsageQuantity } from "./contract"
+import { canonicalJson } from "@genioone/protocol/canonical"
 
 type Row = Record<string, unknown>
 
@@ -75,18 +76,8 @@ function chargeId(invocationId: string, correlationId: string, accountingKeyId: 
   return `charge-${createHash("sha256").update(invocationId).update("\0").update(correlationId).update("\0").update(accountingKeyId).digest("hex")}`
 }
 
-function canonical(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonical)
-  if (value && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value as Record<string, unknown>)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, entry]) => [key, canonical(entry)]))
-  }
-  return value
-}
-
 function equal(left: unknown, right: unknown): boolean {
-  return JSON.stringify(canonical(left)) === JSON.stringify(canonical(right))
+  return canonicalJson(left) === canonicalJson(right)
 }
 
 export function createPostgresAccountingLedger(sql: SqlAdapter, tenantId: string): AccountingLedger {

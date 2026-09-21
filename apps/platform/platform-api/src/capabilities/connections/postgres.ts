@@ -26,6 +26,7 @@ import {
 } from "./contract"
 import { connectionCertificateFromStored, certificateStorageValues, parseConnectionCertificate, sameConnectionCertificate } from "./certificate"
 import type { ResourceConnectionRegistry } from "./module"
+import { compareUtf8 } from "@genioone/protocol/canonical"
 import {
   providerCredentialProfileForVerification,
   type ConnectionVerifier,
@@ -122,10 +123,6 @@ function routingHealthEligible(value: { health_state: string; health_observed_at
     value.health_observed_at !== null &&
     value.health_observed_at <= evaluatedAt &&
     evaluatedAt - value.health_observed_at <= ROUTING_HEALTH_FRESHNESS_SECONDS
-}
-
-function compareUtf8(left: string, right: string): number {
-  return Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"))
 }
 
 function assertTenantId(tenantId: string): void {

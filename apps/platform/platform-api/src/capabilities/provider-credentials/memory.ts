@@ -7,17 +7,7 @@ import type {
   ProviderCredentialStrategy,
 } from "./contract"
 import type { ProviderCredentialProfileStore } from "./module"
-
-function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`
-  if (value && typeof value === "object") {
-    return `{${Object.entries(value as Record<string, unknown>)
-      .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
-      .map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`)
-      .join(",")}}`
-  }
-  return JSON.stringify(value)
-}
+import { canonicalJson } from "@genioone/protocol/canonical"
 
 function required(value: string, code: string): string {
   const normalized = value.trim()
@@ -26,7 +16,7 @@ function required(value: string, code: string): string {
 }
 
 export function providerCredentialStrategyDigest(strategy: ProviderCredentialStrategy): string {
-  return createHash("sha256").update(canonical(strategy)).digest("hex")
+  return createHash("sha256").update(canonicalJson(strategy)).digest("hex")
 }
 
 function normalizeIssuer(value: string): string {

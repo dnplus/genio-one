@@ -132,17 +132,49 @@ function trustedUrl(value: string, field: string): string {
   return url.toString().replace(/\/$/, "")
 }
 
-function normalizeTrust(value: CreateFederationTrustRevisionInput) {
-  const audiences = [...new Set(value.audiences.map((item) => item.trim()).filter(Boolean))].sort()
-  const algorithms = [...new Set(value.algorithms)].sort() as FederationTrustRevision["algorithms"]
-  const required = value.required_claims
-    .map((item) => ({ name: item.name.trim(), value: item.value.trim() }))
-    .sort((left, right) => left.name.localeCompare(right.name) || left.value.localeCompare(right.value))
-  if (
-    audiences.length !== value.audiences.length ||
-    algorithms.length !== value.algorithms.length ||
-    required.some((item, index) => index > 0 && item.name === required[index - 1]!.name)
-  ) throw new PlatformApiError("FEDERATION_TRUST_DUPLICATE_SELECTOR", 422)
+export function normalizeTrust(value: CreateFederationTrustRevisionInput) {
+  const rawAudiences = value.audiences
+  const audLen = rawAudiences.length
+  const audiences = new Array<string>(audLen)
+  for (let i = 0; i < audLen; i++) {
+    const trimmed = rawAudiences[i]!.trim()
+    if (!trimmed) throw new PlatformApiError("FEDERATION_TRUST_DUPLICATE_SELECTOR", 422)
+    audiences[i] = trimmed
+  }
+  if (audLen > 1) {
+    audiences.sort()
+    for (let i = 1; i < audLen; i++) {
+      if (audiences[i] === audiences[i - 1]) throw new PlatformApiError("FEDERATION_TRUST_DUPLICATE_SELECTOR", 422)
+    }
+  }
+
+  const rawAlgs = value.algorithms
+  const algLen = rawAlgs.length
+  const algorithms = new Array<string>(algLen) as FederationTrustRevision["algorithms"]
+  for (let i = 0; i < algLen; i++) {
+    algorithms[i] = rawAlgs[i]!
+  }
+  if (algLen > 1) {
+    algorithms.sort()
+    for (let i = 1; i < algLen; i++) {
+      if (algorithms[i] === algorithms[i - 1]) throw new PlatformApiError("FEDERATION_TRUST_DUPLICATE_SELECTOR", 422)
+    }
+  }
+
+  const rawClaims = value.required_claims
+  const claimLen = rawClaims.length
+  const required = new Array<{ name: string; value: string }>(claimLen)
+  for (let i = 0; i < claimLen; i++) {
+    const item = rawClaims[i]!
+    required[i] = { name: item.name.trim(), value: item.value.trim() }
+  }
+  if (claimLen > 1) {
+    required.sort((left, right) => left.name.localeCompare(right.name) || left.value.localeCompare(right.value))
+    for (let i = 1; i < claimLen; i++) {
+      if (required[i]!.name === required[i - 1]!.name) throw new PlatformApiError("FEDERATION_TRUST_DUPLICATE_SELECTOR", 422)
+    }
+  }
+
   return {
     displayName: value.display_name.trim(),
     issuer: trustedUrl(value.issuer, "ISSUER"),

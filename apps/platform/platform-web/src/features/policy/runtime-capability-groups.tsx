@@ -5,8 +5,7 @@ import { Field, FieldLabel } from "@/components/ui/field"
 import { SearchableSelect, type SearchableSelectOption } from "@/components/ui/searchable-select"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { RuntimePolicyRule } from "@/lib/product-api"
-import { capabilityActions } from "../../../../../../packages/protocol/src/runtime-capability-actions"
-import { ConstraintFields, ObligationFields, constraintKinds, obligationKinds, newConstraint, newObligation } from "./runtime-rule-fields"
+import { runtimeCapabilityActions } from "@genioone/protocol/runtime-capability-actions"
 import { groupRuntimeRules, updateSharedRuleSettings } from "./runtime-rule-groups"
 
 function RuntimeChoice({ disabled, ...props }: Parameters<typeof SearchableSelect>[0] & { disabled: boolean }) {
@@ -18,18 +17,15 @@ function Settings({ rule, disabled, onChange }: { rule: RuntimePolicyRule; disab
   const { t } = useTranslation()
   return <div className="space-y-4">
     <Field><FieldLabel>{t("Effect")}</FieldLabel><Select disabled={disabled} value={rule.effect} onValueChange={(effect) => onChange({ ...rule, effect: effect as RuntimePolicyRule["effect"] })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALLOW">{t("ALLOW")}</SelectItem><SelectItem value="DENY">{t("DENY")}</SelectItem></SelectContent></Select></Field>
-    <label className="flex items-center gap-2 text-sm"><Checkbox disabled={disabled} checked={rule.obligations.some((value) => value.kind === "audit")} onCheckedChange={(checked) => onChange({ ...rule, obligations: checked === true ? [...rule.obligations, newObligation("audit")] : rule.obligations.filter((value) => value.kind !== "audit") })} />{t("Record usage activity")}</label>
-    <Field><FieldLabel>{t("Constraints")}</FieldLabel>{rule.constraints.map((constraint, index) => <div key={index} className="space-y-2 rounded border p-3"><div className="flex items-center justify-between text-sm">{t(constraint.kind)}<Button disabled={disabled} variant="ghost" size="sm" onClick={() => onChange({ ...rule, constraints: rule.constraints.filter((_, position) => position !== index) })}>{t("Remove")}</Button></div><ConstraintFields value={constraint} disabled={disabled} onChange={(value) => onChange({ ...rule, constraints: rule.constraints.map((current, position) => position === index ? value : current) })} /></div>)}{!disabled ? <Select value="" onValueChange={(kind) => onChange({ ...rule, constraints: [...rule.constraints, newConstraint(kind as typeof constraintKinds[number])] })}><SelectTrigger><SelectValue placeholder={t("Add constraint")} /></SelectTrigger><SelectContent>{constraintKinds.map((kind) => <SelectItem key={kind} value={kind}>{t(kind)}</SelectItem>)}</SelectContent></Select> : null}</Field>
-    <details><summary className="cursor-pointer text-sm">{t("Advanced obligations")}</summary><div className="mt-3 space-y-3">{rule.obligations.map((obligation, index) => <div key={index} className="space-y-2 rounded border p-3"><div className="flex justify-between text-sm">{t(obligation.kind)}<Button disabled={disabled} variant="ghost" size="sm" onClick={() => onChange({ ...rule, obligations: rule.obligations.filter((_, position) => position !== index) })}>{t("Remove")}</Button></div><ObligationFields value={obligation} disabled={disabled} onChange={(value) => onChange({ ...rule, obligations: rule.obligations.map((current, position) => position === index ? value : current) })} /></div>)}{!disabled ? <Select value="" onValueChange={(kind) => onChange({ ...rule, obligations: [...rule.obligations, newObligation(kind as typeof obligationKinds[number])] })}><SelectTrigger><SelectValue placeholder={t("Add obligation")} /></SelectTrigger><SelectContent>{obligationKinds.map((kind) => <SelectItem key={kind} value={kind}>{t(kind)}</SelectItem>)}</SelectContent></Select> : null}</div></details>
+    <label className="flex items-center gap-2 text-sm"><Checkbox disabled={disabled} checked={rule.obligations.some((value) => value.kind === "audit")} onCheckedChange={(checked) => onChange({ ...rule, obligations: checked === true ? rule.obligations.some((value) => value.kind === "audit") ? rule.obligations : [...rule.obligations, { kind: "audit", parameters: {} }] : rule.obligations.filter((value) => value.kind !== "audit") })} />{t("Record usage activity")}</label>
   </div>
 }
 
-export function RuntimeCapabilityGroups({ rules, scopeRuntimeIds, runtimeOptions, capabilityOptions, capabilityKinds, disabled, onChange }: {
+export function RuntimeCapabilityGroups({ rules, scopeRuntimeIds, runtimeOptions, capabilityOptions, disabled, onChange }: {
   rules: RuntimePolicyRule[]
   scopeRuntimeIds: string[]
   runtimeOptions: SearchableSelectOption[]
   capabilityOptions: SearchableSelectOption[]
-  capabilityKinds: Record<string, string>
   disabled: boolean
   onChange: (rules: RuntimePolicyRule[]) => void
 }) {
@@ -66,7 +62,7 @@ export function RuntimeCapabilityGroups({ rules, scopeRuntimeIds, runtimeOptions
             emit(rules.filter((rule) => !ids.includes(rule.rule_id) || rule.target.capability_id !== option.value))
           }
         }} />{option.label}</label>)}</div></Field>
-        <Field><FieldLabel>{t("Actions")}</FieldLabel><p className="text-sm text-muted-foreground">{t("Discovery and invocation are separate permissions.")}</p><div className="space-y-3">{members.filter((rule) => rule.target.capability_id).map((rule) => <div key={rule.rule_id} className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded border p-3 text-sm"><span className="min-w-32 font-medium">{capabilityOptions.find((option) => option.value === rule.target.capability_id)?.label ?? rule.target.capability_id}</span>{[...new Set([...capabilityActions(rule.target.capability_id, capabilityKinds[rule.target.capability_id]), ...rule.actions])].map((action) => <label key={action} className="flex items-center gap-2"><Checkbox disabled={disabled} checked={rule.actions.includes(action)} onCheckedChange={(checked) => emit(rules.map((current) => current === rule ? { ...rule, actions: checked === true ? [...rule.actions, action] : rule.actions.filter((value) => value !== action) } : current))} />{t(action === "expose" ? "Discover capability" : action)}</label>)}</div>)}</div></Field>
+        <Field><FieldLabel>{t("Actions")}</FieldLabel><p className="text-sm text-muted-foreground">{t("Discovery and invocation are separate permissions.")}</p><div className="space-y-3">{members.filter((rule) => rule.target.capability_id).map((rule) => <div key={rule.rule_id} className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded border p-3 text-sm"><span className="min-w-32 font-medium">{capabilityOptions.find((option) => option.value === rule.target.capability_id)?.label ?? rule.target.capability_id}</span>{(runtimeCapabilityActions(rule.target.capability_id) ?? []).map((action) => <label key={action} className="flex items-center gap-2"><Checkbox disabled={disabled} checked={rule.actions.includes(action)} onCheckedChange={(checked) => emit(rules.map((current) => current === rule ? { ...rule, actions: checked === true ? [...rule.actions, action] : rule.actions.filter((value) => value !== action) } : current))} />{t(action === "expose" ? "Discover capability" : action)}</label>)}</div>)}</div></Field>
         <h5 className="text-sm font-medium">{t("Shared settings")}</h5>
         <Settings rule={common} disabled={disabled || !commonMembers.length} onChange={(value) => updateGroup(ids, value)} />
         <details open={members.some((rule) => rule.individual_settings) ? true : undefined}><summary className="cursor-pointer text-sm">{t("Individual settings and technical details")}</summary><div className="mt-3 space-y-3">

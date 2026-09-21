@@ -1,5 +1,5 @@
 import type { GenioPrincipal } from "./runtime-broker"
-import { CE_DEMO_USE_CASE_ID } from "../../../packages/protocol/src/ce-demo"
+import { CE_DEMO_USE_CASE_ID } from "@genioone/protocol/ce-demo"
 
 export interface BotUsageContext {
   consumerOrganizationId: string

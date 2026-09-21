@@ -1,16 +1,22 @@
-import { createHash } from "node:crypto"
 
 import { Check } from "typebox/value"
 
 import { PlatformApiError } from "../errors"
 import type { SqlAdapter, SqlTransaction } from "../../persistence/sql-adapter"
 import { lockGatewayPolicyRelease } from "../gateway-policy-release/transaction-lock"
-import { validateCompiledEnforcementChainSemantics } from "./compiler"
+import { canonicalJson } from "@genioone/protocol/canonical"
+import { canonicalEnforcementChainDigest, compileValidatedEnforcementChain, validateCompiledEnforcementChainSemantics } from "./compiler"
 import {
   CompiledEnforcementChainSchema,
+  type CompileEnforcementChainInput,
   type CompiledEnforcementChain,
   type EnforcementChainRevisionKey,
 } from "./contract"
+import { connectionCertificateFromStored } from "../connections/certificate"
+import { isEnforcementConnectionReady } from "./connection-eligibility"
+import { policyDraftFromStoredValue, requireResourcePolicyDraft, resourcePolicyKey } from "../one-policy/drafts"
+import { policyChangeAuditEvent, policySystemPublishAuditEvent } from "../one-policy/lifecycle"
+import type { GatewayAuthorizationAuditStore } from "../audit-events/module"
 import type {
   EnforcementChainReleasePublisher,
   EnforcementChainRevision,
@@ -23,6 +29,7 @@ export interface PostgresEnforcementChainRevisionOptions {
   sql: SqlAdapter
   now?: () => number
   releasePublisher?: EnforcementChainReleasePublisher
+  audit?: GatewayAuthorizationAuditStore
 }
 
 export interface PostgresEnforcementChainRevisionStore
@@ -35,6 +42,9 @@ const CHAIN_COLUMNS = `
   one_policy_revision,
   chain,
   chain_digest,
+  published_by_subject_id,
+  reviewed_by_subject_id,
+  rollback_source_one_policy_revision,
   created_at,
   updated_at`
 
@@ -106,36 +116,23 @@ function rowTimestamp(row: DatabaseRow, key: string, fallback: number): number {
   return fallback
 }
 
-/**
- * JSON object keys are sorted recursively while arrays retain their order.
- * Candidate ordering can be meaningful to a routing policy, so it must not
- * be erased while making object construction order irrelevant to the digest.
- */
-function canonicalize(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map((item) => canonicalize(item))
-  if (value && typeof value === "object") {
-    const record = value as Record<string, unknown>
-    return Object.fromEntries(
-      Object.keys(record)
-        .sort()
-        .map((key) => [key, canonicalize(record[key])]),
-    )
+function nullableString(row: DatabaseRow, key: string): string | null {
+  const value = row[key]
+  if (value === null || value === undefined) return null
+  if (typeof value !== "string" || !value.trim()) {
+    throw new PlatformApiError("ENFORCEMENT_CHAIN_DATA_INVALID", 500)
   }
   return value
 }
 
-function canonicalEnforcementChainJson(
-  chain: CompiledEnforcementChain,
-): string {
-  return JSON.stringify(canonicalize(chain))
-}
-
-export function canonicalEnforcementChainDigest(
-  chain: CompiledEnforcementChain,
-): string {
-  return createHash("sha256")
-    .update(canonicalEnforcementChainJson(chain))
-    .digest("hex")
+function nullableRevision(row: DatabaseRow, key: string): number | null {
+  const value = row[key]
+  if (value === null || value === undefined) return null
+  const parsed = Number(value)
+  if (!Number.isSafeInteger(parsed) || parsed < 1) {
+    throw new PlatformApiError("ENFORCEMENT_CHAIN_DATA_INVALID", 500)
+  }
+  return parsed
 }
 
 function parseChain(value: unknown): CompiledEnforcementChain {
@@ -233,6 +230,9 @@ function mapRevision(
     one_policy_revision: onePolicyRevision,
     chain,
     chain_digest: digest,
+    published_by_subject_id: nullableString(row, "published_by_subject_id"),
+    reviewed_by_subject_id: nullableString(row, "reviewed_by_subject_id"),
+    rollback_source_one_policy_revision: nullableRevision(row, "rollback_source_one_policy_revision"),
     created_at: rowTimestamp(row, "created_at", now()),
     updated_at: rowTimestamp(row, "updated_at", now()),
   }
@@ -308,6 +308,108 @@ function validateSaveInput(
   return { ...key, tenantId }
 }
 
+function jsonValue(value: unknown): unknown {
+  if (typeof value !== "string") return value
+  try {
+    return JSON.parse(value) as unknown
+  } catch {
+    throw new PlatformApiError("ENFORCEMENT_CHAIN_DATA_INVALID", 500)
+  }
+}
+
+function resourceOwnsCapability(value: unknown, capabilityId: string): boolean {
+  const capabilities = jsonValue(value)
+  return Array.isArray(capabilities) && capabilities.some((candidate) =>
+    typeof candidate === "object" &&
+    candidate !== null &&
+    "capability_id" in candidate &&
+    candidate.capability_id === capabilityId)
+}
+
+function connectionReadyForChain(row: DatabaseRow, now: () => number): boolean {
+  const certificate = connectionCertificateFromStored({
+    mode: row.certificate_mode ?? "SYSTEM_CA",
+    certificate_pem: row.certificate_pem,
+    fingerprint_sha256: row.certificate_fingerprint_sha256,
+    subject: row.certificate_subject,
+    issuer: row.certificate_issuer,
+    is_self_signed: row.certificate_is_self_signed,
+    not_before: row.certificate_not_before,
+    not_after: row.certificate_not_after,
+  }, now())
+  return isEnforcementConnectionReady({
+    status: rowString(row, "status"),
+    lifecycle: rowString(row, "lifecycle"),
+    verification_state: rowString(row, "verification_state"),
+    health_state: rowString(row, "health_state"),
+    certificate,
+  })
+}
+
+const CONNECTION_SCOPE_COLUMNS = `connection_id, resource_id, status, lifecycle,
+  verification_state, health_state, certificate_mode, certificate_pem,
+  certificate_fingerprint_sha256, certificate_subject, certificate_issuer,
+  certificate_is_self_signed, certificate_not_before, certificate_not_after`
+
+async function compileResourceDraftInTransaction(
+  transaction: SqlTransaction,
+  input: {
+    tenantId: string
+    resourceId: string
+    capabilityId: string
+    definition: Omit<CompileEnforcementChainInput, "resource_id" | "capability_id" | "eligible_connection_ids">
+      & { eligible_connection_ids?: string[] }
+  },
+  now: () => number,
+): Promise<CompiledEnforcementChain> {
+  const resource = await transaction.query<DatabaseRow>(
+    `select capabilities
+       from genio_one_resources
+      where tenant_id = $1 and resource_id = $2
+      for update`,
+    [input.tenantId, input.resourceId],
+  )
+  if (!resource.rows[0] || !resourceOwnsCapability(resource.rows[0].capabilities, input.capabilityId)) {
+    throw new PlatformApiError("ENFORCEMENT_CAPABILITY_NOT_FOUND", 422)
+  }
+  const requested = input.definition.eligible_connection_ids
+  if (requested && new Set(requested).size !== requested.length) {
+    throw new PlatformApiError("DUPLICATE_ENFORCEMENT_CONNECTION_CANDIDATE", 422)
+  }
+  const result = await transaction.query<DatabaseRow>(
+    `select ${CONNECTION_SCOPE_COLUMNS}
+       from genio_one_resource_connections
+      where tenant_id = $1 and resource_id = $2
+        and ($3::text[] is null or connection_id = any($3::text[]))
+      order by connection_id
+      for update`,
+    [input.tenantId, input.resourceId, requested ?? null],
+  )
+  const rows = result.rows
+  if (requested && rows.length !== requested.length) {
+    throw new PlatformApiError("ENFORCEMENT_CONNECTION_MISMATCH", 422)
+  }
+  const eligibleConnectionIds = rows
+    .filter((row) => connectionReadyForChain(row, now))
+    .map((row) => rowString(row, "connection_id"))
+    .sort()
+  if (requested && eligibleConnectionIds.length !== requested.length) {
+    throw new PlatformApiError("ENFORCEMENT_CONNECTION_NOT_READY", 409)
+  }
+  if (eligibleConnectionIds.length === 0) {
+    throw new PlatformApiError("ENFORCEMENT_CONNECTION_CANDIDATES_REQUIRED", 422)
+  }
+  return compileValidatedEnforcementChain({
+    tenantId: input.tenantId,
+    value: {
+      ...input.definition,
+      resource_id: input.resourceId,
+      capability_id: input.capabilityId,
+      eligible_connection_ids: requested ?? eligibleConnectionIds,
+    },
+  })
+}
+
 type PublishedGateway = {
   gatewayId: string
 }
@@ -346,6 +448,140 @@ export function createPostgresEnforcementChainRevisionStore(
   options: PostgresEnforcementChainRevisionOptions,
 ): PostgresEnforcementChainRevisionStore {
   const now = options.now ?? (() => Math.floor(Date.now() / 1000))
+
+  async function lockPolicy(transaction: SqlTransaction, tenantId: string, resourceId: string, capabilityId: string): Promise<void> {
+    await transaction.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [JSON.stringify(["resource-policy", tenantId, resourceId, capabilityId])])
+  }
+
+  async function saveInTransaction(
+    transaction: SqlTransaction,
+    tenantId: string,
+    chain: CompiledEnforcementChain,
+    lockedGateway?: PublishedGateway | null,
+    provenance: { publishedBySubjectId: string | null; reviewedBySubjectId: string | null; rollbackSourceOnePolicyRevision: number | null } = {
+      publishedBySubjectId: "system",
+      reviewedBySubjectId: null,
+      rollbackSourceOnePolicyRevision: null,
+    },
+  ): Promise<{ revision: EnforcementChainRevision; created: boolean }> {
+    const key = validateSaveInput(tenantId, chain)
+    const digest = canonicalEnforcementChainDigest(chain)
+    const chainJson = canonicalJson(chain)
+    const gatewayBeforeWrite = lockedGateway === undefined
+      ? await activeGatewayForResource(transaction, key)
+      : lockedGateway
+    if (lockedGateway === undefined && gatewayBeforeWrite) {
+      await lockGatewayPolicyRelease({
+        transaction,
+        tenantId: key.tenantId,
+        gatewayId: gatewayBeforeWrite.gatewayId,
+      })
+    }
+    let inserted: DatabaseRow | null = null
+    try {
+      const result = await transaction.query<DatabaseRow>(
+        `insert into genio_one_enforcement_chain_revisions
+           (tenant_id, resource_id, capability_id, one_policy_revision,
+            eligible_connection_ids, chain, chain_digest,
+            published_by_subject_id, reviewed_by_subject_id,
+            rollback_source_one_policy_revision)
+         values ($1, $2, $3, $4, $5::text::jsonb, $6::text::jsonb, $7, $8, $9, $10)
+         on conflict (tenant_id, resource_id, capability_id, one_policy_revision)
+         do nothing
+         returning ${CHAIN_COLUMNS}`,
+        [
+          key.tenantId,
+          key.resourceId,
+          key.capabilityId,
+          key.onePolicyRevision,
+          JSON.stringify(chain.eligible_connection_ids),
+          chainJson,
+          digest,
+          provenance.publishedBySubjectId,
+          provenance.reviewedBySubjectId,
+          provenance.rollbackSourceOnePolicyRevision,
+        ],
+      )
+      inserted = result.rows[0] ?? null
+    } catch (error) {
+      if (!isUniqueViolation(error)) throw error
+    }
+    if (inserted) {
+      const revision = mapRevision(inserted, now, key)
+      const gatewayAfterWrite = await activeGatewayForResource(transaction, key)
+      if (gatewayAfterWrite && gatewayAfterWrite.gatewayId !== gatewayBeforeWrite?.gatewayId) {
+        throw new PlatformApiError("ENFORCEMENT_CHAIN_PUBLICATION_CHANGED", 409)
+      }
+      if (gatewayAfterWrite) {
+        if (!options.releasePublisher) {
+          throw new PlatformApiError("GATEWAY_RELEASE_PUBLISHER_REQUIRED", 500)
+        }
+        await options.releasePublisher.reconcileInTransaction({
+          transaction,
+          tenantId: key.tenantId,
+          gatewayId: gatewayAfterWrite.gatewayId,
+          issuedAt: now(),
+        })
+      }
+      return { revision, created: true }
+    }
+    const existing = await selectRevision(transaction, key, true)
+    if (!existing) {
+      throw new PlatformApiError("ENFORCEMENT_CHAIN_REVISION_WRITE_RACE", 500)
+    }
+    const mapped = mapRevision(existing, now, key)
+    if (mapped.chain_digest === digest) return { revision: mapped, created: false }
+    throw new PlatformApiError("ENFORCEMENT_CHAIN_REVISION_IMMUTABLE", 409)
+  }
+
+  async function latestPolicyRevisionInTransaction(
+    transaction: SqlTransaction,
+    tenantId: string,
+    resourceId: string,
+    capabilityId: string,
+  ): Promise<number> {
+    const result = await transaction.query<DatabaseRow>(
+      `select one_policy_revision
+         from genio_one_enforcement_chain_revisions
+        where tenant_id = $1 and resource_id = $2 and capability_id = $3
+        order by one_policy_revision desc
+        limit 1
+        for update`,
+      [tenantId, resourceId, capabilityId],
+    )
+    return result.rows[0] ? rowRevision(result.rows[0]) : 0
+  }
+
+  async function recordPublishedDraft(
+    transaction: SqlTransaction,
+    input: {
+      tenantId: string
+      policyKey: string
+      draft: NonNullable<ReturnType<typeof policyDraftFromStoredValue>>
+      publishedBySubjectId: string
+      correlationId: string
+      publishedRevision: number
+    },
+  ): Promise<void> {
+    if (!options.audit) return
+    if (!options.audit.recordInTransaction) {
+      throw new PlatformApiError("POLICY_AUDIT_TRANSACTION_UNAVAILABLE", 500)
+    }
+    await options.audit.recordInTransaction({
+      transaction,
+      tenantId: input.tenantId,
+      event: policyChangeAuditEvent({
+        tenantId: input.tenantId,
+        policyKey: input.policyKey,
+        draft: input.draft,
+        action: "PUBLISHED",
+        actorSubjectId: input.publishedBySubjectId,
+        correlationId: input.correlationId,
+        occurredAt: now(),
+        publishedRevision: input.publishedRevision,
+      }),
+    })
+  }
 
   return {
     async listInventory({ tenantId }) {
@@ -410,93 +646,105 @@ export function createPostgresEnforcementChainRevisionStore(
       return row ? mapRevision(row, now, input) : null
     },
 
-    async save({ tenantId, chain }) {
-      const key = validateSaveInput(tenantId, chain)
-      const digest = canonicalEnforcementChainDigest(chain)
-      const chainJson = canonicalEnforcementChainJson(chain)
-
+    async save({ tenantId, chain, provenance }) {
+      validateSaveInput(tenantId, chain)
+      const effectiveProvenance = provenance ?? {
+        publishedBySubjectId: "system",
+        reviewedBySubjectId: null,
+        rollbackSourceOnePolicyRevision: null,
+      }
       return options.sql.transaction(async (transaction) => {
-        const gatewayBeforeWrite = await activeGatewayForResource(transaction, key)
-        if (gatewayBeforeWrite) {
-          await lockGatewayPolicyRelease({
+        await lockPolicy(transaction, tenantId, chain.resource_id, chain.capability_id)
+        const { revision: published, created } = await saveInTransaction(transaction, tenantId, chain, undefined, effectiveProvenance)
+        if (options.audit && created) {
+          if (!options.audit.recordInTransaction) throw new PlatformApiError("POLICY_AUDIT_TRANSACTION_UNAVAILABLE", 500)
+          await options.audit.recordInTransaction({
             transaction,
-            tenantId: key.tenantId,
-            gatewayId: gatewayBeforeWrite.gatewayId,
+            tenantId,
+            event: policySystemPublishAuditEvent({
+              tenantId,
+              policyKey: resourcePolicyKey(chain.resource_id, chain.capability_id),
+              publishedRevision: published.one_policy_revision,
+              content: chain,
+              actorSubjectId: effectiveProvenance.publishedBySubjectId ?? "system",
+              correlationId: effectiveProvenance.correlationId ?? `policy-system-${chain.resource_id}-${chain.capability_id}-${chain.one_policy_revision}`,
+              occurredAt: now(),
+            }),
           })
         }
-        let inserted: DatabaseRow | null = null
-        try {
-          const result = await transaction.query<DatabaseRow>(
-            `insert into genio_one_enforcement_chain_revisions
-               (tenant_id, resource_id, capability_id, one_policy_revision,
-                eligible_connection_ids, chain, chain_digest)
-             values ($1, $2, $3, $4, $5::text::jsonb, $6::text::jsonb, $7)
-             on conflict (tenant_id, resource_id, capability_id, one_policy_revision)
-             do nothing
-             returning ${CHAIN_COLUMNS}`,
-            [
-              key.tenantId,
-              key.resourceId,
-              key.capabilityId,
-              key.onePolicyRevision,
-              JSON.stringify(chain.eligible_connection_ids),
-              chainJson,
-              digest,
-            ],
-          )
-          inserted = result.rows[0] ?? null
-        } catch (error) {
-          // A concurrent transaction may win the immutable identity.  Read
-          // it below and apply the same digest/idempotency rule rather than
-          // leaking a driver-specific unique-violation error.
-          if (!isUniqueViolation(error)) throw error
-        }
-
-        if (inserted) {
-          const revision = mapRevision(inserted, now, key)
-          const gatewayAfterWrite = await activeGatewayForResource(transaction, key)
-          if (
-            gatewayAfterWrite &&
-            gatewayAfterWrite.gatewayId !== gatewayBeforeWrite?.gatewayId
-          ) {
-            // Do not acquire a newly discovered Gateway after the insert has
-            // acquired its Resource foreign-key lock.  Roll back and let the
-            // caller retry against one coherent publication identity.
-            throw new PlatformApiError(
-              "ENFORCEMENT_CHAIN_PUBLICATION_CHANGED",
-              409,
-              "The active publication changed while saving an enforcement chain; retry the request",
-            )
-          }
-          if (gatewayAfterWrite) {
-            if (!options.releasePublisher) {
-              throw new PlatformApiError("GATEWAY_RELEASE_PUBLISHER_REQUIRED", 500)
-            }
-            await options.releasePublisher.reconcileInTransaction({
-              transaction,
-              tenantId: key.tenantId,
-              gatewayId: gatewayAfterWrite.gatewayId,
-              issuedAt: now(),
-            })
-          }
-          return revision
-        }
-
-        const existing = await selectRevision(transaction, key, true)
-        if (!existing) {
-          throw new PlatformApiError(
-            "ENFORCEMENT_CHAIN_REVISION_WRITE_RACE",
-            500,
-            "Enforcement chain revision disappeared during an immutable save",
-          )
-        }
-        const mapped = mapRevision(existing, now, key)
-        if (mapped.chain_digest === digest) return mapped
-        throw new PlatformApiError(
-          "ENFORCEMENT_CHAIN_REVISION_IMMUTABLE",
-          409,
-          "An enforcement chain revision cannot be overwritten with different content",
+        return published
+      })
+    },
+    async publishDraft({ tenantId, resourceId, capabilityId, expectedVersion, expectedContentDigest, publishedBySubjectId, correlationId }) {
+      return options.sql.transaction(async (transaction) => {
+        await transaction.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [JSON.stringify(["policy-draft", tenantId, resourcePolicyKey(resourceId, capabilityId)])])
+        const draftResult = await transaction.query<{ value: unknown }>(
+          "select value from genio_one_policy_drafts where tenant_id = $1 and policy_key = $2 for update",
+          [tenantId, resourcePolicyKey(resourceId, capabilityId)],
         )
+        const draft = policyDraftFromStoredValue(draftResult.rows[0]?.value ?? null)
+        if (!draft) throw new PlatformApiError("POLICY_DRAFT_CONFLICT", 409)
+        const { baseRevision, definition } = requireResourcePolicyDraft(
+          draft,
+          expectedVersion,
+          expectedContentDigest,
+        )
+        if (definition.one_policy_revision !== baseRevision + 1) {
+          throw new PlatformApiError("POLICY_REVISION_CONFLICT", 409)
+        }
+        await lockPolicy(transaction, tenantId, resourceId, capabilityId)
+        const currentRevision = await latestPolicyRevisionInTransaction(
+          transaction,
+          tenantId,
+          resourceId,
+          capabilityId,
+        )
+        if (currentRevision !== baseRevision) {
+          throw new PlatformApiError("POLICY_REVISION_CONFLICT", 409)
+        }
+        const gateway = await activeGatewayForResource(transaction, {
+          tenantId,
+          resourceId,
+        })
+        if (gateway) {
+          await lockGatewayPolicyRelease({
+            transaction,
+            tenantId,
+            gatewayId: gateway.gatewayId,
+          })
+        }
+        const chain = await compileResourceDraftInTransaction(transaction, {
+          tenantId,
+          resourceId,
+          capabilityId,
+          definition,
+        }, now)
+        const { revision: published } = await saveInTransaction(transaction, tenantId, chain, gateway, {
+          publishedBySubjectId,
+          reviewedBySubjectId: draft.review?.actor_subject_id ?? null,
+          rollbackSourceOnePolicyRevision: null,
+        })
+        await recordPublishedDraft(transaction, {
+          tenantId,
+          policyKey: resourcePolicyKey(resourceId, capabilityId),
+          draft,
+          publishedBySubjectId,
+          correlationId,
+          publishedRevision: published.one_policy_revision,
+        })
+        const removed = await transaction.query(
+          `update genio_one_policy_drafts
+              set value = 'null'::jsonb
+            where tenant_id = $1
+              and policy_key = $2
+              and (value->>'version')::int = $3
+              and value->>'content_digest' = $4
+              and value->>'lifecycle' = 'REVIEWED'
+          returning policy_key`,
+          [tenantId, resourcePolicyKey(resourceId, capabilityId), expectedVersion, expectedContentDigest],
+        )
+        if (removed.rowCount !== 1) throw new PlatformApiError("POLICY_DRAFT_CONFLICT", 409)
+        return published
       })
     },
   }

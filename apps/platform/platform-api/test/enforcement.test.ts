@@ -13,7 +13,7 @@ import type { ConnectionRegistration } from "../src/capabilities/connections/con
 import type { ResourceConnectionRegistry } from "../src/capabilities/connections/module"
 import type { ResourceRegistration } from "../src/capabilities/resources/contract"
 import type { ResourceRegistry } from "../src/capabilities/resources/module"
-import { createInMemoryEnforcementChainReader } from "../src/capabilities/publications/memory"
+import { createInMemoryEnforcementChainReader } from "../src/capabilities/enforcement/memory"
 
 const resource: ResourceRegistration = {
   tenant_id: "tenant-acme",
@@ -266,7 +266,7 @@ test("formal candidate discovery freezes only READY Connections", async () => {
     tenantId: "tenant-acme",
     resourceId: "resource-ai",
   })
-  assert.deepEqual(result, ["connection-openai", "connection-omlx"])
+  assert.deepEqual(result, ["connection-omlx", "connection-openai"])
 
   await assert.rejects(
     scopedCompiler({

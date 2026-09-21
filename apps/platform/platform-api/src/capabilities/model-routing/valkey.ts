@@ -11,6 +11,10 @@ import {
 } from "./contract"
 import type { ModelRouter } from "./module"
 import { prepareModelRoute, type RoutableModel } from "./candidates"
+import {
+  applySemanticModelDecision,
+  type ModelRoutingDecisionProvider,
+} from "./decision-provider"
 
 const DEFAULT_LEASE_SECONDS = 3_600
 const MAX_LEASE_SECONDS = 86_400
@@ -36,6 +40,8 @@ export interface ValkeyModelRouterOptions {
   now?: () => number
   defaultLeaseSeconds?: number
   idFactory?: () => string
+  decisionProvider?: ModelRoutingDecisionProvider
+  decisionMinimumConfidence?: number
 }
 
 export interface ModelRouteLeaseKeyInput {
@@ -194,7 +200,14 @@ export function createValkeyModelRouter(options: ValkeyModelRouterOptions): Mode
         return { ...current, reused: true }
       }
 
-      const selected = candidates[0]
+      const routed = await applySemanticModelDecision({
+        request: prepared.semanticRouting,
+        provider: options.decisionProvider,
+        minimumConfidence: options.decisionMinimumConfidence ?? 0.6,
+        candidates,
+        decidedAt: currentTime,
+      })
+      const selected = routed.candidates[0]
       if (!selected) throw new PlatformApiError("NO_ELIGIBLE_MODEL", 403)
 
       const ttl = leaseSeconds(input.value.lease_seconds, defaultLease)
@@ -215,6 +228,7 @@ export function createValkeyModelRouter(options: ValkeyModelRouterOptions): Mode
         expires_at: currentTime + ttl,
         reused: false,
         route_mode: "SESSION_LEASE",
+        ...(routed.receipt ? { decision_receipt: routed.receipt } : {}),
       }
 
       let acquired: "OK" | null

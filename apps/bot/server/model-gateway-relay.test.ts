@@ -23,6 +23,18 @@ class Reply {
   }
 }
 
+function waitFor(check: () => boolean) {
+  return new Promise<void>((resolve, reject) => {
+    const deadline = Date.now() + 1_000
+    const tick = () => {
+      if (check()) return resolve()
+      if (Date.now() >= deadline) return reject(new Error("MCP_RELAY_TEST_TIMEOUT"))
+      setTimeout(tick, 1)
+    }
+    tick()
+  })
+}
+
 function decision(correlationId: string) {
   return {
     tenant_id: "tenant-uat",
@@ -204,5 +216,245 @@ describe("model gateway relay", () => {
       messages: [{ role: "user", content: "hello" }],
       stream: true,
     })
+  })
+})
+
+function managedMcpDecision(correlationId: string, overrides: Record<string, unknown> = {}) {
+  return {
+    ...decision(correlationId),
+    capability_id: "mcp.invoke",
+    action: "invoke" as const,
+    target: "runtime:codex:mcp.invoke",
+    ...overrides,
+  }
+}
+
+describe("managed MCP relay runtime policy", () => {
+  const originalMcpGateway = process.env.GENIO_ONE_MCP_URL
+
+  afterEach(() => {
+    if (originalMcpGateway === undefined) delete process.env.GENIO_ONE_MCP_URL
+    else process.env.GENIO_ONE_MCP_URL = originalMcpGateway
+  })
+
+  async function routeFor(context: Record<string, unknown>) {
+    const routes = new Map<string, (request: unknown, reply: Reply) => Promise<unknown>>()
+    await modelGatewayRelayRoutes({
+      post: () => {},
+      all: (path: string, handler: (request: unknown, reply: Reply) => Promise<unknown>) => { routes.set(path, handler) },
+    } as never, context as never)
+    const route = routes.get("/api/mcp-gateway/:runtimeSessionId/:resourceId/mcp")
+    if (!route) throw new Error("MCP_RELAY_ROUTE_MISSING")
+    return route
+  }
+
+  function contextFor(policy: Record<string, unknown>, bindings = [{ resourceId: "resource-context7", capabilityId: "context7", state: "INSTALLED", kind: "MCP" }]) {
+    const session = {
+      id: "runtime-session",
+      principal: {
+        tenant_id: "tenant-uat",
+        subject_id: "person-dylan",
+        acting_client_id: "genio-one-bot",
+        scopes: ["genioone-invocation"],
+      },
+      selectedBotId: "bot-dylan",
+      accessToken: "session-token",
+      managedMcpMounts: {
+        "resource-context7": {
+          resourceId: "resource-context7",
+          capabilityId: "context7",
+          serverName: "genio_mcp_context7",
+          hostname: "context7.example",
+          basePath: "/mcp",
+        },
+      },
+    }
+    return {
+      runtimeBroker: { get: () => session },
+      botRegistry: { getOwned: () => ({ id: "bot-dylan", bindings }) },
+      runtimePolicy: policy,
+    }
+  }
+
+  function request() {
+    return {
+      params: { runtimeSessionId: "runtime-session", resourceId: "resource-context7" },
+      method: "POST",
+      url: "/api/mcp-gateway/runtime-session/resource-context7/mcp?session=1",
+      headers: { "content-type": "application/json" },
+      body: { jsonrpc: "2.0", id: 1, method: "tools/call" },
+    }
+  }
+
+  test("keeps the catalog and live binding gate before authorizing an MCP invocation", async () => {
+    process.env.GENIO_ONE_MCP_URL = "https://gateway.example/mcp"
+    let authorized = false
+    const route = await routeFor(contextFor({
+      async authorize() { authorized = true; return managedMcpDecision("unused") },
+      async report() {},
+    }, []))
+
+    const reply = new Reply()
+    await route(request(), reply)
+
+    expect(reply.statusCode).toBe(403)
+    expect((reply.body as { error: string }).error).toBe("MCP_RESOURCE_NOT_ALLOWED")
+    expect(authorized).toBe(false)
+  })
+
+  test("reports a completed managed MCP invocation only after its response reaches EOF", async () => {
+    process.env.GENIO_ONE_MCP_URL = "https://gateway.example/mcp"
+    const authorizations: Array<Record<string, unknown>> = []
+    const reports: Array<Record<string, unknown>> = []
+    const upstream: Array<{ url: string; headers: Headers }> = []
+    globalThis.fetch = (async (input, init) => {
+      upstream.push({ url: String(input), headers: new Headers(init?.headers) })
+      return Response.json({ jsonrpc: "2.0", id: 1, result: {} })
+    }) as typeof fetch
+    const route = await routeFor(contextFor({
+      async authorize(input: Record<string, unknown>) {
+        authorizations.push(input)
+        return managedMcpDecision(String(input.correlationId))
+      },
+      async report(input: Record<string, unknown>) { reports.push(input) },
+    }))
+
+    const reply = new Reply()
+    await route(request(), reply)
+    expect(reports).toHaveLength(0)
+    for await (const _chunk of reply.body as AsyncIterable<unknown>) {}
+
+    expect(authorizations).toHaveLength(1)
+    expect(authorizations[0]).toMatchObject({ capabilityId: "mcp.invoke", action: "invoke", botId: "bot-dylan" })
+    expect(upstream).toHaveLength(1)
+    expect(upstream[0]!.url).toBe("https://context7.example/mcp?session=1")
+    expect(upstream[0]!.headers.get("authorization")).toBe("Bearer session-token")
+    expect(reports).toHaveLength(1)
+    expect(reports[0]).toMatchObject({ capabilityId: "mcp.invoke", action: "invoke", outcome: "COMPLETED", correlationId: authorizations[0]!.correlationId })
+    expect(reply.statusCode).toBe(200)
+  })
+
+  test("reports a failed managed MCP invocation when its response stream interrupts", async () => {
+    process.env.GENIO_ONE_MCP_URL = "https://gateway.example/mcp"
+    globalThis.fetch = (async () => new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"jsonrpc":"2.0"}'))
+        controller.error(new Error("MCP_STREAM_INTERRUPTED"))
+      },
+    }))) as unknown as typeof fetch
+    const reports: Array<Record<string, unknown>> = []
+    const route = await routeFor(contextFor({
+      async authorize(input: Record<string, unknown>) { return managedMcpDecision(String(input.correlationId)) },
+      async report(input: Record<string, unknown>) { reports.push(input) },
+    }))
+
+    const reply = new Reply()
+    await route(request(), reply)
+    expect(reports).toHaveLength(0)
+    let streamFailed = false
+    try {
+      for await (const _chunk of reply.body as AsyncIterable<unknown>) {}
+    } catch {
+      streamFailed = true
+    }
+
+    expect(streamFailed).toBe(true)
+    expect(reports).toHaveLength(1)
+    expect(reports[0]).toMatchObject({ capabilityId: "mcp.invoke", action: "invoke", outcome: "FAILED", reasonCode: "MCP_GATEWAY_UPSTREAM_STREAM_FAILED" })
+  })
+
+  test("reports a failed managed MCP invocation when its response stream is cancelled", async () => {
+    process.env.GENIO_ONE_MCP_URL = "https://gateway.example/mcp"
+    let cancelled = false
+    globalThis.fetch = (async () => new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"jsonrpc":"2.0"}'))
+      },
+      cancel() {
+        cancelled = true
+      },
+    }))) as unknown as typeof fetch
+    const reports: Array<Record<string, unknown>> = []
+    const route = await routeFor(contextFor({
+      async authorize(input: Record<string, unknown>) { return managedMcpDecision(String(input.correlationId)) },
+      async report(input: Record<string, unknown>) { reports.push(input) },
+    }))
+
+    const reply = new Reply()
+    await route(request(), reply)
+    for await (const _chunk of reply.body as AsyncIterable<unknown>) break
+    await waitFor(() => reports.length === 1)
+
+    expect(cancelled).toBe(true)
+    expect(reports[0]).toMatchObject({ capabilityId: "mcp.invoke", action: "invoke", outcome: "FAILED", reasonCode: "MCP_GATEWAY_UPSTREAM_STREAM_CANCELLED" })
+  })
+
+  test("fails the managed MCP response when EOF cannot be reported", async () => {
+    process.env.GENIO_ONE_MCP_URL = "https://gateway.example/mcp"
+    globalThis.fetch = (async () => Response.json({ jsonrpc: "2.0", id: 1, result: {} })) as unknown as typeof fetch
+    const reports: Array<Record<string, unknown>> = []
+    const route = await routeFor(contextFor({
+      async authorize(input: Record<string, unknown>) { return managedMcpDecision(String(input.correlationId)) },
+      async report(input: Record<string, unknown>) {
+        reports.push(input)
+        throw new Error("AUDIT_OFFLINE")
+      },
+    }))
+
+    const reply = new Reply()
+    await route(request(), reply)
+    let streamFailed = false
+    try {
+      for await (const _chunk of reply.body as AsyncIterable<unknown>) {}
+    } catch {
+      streamFailed = true
+    }
+
+    expect(streamFailed).toBe(true)
+    expect(reports).toHaveLength(1)
+    expect(reports[0]).toMatchObject({ outcome: "COMPLETED" })
+  })
+
+  test("reports a managed MCP policy denial without forwarding", async () => {
+    process.env.GENIO_ONE_MCP_URL = "https://gateway.example/mcp"
+    let fetched = false
+    globalThis.fetch = (async () => {
+      fetched = true
+      return Response.json({})
+    }) as unknown as typeof fetch
+    const reports: Array<Record<string, unknown>> = []
+    const route = await routeFor(contextFor({
+      async authorize(input: Record<string, unknown>) {
+        return managedMcpDecision(String(input.correlationId), { decision: "DENY", reason_code: "RULE_DENY:mcp" })
+      },
+      async report(input: Record<string, unknown>) { reports.push(input) },
+    }))
+
+    const reply = new Reply()
+    await route(request(), reply)
+
+    expect(reply.statusCode).toBe(403)
+    expect((reply.body as { error: string }).error).toBe("RULE_DENY:mcp")
+    expect(fetched).toBe(false)
+    expect(reports).toHaveLength(1)
+    expect(reports[0]).toMatchObject({ capabilityId: "mcp.invoke", action: "invoke", outcome: "DENY" })
+  })
+
+  test("reports a failed managed MCP invocation when the upstream rejects it", async () => {
+    process.env.GENIO_ONE_MCP_URL = "https://gateway.example/mcp"
+    globalThis.fetch = (async () => new Response("unavailable", { status: 502 })) as unknown as typeof fetch
+    const reports: Array<Record<string, unknown>> = []
+    const route = await routeFor(contextFor({
+      async authorize(input: Record<string, unknown>) { return managedMcpDecision(String(input.correlationId)) },
+      async report(input: Record<string, unknown>) { reports.push(input) },
+    }))
+
+    const reply = new Reply()
+    await route(request(), reply)
+    for await (const _chunk of reply.body as AsyncIterable<unknown>) {}
+
+    expect(reply.statusCode).toBe(502)
+    expect(reports).toHaveLength(1)
+    expect(reports[0]).toMatchObject({ capabilityId: "mcp.invoke", action: "invoke", outcome: "FAILED", reasonCode: "MCP_GATEWAY_UPSTREAM_502" })
   })
 })

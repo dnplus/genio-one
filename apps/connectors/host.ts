@@ -1,4 +1,4 @@
-import { observeIncomingRequest } from "../../packages/telemetry/src/operation-observability"
+import { observeIncomingRequest } from "@genioone/telemetry/operation-observability"
 import { readConnectorConfigurationToken, type ConnectorConfiguration, type ConnectorKind } from "./configuration"
 
 export function createConnectorHost(options: {

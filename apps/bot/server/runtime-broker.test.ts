@@ -99,6 +99,24 @@ describe("RuntimeBroker", () => {
     await broker.stop(session.id)
   })
 
+  test("detaches only the endpoint lease it attached", async () => {
+    const broker = new RuntimeBroker({ provision: async () => execDesktop("endpoint") })
+    const session = await broker.start(principal, { onMessage() {}, onExit() {} })
+    const first = execDesktop("endpoint-first")
+    const second = execDesktop("endpoint-second")
+
+    broker.attachEndpoint(session.id, first)
+    expect(broker.detachEndpoint(session.id, first)).toBe(true)
+    expect(broker.get(session.id)?.leases.headless).toBeUndefined()
+    expect(broker.get(session.id)?.runtimeDetails.headless).toBeUndefined()
+    expect(broker.get(session.id)?.details.tier).toBe("none")
+
+    broker.attachEndpoint(session.id, second)
+    expect(broker.detachEndpoint(session.id, first)).toBe(false)
+    expect(broker.get(session.id)?.leases.headless).toBe(second)
+    await broker.stop(session.id)
+  })
+
   test("keeps the headless lease active when the desktop lease exits", async () => {
     let desktopExit: ((reason: string) => void) | null = null
     const events: string[] = []

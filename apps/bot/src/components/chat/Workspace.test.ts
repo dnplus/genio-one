@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 
-import { CE_DEMO_PROMPTS } from "../../../../../packages/protocol/src/ce-demo"
+import { CE_DEMO_PROMPTS } from "@genioone/protocol/ce-demo"
 import { requiresHeadlessRuntime } from "./Workspace"
 
 test("keeps the unmodified CE documentation prompt on the tools-only path", () => {

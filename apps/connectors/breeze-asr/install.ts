@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from "node:util"
 import { readFile } from "node:fs/promises"
-import { CommonInstallConfiguration, managementApi, type Api, type CommonInstallConfig } from "../install"
+import { CommonInstallConfiguration, ensureResourceCapabilityPolicy, managementApi, type Api, type CommonInstallConfig } from "../install"
 
 interface Resource {
   resource_id: string
@@ -59,13 +59,12 @@ export async function installBreezeAsr(config: CommonInstallConfig, api: Api) {
     if (!(error instanceof Error) || !error.message.startsWith("STANDARD_INSTALL_HTTP_404:") || resource.lifecycle !== "DRAFT") throw error
     await api(`${policyPath}/model-routing-policy`, json(routing, "PUT"))
   }
-  try {
-    const existing = await api<{ chain: { steps: unknown } }>(`${policyPath}/enforcement-chain`)
-    if (!isDeepStrictEqual(existing.chain.steps, steps)) throw new Error("ASR_ENFORCEMENT_CHAIN_CONFLICT")
-  } catch (error) {
-    if (!(error instanceof Error) || !error.message.startsWith("STANDARD_INSTALL_HTTP_404:") || resource.lifecycle !== "DRAFT") throw error
-    await api(`${policyPath}/enforcement-chain`, json({ one_policy_revision: 1, steps }))
-  }
+  await ensureResourceCapabilityPolicy(api, {
+    base,
+    resourceId: resource.resource_id,
+    capabilityId: "model.invoke",
+    steps,
+  })
   if (resource.lifecycle !== "PUBLISHED") {
     if (resource.lifecycle !== "DRAFT") throw new Error("ASR_RESOURCE_NOT_DRAFT")
     if (!resource.publication_endpoint) await api(`${path}/publication-endpoint`, json({ gateway_id: config.gatewayId, hostname: config.hostname, base_path: config.basePath, visibility: "PUBLIC", dns_management: "EXTERNAL", dns_verification: "VERIFIED", dns_target: config.dnsTarget }, "PUT"))

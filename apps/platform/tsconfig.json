@@ -30,7 +30,6 @@
   "include": [
     "../../runtimes/gateway/services",
     "../../runtimes/gateway/controller",
-    "../../packages/*/src",
     "platform-api/src",
     "platform-api/test",
     "platform-web/src",

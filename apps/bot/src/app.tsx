@@ -60,7 +60,7 @@ import {
   CreateBotModal,
   CorpBotCatalogModal,
 } from "./components"
-import { CE_DEMO_PROMPTS, type CeDemoPromptId } from "../../../packages/protocol/src/ce-demo"
+import { CE_DEMO_PROMPTS, type CeDemoPromptId } from "@genioone/protocol/ce-demo"
 
 let pendingGenioLogin: Promise<string> | null = null
 

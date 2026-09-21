@@ -25,13 +25,13 @@ GenioOne is a self-hosted platform for managing AI agents, MCP tools, and model 
 
 ## Quickstart
 
-You need macOS or Linux, Docker with Compose, Git, Node.js, pnpm **10.32.1**, and Bun **1.4.0**.
+You need macOS or Linux, Docker with Compose, Git, Node.js, pnpm **12.4.2**, and Bun **1.4.2**.
 
 ```sh
 curl -fsSL https://genio.sh/install.sh | sh
 ```
 
-This clones the repository, installs dependencies, and prepares `.env.local` files. It does not start anything; run `pnpm dev` yourself as the last step. See `install.sh --help` for `--dir`/`--ref` options, or set up manually:
+This clones the repository, installs dependencies, and prepares `.env.local` files. It does not start services; run `pnpm dev` yourself. See `install.sh --help` for `--dir` and `--ref` options, or set up manually:
 
 ```sh
 git clone https://github.com/dnplus/genio-one.git

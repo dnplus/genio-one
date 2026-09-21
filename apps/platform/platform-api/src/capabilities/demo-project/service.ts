@@ -12,8 +12,8 @@ import type { ResourceRegistry } from "../resources/module"
 import type { UsageGovernanceDirectory } from "../usage-governance/directory"
 import type { OnePolicy } from "../one-policy/module"
 import type { RuntimePolicyDefinition, RuntimePolicyRevision } from "../one-policy/runtime"
-import { CE_DEMO_ID, CE_DEMO_PROMPTS, CE_DEMO_RESOURCE_IDS, CE_DEMO_USE_CASE_ID, CE_DEMO_VERSION } from "../../../../../../packages/protocol/src/ce-demo"
-import packages from "../../../../../../packages/protocol/src/ce-demo-package.json" with { type: "json" }
+import { CE_DEMO_ID, CE_DEMO_PROMPTS, CE_DEMO_RESOURCE_IDS, CE_DEMO_USE_CASE_ID, CE_DEMO_VERSION } from "@genioone/protocol/ce-demo"
+import packages from "@genioone/protocol/ce-demo-package.json" with { type: "json" }
 import type { DemoProjectResponse, InstallDemoProjectInput } from "./contract"
 import type { DemoLlmProvisioningResult, PrepareDemoLlmInput } from "./llm-provisioning"
 import type { DemoInstallationStore } from "./module"

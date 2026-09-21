@@ -158,7 +158,7 @@ describe("CapabilityToolsPanel list builder", () => {
 
   test("shows every runtime capability as unavailable when the effective read is unavailable", () => {
     const rows = buildBotCapabilityRows([], null)
-    expect(rows.filter((row) => row.source === "runtime")).toHaveLength(6)
+    expect(rows.filter((row) => row.source === "runtime")).toHaveLength(9)
     expect(rows.filter((row) => row.source === "runtime").every((row) => row.effectiveAllow === false)).toBe(true)
   })
 })
@@ -224,7 +224,7 @@ test("renders the capabilities and OAuth connection path in English without chan
   expect(html).toContain("This capability needs an account connection before it can be added or invoked.")
   expect(html).toContain(">Connect<")
   expect(html).toContain("Runtime capabilities")
-  expect(html).toContain("6 items")
+  expect(html).toContain("9 items")
   expect(html).toContain("Runtime policy is not available. Runtime capabilities are paused.")
   expect(html).toContain(">Retry<")
   expect(html).not.toContain("企業工具")

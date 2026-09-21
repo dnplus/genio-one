@@ -1,4 +1,5 @@
 import type { GatewayActivityTrendPoint, OverviewSnapshot, ResourceKind } from "@/domain/contracts"
+import { isDecisionAuditEvent } from "@/domain/audit-events"
 import { normalizeEnforcementPoint } from "@/features/observability/enforcement-point-model"
 import { dateKeyInTimeZone } from "@/lib/personal-preferences"
 
@@ -212,7 +213,7 @@ export function buildTrendRecords(data: OverviewSnapshot): TrendRecord[] {
     })
   }
 
-  for (const event of data.auditEvents) {
+  for (const event of data.auditEvents.filter(isDecisionAuditEvent)) {
     if (event.kind !== "INVOCATION_OUTCOME" || seenCorrelations.has(event.correlation_id) || !event.resource_id) continue
     const kind = resources.get(event.resource_id)
     if (!kind) continue

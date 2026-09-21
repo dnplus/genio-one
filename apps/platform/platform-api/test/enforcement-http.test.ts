@@ -60,7 +60,7 @@ function compiled(value: CompileEnforcementChainInput): CompiledEnforcementChain
   }
 }
 
-test("formal route injects Resource/Capability and carries explicit compiler candidates", async () => {
+test("direct Enforcement Chain writes are retired", async () => {
   let compileInput: { tenantId: string; value: CompileEnforcementChainInput } | null = null
   const compiler: EnforcementChainCompiler = {
     async listEligibleConnectionIds() {
@@ -85,6 +85,9 @@ test("formal route injects Resource/Capability and carries explicit compiler can
     one_policy_revision: 7,
     chain,
     chain_digest: "a".repeat(64),
+    published_by_subject_id: "system",
+    reviewed_by_subject_id: null,
+    rollback_source_one_policy_revision: null,
     created_at: 1,
     updated_at: 1,
   }
@@ -104,6 +107,9 @@ test("formal route injects Resource/Capability and carries explicit compiler can
     async getLatest() {
       return revision
     },
+    async publishDraft() {
+      return revision
+    },
   }
 
   const app = Fastify()
@@ -113,18 +119,9 @@ test("formal route injects Resource/Capability and carries explicit compiler can
     url: "/v1/tenants/tenant-acme/resources/resource-ai/capabilities/chat/enforcement-chain",
     payload: { one_policy_revision: 7, steps },
   })
-  assert.equal(response.statusCode, 200, response.body)
-  assert.equal(JSON.parse(response.body).chain.capability_id, "chat")
-  assert.deepEqual(compileInput, {
-    tenantId: "tenant-acme",
-    value: {
-      resource_id: "resource-ai",
-      capability_id: "chat",
-      eligible_connection_ids: ["connection-openai", "connection-ollama"],
-      one_policy_revision: 7,
-      steps,
-    },
-  })
+  assert.equal(response.statusCode, 410, response.body)
+  assert.equal(JSON.parse(response.body).code, "ENFORCEMENT_DIRECT_WRITE_RETIRED")
+  assert.equal(compileInput, null)
 
   const latest = await app.inject({
     method: "GET",
@@ -142,11 +139,6 @@ test("formal route injects Resource/Capability and carries explicit compiler can
       eligible_connection_ids: ["attacker-connection"],
     },
   })
-  assert.equal(bodyInjection.statusCode, 200, bodyInjection.body)
-  const injectedCompile = compileInput as {
-    tenantId: string
-    value: CompileEnforcementChainInput
-  }
-  assert.deepEqual(injectedCompile.value.eligible_connection_ids, ["attacker-connection"])
+  assert.equal(bodyInjection.statusCode, 410, bodyInjection.body)
   await app.close()
 })

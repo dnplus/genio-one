@@ -62,6 +62,7 @@ test("OTel MCP public and provider access logs materialize one correlated Activi
       async query() {
         return {
           events: [{
+            kind: "ONE_POLICY_DECISION",
             resource_id: "resource-1",
             capability_id: "mcp.invoke",
             entitlement_id: "entitlement-1",
@@ -170,6 +171,7 @@ test("OTel API access log materializes one API Gateway Activity", async () => {
       async query() {
         return {
           events: [{
+            kind: "ONE_POLICY_DECISION",
             resource_id: "resource-api",
             capability_id: "incident.list",
             entitlement_id: "entitlement-api",
@@ -254,6 +256,7 @@ test("OTel attempted-host receipts materialize ordered failover and the selected
       async query() {
         return {
           events: [{
+            kind: "ONE_POLICY_DECISION",
             resource_id: "resource-routing",
             capability_id: "model.invoke",
             entitlement_id: "entitlement-routing",

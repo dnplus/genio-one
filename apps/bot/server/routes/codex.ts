@@ -1,5 +1,6 @@
-import { observationContext, observeOperation } from "../../../../packages/telemetry/src/operation-observability"
-import { traceIdentity } from "../../../../packages/telemetry/src/otlp-observability"
+import { observationContext, observeOperation } from "@genioone/telemetry/operation-observability"
+import { traceIdentity } from "@genioone/telemetry/otlp-observability"
+import { defaultRuntimeCapabilityAction } from "@genioone/protocol/runtime-capability-actions"
 import { canonicalizeNativeParams } from "../native-runtime-params"
 import { nativeRuntimeEnvironment, ownedRuntimeEnvironment } from "../native-runtime-environment"
 import { createRuntimePolicyLifecycle } from "../runtime-policy-lifecycle"
@@ -9,13 +10,17 @@ import { assertCapability, CapabilityDeniedError, PERSONAL_BOT_COMPUTER_USE, PER
 import { proxiedDesktopUrl } from "../desktop-proxy"
 import { verifyGenioOneAccessToken } from "../auth"
 import { createCodexRuntime as defaultCreateCodexRuntime, type CodexRuntime, type RuntimeTier } from "../runtime"
-import type { RuntimeSession } from "../runtime-broker"
+import { setBotSelection, type RuntimeSession } from "../runtime-broker"
 import type { BotServerContext } from "../context"
 import { botTurnContext } from "../bot-context"
 import { BotUsageContextError, resolveBotUsageContext } from "../usage-context"
 import { emitBotFeedbackLog } from "../telemetry"
-import { type RuntimePolicyCapabilityId, type RuntimePolicyDecision } from "../runtime-policy-contract"
-import { isManagedMcpServerName, managedMcpConfig, resolveManagedMcpEndpoints } from "../ce-demo-mcp"
+import {
+  type RuntimePolicyCapabilityId,
+  type RuntimePolicyDecision,
+  type RuntimePolicyExecutableAction,
+} from "../runtime-policy-contract"
+import { isManagedMcpServerName, managedMcpConfig, resolveManagedMcpMounts } from "../managed-mcp"
 import {
   readNativeRuntimeExposure,
   type NativeRuntimeEnvironment,
@@ -56,7 +61,6 @@ const HOST_EXECUTION_COMMANDS = new Set([
 
 const CODEX_SUBSCRIPTION_CAPABILITY = "codex.subscription" as const
 const SHELL_EXEC_CAPABILITY = "shell.exec" as const
-const MANAGED_MCP_SERVERS = new Set(["genio_one", "genio_discovery", "genio_bot"])
 
 const SUPPORTED_CLIENT_METHODS = new Set([
   "initialize",
@@ -99,6 +103,12 @@ function hostExecutionCapability(method: string): RuntimePolicyCapabilityId {
   return SHELL_EXEC_CAPABILITY
 }
 
+function runtimeExecutionAction(capabilityId: RuntimePolicyCapabilityId): RuntimePolicyExecutableAction {
+  const action = defaultRuntimeCapabilityAction(capabilityId)
+  if (!action) throw new Error("RUNTIME_POLICY_CAPABILITY_INVALID")
+  return action
+}
+
 function nativeMethodRequiresSelection(method: string): boolean {
   return method === "model/list" || method === "mcpServerStatus/list" || method === "modelProvider/capabilities/read" || method.startsWith("account/")
 }
@@ -108,9 +118,8 @@ function isAccountMethodAllowed(method: string, modelRoute: "codex-subscription"
 }
 
 function isManagedMcpConfigKey(key: string) {
-  if (key === "mcp_servers.genio_bot" || key.startsWith("mcp_servers.genio_bot.")) return true
-  const name = key.startsWith("mcp_servers.") ? key.slice("mcp_servers.".length).split(".", 1)[0] : ""
-  return isManagedMcpServerName(name)
+  if (!key.startsWith("mcp_servers.")) return false
+  return isManagedMcpServerName(key.slice("mcp_servers.".length).split(".", 1)[0])
 }
 
 export async function codexRoutes(app: FastifyInstance, context: BotServerContext) {
@@ -142,6 +151,35 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
       accessToken: () => sessionAccessToken,
       onReportFailure: showRuntimeReportFailure,
     })
+
+    const authorizeManagedMcpExposure = async (
+      session: RuntimeSession,
+      botId: string,
+      mounts: RuntimeSession["managedMcpMounts"] = {},
+      isCurrent: () => boolean,
+      outcome: "ALLOW" | "COMPLETED",
+      reasonCode: string,
+    ) => {
+      const allowed: NonNullable<RuntimeSession["managedMcpMounts"]> = {}
+      for (const [resourceId, mount] of Object.entries(mounts)) {
+        try {
+          const decision = await authorizeRuntime(session, botId, "mcp.invoke", "expose", isCurrent)
+          if (!await reportRuntimeDecision(session, botId, decision, outcome, reasonCode, isCurrent)) {
+            throw new Error("RUNTIME_POLICY_REPORT_UNAVAILABLE")
+          }
+          allowed[resourceId] = mount
+        } catch (error) {
+          console.warn(JSON.stringify({
+            event: "bot.managed-mcp.exposure_denied",
+            runtime_session_id: session.id,
+            bot_id: botId,
+            resource_id: resourceId,
+            reason: error instanceof Error ? error.message : "RUNTIME_POLICY_DENIED",
+          }))
+        }
+      }
+      return allowed
+    }
 
     const sendRuntimePolicyError = (message: string, tier?: RuntimeTier, id?: number | string) => {
       if (socket.readyState !== socket.OPEN) return
@@ -180,7 +218,7 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
             botRegistry.setThreadHistoryStatus(pending.botId, pending.threadId, "unavailable")
           }
           if (pending?.method === "mcpServerStatus/list" && Array.isArray(parsed.result?.data)) {
-            parsed = { ...parsed, result: { ...parsed.result, data: parsed.result.data.filter((server: any) => MANAGED_MCP_SERVERS.has(server?.name) || isManagedMcpServerName(server?.name)) } }
+            parsed = { ...parsed, result: { ...parsed.result, data: parsed.result.data.filter((server: any) => isManagedMcpServerName(server?.name)) } }
             runtimeMessage = JSON.stringify(parsed)
           }
           if (pending && parsed.result) {
@@ -210,7 +248,8 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
           const session = runtimeSession
           const botId = selectedBotId
           if (session && botId && parsed.id !== undefined) {
-            void authorizeRuntime(session, botId, hostExecutionCapability(parsed.method), "invoke")
+            const capabilityId = hostExecutionCapability(parsed.method)
+            void authorizeRuntime(session, botId, capabilityId, runtimeExecutionAction(capabilityId))
               .then((decision) => reportRuntimeDecision(session, botId, decision, "FAILED", "REMOTE_RUNTIME_REQUIRED"))
               .catch(() => {})
           }
@@ -230,7 +269,8 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
             return
           }
           const requestId = parsed.id
-          void authorizeRuntime(session, botId, hostExecutionCapability(parsed.method), "invoke")
+          const capabilityId = hostExecutionCapability(parsed.method)
+          void authorizeRuntime(session, botId, capabilityId, runtimeExecutionAction(capabilityId))
             .then(async (decision) => {
               if (requestId === undefined || socket.readyState !== socket.OPEN) {
                 await reportRuntimeDecision(session, botId, decision, "FAILED", requestId === undefined ? "RUNTIME_HOST_REQUEST_ID_REQUIRED" : "RUNTIME_SOCKET_CLOSED")
@@ -385,11 +425,7 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
             const session = runtimeSession
             const botId = typeof message.params?.botId === "string" ? message.params.botId : ""
             selectedBotId = null
-            if (session) {
-              session.selectedBotId = null
-              session.usageContext = null
-              session.managedMcpEndpoints = undefined
-            }
+            if (session) setBotSelection(session, null)
             if (!session || !botId) {
               if (socket.readyState === socket.OPEN) socket.send(JSON.stringify({ id: message.id, error: { code: "BOT_REQUIRED", message: "A Bot must be selected" } }))
               return
@@ -403,12 +439,19 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
               if (!selectedBot) throw new Error("BOT_NOT_FOUND")
               await assertCapability(capabilityGate, session.principal, PERSONAL_BOT_USE, sessionAccessToken ?? undefined)
               assertCurrentSelection()
-              const managedMcpEndpoints = await resolveManagedMcpEndpoints(
-                selectedBot.sourceResourceId,
-                selectedBot.bindings,
-                session.principal.tenant_id,
-                sessionAccessToken ?? session.accessToken,
-              )
+              const resolvedMcpMounts = await resolveManagedMcpMounts({
+                bindings: selectedBot.bindings,
+                tenantId: session.principal.tenant_id,
+                accessToken: sessionAccessToken ?? session.accessToken,
+                onDegraded: (reason) => console.warn(JSON.stringify({
+                  event: "bot.managed-mcp.degraded",
+                  runtime_session_id: session.id,
+                  bot_id: selectedBot.id,
+                  reason,
+                })),
+              })
+              assertCurrentSelection()
+              const mcpMounts = await authorizeManagedMcpExposure(session, selectedBot.id, resolvedMcpMounts, isCurrentSelection, "ALLOW", "MANAGED_MCP_MOUNT_EXPOSED")
               assertCurrentSelection()
               const usageContext = await resolveBotUsageContext({
                 principal: session.principal,
@@ -467,9 +510,7 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
               }
               assertCurrentSelection()
               selectedBotId = selectedBot.id
-              session.selectedBotId = selectedBot.id
-              session.usageContext = usageContext
-              session.managedMcpEndpoints = managedMcpEndpoints
+              setBotSelection(session, { botId: selectedBot.id, usageContext, mcpMounts })
               if (socket.readyState === socket.OPEN) socket.send(JSON.stringify({ id: message.id, result: {
                 botId: selectedBot.id,
                 modelDirectory: selectedBot.modelRoute,
@@ -481,9 +522,7 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
               if (codexDecision && !codexReportAttempted) await reportRuntimeDecision(session, botId, codexDecision, "FAILED", error instanceof Error ? error.message : "BOT_SELECT_FAILED", isCurrentSelection)
               if (isCurrentSelection()) {
                 selectedBotId = null
-                session.selectedBotId = null
-                session.usageContext = null
-                session.managedMcpEndpoints = undefined
+                setBotSelection(session, null)
                 sendRuntimePolicyError(error instanceof Error ? error.message : "BOT_SELECT_FAILED", undefined, message.id)
               } else if (socket.readyState === socket.OPEN) {
                 socket.send(JSON.stringify({ id: message.id, error: { code: "BOT_SELECTION_SUPERSEDED", message: "BOT_SELECTION_SUPERSEDED" } }))
@@ -661,7 +700,7 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
                 })
               }
               if (isNativeExecutionRequest && nativeEnvironment?.hasRuntimeEnvironment) {
-                authorizations.push(await authorizeRuntime(runtimeSession, botId, SHELL_EXEC_CAPABILITY, "invoke"))
+                authorizations.push(await authorizeRuntime(runtimeSession, botId, SHELL_EXEC_CAPABILITY, runtimeExecutionAction(SHELL_EXEC_CAPABILITY)))
               }
             } catch (error) {
               await Promise.all(authorizations.map((decision) => reportRuntimeDecision(runtimeSession!, botId, decision, "FAILED", error instanceof Error ? error.message : "RUNTIME_POLICY_DENIED")))
@@ -691,19 +730,19 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
             if (message.id !== undefined) botRequests.set(message.id, { method: message.method, botId, session: runtimeSession, threadId, historyRevision: botRegistry.timeline.revision(), runtimeTier: ownedRuntimeEnvironment(runtimeSession, message.params?.environments?.[0]?.environmentId, undefined, botId)?.tier ?? "none", authorizations })
             if (message.method === "turn/start") message.params.additionalContext = botTurnContext(botRegistry, botId, threadId, message.params.additionalContext ?? {})
             if ((message.method === "thread/start" || message.method === "thread/resume") && sessionAccessToken) {
+              const mcpMounts = await authorizeManagedMcpExposure(runtimeSession, botId, runtimeSession.managedMcpMounts, () => true, "COMPLETED", "MANAGED_MCP_CONFIG_INJECTED")
+              runtimeSession.managedMcpMounts = mcpMounts
               const config = { ...message.params.config }
               for (const key of Object.keys(config)) if (isManagedMcpConfigKey(key)) delete config[key]
               if (config.mcp_servers && typeof config.mcp_servers === "object") {
                 config.mcp_servers = { ...config.mcp_servers }
-                delete config.mcp_servers.genio_bot
                 for (const name of Object.keys(config.mcp_servers)) if (isManagedMcpServerName(name)) delete config.mcp_servers[name]
               }
-              const selectedBot = botRegistry.getOwned(botId, runtimeSession.principal)
               message.params.config = {
                 ...config,
                 "features.memories": false,
                 "mcp_servers.genio_bot": context.botToolSessions.config(botId, runtimeSession.principal, sessionAccessToken),
-                ...managedMcpConfig(selectedBot?.sourceResourceId, runtimeSession.id, runtimeSession.managedMcpEndpoints),
+                ...managedMcpConfig(runtimeSession.id, mcpMounts),
               }
             }
           } else if (message.id !== undefined && requestAuthorizations.length > 0 && runtimeSession && selectedBotId) {

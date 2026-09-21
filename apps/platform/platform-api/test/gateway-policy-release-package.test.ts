@@ -4,7 +4,7 @@ import test from "node:test"
 
 import { Check } from "typebox/value"
 
-import type { VerificationKeyRing } from "../../../../packages/protocol/src/compact-jws"
+import type { VerificationKeyRing } from "@genioone/protocol/compact-jws"
 import { canonicalGatewayPolicyReleaseBytes, planGatewayPolicyRelease } from "../src/capabilities/gateway-policy-release/planner"
 import type {
   CompactJwsSigner,

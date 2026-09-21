@@ -1,4 +1,4 @@
-import { observeOperation } from "../../../packages/telemetry/src/operation-observability"
+import { observeOperation } from "@genioone/telemetry/operation-observability"
 import nodemailer from "nodemailer"
 import type { SendMailOptions } from "nodemailer"
 import { z } from "zod"

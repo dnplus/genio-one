@@ -11,7 +11,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { ApiGatewayActivityEvent, ApiGatewayHttpMessageDetail, AuditEvent, OverviewSnapshot } from "@/domain/contracts"
+import type { ApiGatewayActivityEvent, ApiGatewayHttpMessageDetail, DecisionAuditEvent, OverviewSnapshot } from "@/domain/contracts"
 import { loadActivityEvidence, type ActivityEvidence } from "@/features/activity/activity-evidence"
 import { createActivityDisplayDirectory, type ActivityEntityDisplay } from "@/features/activity/activity-display"
 import { enforcementPointLabel, normalizeEnforcementPoint } from "@/features/observability/enforcement-point-model"
@@ -81,7 +81,7 @@ export function ApiGatewayTransactionSheet({
 }: {
   tenantId: string
   event: ApiGatewayActivityEvent | null
-  auditEvent: AuditEvent | null
+  auditEvent: DecisionAuditEvent | null
   data: Pick<OverviewSnapshot, "applications" | "connections" | "identity" | "resources">
   open: boolean
   onOpenChange: (open: boolean) => void

@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { createHash, generateKeyPairSync, sign as signPayload } from "node:crypto"
 import test from "node:test"
 
-import type { VerificationKeyRing } from "../../../../packages/protocol/src/compact-jws"
+import type { VerificationKeyRing } from "@genioone/protocol/compact-jws"
 import type { SqlTransaction } from "../src/persistence/sql-adapter"
 import type { ModelEntitlement } from "../src/capabilities/entitlements/contract"
 import type { CompiledEnforcementChain } from "../src/capabilities/enforcement/contract"
@@ -24,7 +24,7 @@ import {
   createGatewayPublicationReleaseCoordinator,
 } from "../src/capabilities/gateway-policy-release/publication-commit"
 import type { GatewayAggregateCommandRecord } from "../src/capabilities/gateway-runtime-control/contract"
-import type { GatewayReleaseReference } from "../../../../packages/protocol/src/gateway-release"
+import type { GatewayReleaseReference } from "@genioone/protocol/gateway-release"
 
 const TENANT_ID = "tenant-acme"
 const GATEWAY_ID = "ai-gateway"

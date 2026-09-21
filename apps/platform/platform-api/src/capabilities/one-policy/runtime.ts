@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 
 import { Type, type Static } from "typebox"
 import * as Value from "typebox/value"
+import { RUNTIME_CAPABILITY_IDS } from "@genioone/protocol/runtime-capability-actions"
 
 const Identifier = Type.String({ minLength: 1, maxLength: 256 })
 const StringList = Type.Array(Identifier, { maxItems: 2_048, uniqueItems: true })
@@ -28,6 +29,7 @@ export const RuntimePolicyTargetSchema = Type.Object({
 }, { additionalProperties: false })
 
 export const RuntimePolicyScopeSchema = Type.Object({
+  access_group_ids: Type.Optional(Type.Array(Identifier, { maxItems: 1_000, uniqueItems: true })),
   subject_ids: Type.Array(Identifier, { maxItems: 1_000, uniqueItems: true }),
   organization_ids: Type.Array(Identifier, { maxItems: 1_000, uniqueItems: true }),
   roles: Type.Array(RuntimeRoleSchema, { maxItems: 3, uniqueItems: true }),
@@ -254,13 +256,7 @@ export type RuntimePolicyReportBody = Static<typeof RuntimePolicyReportBodySchem
 export const RUNTIME_POLICY_ID = "one-policy.runtime.capabilities" as const
 export const PERSONAL_BOT_RESOURCE_ID = "genio.personal-bot" as const
 export const RUNTIME_POLICY_CAPABILITY_IDS = [
-  "codex.subscription",
-  "model.invoke",
-  "shell.exec",
-  "filesystem.read",
-  "filesystem.write",
-  "browser.open",
-  "web_search.query",
+  ...RUNTIME_CAPABILITY_IDS,
 ] as const
 
 export function runtimeTarget(runtimeId: string, capabilityId: string): string {
@@ -278,6 +274,7 @@ export interface RuntimePolicyEvaluationInput {
   client_id: string
   role?: RuntimePolicyRole
   organization_ids: readonly string[]
+  access_group_ids?: readonly string[]
   bot_id: string
   runtime_id: string
   capability_id: string
@@ -297,7 +294,8 @@ function includesOrUnscoped(values: readonly string[], value: string): boolean {
 }
 
 export function runtimePolicyScopeMatches(scope: RuntimePolicyScope, input: RuntimePolicyEvaluationInput): boolean {
-  return includesOrUnscoped(scope.subject_ids, input.subject_id) &&
+  return (scope.access_group_ids === undefined || scope.access_group_ids.length === 0 || scope.access_group_ids.some((id) => input.access_group_ids?.includes(id))) &&
+    includesOrUnscoped(scope.subject_ids, input.subject_id) &&
     (scope.organization_ids.length === 0 || scope.organization_ids.some((id) => input.organization_ids.includes(id))) &&
     (scope.roles.length === 0 || (input.role !== undefined && scope.roles.includes(input.role))) &&
     includesOrUnscoped(scope.client_ids, input.client_id) &&

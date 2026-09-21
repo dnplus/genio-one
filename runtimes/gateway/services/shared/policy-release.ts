@@ -2,7 +2,7 @@ import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import { join, relative, resolve, sep } from "node:path"
 
-import type { CompiledAuthorizationBundle } from "../../../../packages/protocol/src/authorization"
+import type { CompiledAuthorizationBundle } from "@genioone/protocol/authorization"
 import { isCompiledAuthorizationBundle } from "../authorizer/signed-bundle"
 import type { ProcessorPolicyBundle } from "../processor/contract"
 import { validateProcessorPolicyBundle } from "../processor/contract"
@@ -13,16 +13,16 @@ import {
 import {
   verifyCompactEdDsaJws,
   type VerificationKeyRing,
-} from "../../../../packages/protocol/src/compact-jws"
+} from "@genioone/protocol/compact-jws"
 import {
   verifyGatewayRuntimeCommand,
   type GatewayReleaseReference,
-} from "../../../../packages/protocol/src/runtime-command"
+} from "@genioone/protocol/runtime-command"
 
 export {
   isGatewayReleaseReference,
   type GatewayReleaseReference,
-} from "../../../../packages/protocol/src/runtime-command"
+} from "@genioone/protocol/runtime-command"
 
 export const POLICY_RELEASE_SCHEMA_VERSION = 2 as const
 
