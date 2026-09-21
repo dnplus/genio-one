@@ -28,6 +28,7 @@ const Digest = Type.String({ pattern: "^[a-f0-9]{64}$" })
 export const BotRulesSchema = Type.Object({
   allowed_roles: Type.Array(Type.Union([Type.Literal("TENANT_ADMINISTRATOR"), Type.Literal("ORGANIZATION_ADMINISTRATOR"), Type.Literal("USER")]), { uniqueItems: true }),
   allowed_subject_ids: Type.Array(Type.String({ minLength: 1, maxLength: 256 }), { maxItems: 1000, uniqueItems: true }),
+  computer_use_enabled: Type.Optional(Type.Boolean()),
 }, { additionalProperties: false })
 export type BotRules = Static<typeof BotRulesSchema>
 export const defaultBotRules: BotRules = { allowed_roles: ["TENANT_ADMINISTRATOR"], allowed_subject_ids: [] }

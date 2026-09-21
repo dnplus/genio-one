@@ -21,7 +21,7 @@ test("Bot policy draft is isolated, role protected, published with history and u
   try {
     const active = await app.inject({ method: "GET", url: base, headers })
     assert.equal(active.statusCode, 200)
-    const content = { kind: "BOT_ACCESS", definition: { allowed_roles: [], allowed_subject_ids: [] } }
+    const content = { kind: "BOT_ACCESS", definition: { allowed_roles: [], allowed_subject_ids: [], computer_use_enabled: true } }
     const saved = await app.inject({ method: "PUT", url: `${base}/draft`, headers, payload: { expected_version: 0, base_revision: 1, content } })
     assert.equal(saved.statusCode, 200, saved.body)
     assert.equal((await app.inject({ method: "GET", url: decisionPath, headers })).json().decision, "ALLOW")
@@ -36,6 +36,7 @@ test("Bot policy draft is isolated, role protected, published with history and u
     const published = await app.inject({ method: "POST", url: `${base}/draft/publish`, headers, payload: { expected_version: reviewed.json().version, expected_content_digest: reviewed.json().content_digest } })
     assert.equal(published.statusCode, 200, published.body)
     assert.equal(published.json().policy_revision, 2)
+    assert.equal(published.json().rules.computer_use_enabled, true)
     assert.equal((await app.inject({ method: "GET", url: decisionPath, headers })).json().decision, "DENY")
     assert.equal((await app.inject({ method: "GET", url: `${base}/draft`, headers })).json(), null)
     const history = (await app.inject({ method: "GET", url: `${base}/revisions`, headers })).json()

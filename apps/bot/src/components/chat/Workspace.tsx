@@ -58,9 +58,18 @@ import { RealtimeVoiceModal } from "./RealtimeVoiceModal"
 import { botCopy, botDisplayName } from "../../lib/ui-copy"
 
 export function requiresHeadlessRuntime(text: string) {
-  return /(?:建立|產生|輸出|寫入|儲存|\b(?:create|generate|make|write|save)\b)\s*[^。！？\n]{0,48}(?:檔案|文件|簡報|(?:artifact|document|file)\b|presentation(?:\.html)?\b|[A-Za-z0-9_-]+\.html\b)/i.test(text) ||
-    /(?:執行|運行|\b(?:run|execute)\b)\s*[^。！？\n]{0,48}(?:指令|命令|\b(?:command|terminal|shell|script)\b)/i.test(text) ||
-    /(?:讀取|列出|修改|寫入|建立|刪除|\b(?:read|list|modify|write|create|delete)\b)\s*[^。！？\n]{0,48}(?:工作區|\bworkspace\b)/i.test(text)
+  const ownerTool = /\b(?:read_self|update_self|create_bot|list_owned_skills|read_owned_skill|write_owned_skill|revert_owned_skill|delete_owned_skill|list_schedules|list_schedule_runs|create_schedule|update_schedule|delete_schedule|list_bots|send_to_bot)\b/i
+  const englishWord = (words: string) => String.raw`(?<![A-Za-z0-9_-])(?:${words})(?![A-Za-z0-9_-])`
+  const englishTarget = (words: string) => String.raw`(?<![A-Za-z0-9_])(?:[A-Za-z][A-Za-z0-9_]*-)*(?:${words})(?![A-Za-z0-9_-])`
+  const workspaceAction = new RegExp(String.raw`(?:讀取|列出|修改|寫入|建立|刪除|使用|${englishWord("read|list|modify|write|create|delete|use")})\s*[^。！？\n]{0,48}(?:工作區|${englishTarget("workspace")})`, "i")
+  const executionAction = new RegExp(String.raw`(?:執行|運行|${englishWord("run|execute")})\s*[^。！？\n]{0,48}(?:指令|命令|${englishTarget("command|terminal|shell|script")})`, "i")
+  const artifactAction = new RegExp(String.raw`(?:建立|產生|輸出|寫入|儲存|${englishWord("create|generate|make|write|save")})\s*[^。！？\n]{0,48}(?:檔案|文件|簡報|${englishTarget("artifact|document|file")}|${englishTarget("presentation")}(?:\.html)?|[A-Za-z0-9_-]+\.html\b)`, "i")
+  for (const clause of text.split(/[，,。！？\n；;]/)) {
+    if (/^\s*(?:(?:請|please|也|並且|and)\s*)?(?:不要|別|不需|無需|do not|don't)/i.test(clause)) continue
+    if (executionAction.test(clause) || workspaceAction.test(clause)) return true
+    if (artifactAction.test(clause) && !(ownerTool.test(clause) && /\bSKILL\.md\b/i.test(clause))) return true
+  }
+  return false
 }
 
 export function Workspace({
@@ -90,7 +99,7 @@ export function Workspace({
   activeBot: BotInstance
   onSelectBot: (botId: string) => void
   onAddBot: () => void
-  onUpdateBot: (bot: BotInstance) => void
+  onUpdateBot: (bot: BotInstance) => void | Promise<void>
   onToggleBinding: (botId: string, resourceId: string, capabilityId: string, currentlyInstalled: boolean) => Promise<void>
   onDuplicateBot?: (bot: BotInstance) => void
   onDeleteBot?: (bot: BotInstance) => void
@@ -318,6 +327,7 @@ export function Workspace({
     clientRef,
     runtime,
     runtimeTiers,
+    executionRuntime,
     runtimeState,
     setRuntimeState,
     mcpStatus,
@@ -350,6 +360,7 @@ export function Workspace({
     uploadFeedback,
     startTurn,
     queuePendingExecution,
+    pendingExecutionStatus,
   } = useCodexSession({
     activeBot,
     activeThreadId,
@@ -680,6 +691,17 @@ ${availableSkillsList}`,
       return
     }
 
+    if (!demo) {
+      const pendingStatus = pendingExecutionStatus()
+      if (pendingStatus !== "none") {
+        setRuntimeState(pendingStatus === "busy"
+          ? "正在準備前一項 Headless 工作；目前輸入已保留，請等待後再送出。"
+          : "前一項 Headless 工作已取消並保留在輸入框，請重新送出。")
+        setAgentState("orbit")
+        return
+      }
+    }
+
     setInputHistory((prev) => {
       const next = prev[prev.length - 1] === text ? prev : [...prev, text].slice(-50)
       saveInputHistory(activeBot.id, next)
@@ -797,7 +819,7 @@ ${availableSkillsList}`,
     }
 
     const needsHeadless = requiresHeadlessRuntime(text)
-    const taskRuntime = needsHeadless ? (runtimeTiers.headless ?? runtime) : runtime
+    const taskRuntime = needsHeadless ? requestRuntimeTier("headless") : executionRuntime
     if (!demo && taskRuntime?.kind === "endpoint" && (!taskRuntime.execReady || taskRuntime.endpoint?.botId !== activeBot.id)) {
       setRuntimeState("本機連線無法使用，輸入已保留。請開啟「連接本機」重新配對。")
       return
@@ -805,21 +827,30 @@ ${availableSkillsList}`,
     if (!demo && needsHeadless && !runtimeCanExec(taskRuntime)) {
       if (images.length) {
         setRuntimeState("正在準備工作區，圖片與輸入已保留；就緒後請再送出。")
-        requestRuntimeTier("headless")
         return
       }
       const progressId = `runtime-provisioning-${Date.now()}`
-      queuePendingExecution(text, progressId)
+      const queued = queuePendingExecution(text, progressId, () => {
+        setInput((current) => {
+          if (current.trim() === text.trim()) return current
+          return current ? `${text}\n\n${current}` : text
+        })
+      })
+      if (queued !== "queued") {
+        setRuntimeState(queued === "busy" ? "正在準備前一項 Headless 工作；目前輸入已保留，請等待後再送出。" : "前一項 Headless 工作已取消並保留在輸入框，請重新送出。")
+        setAgentState("orbit")
+        return
+      }
       setMessages((current) => [...current, {
         id: progressId,
+        localOnly: true,
         role: "assistant",
-        text: "正在準備 Headless 工作區，完成後會自動繼續這項工作…",
+        text: `正在準備 Headless 工作區，完成後會自動繼續這項工作：\n\n${text}`,
         createdAt: Date.now(),
       }])
       setInput("")
       setRuntimeState("等待 Headless 工作區")
       setAgentState("orbit")
-      requestRuntimeTier("headless")
       return
     }
 
@@ -926,10 +957,10 @@ ${availableSkillsList}`,
     viewState.mentions,
     updateView,
     handoffBot,
+    pendingExecutionStatus,
     queuePendingExecution,
     requestRuntimeTier,
-    runtime,
-    runtimeTiers.headless,
+    executionRuntime,
     safeTimeout,
     scrollToBottom,
     setActivities,
@@ -1020,30 +1051,9 @@ ${availableSkillsList}`,
   const isSendDisabled = !demo && (showCodexLogin || !threadReady)
   const runningActivity = activities.find((a) => a.status === "running")
 
-  const handleExecuteSlashAction = useCallback((action: SlashCommandItem["action"]) => {
-    if (action === "help") {
-      setInput("")
-      showHelpMessage()
-    } else if (action === "compact") {
-      setInput("")
-      executeCompact()
-    } else if (action === "skills") {
-      setInput("")
-      showSkillsMessage()
-    } else if (action === "desktop") {
-      setInput("")
-      setRightTab("desktop")
-      setRightPanelOpen(true)
-      requestRuntimeTier("desktop")
-    } else if (action === "request_help") {
-      sendMessage("/request-help")
-    } else if (action === "headless") {
-      setInput("")
-      setRightTab("activities")
-      setRightPanelOpen(true)
-      requestRuntimeTier("headless")
-    }
-  }, [executeCompact, requestRuntimeTier, sendMessage, showHelpMessage, showSkillsMessage])
+  const handleExecuteSlashAction = useCallback((_action: SlashCommandItem["action"], command: SlashCommandItem) => {
+    sendMessage(command.command)
+  }, [sendMessage])
 
   const navigateMessage = async (botId: string, messageId: string) => {
     setNavigationError("")

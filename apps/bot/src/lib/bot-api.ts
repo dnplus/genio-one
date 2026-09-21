@@ -120,6 +120,7 @@ async function request<T>(token: string, path: string, init: RequestInit = {}) {
 
 export interface BotProfileDto {
   botId: string
+  revision: number
   name: string
   title: string
   description: string
@@ -162,6 +163,7 @@ export async function createBot(token: string, input: {
 }
 
 export async function updateBot(token: string, botId: string, input: {
+  expectedRevision?: number
   name?: string
   title?: string
   description?: string

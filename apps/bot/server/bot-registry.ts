@@ -14,6 +14,7 @@ import { BotHandoffStore, type CreateHandoffInput } from "./bot-handoff"
 import { BotGroupStore, type CreateGroupInput } from "./bot-groups"
 import { BotTimelineStore } from "./bot-timeline"
 import { InteractionHistory } from "./interaction-history"
+import { BotOwnedSkills } from "./bot-owned-skills"
 import type { BotSidebarSummary } from "../shared/bot-roster"
 import type { Turn } from "./generated/v2/Turn"
 
@@ -86,6 +87,7 @@ export interface BotRecord {
   sourceDigest: string | null
   createdAt: number
   updatedAt: number
+  revision: number
   archived: boolean
   bindings: BotBinding[]
 }
@@ -111,6 +113,7 @@ export interface BotProfile {
   useCaseId: string | null
   createdAt: number
   updatedAt: number
+  revision: number
 }
 
 export function toBotProfile(bot: BotRecord): BotProfile {
@@ -131,6 +134,7 @@ export function toBotProfile(bot: BotRecord): BotProfile {
     useCaseId: bot.useCaseId,
     createdAt: bot.createdAt,
     updatedAt: bot.updatedAt,
+    revision: bot.revision,
   }
 }
 
@@ -216,9 +220,11 @@ export interface CreateBotInput {
   agentSubjectId?: string
   ownerOrganizationId?: string | null
   useCaseId?: string | null
+  selfCreateRequestId?: string | null
 }
 
 export interface UpdateBotInput {
+  expectedRevision?: number
   name?: string
   role?: string
   title?: string
@@ -233,6 +239,30 @@ export interface UpdateBotInput {
   defaultRuntimeTier?: RuntimeTier
   sharePolicy?: Partial<BotSharePolicy>
   bindings?: Array<Partial<BotBinding> & Pick<BotBinding, "resourceId" | "capabilityId">>
+}
+
+export interface BotSelfProfileRevision {
+  revision: number
+  updatedAt: number
+}
+
+function selfProfileSnapshot(bot: BotRecord) {
+  return {
+    name: bot.name,
+    title: bot.title,
+    description: bot.description,
+    antiJobs: bot.antiJobs,
+    voice: bot.voice,
+  }
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`).join(",")}}`
+  }
+  return JSON.stringify(value)
 }
 
 const DEFAULT_SHARE_POLICY: BotSharePolicy = {
@@ -300,6 +330,7 @@ export class BotRegistry {
   readonly questions: BotQuestions
   readonly continuations: BotContinuations
   readonly memory: BotMemoryStore
+  readonly ownedSkills: BotOwnedSkills
 
   constructor(
     databasePath = process.env.GENIO_BOT_REGISTRY_DB?.trim() || resolve(import.meta.dir, "../.local/bot-registry.sqlite"),
@@ -321,6 +352,7 @@ export class BotRegistry {
     })
     this.db.exec("pragma journal_mode = wal; pragma busy_timeout = 5000;")
     this.packages = loadBotPackages()
+    this.ownedSkills = new BotOwnedSkills(this.db, (botId, principal) => Boolean(this.getOwned(botId, principal)))
     this.artifacts = new BotArtifactStore(this.db, resolve(artifactStoreRoot), (botId, principal) => this.getOwned(botId, principal))
     this.invocations = new BotInvocationStore(this.db, (botId, principal) => this.getOwned(botId, principal), (botId, principal) => this.get(botId, principal))
     this.handoffs = new BotHandoffStore(
@@ -358,6 +390,8 @@ export class BotRegistry {
         source_digest text,
         created_at integer not null,
         updated_at integer not null,
+        profile_revision integer not null default 1,
+        self_create_request_id text,
         archived integer not null default 0
       );
       create table if not exists bot_bindings (
@@ -423,10 +457,30 @@ export class BotRegistry {
         size integer not null,
         created_at integer not null
       )
+      ;
+      create table if not exists bot_profile_revisions (
+        bot_id text not null,
+        revision integer not null,
+        profile_json text not null,
+        created_at integer not null,
+        primary key (bot_id, revision)
+      );
+      create table if not exists bot_self_create_requests (
+        tenant_id text not null,
+        owner_subject_id text not null,
+        client_request_id text not null,
+        payload_json text,
+        bot_id text,
+        state text not null,
+        created_at integer not null,
+        updated_at integer not null,
+        primary key (tenant_id, owner_subject_id, client_request_id)
+      );
     `)
     this.ensureSessionSchema()
     this.ensureBindingSchema()
     this.ensureDesignerSchema()
+    this.ensureSelfManagementSchema()
   }
 
   /** Additive columns for older bot_sessions rows (SQLite). */
@@ -450,6 +504,16 @@ export class BotRegistry {
     if (!names.has("anti_jobs")) this.db.exec("alter table bots add column anti_jobs text not null default ''")
     if (!names.has("voice")) this.db.exec("alter table bots add column voice text not null default ''")
     if (!names.has("wake")) this.db.exec("alter table bots add column wake text not null default ''")
+  }
+
+  private ensureSelfManagementSchema() {
+    const cols = this.db.query("pragma table_info(bots)").all() as Array<{ name: string }>
+    const names = new Set(cols.map((col) => col.name))
+    if (!names.has("profile_revision")) this.db.exec("alter table bots add column profile_revision integer not null default 1")
+    if (!names.has("self_create_request_id")) this.db.exec("alter table bots add column self_create_request_id text")
+    const requestColumns = this.db.query("pragma table_info(bot_self_create_requests)").all() as Array<{ name: string }>
+    if (!requestColumns.some((column) => column.name === "payload_json")) this.db.exec("alter table bot_self_create_requests add column payload_json text")
+    this.db.exec("create unique index if not exists bots_self_create_request_unique on bots (tenant_id, owner_subject_id, self_create_request_id) where self_create_request_id is not null")
   }
 
   /** Additive columns for BotBinding projection (skill / approval / reason). */
@@ -523,7 +587,7 @@ export class BotRegistry {
       if (current.ownerOrganizationId !== input.ownerOrganizationId || current.useCaseId !== input.useCaseId) throw new Error("BOT_USAGE_CONTEXT_CONFLICT")
       return current
     }
-    this.db.query("update bots set owner_organization_id = ?, use_case_id = ?, updated_at = ? where id = ? and tenant_id = ? and owner_subject_id = ?").run(
+    this.db.query("update bots set owner_organization_id = ?, use_case_id = ?, updated_at = ?, profile_revision = profile_revision + 1 where id = ? and tenant_id = ? and owner_subject_id = ?").run(
       input.ownerOrganizationId,
       input.useCaseId,
       Date.now(),
@@ -531,7 +595,9 @@ export class BotRegistry {
       principal.tenant_id,
       principal.subject_id,
     )
-    return this.getOwned(botId, principal)!
+    const updated = this.getOwned(botId, principal)!
+    this.writeProfileRevision(updated)
+    return updated
   }
 
   create(principal: GenioPrincipal, input: CreateBotInput): BotRecord {
@@ -550,8 +616,8 @@ export class BotRegistry {
         id, tenant_id, owner_subject_id, agent_subject_id, owner_organization_id, use_case_id, name, role, title, description,
         avatar_json, workspace_path, skills_json, allowed_tools_json, model_route,
         default_runtime_tier, share_policy_json, source_resource_id, source_version,
-        source_digest, created_at, updated_at, archived, anti_jobs, voice, wake
-      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`).run(
+        source_digest, created_at, updated_at, profile_revision, self_create_request_id, archived, anti_jobs, voice, wake
+      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 0, ?, ?, ?)`).run(
         id,
         principal.tenant_id,
         principal.subject_id,
@@ -574,14 +640,17 @@ export class BotRegistry {
         input.sourceDigest ?? null,
         now,
         now,
+        input.selfCreateRequestId?.trim() || null,
         antiJobs,
         voice,
         wake,
       )
       this.replaceBindings(id, input.bindings ?? [])
+      const created = this.getOwned(id, principal)!
+      this.writeProfileRevision(created)
+      return created
     })
-    runTransaction()
-    return this.getOwned(id, principal)!
+    return runTransaction()
   }
 
   update(botId: string, principal: GenioPrincipal, input: UpdateBotInput): BotRecord {
@@ -596,11 +665,14 @@ export class BotRegistry {
     const nextWake = input.wake === "chat" || input.wake === "routine" || input.wake === "both" || input.wake === ""
       ? input.wake
       : current.wake
+    const expectedRevision = input.expectedRevision
+    if (expectedRevision !== undefined && (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1)) throw new Error("BOT_PROFILE_REVISION_INVALID")
     const runTransaction = this.db.transaction(() => {
-      this.db.query(`update bots set name = ?, role = ?, title = ?, description = ?, avatar_json = ?,
+      this.writeProfileRevision(current)
+      const result = this.db.query(`update bots set name = ?, role = ?, title = ?, description = ?, avatar_json = ?,
         skills_json = ?, allowed_tools_json = ?, model_route = ?, default_runtime_tier = ?, share_policy_json = ?,
-        anti_jobs = ?, voice = ?, wake = ?, updated_at = ?
-        where id = ?`).run(
+        anti_jobs = ?, voice = ?, wake = ?, updated_at = ?, profile_revision = profile_revision + 1
+        where id = ? and tenant_id = ? and owner_subject_id = ? and profile_revision = ?`).run(
         input.name?.trim() || current.name,
         (input.description?.trim() || input.role?.trim() || current.description),
         input.title?.trim() || current.title,
@@ -616,20 +688,118 @@ export class BotRegistry {
         nextWake,
         now,
         botId,
+        principal.tenant_id,
+        principal.subject_id,
+        expectedRevision ?? current.revision,
       )
+      if (result.changes !== 1) throw new Error("BOT_PROFILE_REVISION_CONFLICT")
       if (input.bindings) this.replaceBindings(botId, input.bindings)
+      const updated = this.getOwned(botId, principal)!
+      this.writeProfileRevision(updated)
+      return updated
     })
-    runTransaction()
-    return this.getOwned(botId, principal)!
+    return runTransaction()
+  }
+
+  readSelf(botId: string, principal: GenioPrincipal) {
+    const bot = this.getOwned(botId, principal)
+    if (!bot) throw new Error("BOT_NOT_FOUND")
+    let history = this.db.query("select revision, created_at from bot_profile_revisions where bot_id = ? order by revision desc limit 20").all(botId) as Array<{ revision: number; created_at: number }>
+    if (history.length === 0) {
+      this.writeProfileRevision(bot)
+      history = this.db.query("select revision, created_at from bot_profile_revisions where bot_id = ? order by revision desc limit 20").all(botId) as Array<{ revision: number; created_at: number }>
+    }
+    return {
+      bot: { id: bot.id, ...toBotProfile(bot), antiJobs: bot.antiJobs, voice: bot.voice },
+      history: history.map((row) => ({ revision: Number(row.revision), updatedAt: Number(row.created_at) })),
+    }
+  }
+
+  updateSelf(botId: string, principal: GenioPrincipal, input: {
+    expectedRevision: number
+    name?: string
+    title?: string
+    description?: string
+    antiJobs?: string
+    voice?: string
+    restoreRevision?: number
+  }) {
+    const current = this.getOwned(botId, principal)
+    if (!current) throw new Error("BOT_NOT_FOUND")
+    if (current.revision !== input.expectedRevision) throw new Error("BOT_PROFILE_REVISION_CONFLICT")
+    let next = input
+    if (input.restoreRevision !== undefined) {
+      const row = this.db.query("select profile_json from bot_profile_revisions where bot_id = ? and revision = ?").get(botId, input.restoreRevision) as { profile_json?: string } | null
+      if (!row?.profile_json) throw new Error("BOT_PROFILE_REVISION_NOT_FOUND")
+      const profile = parseJson<Record<string, unknown>>(row.profile_json, {})
+      next = {
+        expectedRevision: input.expectedRevision,
+        name: typeof profile.name === "string" ? profile.name : current.name,
+        title: typeof profile.title === "string" ? profile.title : current.title,
+        description: typeof profile.description === "string" ? profile.description : current.description,
+        antiJobs: typeof profile.antiJobs === "string" ? profile.antiJobs : current.antiJobs,
+        voice: typeof profile.voice === "string" ? profile.voice : current.voice,
+      }
+    }
+    const updated = this.update(botId, principal, { ...next, expectedRevision: input.expectedRevision })
+    return { bot: { id: updated.id, ...toBotProfile(updated), antiJobs: updated.antiJobs, voice: updated.voice }, revision: updated.revision }
+  }
+
+  beginSelfBotCreate(principal: GenioPrincipal, clientRequestId: string, payload: unknown) {
+    const payloadJson = canonicalJson(payload)
+    const current = this.db.query("select bot_id, state, payload_json from bot_self_create_requests where tenant_id = ? and owner_subject_id = ? and client_request_id = ?").get(principal.tenant_id, principal.subject_id, clientRequestId) as { bot_id: string | null; state: string; payload_json: string | null } | null
+    if (current && current.payload_json !== payloadJson) throw new Error("BOT_CREATE_REQUEST_CONFLICT")
+    if (current?.bot_id) {
+      const row = this.db.query("select archived from bots where id = ? and tenant_id = ? and owner_subject_id = ?").get(current.bot_id, principal.tenant_id, principal.subject_id) as { archived?: number } | null
+      if (row && Number(row.archived) !== 1) {
+        const bot = this.getOwned(current.bot_id, principal)
+        if (bot) return { state: "COMPLETED" as const, bot }
+      }
+      this.db.query("update bot_self_create_requests set state = 'DELETED', updated_at = ? where tenant_id = ? and owner_subject_id = ? and client_request_id = ?").run(Date.now(), principal.tenant_id, principal.subject_id, clientRequestId)
+      return { state: "DELETED" as const, bot: null }
+    }
+    if (current) {
+      if (current.state !== "PENDING") return { state: "DELETED" as const, bot: null }
+      const recovered = this.db.query("select id from bots where tenant_id = ? and owner_subject_id = ? and self_create_request_id = ?").get(principal.tenant_id, principal.subject_id, clientRequestId) as { id?: string } | null
+      if (recovered?.id) {
+        this.db.query("update bot_self_create_requests set bot_id = ?, state = 'COMPLETED', updated_at = ? where tenant_id = ? and owner_subject_id = ? and client_request_id = ? and payload_json = ?").run(recovered.id, Date.now(), principal.tenant_id, principal.subject_id, clientRequestId, payloadJson)
+        return { state: "COMPLETED" as const, bot: this.getOwned(recovered.id, principal)! }
+      }
+      return { state: "PENDING" as const, bot: null }
+    }
+    const now = Date.now()
+    this.db.query("insert into bot_self_create_requests (tenant_id, owner_subject_id, client_request_id, payload_json, bot_id, state, created_at, updated_at) values (?, ?, ?, ?, null, 'PENDING', ?, ?)").run(principal.tenant_id, principal.subject_id, clientRequestId, payloadJson, now, now)
+    return { state: "PENDING" as const, bot: null }
+  }
+
+  completeSelfBotCreate(principal: GenioPrincipal, clientRequestId: string, input: CreateBotInput) {
+    return this.db.transaction(() => {
+      const request = this.db.query("select bot_id, state from bot_self_create_requests where tenant_id = ? and owner_subject_id = ? and client_request_id = ?").get(principal.tenant_id, principal.subject_id, clientRequestId) as { bot_id: string | null; state: string } | null
+      if (!request) throw new Error("BOT_CREATE_REQUEST_NOT_FOUND")
+      if (request.state !== "PENDING" && !request.bot_id) throw new Error("BOT_CREATE_REQUEST_TOMBSTONED")
+      if (request.bot_id) {
+        const bot = this.getOwned(request.bot_id, principal)
+        if (bot) return { bot, created: false }
+        throw new Error("BOT_CREATE_REQUEST_TOMBSTONED")
+      }
+      const existing = this.db.query("select id from bots where tenant_id = ? and owner_subject_id = ? and self_create_request_id = ?").get(principal.tenant_id, principal.subject_id, clientRequestId) as { id?: string } | null
+      const bot = existing?.id ? this.getOwned(existing.id, principal)! : this.create(principal, { ...input, selfCreateRequestId: clientRequestId })
+      this.db.query("update bot_self_create_requests set bot_id = ?, state = 'COMPLETED', updated_at = ? where tenant_id = ? and owner_subject_id = ? and client_request_id = ? and state = 'PENDING'").run(bot.id, Date.now(), principal.tenant_id, principal.subject_id, clientRequestId)
+      return { bot, created: !existing?.id }
+    })()
   }
 
   delete(botId: string, principal: GenioPrincipal): boolean {
     const current = this.getOwned(botId, principal)
     if (!current) throw new Error("BOT_NOT_FOUND")
     const runTransaction = this.db.transaction(() => {
+      this.db.query("update bot_self_create_requests set state = 'DELETED', updated_at = ? where bot_id = ? and tenant_id = ? and owner_subject_id = ?").run(Date.now(), botId, principal.tenant_id, principal.subject_id)
       this.db.query("delete from bot_bindings where bot_id = ?").run(botId)
       this.db.query("delete from bot_sessions where bot_id = ?").run(botId)
       this.db.query("delete from bot_artifacts where bot_id = ?").run(botId)
+      this.db.query("delete from bot_owned_skill_revisions where bot_id = ?").run(botId)
+      this.db.query("delete from bot_owned_skills where bot_id = ?").run(botId)
+      this.db.query("delete from bot_profile_revisions where bot_id = ?").run(botId)
       this.db.query("delete from bots where id = ? and tenant_id = ? and owner_subject_id = ?").run(botId, principal.tenant_id, principal.subject_id)
     })
     runTransaction()
@@ -1211,8 +1381,19 @@ export class BotRegistry {
       sourceDigest: typeof row.source_digest === "string" ? row.source_digest : null,
       createdAt: Number(row.created_at),
       updatedAt: Number(row.updated_at),
+      revision: Number(row.profile_revision) || 1,
       archived: Number(row.archived) === 1,
       bindings,
     }
+  }
+
+  private writeProfileRevision(bot: BotRecord) {
+    this.db.query(`insert into bot_profile_revisions (bot_id, revision, profile_json, created_at) values (?, ?, ?, ?)
+      on conflict(bot_id, revision) do update set profile_json = excluded.profile_json, created_at = excluded.created_at`).run(
+      bot.id,
+      bot.revision,
+      JSON.stringify(selfProfileSnapshot(bot)),
+      bot.updatedAt,
+    )
   }
 }

@@ -1,15 +1,15 @@
 import { expect, test } from "bun:test"
 import { BotRegistry } from "./bot-registry"
 import { RuntimeBroker } from "./runtime-broker"
-import { createCapabilityGate } from "./capability-gate"
 import { continueCallers } from "./caller-continuation"
 import type { BotServerContext } from "./context"
 import { BotToolSessions } from "./bot-tool-sessions"
+import type { RuntimeDetails } from "./runtime"
 
 test.each(["COMPLETED", "FAILED"] as const)("handoff %s waits for caller idle and starts exactly one continuation with system provenance", async (outcome) => {
   const principal = { tenant_id: "tenant-test", subject_id: "owner", acting_client_id: "genio-one-bot", scopes: [] }
   const registry = new BotRegistry(":memory:")
-  const caller = registry.create(principal, { name: "Caller", description: "Continue existing work" })
+  const caller = registry.create(principal, { name: "Caller", description: "Continue existing work", modelRoute: "genio-gateway" })
   const target = registry.create(principal, { name: "Target", description: "Return a result" })
   registry.rememberThread(caller.id, "caller-thread")
   registry.saveSession({ botId: caller.id, appServerThreadId: "caller-thread" })
@@ -27,10 +27,22 @@ test.each(["COMPLETED", "FAILED"] as const)("handoff %s waits for caller idle an
     async send(line) {
       const request = JSON.parse(line)
       if (request.method === "thread/read") callbacks.onMessage(JSON.stringify({ id: request.id, result: { thread: { id: "caller-thread", status: { type: busy ? "active" : "idle" } } } }))
-      if (request.method === "thread/resume") callbacks.onMessage(JSON.stringify({ id: request.id, result: { thread: { id: "caller-thread" } } }))
+      if (request.method === "thread/resume") {
+        expect(request.params.environments).toBeUndefined()
+        expect(request.params.cwd).toBe("/local/bot")
+        expect(request.params.runtimeWorkspaceRoots).toEqual([])
+        expect(request.params.config["mcp_servers.genio_bot"]).toBeDefined()
+        expect(request.params.config["mcp_servers.genio_discovery"]).toBeDefined()
+        expect(request.params.config["model_providers.genio_one.base_url"]).toBeDefined()
+        callbacks.onMessage(JSON.stringify({ id: request.id, result: { thread: { id: "caller-thread" } } }))
+      }
       if (request.method === "turn/start") {
         turns++
         expect(request.params.threadId).toBe("caller-thread")
+        expect(request.params.environments).toEqual([])
+        expect(request.params.cwd).toBe("/local/bot")
+        expect(request.params.runtimeWorkspaceRoots).toEqual([])
+        expect(request.params.sandboxPolicy).toEqual({ type: "readOnly", networkAccess: false })
         expect(request.params.input[0].text).toContain("Reviewed result")
         expect(request.params.input[0].text).toContain(`terminal outcome ${outcome}`)
         if (outcome === "FAILED") expect(request.params.input[0].text).toContain("Do not claim successful effects, bypass a denial, or automatically retry/redelegate")
@@ -42,7 +54,19 @@ test.each(["COMPLETED", "FAILED"] as const)("handoff %s waits for caller idle an
     async close() {},
   }), "test-token")
   session.initialized = true
-  const context = { botRegistry: registry, runtimeBroker: broker, capabilityGate: createCapabilityGate({ mode: "open" }), botToolSessions: new BotToolSessions() } as BotServerContext
+  const local: RuntimeDetails = { kind: "local", tier: "none", cwd: "/local/bot", desktopUrl: null, sandboxId: null, environmentId: null, execServerUrl: null, execReady: false }
+  const desktop: RuntimeDetails = { kind: "e2b-self-hosted", tier: "desktop", cwd: "/home/user", desktopUrl: "https://desktop.example", sandboxId: "desktop-sandbox", environmentId: "desktop-environment", execServerUrl: "ws://desktop.example", execReady: true }
+  session.details = desktop
+  session.runtimeDetails = { none: local, desktop }
+  const context = {
+    botRegistry: registry,
+    runtimeBroker: broker,
+    capabilityGate: { async resolve() { return { decision: "ALLOW", model_route: "genio-gateway" } } },
+    botToolSessions: new BotToolSessions(),
+    runtimePolicy: { async read() { return { decisions: [] } } },
+    modelDirectory: { async resolve() { return [{ publicModelId: "company-model", displayName: "Company Model", route: { kind: "genio-gateway" } }] } },
+    botSchedules: { resumeAuthorized() {} },
+  } as unknown as BotServerContext
   try {
     await continueCallers(context)
     expect(turns).toBe(0)

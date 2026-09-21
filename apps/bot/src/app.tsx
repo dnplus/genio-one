@@ -254,6 +254,13 @@ export function App() {
     setUnreadBotIds(unread)
     setWorkStates(working)
     setSummaries(Object.fromEntries(roster.map((entry) => [entry.bot.id, entry.summary])))
+    setBots((current) => {
+      const incoming = roster.map((entry) => {
+        const previous = current.find((bot) => bot.id === entry.bot.id)
+        return previous && (previous.revision ?? 0) > (entry.bot.revision ?? 0) ? previous : entry.bot
+      })
+      return JSON.stringify(current) === JSON.stringify(incoming) ? current : incoming
+    })
     return roster
   }, [])
 
@@ -268,6 +275,7 @@ export function App() {
 
   const hydrateFromLive = (created: BotInstance, live: BotProfileDto): BotInstance => ({
     ...created,
+    revision: live.revision,
     name: live.name,
     title: live.title,
     description: live.description,
@@ -297,6 +305,7 @@ export function App() {
       const id = `bot-${crypto.randomUUID().slice(0, 8)}`
       const live: BotProfileDto = {
         botId: id,
+        revision: 1,
         name: payload.name,
         title: payload.title,
         description: payload.description,
@@ -390,9 +399,10 @@ export function App() {
     setBots((current) => current.map((bot) => bot.id === botId ? authoritative : bot))
   }, [bots, demo, refreshRosterProjection, token])
 
-  const handleUpdateBot = (updated: BotInstance) => {
+  const handleUpdateBot = async (updated: BotInstance) => {
     if (!demo) {
-      void updateBotOnServer(token, updated.id, {
+      const saved = await updateBotOnServer(token, updated.id, {
+        expectedRevision: updated.revision,
         name: updated.name,
         title: updated.title,
         description: updated.description,
@@ -402,7 +412,8 @@ export function App() {
         defaultRuntimeTier: updated.defaultRuntimeTier,
         modelRoute: updated.modelRoute,
         sharePolicy: updated.sharePolicy,
-      }).then((saved) => setBots((current) => current.map((bot) => bot.id === saved.id ? saved : bot))).catch((error) => console.warn("Update Bot failed", error))
+      })
+      setBots((current) => current.map((bot) => bot.id === saved.id ? saved : bot))
       return
     }
     const next = bots.map((b) => b.id === updated.id ? updated : b)

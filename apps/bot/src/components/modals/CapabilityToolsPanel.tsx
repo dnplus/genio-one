@@ -11,6 +11,7 @@ import {
 import {
   CODEX_CORE_CAPABILITY_DEFS,
   CODEX_SUBSCRIPTION_CAPABILITY_DEF,
+  GENIO_DESKTOP_ADAPTER_CAPABILITY_DEFS,
 } from "../../../server/codex-runtime-catalog"
 import { ConnectCard, type ConnectCardPath, type ConnectCardResult, type ConnectCardPhase } from "./ConnectCard"
 import { PersonalConnectionCard } from "./PersonalConnectionCard"
@@ -30,7 +31,15 @@ export function catalogRowsToEnterpriseInputs(rows: CatalogAddRow[]) {
 }
 
 export function buildBotCapabilityRows(catalogRows: CatalogAddRow[], runtimePolicy: RuntimePolicySnapshot | null): CapabilitySurfaceRow[] {
-  const runtimeDefs = [CODEX_SUBSCRIPTION_CAPABILITY_DEF, ...CODEX_CORE_CAPABILITY_DEFS]
+  const runtimeDefs = [
+    CODEX_SUBSCRIPTION_CAPABILITY_DEF,
+    ...CODEX_CORE_CAPABILITY_DEFS,
+    ...GENIO_DESKTOP_ADAPTER_CAPABILITY_DEFS.map((definition) => ({
+      ...definition,
+      display_name: botCopy("Genio desktop (E2B)", "Genio 桌面（E2B）"),
+      description: botCopy("Operate this Bot's managed desktop", "操作這個 Bot 的受管理桌面"),
+    })),
+  ]
   return buildCapabilitySurface({
     enterprise: catalogRowsToEnterpriseInputs(catalogRows),
     runtimeDefs,

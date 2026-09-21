@@ -5,8 +5,10 @@ import {
   appServerCommand,
   codexChildEnvironment,
   createManagedRuntime,
+  e2bCommandResult,
   pendingRuntimeDetails,
   remoteExecServerCommand,
+  requiresCodexBootstrap,
   resolveGenioDiscoveryMcpUrl,
   resolveGenioOneMcpUrl,
 } from "./runtime"
@@ -155,6 +157,20 @@ test("native OTel export is explicitly configured with prompt logging enabled", 
   expect(args).toContain('otel.trace_exporter={otlp-http={endpoint="http://127.0.0.1:54318/v1/traces",protocol="json"}}')
   expect(args).toContain('otel.metrics_exporter={otlp-http={endpoint="http://127.0.0.1:54318/v1/metrics",protocol="json"}}')
   expect(args).toContain("otel.log_user_prompt=true")
+})
+
+test("rethrows E2B transport failures instead of bootstrapping Codex", async () => {
+  const transportError = Object.assign(new Error("transport unavailable"), { statusCode: 503 })
+  await expect(e2bCommandResult(async () => { throw transportError })).rejects.toBe(transportError)
+})
+
+test("bootstraps when the Codex command exits or returns a different version", async () => {
+  const missing = await e2bCommandResult(async () => {
+    throw Object.assign(new Error("not found"), { exitCode: 127 })
+  })
+  expect(requiresCodexBootstrap(missing, "0.155.0")).toBe(true)
+  expect(requiresCodexBootstrap({ exitCode: 0, stdout: "codex-cli 0.154.0\n" }, "0.155.0")).toBe(true)
+  expect(requiresCodexBootstrap({ exitCode: 0, stdout: "codex-cli 0.155.0\n" }, "0.155.0")).toBe(false)
 })
 
  test("Discovery is attached without a generic enterprise MCP", () => {

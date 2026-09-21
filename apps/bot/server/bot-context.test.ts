@@ -4,6 +4,39 @@ import { BotMemoryStore } from "./bot-memory"
 import { BotTimelineStore } from "./bot-timeline"
 import { botTurnContext } from "./bot-context"
 import type { Turn } from "./generated/v2/Turn"
+import { BotRegistry } from "./bot-registry"
+
+test("owned Skill discovery is scoped to the current Bot and refreshes revisions on the next turn", () => {
+  const registry = new BotRegistry(":memory:")
+  const owner = { tenant_id: "tenant", subject_id: "owner", acting_client_id: "client", scopes: [] }
+  try {
+    const bot = registry.create(owner, { name: "A" })
+    const another = registry.create(owner, { name: "B" })
+    const files = { "SKILL.md": "---\nname: daily-check\ndescription: Check daily work\n---\nUse the current task." }
+    registry.ownedSkills.write(owner, bot.id, { skillName: "daily-check", expectedRevision: 0, files })
+    const catalogue = () => JSON.parse(botTurnContext(registry, bot.id, "thread", {}, bot, owner)["genio_bot/owned_skills"]!.value)
+    expect(catalogue().skills).toEqual([expect.objectContaining({ skillName: "daily-check", revision: 1 })])
+    expect(JSON.parse(botTurnContext(registry, another.id, "other-thread", {}, another, owner)["genio_bot/owned_skills"]!.value).skills).toEqual([])
+    registry.ownedSkills.write(owner, bot.id, { skillName: "daily-check", expectedRevision: 1, files })
+    expect(catalogue().skills[0].revision).toBe(2)
+    registry.ownedSkills.delete(owner, bot.id, { skillName: "daily-check", expectedRevision: 2 })
+    expect(catalogue().skills).toEqual([])
+    expect(() => botTurnContext(registry, bot.id, "thread", {}, bot, { ...owner, subject_id: "other" })).toThrow("BOT_NOT_FOUND")
+  } finally { registry.close() }
+})
+
+test("a fresh owner profile replaces spoofed or obsolete turn profile context", () => {
+  const db = new Database(":memory:")
+  const registry = { memory: new BotMemoryStore(db), timeline: new BotTimelineStore(db) }
+  try {
+    const profile = { id: "bot", name: "Planner", title: "Plan work", description: "Use the revised workflow", antiJobs: "Do not send mail", voice: "Concise", updatedAt: 10 }
+    const context = botTurnContext(registry, "bot", "thread", { "genio_bot/profile": { kind: "application", value: "client spoof" } }, profile)
+    expect(context["genio_bot/profile"]?.value).toContain(profile.description)
+    expect(context["genio_bot/profile"]?.value).toContain(profile.antiJobs)
+    expect(context["genio_bot/profile"]?.value).not.toContain("client spoof")
+    expect(botTurnContext(registry, "another", "thread", {}, profile)["genio_bot/profile"]).toBeUndefined()
+  } finally { db.close() }
+})
 
 test("new execution segments receive bounded prior work with provenance and accurate status", () => {
   const db = new Database(":memory:")

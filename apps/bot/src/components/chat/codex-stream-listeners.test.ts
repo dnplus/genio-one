@@ -3,10 +3,15 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { CodexClient } from "../../lib/codex-client"
 import type { BotInstance } from "../../bots-storage"
 import { GOOGLE_GEMINI_PREPAYMENT_DEPLETED_MESSAGE, MODEL_PROVIDER_RATE_LIMITED_MESSAGE } from "../../lib/model-route"
-import { registerCodexStreamListeners } from "./codex-stream-listeners"
+import { registerCodexStreamListeners, type PendingExecution } from "./codex-stream-listeners"
 
-function harness() {
+function harness(options: { deferTimeout?: boolean; isPendingExecutionCurrent?: () => boolean } = {}) {
   const client = new CodexClient()
+  const timeouts: Array<() => void> = []
+  const pendingTasks: string[] = []
+  const restoredTasks: string[] = []
+  const messages: Array<{ id: string; text: string }> = []
+  const pendingExecutionRef = { current: null as PendingExecution | null }
   const state = {
     runtimeState: "就緒",
     agentState: "idle",
@@ -26,6 +31,7 @@ function harness() {
     skills: [],
     bindings: [],
   } as unknown as BotInstance
+  const activeBotRef = { current: bot }
   const set = <Key extends keyof typeof state>(key: Key) => (value: (typeof state)[Key] | ((current: (typeof state)[Key]) => (typeof state)[Key])) => {
     state[key] = typeof value === "function"
       ? (value as (current: (typeof state)[Key]) => (typeof state)[Key])(state[key])
@@ -33,16 +39,22 @@ function harness() {
   }
   const unsubscribe = registerCodexStreamListeners({
     isMounted: () => true,
-    safeTimeout: (fn: () => void) => setTimeout(fn, 0),
+    safeTimeout: (fn: () => void) => {
+      if (options.deferTimeout) {
+        timeouts.push(fn)
+        return 0 as unknown as ReturnType<typeof setTimeout>
+      }
+      return setTimeout(fn, 0)
+    },
     client,
     tokenRef: { current: "token" },
-    activeBotRef: { current: bot },
+    activeBotRef,
     threadRef: { current: "thread-dylan" },
     threadBotIdRef: { current: "bot-dylan" },
     runtimeDetailsRef: { current: null },
     completedItemIdsRef: { current: new Set() },
     pendingArtifactRef: { current: null },
-    pendingExecutionRef: { current: null },
+    pendingExecutionRef,
     modelDirectoryModelsRef: { current: [] },
     loggedInRef: { current: false },
     isTurnRunningRef: { current: true },
@@ -54,7 +66,10 @@ function harness() {
     setSelectedModel: () => {},
     setCodexLogin: () => {},
     setAgentState: set("agentState"),
-    setMessages: () => {},
+    setMessages: (next: Array<{ id: string; text: string }> | ((current: Array<{ id: string; text: string }>) => Array<{ id: string; text: string }>)) => {
+      const resolved = typeof next === "function" ? next(messages) : next
+      messages.splice(0, messages.length, ...resolved)
+    },
     setArtifacts: () => {},
     setActivities: () => {},
     setThreadReady: set("threadReady"),
@@ -67,6 +82,8 @@ function harness() {
     setTurnRunning: (running: boolean) => { state.turnRunning = running },
     prepareCodexSession: async () => {},
     attachRuntimeDesktop: async () => {},
+    isPendingExecutionCurrent: options.isPendingExecutionCurrent ? () => options.isPendingExecutionCurrent!() : undefined,
+    onPendingExecutionReady: (task: string) => { pendingTasks.push(task) },
     onSignOut: () => { state.signedOut = true },
     focusInput: () => {},
     startThread: async () => {},
@@ -82,7 +99,7 @@ function harness() {
     const handlers = (client as unknown as { closeHandlers: Set<(event: { code: number; reason: string }) => void> }).closeHandlers
     for (const handler of handlers) handler({ code, reason })
   }
-  return { client, state, receive, status, close, unsubscribe }
+  return { client, state, receive, status, close, unsubscribe, activeBotRef, pendingExecutionRef, pendingTasks, restoredTasks, timeouts, messages }
 }
 
 describe("Codex stream runtime errors", () => {
@@ -177,5 +194,76 @@ describe("Codex stream runtime errors", () => {
     expect(value.state.agentState).toBe("exclaim")
     expect(value.state.runtimeState).toBe(MODEL_PROVIDER_RATE_LIMITED_MESSAGE)
     expect(value.state.runtimeState).not.toContain("Google Gemini")
+  })
+
+  test("does not dispatch a replaced pending task after runtime preparation", async () => {
+    const value = harness({ deferTimeout: true })
+    cleanups.push(value.unsubscribe)
+    const pending = {
+      task: "建立報表",
+      progressId: "runtime-provisioning-1",
+      botId: "bot-dylan",
+      connectionGeneration: 0,
+      modelRoute: "codex-subscription" as const,
+      restoreDraft: () => { value.restoredTasks.push("建立報表") },
+    }
+    value.pendingExecutionRef.current = pending
+    value.receive({ method: "genio/runtime/ready", params: { tier: "headless", environmentId: "env-1", execReady: true } })
+    await Promise.resolve()
+    value.pendingExecutionRef.current = {
+      ...pending,
+      task: "新 Bot 的工作",
+      progressId: "runtime-provisioning-2",
+    }
+
+    for (const timeout of value.timeouts) timeout()
+
+    expect(value.pendingTasks).toEqual([])
+    expect(value.pendingExecutionRef.current?.task).toBe("新 Bot 的工作")
+  })
+
+  test("cancels a stale pending task with recoverable text", async () => {
+    const value = harness({ deferTimeout: true, isPendingExecutionCurrent: () => false })
+    cleanups.push(value.unsubscribe)
+    value.pendingExecutionRef.current = {
+      task: "建立報表",
+      progressId: "runtime-provisioning-1",
+      botId: "bot-dylan",
+      connectionGeneration: 0,
+      modelRoute: "codex-subscription",
+      restoreDraft: () => { value.restoredTasks.push("建立報表") },
+    }
+    value.receive({ method: "genio/runtime/ready", params: { tier: "headless", environmentId: "env-1", execReady: true } })
+    await Promise.resolve()
+
+    for (const timeout of value.timeouts) timeout()
+
+    expect(value.pendingTasks).toEqual([])
+    expect(value.pendingExecutionRef.current).toBeNull()
+    expect(value.restoredTasks).toEqual(["建立報表"])
+    expect(value.messages.at(-1)?.text).toContain("建立報表")
+  })
+
+  test("does not write a stale task into a different Bot transcript", async () => {
+    const value = harness({ deferTimeout: true, isPendingExecutionCurrent: () => false })
+    cleanups.push(value.unsubscribe)
+    value.pendingExecutionRef.current = {
+      task: "建立報表",
+      progressId: "runtime-provisioning-1",
+      botId: "bot-dylan",
+      connectionGeneration: 0,
+      modelRoute: "codex-subscription",
+      restoreDraft: () => { value.restoredTasks.push("建立報表") },
+    }
+    value.receive({ method: "genio/runtime/ready", params: { tier: "headless", environmentId: "env-1", execReady: true } })
+    await Promise.resolve()
+    value.activeBotRef.current = { ...value.activeBotRef.current, id: "bot-new" }
+
+    for (const timeout of value.timeouts) timeout()
+
+    expect(value.pendingTasks).toEqual([])
+    expect(value.pendingExecutionRef.current).toBeNull()
+    expect(value.restoredTasks).toEqual(["建立報表"])
+    expect(value.messages).toEqual([])
   })
 })

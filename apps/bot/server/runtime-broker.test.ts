@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { RuntimeBroker, type GenioPrincipal, type RuntimeProvider } from "./runtime-broker"
+import { managedMcpMountsForBot, RuntimeBroker, setBotSelection, type GenioPrincipal, type RuntimeProvider } from "./runtime-broker"
 import type { ManagedDesktop, RuntimeProvisionRequest, RuntimeCallbacks } from "./runtime"
 
 const principal: GenioPrincipal = {
@@ -27,6 +27,53 @@ function execDesktop(sandboxId: string): ManagedDesktop {
 }
 
 describe("RuntimeBroker", () => {
+  test("keeps delegated invocation credentials bound to each Bot while owner OAuth rotates", async () => {
+    const broker = new RuntimeBroker({ provision: async () => execDesktop("invocation-credentials") })
+    const session = await broker.start(principal, { onMessage() {}, onExit() {} }, undefined, "owner-token-a")
+    const releaseA = broker.bindInvocationAccessToken(session.id, "bot-a", "invocation-a", "agent-token-a")
+    const releaseB = broker.bindInvocationAccessToken(session.id, "bot-b", "invocation-b", "agent-token-b")
+
+    expect(broker.accessTokenForBot(session.id, "bot-a")).toBe("agent-token-a")
+    expect(broker.accessTokenForBot(session.id, "bot-b")).toBe("agent-token-b")
+    expect(() => broker.bindInvocationAccessToken(session.id, "bot-a", "invocation-next", "agent-token-next")).toThrow("RUNTIME_INVOCATION_ACCESS_TOKEN_CONFLICT")
+
+    await broker.start(principal, { onMessage() {}, onExit() {} }, undefined, "owner-token-b")
+    expect(session.accessToken).toBe("owner-token-b")
+    expect(broker.accessTokenForBot(session.id, "bot-a")).toBe("agent-token-a")
+    expect(broker.accessTokenForBot(session.id, "bot-b")).toBe("agent-token-b")
+
+    releaseA()
+    expect(broker.accessTokenForBot(session.id, "bot-a")).toBe("owner-token-b")
+    expect(broker.accessTokenForBot(session.id, "bot-b")).toBe("agent-token-b")
+    const releaseNext = broker.bindInvocationAccessToken(session.id, "bot-a", "invocation-next", "agent-token-next")
+    releaseA()
+    expect(broker.accessTokenForBot(session.id, "bot-a")).toBe("agent-token-next")
+
+    releaseNext()
+    releaseB()
+    await broker.stop(session.id)
+  })
+
+  test("keeps managed MCP mounts scoped to the Bot that created them", async () => {
+    const broker = new RuntimeBroker({ provision: async () => execDesktop("bot-mounts") })
+    const session = await broker.start(principal, { onMessage() {}, onExit() {} })
+    const aMounts = {
+      "resource-a": { resourceId: "resource-a", capabilityId: "mcp.a", serverName: "genio_mcp_a", hostname: "a.example", basePath: "/mcp" },
+    }
+    const bMounts = {
+      "resource-b": { resourceId: "resource-b", capabilityId: "mcp.b", serverName: "genio_mcp_b", hostname: "b.example", basePath: "/mcp" },
+    }
+
+    setBotSelection(session, { botId: "bot-a", usageContext: { consumerOrganizationId: "org-a", useCaseId: "purpose-a" }, mcpMounts: aMounts })
+    setBotSelection(session, { botId: "bot-b", usageContext: { consumerOrganizationId: "org-b", useCaseId: "purpose-b" }, mcpMounts: bMounts })
+    setBotSelection(session, null)
+
+    expect(session.selectedBotId).toBeNull()
+    expect(managedMcpMountsForBot(session, "bot-a")).toEqual(aMounts)
+    expect(managedMcpMountsForBot(session, "bot-b")).toEqual(bMounts)
+    await broker.stop(session.id)
+  })
+
   test("shutdown awaits runtime closure and rejects new work", async () => {
     const broker = new RuntimeBroker({ provision: async () => execDesktop("shutdown") })
     let finishClose!: () => void

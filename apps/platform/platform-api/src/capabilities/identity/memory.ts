@@ -42,13 +42,20 @@ export function createInMemoryIdentityDirectory(): IdentityDirectory {
     put(tenantId, { ...value, subject_id: subjectId, role: "USER" })
     return structuredClone(subjects.get(key(tenantId, subjectId))!)
   }
-  const createSelfServiceAgent = async ({ tenantId, value }: { tenantId: string; value: CreateSelfServiceAgentInput }) => {
+  const createSelfServiceAgent = async ({ tenantId, value, subjectId }: { tenantId: string; value: CreateSelfServiceAgentInput; subjectId?: string }) => {
     const displayName = value.display_name.trim()
     if (!displayName) throw new PlatformApiError("SUBJECT_DISPLAY_NAME_REQUIRED", 422)
+    if (subjectId) {
+      const existing = subjects.get(key(tenantId, subjectId))
+      if (existing) {
+        if (existing.kind === "AGENT" && existing.profile.display_name === displayName) return structuredClone(existing)
+        throw new PlatformApiError("SELF_SERVICE_AGENT_REQUEST_CONFLICT", 409)
+      }
+    }
     return create({
       tenantId,
       value: {
-        subject_id: `agent-${crypto.randomUUID()}`,
+        subject_id: subjectId || `agent-${crypto.randomUUID()}`,
         kind: "AGENT",
         display_name: displayName,
       },

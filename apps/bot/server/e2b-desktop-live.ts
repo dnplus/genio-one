@@ -43,8 +43,7 @@ try {
 
   console.info(JSON.stringify({ event: "e2b.desktop.live.stage", stage: "desktop.stream", sandbox_id: sandbox.sandboxId }))
   await sandbox.stream.start({ requireAuth: true })
-  const authKey = sandbox.stream.getAuthKey()
-  const desktopUrl = sandbox.stream.getUrl({ authKey })
+  const streamReady = true
   console.info(JSON.stringify({ event: "e2b.desktop.live.stage", stage: "desktop.chrome", sandbox_id: sandbox.sandboxId }))
   await sandbox.launch("google-chrome", "https://example.com")
   const browserReady = await sandbox.waitAndVerify(
@@ -61,7 +60,7 @@ try {
   console.info(JSON.stringify({
     event: "e2b.desktop.live",
     sandbox_id: sandbox.sandboxId,
-    desktop_url: desktopUrl,
+    stream_ready: streamReady,
     screenshot_path: screenshotPath,
     codex_version: codex.stdout.trim(),
   }))

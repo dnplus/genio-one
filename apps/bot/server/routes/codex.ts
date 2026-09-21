@@ -7,10 +7,10 @@ import { createRuntimePolicyLifecycle } from "../runtime-policy-lifecycle"
 import type { FastifyInstance } from "fastify"
 
 import { assertCapability, CapabilityDeniedError, PERSONAL_BOT_COMPUTER_USE, PERSONAL_BOT_USE } from "../capability-gate"
-import { proxiedDesktopUrl } from "../desktop-proxy"
+import { desktopBrowserGrants, proxiedDesktopUrl } from "../desktop-proxy"
 import { verifyGenioOneAccessToken } from "../auth"
-import { createCodexRuntime as defaultCreateCodexRuntime, type CodexRuntime, type RuntimeTier } from "../runtime"
-import { setBotSelection, type RuntimeSession } from "../runtime-broker"
+import { createCodexRuntime as defaultCreateCodexRuntime, type CodexRuntime, type RuntimeDetails, type RuntimeTier } from "../runtime"
+import { setBotSelection, setManagedMcpMounts, type RuntimeSession } from "../runtime-broker"
 import type { BotServerContext } from "../context"
 import { botTurnContext } from "../bot-context"
 import { BotUsageContextError, resolveBotUsageContext } from "../usage-context"
@@ -20,7 +20,7 @@ import {
   type RuntimePolicyDecision,
   type RuntimePolicyExecutableAction,
 } from "../runtime-policy-contract"
-import { isManagedMcpServerName, managedMcpConfig, resolveManagedMcpMounts } from "../managed-mcp"
+import { isManagedMcpServerName, managedMcpConfig, resolveManagedMcpMounts, type ManagedMcpMounts } from "../managed-mcp"
 import {
   readNativeRuntimeExposure,
   type NativeRuntimeEnvironment,
@@ -125,6 +125,19 @@ function isManagedMcpConfigKey(key: string) {
 export async function codexRoutes(app: FastifyInstance, context: BotServerContext) {
   const { runtimeBroker, capabilityGate, modelDirectory, botRegistry, runtimePolicy } = context
   const makeCodexRuntime = context.createCodexRuntime ?? defaultCreateCodexRuntime
+  const desktopUrl = (session: RuntimeSession, details: RuntimeDetails = session.details) => proxiedDesktopUrl(
+    session.id,
+    details.desktopUrl,
+    desktopBrowserGrants.issue(runtimeBroker, session.id),
+  )
+  const runtimeDetailsForClient = (session: RuntimeSession, details: RuntimeDetails) => {
+    if (details.tier !== "desktop") return details
+    const desktop = session.leases.desktop
+    return {
+      ...details,
+      desktopUrl: desktop?.details === details ? desktopUrl(session, desktop.details) : null,
+    }
+  }
 
   app.get("/api/codex", { websocket: true }, (socket) => {
     let closed = false
@@ -155,12 +168,12 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
     const authorizeManagedMcpExposure = async (
       session: RuntimeSession,
       botId: string,
-      mounts: RuntimeSession["managedMcpMounts"] = {},
+      mounts: ManagedMcpMounts = {},
       isCurrent: () => boolean,
       outcome: "ALLOW" | "COMPLETED",
       reasonCode: string,
     ) => {
-      const allowed: NonNullable<RuntimeSession["managedMcpMounts"]> = {}
+      const allowed: ManagedMcpMounts = {}
       for (const [resourceId, mount] of Object.entries(mounts)) {
         try {
           const decision = await authorizeRuntime(session, botId, "mcp.invoke", "expose", isCurrent)
@@ -396,7 +409,9 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
               await assertCapability(capabilityGate, principal, PERSONAL_BOT_USE, nextToken)
               sessionAccessToken = nextToken
               runtimeSession.accessToken = nextToken
+              runtimeSession.principal = principal
               await codexRuntime.updateToken?.(nextToken)
+              context.botSchedules.resumeAuthorized(principal)
               if (socket.readyState === socket.OPEN && message.id !== undefined) socket.send(JSON.stringify({ id: message.id, result: { ok: true } }))
             } catch (error) {
               const failure = error instanceof Error ? error.message : "GENIO_ONE_SESSION_REJECTED"
@@ -412,8 +427,8 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
               socket.send(JSON.stringify({
                 id: message.id,
                 result: {
-                  active: session.details,
-                  tiers: session.runtimeDetails,
+                  active: runtimeDetailsForClient(session, session.details),
+                  tiers: Object.fromEntries(Object.entries(session.runtimeDetails).map(([tier, details]) => [tier, runtimeDetailsForClient(session, details)])),
                   runtimeSessionId: session.id,
                 },
               }))
@@ -573,13 +588,13 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
                     method: "genio/runtime/ready",
                     params: {
                       ...nextSession.details,
-                      desktopUrl: proxiedDesktopUrl(nextSession.id, nextSession.details.desktopUrl),
+                      desktopUrl: desktopUrl(nextSession),
                       runtimeSessionId: nextSession.id,
                     },
                   }))
                   socket.send(JSON.stringify({ method: "genio/execReady", params: {
                     ...nextSession.details,
-                    desktopUrl: proxiedDesktopUrl(nextSession.id, nextSession.details.desktopUrl),
+                    desktopUrl: desktopUrl(nextSession),
                     runtimeSessionId: nextSession.id,
                   } }))
                 }
@@ -626,9 +641,12 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
               return
             }
           }
-          if (message.method === "thread/start" || message.method === "turn/start") {
+          if (message.method === "thread/start" || message.method === "thread/resume" || message.method === "turn/start") {
             const environments = Array.isArray(message.params?.environments) ? message.params.environments : []
-            if (environments.length > 0 && (!runtimeSession || environments.some((environment: { environmentId?: unknown }) => !ownedRuntimeEnvironment(runtimeSession!, environment.environmentId, undefined, selectedBotId)))) {
+            if (environments.length > 0 && (!runtimeSession || environments.some((environment: unknown) => {
+              if (!environment || typeof environment !== "object" || Array.isArray(environment)) return true
+              return !ownedRuntimeEnvironment(runtimeSession!, (environment as { environmentId?: unknown }).environmentId, undefined, selectedBotId)
+            }))) {
               if (socket.readyState === socket.OPEN) socket.send(JSON.stringify({ id: message.id, error: { code: runtimeSession?.details.tier === "none" ? "REMOTE_RUNTIME_REQUIRED" : "RUNTIME_ENVIRONMENT_NOT_OWNED", message: "The requested environment is not owned by this Runtime Broker session" } }))
               return
             }
@@ -728,10 +746,29 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
               turnClaims.set(message.id, release)
             }
             if (message.id !== undefined) botRequests.set(message.id, { method: message.method, botId, session: runtimeSession, threadId, historyRevision: botRegistry.timeline.revision(), runtimeTier: ownedRuntimeEnvironment(runtimeSession, message.params?.environments?.[0]?.environmentId, undefined, botId)?.tier ?? "none", authorizations })
-            if (message.method === "turn/start") message.params.additionalContext = botTurnContext(botRegistry, botId, threadId, message.params.additionalContext ?? {})
+            if (message.method === "turn/start") message.params.additionalContext = botTurnContext(botRegistry, botId, threadId, message.params.additionalContext ?? {}, botRegistry.getOwned(botId, runtimeSession.principal) ?? undefined, runtimeSession.principal)
             if ((message.method === "thread/start" || message.method === "thread/resume") && sessionAccessToken) {
-              const mcpMounts = await authorizeManagedMcpExposure(runtimeSession, botId, runtimeSession.managedMcpMounts, () => true, "COMPLETED", "MANAGED_MCP_CONFIG_INJECTED")
-              runtimeSession.managedMcpMounts = mcpMounts
+              const session = runtimeSession
+              if (!session) return
+              const bot = botRegistry.getOwned(botId, session.principal)
+              if (!bot) {
+                await Promise.all(authorizations.map((decision) => reportRuntimeDecision(session, botId, decision, "FAILED", "BOT_NOT_FOUND")))
+                sendRuntimePolicyError("BOT_NOT_FOUND", undefined, message.id)
+                return
+              }
+              const resolvedMcpMounts = await resolveManagedMcpMounts({
+                bindings: bot.bindings,
+                tenantId: session.principal.tenant_id,
+                accessToken: sessionAccessToken ?? session.accessToken,
+                onDegraded: (reason) => console.warn(JSON.stringify({
+                  event: "bot.managed-mcp.degraded",
+                  runtime_session_id: session.id,
+                  bot_id: bot.id,
+                  reason,
+                })),
+              })
+              const mcpMounts = await authorizeManagedMcpExposure(session, botId, resolvedMcpMounts, () => true, "COMPLETED", "MANAGED_MCP_CONFIG_INJECTED")
+              setManagedMcpMounts(session, botId, mcpMounts)
               const config = { ...message.params.config }
               for (const key of Object.keys(config)) if (isManagedMcpConfigKey(key)) delete config[key]
               if (config.mcp_servers && typeof config.mcp_servers === "object") {
@@ -741,8 +778,8 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
               message.params.config = {
                 ...config,
                 "features.memories": false,
-                "mcp_servers.genio_bot": context.botToolSessions.config(botId, runtimeSession.principal, sessionAccessToken),
-                ...managedMcpConfig(runtimeSession.id, mcpMounts),
+                "mcp_servers.genio_bot": context.botToolSessions.config(botId, session.principal, session.id),
+                ...managedMcpConfig(session.id, botId, mcpMounts),
               }
             }
           } else if (message.id !== undefined && requestAuthorizations.length > 0 && runtimeSession && selectedBotId) {
@@ -809,15 +846,17 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
           const session = await runtimeBroker.start(
             principal,
             runtimeCallbacks,
-            (sessionCallbacks, runtimeSessionId) => makeCodexRuntime(accessToken, sessionCallbacks, {
-              tenantId: principal.tenant_id,
-              subjectId: principal.subject_id,
-              actingClientId: principal.acting_client_id,
-              runtimeSessionId,
-            }),
+            (sessionCallbacks, runtimeSessionId, relaySecret) => makeCodexRuntime(accessToken, sessionCallbacks, {
+                tenantId: principal.tenant_id,
+                subjectId: principal.subject_id,
+                actingClientId: principal.acting_client_id,
+                runtimeSessionId,
+              }, relaySecret),
             accessToken,
           )
           runtimeSession = session
+          runtimeSession.principal = principal
+          context.botSchedules.resumeAuthorized(principal)
           runtimeSession.modelRoute = bootstrapRoute ?? undefined
           codexRuntime = runtimeBroker.channel(session.id, runtimeCallbacks)
           if (closed) {
@@ -839,7 +878,7 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
               method: "genio/runtimeReady",
               params: {
                 ...session.details,
-                desktopUrl: proxiedDesktopUrl(session.id, session.details.desktopUrl),
+                desktopUrl: desktopUrl(session),
                 runtimeSessionId: session.id,
                 models,
                 ...(bootstrapRoute ? { modelDirectory: bootstrapRoute } : {}),
@@ -849,7 +888,7 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
               method: "genio/runtime/ready",
               params: {
                 ...session.details,
-                desktopUrl: proxiedDesktopUrl(session.id, session.details.desktopUrl),
+                desktopUrl: desktopUrl(session),
                 runtimeSessionId: session.id,
                 models,
                 ...(bootstrapRoute ? { modelDirectory: bootstrapRoute } : {}),

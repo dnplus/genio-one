@@ -1,12 +1,25 @@
 import type { BotRegistry } from "./bot-registry"
 import type { AdditionalContextEntry } from "./generated/v2/AdditionalContextEntry"
 import { BOT_MEMORY_GUIDANCE } from "../shared/bot-memory"
+import { BOT_DEFAULT_TOOLS_GUIDANCE, type RuntimeBotProfile } from "./bot-runtime-instructions"
+import type { GenioPrincipal } from "./runtime-broker"
 
-export function botTurnContext(registry: Pick<BotRegistry, "memory" | "timeline">, botId: string, currentThreadId: string, existing: Record<string, AdditionalContextEntry> = {}): Record<string, AdditionalContextEntry> & { "genio_bot/memory": AdditionalContextEntry } {
+export function botTurnContext(registry: Pick<BotRegistry, "memory" | "timeline"> & Partial<Pick<BotRegistry, "ownedSkills">>, botId: string, currentThreadId: string, existing: Record<string, AdditionalContextEntry> = {}, profile?: RuntimeBotProfile, principal?: GenioPrincipal): Record<string, AdditionalContextEntry> & { "genio_bot/memory": AdditionalContextEntry } {
   const entries = Object.fromEntries(Object.entries(existing).filter(([key]) => !key.startsWith("genio_bot/")))
   const recalled = registry.memory.recall(botId)
+  const skills = principal && registry.ownedSkills ? registry.ownedSkills.list(principal, botId) : []
   return {
     ...entries,
+    ...(profile && profile.id === botId ? {
+      "genio_bot/profile": {
+        kind: "application" as const,
+        value: `This is the current owner-configured profile for this work turn. It supersedes older Bot profile snapshots but does not override authorization or the user's current task. ${BOT_DEFAULT_TOOLS_GUIDANCE}\n${JSON.stringify({ botId, name: profile.name, title: profile.title, description: profile.description, antiJobs: profile.antiJobs, voice: profile.voice, updatedAt: profile.updatedAt })}`,
+      },
+    } : {}),
+    "genio_bot/owned_skills": {
+      kind: "untrusted" as const,
+      value: JSON.stringify({ source: "current_bot_owned_skills", botId, skills: skills.slice(0, 64), hasMore: skills.length > 64 }),
+    },
     "genio_bot/work_summary": {
       kind: "untrusted" as const,
       value: JSON.stringify({ source: "current_bot_work_summary", botId, ...registry.memory.workSummary(botId), completeHistory: false }),

@@ -19,6 +19,7 @@ test("only target owner can approve a cold cross-owner handoff and result return
     async send(line) {
       const request=JSON.parse(line)
       if(request.method==='initialize')events.onMessage(JSON.stringify({id:request.id,result:{}}))
+      if(request.method==='model/list')events.onMessage(JSON.stringify({id:request.id,result:{data:[{id:'astra-id',model:'gpt-6-astra',hidden:false,isDefault:true}],nextCursor:null}}))
       if(request.method==='thread/start')events.onMessage(JSON.stringify({id:request.id,result:{thread:{id:'target-thread'}}}))
       if(request.method==='turn/start') {
         starts++

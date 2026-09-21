@@ -260,6 +260,66 @@ test("authorize is idempotent, report binds the verified decision, and policy di
   }
 })
 
+test("computer use independently authorizes discovery and desktop invocation with correlated audit", async () => {
+  const { modules } = platformModulesWithBotConnection("ENABLED", { runtimeReportKeyId: "runtime-policy-test", runtimeReportPublicKeyPem })
+  const app = await createManagementApi({ modules, resourceCatalog: modules.resources, principalAuthenticator: principals() })
+  const policyPath = `/v1/tenants/${tenantId}/one-policy/runtime-policies/desktop-control`
+  const scope = { subject_ids: ["person-uat-dylan"], organization_ids: [], roles: [], client_ids: ["genio-one-bot"], bot_ids: [], runtime_ids: ["codex"] }
+  try {
+    const saved = await app.inject({ method: "PUT", url: `${policyPath}/draft`, headers: adminHeaders, payload: {
+      expected_version: 0,
+      base_revision: 0,
+      content: {
+        kind: "RUNTIME_CAPABILITY",
+        definition: {
+          display_name: "Desktop control",
+          scope,
+          rules: [
+            { rule_id: "expose-computer", target: { runtime_id: "codex", capability_id: "computer.use" }, actions: ["expose"], effect: "ALLOW", constraints: [], obligations: [{ kind: "audit", enforcement_point_id: "AGENT_RUNTIME", parameters: { event_kind: "expose" } }] },
+            { rule_id: "invoke-computer", target: { runtime_id: "codex", capability_id: "computer.use" }, actions: ["invoke"], effect: "ALLOW", constraints: [], obligations: [{ kind: "audit", enforcement_point_id: "AGENT_RUNTIME", parameters: { event_kind: "invoke" } }] },
+          ],
+        },
+      },
+    } })
+    assert.equal(saved.statusCode, 200, saved.body)
+    const reviewed = await reviewRuntimeDraft(app, `${policyPath}/draft`, saved.json())
+    const published = await app.inject({ method: "POST", url: `${policyPath}/draft/publish`, headers: adminHeaders, payload: { expected_version: reviewed.version, expected_content_digest: reviewed.content_digest } })
+    assert.equal(published.statusCode, 200, published.body)
+
+    const discovery = { correlation_id: "corr-computer-expose", bot_id: "managed-genio-bot", runtime_id: "codex", capability_id: "computer.use", action: "expose" }
+    const discoveryAuthorization = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-authorize`, headers: { authorization: "Bearer dylan" }, payload: discovery })
+    assert.equal(discoveryAuthorization.statusCode, 200, discoveryAuthorization.body)
+    assert.equal(discoveryAuthorization.json().decision, "ALLOW")
+
+    const invocation = { correlation_id: "corr-computer-invoke", bot_id: "managed-genio-bot", runtime_id: "codex", capability_id: "computer.use", action: "invoke" }
+    const invocationAuthorization = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-authorize`, headers: { authorization: "Bearer dylan" }, payload: invocation })
+    assert.equal(invocationAuthorization.statusCode, 200, invocationAuthorization.body)
+    assert.equal(invocationAuthorization.json().decision, "ALLOW")
+
+    const reportBody = { ...invocation, outcome: "COMPLETED" as const }
+    const report = await app.inject({
+      method: "POST",
+      url: `/v1/tenants/${tenantId}/one-policy/runtime-report`,
+      headers: {
+        authorization: "Bearer dylan",
+        [RUNTIME_REPORT_KEY_ID_HEADER]: "runtime-policy-test",
+        [RUNTIME_REPORT_SIGNATURE_HEADER]: signRuntimeReport(reportBody, runtimeReportPrivateKeyPem),
+      },
+      payload: reportBody,
+    })
+    assert.equal(report.statusCode, 201, report.body)
+    assert.equal(report.json().capability_id, "computer.use")
+    assert.equal(report.json().action, "invoke")
+    assert.equal(report.json().authorization_audit_event_id, "corr-computer-invoke:authorize")
+
+    const audit = await app.inject({ method: "GET", url: `/v1/tenants/${tenantId}/audit-events?correlation_id=corr-computer-invoke`, headers: adminHeaders })
+    assert.equal(audit.statusCode, 200, audit.body)
+    assert.deepEqual(audit.json().map((event: { phase: string }) => event.phase), ["REPORT", "AUTHORIZE"])
+  } finally {
+    await app.close()
+  }
+})
+
 test("unsupported persisted constraints are a deny decision", () => {
   const result = evaluateRuntimePolicy({
     tenant_id: tenantId,

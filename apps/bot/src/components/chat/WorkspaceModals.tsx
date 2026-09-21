@@ -19,7 +19,7 @@ export interface WorkspaceModalsProps {
   onCloseSettings: () => void
   onCloseSearch: () => void
   onCloseCatalog: () => void
-  onUpdateBot: (bot: BotInstance) => void
+  onUpdateBot: (bot: BotInstance) => void | Promise<void>
   onToggleBinding: (botId: string, resourceId: string, capabilityId: string, currentlyInstalled: boolean) => Promise<void>
   onDuplicateBot?: (bot: BotInstance) => void
   onDeleteBot?: (bot: BotInstance) => void

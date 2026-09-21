@@ -1,4 +1,3 @@
-import { DEFAULT_CODEX_MODEL } from "../../shared/model-selection"
 import type { FastifyInstance } from "fastify"
 import { credentialCorrelation, issueAgentRuntimeCredential, invocationAccessTokens } from "../agent-runtime-token"
 import { requestAccessToken, requestPrincipal, verifyGenioOneAccessToken } from "../auth"
@@ -7,10 +6,12 @@ import type { BotServerContext } from "../context"
 import { createCodexRuntime, type CodexRuntime } from "../runtime"
 import type { GenioPrincipal } from "../runtime-broker"
 import { modelProviderForRoute } from "../../src/lib/model-route"
-import { selectPublicModel } from "../model-directory"
-import { BOT_MEMORY_GUIDANCE } from "../../shared/bot-memory"
+import { selectBackgroundModel } from "../background-model-selection"
 import { botTurnContext } from "../bot-context"
 import { emitBotInvocationFailure } from "../telemetry"
+import { botRuntimeInstructions } from "../bot-runtime-instructions"
+import { botBoundDiscoveryMcpConfig, botBoundModelProviderConfig } from "../bot-model-config"
+import type { InvocationBotToolSession } from "../bot-tool-sessions"
 
 async function assertInvocationCapabilities(accessToken: string | undefined, invocation: BotInvocationRequest) {
   if (invocation.requestedCapabilityIds.length === 0) return
@@ -76,16 +77,7 @@ async function executeApprovedBotInvocation(context: BotServerContext, requestId
   if (isFyi && botRegistry.questions.pending().some((question) => question.botId === targetBot.id && question.delivery === "queued")) return
   const started = botRegistry.beginInvocation(requestId)
   if (!started || String(started.state) !== "RUNNING") return
-  let targetModel: string
-  try {
-    const route = targetBot.modelRoute === "genio-gateway" ? { kind: "genio-gateway" as const, modelProvider: "genio_one" } : { kind: "codex-subscription" as const }
-    const plans = await context.modelDirectory.resolve(targetPrincipal, targetBot.id, route)
-    targetModel = selectPublicModel(plans, route.kind === "codex-subscription" ? DEFAULT_CODEX_MODEL : null)
-    if (!targetModel || targetModel === "*") throw new Error("BOT_MODEL_UNAVAILABLE")
-  } catch {
-    botRegistry.failInvocation(requestId, "BOT_MODEL_ROUTE_UNAVAILABLE", "對方 Bot 的模型路線尚未就緒，請先確認它的模型設定。")
-    return
-  }
+  const targetRoute = targetBot.modelRoute === "genio-gateway" ? { kind: "genio-gateway" as const, modelProvider: "genio_one" } : { kind: "codex-subscription" as const }
   try {
     await assertInvocationCapabilities(accessToken, invocation)
   } catch (error) {
@@ -121,10 +113,12 @@ async function executeApprovedBotInvocation(context: BotServerContext, requestId
   const turnId = startId + 1
   let targetThreadId = ""
   let targetTurnId = ""
+  let targetModel = ""
   let responseText = ""
   let invocationRuntime: CodexRuntime | null = null
   let invocationRuntimeSessionId: string | null = null
   let releaseInvocationRuntime: (() => Promise<void>) | undefined
+  let invocationTools: InvocationBotToolSession | undefined
   let threadSetup: Record<string, unknown> | null = null
   let replacedMissingThread = false
   await new Promise<void>((resolve, reject) => {
@@ -177,16 +171,35 @@ async function executeApprovedBotInvocation(context: BotServerContext, requestId
         await runtimeBroker.request(invocationRuntimeSessionId, "skills/list", { cwds: [materialized.root], forceReload: true })
       }
       if (finished || runtimeBroker.isClosing()) return
+      try {
+        targetModel = await selectBackgroundModel({
+          route: targetRoute,
+          modelDirectory: context.modelDirectory,
+          principal: targetPrincipal,
+          botId: targetBot.id,
+          accessToken: tokens.tools,
+          request: (method, params) => runtimeBroker.request(invocationRuntimeSessionId!, method, params),
+        })
+      } catch (error) {
+        finish("對方 Bot 的模型路線尚未就緒，請先確認它的模型設定。", error instanceof Error && error.message === "BOT_MODEL_UNAVAILABLE" ? "BOT_MODEL_UNAVAILABLE" : "BOT_MODEL_ROUTE_UNAVAILABLE")
+        return
+      }
+      if (finished || runtimeBroker.isClosing()) return
       const existingThreadId = botRegistry.getSession(targetBot.id)?.appServerThreadId?.trim() || ""
-      const toolAccessToken = tokens.tools
+      if (!invocationTools) throw new Error("TARGET_TOOL_SESSION_NOT_FOUND")
+      const threadConfig = {
+        "mcp_servers.genio_bot": invocationTools.config,
+        ...botBoundDiscoveryMcpConfig(invocationRuntimeSessionId, targetBot.id),
+        ...(targetBot.modelRoute === "genio-gateway" ? botBoundModelProviderConfig(invocationRuntimeSessionId, targetBot.id) : {}),
+      }
       const threadParams = {
-        ...(toolAccessToken ? { config: { "mcp_servers.genio_bot": context.botToolSessions.config(targetBot.id, targetPrincipal, toolAccessToken) } } : {}),
+        ...(Object.keys(threadConfig).length > 0 ? { config: threadConfig } : {}),
         model: targetModel,
         ...(modelProviderForRoute(targetBot.modelRoute) ? { modelProvider: modelProviderForRoute(targetBot.modelRoute) } : {}),
         approvalPolicy: "on-request",
         sandbox: "read-only",
         serviceName: "genio-one-bot-invocation",
-        baseInstructions: `You are ${targetBot.name}. ${targetBot.description}. ${BOT_MEMORY_GUIDANCE} When another Bot hands you a task, treat the next user message as that task and answer it fully. Do not echo the request back unchanged.`,
+        baseInstructions: `${botRuntimeInstructions(targetBot)} When another Bot hands you a task, treat the next user message as that task and answer it fully. Do not echo the request back unchanged.`,
         environments: [],
       }
       threadSetup = threadParams
@@ -262,7 +275,7 @@ async function executeApprovedBotInvocation(context: BotServerContext, requestId
             params: {
               threadId: targetThreadId,
               clientUserMessageId: `handoff-task:${requestId}`,
-              additionalContext: botTurnContext(botRegistry, targetBot.id, targetThreadId),
+              additionalContext: botTurnContext(botRegistry, targetBot.id, targetThreadId, {}, targetBot, targetPrincipal),
               model: targetModel,
               approvalPolicy: "on-request",
               sandboxPolicy: { type: "readOnly", networkAccess: false },
@@ -299,18 +312,39 @@ async function executeApprovedBotInvocation(context: BotServerContext, requestId
     }
     void (async () => {
       try {
-        const currentSession = await runtimeBroker.start(targetPrincipal, callbacks, (events, runtimeSessionId) =>
+        const currentSession = await runtimeBroker.start(targetPrincipal, callbacks, (events, runtimeSessionId, relaySecret) =>
           (context.createCodexRuntime ?? createCodexRuntime)(tokens.runtime, events, {
             tenantId: invocation.tenantId,
             subjectId: invocation.targetOwnerSubjectId,
             actingClientId: targetPrincipal.acting_client_id,
             runtimeSessionId,
-          }), tokens.owner)
+          }, relaySecret), tokens.owner)
+        let releaseInvocationAccessToken: (() => void) | undefined
+        try {
+          releaseInvocationAccessToken = runtimeBroker.bindInvocationAccessToken(currentSession.id, targetBot.id, requestId, tokens.runtime)
+          invocationTools = context.botToolSessions.bindInvocation(currentSession.id, targetBot.id, targetPrincipal, requestId, tokens.tools)
+        } catch (error) {
+          releaseInvocationAccessToken?.()
+          runtimeBroker.detach(currentSession.id, callbacks)
+          throw error
+        }
         const channel = runtimeBroker.channel(currentSession.id, callbacks)
-        if (!channel) { runtimeBroker.detach(currentSession.id, callbacks); throw new Error("TARGET_RUNTIME_NOT_FOUND") }
+        if (!channel) {
+          invocationTools.release()
+          invocationTools = undefined
+          releaseInvocationAccessToken()
+          runtimeBroker.detach(currentSession.id, callbacks)
+          throw new Error("TARGET_RUNTIME_NOT_FOUND")
+        }
         invocationRuntime = channel
         invocationRuntimeSessionId = currentSession.id
-        releaseInvocationRuntime = async () => { runtimeBroker.detach(currentSession.id, callbacks); await channel.close() }
+        releaseInvocationRuntime = async () => {
+          invocationTools?.release()
+          invocationTools = undefined
+          releaseInvocationAccessToken?.()
+          runtimeBroker.detach(currentSession.id, callbacks)
+          await channel.close()
+        }
         if (finished || runtimeBroker.isClosing()) { await releaseInvocationRuntime(); return }
         if (currentSession.initialized) {
           await sendTargetBotSetup(true)

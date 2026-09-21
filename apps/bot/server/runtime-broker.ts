@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto"
+import { randomBytes, randomUUID } from "node:crypto"
 import { CodexRpcChannels } from "./codex-rpc-channels"
 import { PendingInteractions } from "./pending-interactions"
 import type { ManagedMcpMounts } from "./managed-mcp"
@@ -33,6 +33,7 @@ export interface RuntimeProvider {
 
 export interface RuntimeSession {
   id: string
+  relaySecret: string
   principal: GenioPrincipal
   details: RuntimeDetails
   runtimeDetails: Partial<Record<RuntimeTier, RuntimeDetails>>
@@ -46,7 +47,7 @@ export interface RuntimeSession {
   modelRoute?: "codex-subscription" | "genio-gateway"
   selectedBotId?: string | null
   usageContext?: RuntimeUsageContext | null
-  managedMcpMounts?: ManagedMcpMounts
+  managedMcpMountsByBot?: Record<string, ManagedMcpMounts>
   eventBuffer: string[]
 }
 
@@ -59,13 +60,25 @@ export interface BotSelection {
 export function setBotSelection(session: RuntimeSession, selection: BotSelection | null) {
   session.selectedBotId = selection?.botId ?? null
   session.usageContext = selection?.usageContext ?? null
-  session.managedMcpMounts = selection?.mcpMounts
+  if (selection) setManagedMcpMounts(session, selection.botId, selection.mcpMounts)
+}
+
+export function managedMcpMountsForBot(session: RuntimeSession, botId: string): ManagedMcpMounts {
+  return session.managedMcpMountsByBot?.[botId] ?? {}
+}
+
+export function setManagedMcpMounts(session: RuntimeSession, botId: string, mounts: ManagedMcpMounts) {
+  session.managedMcpMountsByBot = {
+    ...session.managedMcpMountsByBot,
+    [botId]: mounts,
+  }
 }
 
 interface ManagedRuntimeSession {
   callbacks: RuntimeCallbacks
   interactions: PendingInteractions
   rpcChannels: CodexRpcChannels
+  invocationAccessTokens: Map<string, { invocationId: string; accessToken: string }>
   session: RuntimeSession
   principalKey: string
   listeners: Set<RuntimeCallbacks>
@@ -116,7 +129,7 @@ export class RuntimeBroker {
   async start(
     principal: GenioPrincipal,
     callbacks: RuntimeCallbacks,
-    codexFactory?: (callbacks: RuntimeCallbacks, runtimeSessionId: string) => CodexRuntime,
+    codexFactory?: (callbacks: RuntimeCallbacks, runtimeSessionId: string, relaySecret: string) => CodexRuntime,
     accessToken?: string,
   ): Promise<RuntimeSession> {
     if (this.closing) throw new Error("RUNTIME_BROKER_CLOSING")
@@ -127,7 +140,7 @@ export class RuntimeBroker {
       if (!existing.session.codex && codexFactory) {
         existing.session.initialized = false
         existing.session.initializeResult = undefined
-        existing.session.codex = codexFactory(existing.callbacks, existing.session.id)
+        existing.session.codex = codexFactory(existing.callbacks, existing.session.id, existing.session.relaySecret)
       }
       if (existing.disconnectTimer) clearTimeout(existing.disconnectTimer)
       existing.disconnectTimer = null
@@ -245,10 +258,11 @@ export class RuntimeBroker {
     principal: GenioPrincipal,
     principalKey: string,
     callbacks: RuntimeCallbacks,
-    codexFactory?: (callbacks: RuntimeCallbacks, runtimeSessionId: string) => CodexRuntime,
+    codexFactory?: (callbacks: RuntimeCallbacks, runtimeSessionId: string, relaySecret: string) => CodexRuntime,
     accessToken?: string,
   ) {
     const id = randomUUID()
+    const relaySecret = randomBytes(32).toString("base64url")
     const listeners = new Set<RuntimeCallbacks>([callbacks])
     const eventBuffer: string[] = []
     const rpcChannels = new CodexRpcChannels()
@@ -311,10 +325,11 @@ export class RuntimeBroker {
       },
     }
 
-    const codex = codexFactory ? codexFactory(brokerCallbacks, id) : undefined
+    const codex = codexFactory ? codexFactory(brokerCallbacks, id, relaySecret) : undefined
     const pending = new PendingRuntime()
     const session: RuntimeSession = {
       id,
+      relaySecret,
       principal,
       details: pending.details,
       runtimeDetails: { none: pending.details },
@@ -327,7 +342,7 @@ export class RuntimeBroker {
       eventBuffer,
     }
     currentSession = session
-    const managed: ManagedRuntimeSession = { callbacks: brokerCallbacks, session, principalKey, listeners, disconnectTimer: null, eventBuffer, rpcChannels, interactions }
+    const managed: ManagedRuntimeSession = { callbacks: brokerCallbacks, session, principalKey, listeners, disconnectTimer: null, eventBuffer, rpcChannels, interactions, invocationAccessTokens: new Map() }
     if (!exited) {
       this.sessions.set(id, managed)
       this.principalSessions.set(principalKey, id)
@@ -507,6 +522,31 @@ export class RuntimeBroker {
 
   get(id: string) {
     return this.sessions.get(id)?.session ?? null
+  }
+
+  bindInvocationAccessToken(id: string, botId: string, invocationId: string, accessToken: string) {
+    const managed = this.sessions.get(id)
+    const boundBotId = botId.trim()
+    const boundInvocationId = invocationId.trim()
+    const token = accessToken.trim()
+    if (!managed) throw new Error("RUNTIME_SESSION_NOT_FOUND")
+    if (!boundBotId || !boundInvocationId || !token) throw new Error("RUNTIME_INVOCATION_ACCESS_TOKEN_INVALID")
+    const existing = managed.invocationAccessTokens.get(boundBotId)
+    if (existing && existing.invocationId !== boundInvocationId) throw new Error("RUNTIME_INVOCATION_ACCESS_TOKEN_CONFLICT")
+    managed.invocationAccessTokens.set(boundBotId, { invocationId: boundInvocationId, accessToken: token })
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      if (managed.invocationAccessTokens.get(boundBotId)?.invocationId === boundInvocationId) {
+        managed.invocationAccessTokens.delete(boundBotId)
+      }
+    }
+  }
+
+  accessTokenForBot(id: string, botId: string) {
+    const managed = this.sessions.get(id)
+    return managed?.invocationAccessTokens.get(botId)?.accessToken ?? managed?.session.accessToken
   }
 
   pendingInteractions(id: string, threadId: string) {

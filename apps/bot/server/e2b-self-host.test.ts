@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { selfHostedE2BConfiguration } from "./e2b-self-host"
+import { DEFAULT_CODEX_VERSION, selfHostedE2BConfiguration } from "./e2b-self-host"
 
 const base = {
   E2B_DOMAIN: "e2b.internal.example",
@@ -11,7 +11,6 @@ const base = {
   GENIO_BOT_E2B_TEMPLATE: "genio-bot-desktop",
   GENIO_BOT_E2B_DESKTOP_TEMPLATE: "genio-bot-desktop",
   GENIO_BOT_E2B_HEADLESS_TEMPLATE: "genio-bot-headless",
-  GENIO_BOT_CODEX_VERSION: "0.153.4",
 }
 
 describe("selfHostedE2BConfiguration", () => {
@@ -27,8 +26,13 @@ describe("selfHostedE2BConfiguration", () => {
       desktopBaseTemplate: "desktop-self-hosted",
       desktopTemplate: "genio-bot-desktop",
       headlessTemplate: "genio-bot-headless",
-      codexVersion: "0.153.4",
+      codexVersion: DEFAULT_CODEX_VERSION,
     })
+  })
+
+  test("uses the Bot package Codex version unless the runtime explicitly pins one", () => {
+    expect(selfHostedE2BConfiguration(base).codexVersion).toBe(DEFAULT_CODEX_VERSION)
+    expect(selfHostedE2BConfiguration({ ...base, GENIO_BOT_CODEX_VERSION: "0.155.1" }).codexVersion).toBe("0.155.1")
   })
 
   test("rejects the public E2B service and incomplete self-host configuration", () => {

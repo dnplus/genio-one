@@ -45,6 +45,7 @@ export interface BotBinding {
 
 export interface BotInstance {
   id: string
+  revision?: number
   botId?: string
   name: string
   /** @deprecated legacy mirror of description — prefer title/description */

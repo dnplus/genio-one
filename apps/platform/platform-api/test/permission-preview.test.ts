@@ -36,6 +36,8 @@ test("preview uses canonical user membership, distinct operations and actor-owne
     assert.equal(result.actor_subject_id, "admin")
     assert.equal(result.runtime_decisions.find((value: any) => value.capability_id === "codex.subscription" && value.action === "use").decision, "ALLOW")
     assert.equal(result.runtime_decisions.find((value: any) => value.capability_id === "codex.subscription" && value.action === "expose").decision, "DENY")
+    assert.equal(result.runtime_decisions.find((value: any) => value.capability_id === "computer.use" && value.action === "expose").decision, "DENY")
+    assert.equal(result.runtime_decisions.find((value: any) => value.capability_id === "computer.use" && value.action === "invoke").decision, "DENY")
     const audit = await modules.auditEvents.query({ tenantId, subjectId: "admin", offset: 0, limit: 100 })
     const previews = audit.events.filter((event: any) => event.phase === "PREVIEW")
     assert.equal(previews.length, result.runtime_decisions.length)
@@ -52,6 +54,50 @@ test("preview uses canonical user membership, distinct operations and actor-owne
     assert.equal(published.rules[0]!.individual_settings, true)
     const alternateClient = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/permission-preview`, headers: { authorization: "Bearer admin" }, payload: { ...payload, client_id: "console" } })
     assert.equal(alternateClient.json().runtime_decisions.find((value: any) => value.capability_id === "codex.subscription" && value.action === "use").decision, "DENY")
+  } finally { await app.close() }
+})
+
+test("preview applies the computer use gate to computer decisions and preview audit", async () => {
+  const { app, modules } = await setup()
+  try {
+    await modules.botAccessPolicy.publishRuntimePolicy({ tenantId, policyId: "desktop-preview", baseRevision: 0, publishedBy: "admin", definition: {
+      display_name: "Desktop preview",
+      scope: { subject_ids: ["user"], organization_ids: [], roles: [], client_ids: ["genio-one-bot"], bot_ids: [], runtime_ids: ["codex"] },
+      rules: [
+        { rule_id: "desktop-expose", target: { runtime_id: "codex", capability_id: "computer.use" }, actions: ["expose"], effect: "ALLOW", constraints: [], obligations: [{ kind: "audit", parameters: {} }] },
+        { rule_id: "desktop-invoke", target: { runtime_id: "codex", capability_id: "computer.use" }, actions: ["invoke"], effect: "ALLOW", constraints: [], obligations: [{ kind: "audit", parameters: {} }] },
+      ],
+    } })
+    const seed = await modules.botAccessPolicy.getFirstPartyBotSeed({ tenantId })
+    await modules.botAccessPolicy.publishFirstPartyBotPolicy({ tenantId, baseRevision: seed.policy_revision, rules: { ...seed.rules, allowed_subject_ids: ["user"] }, publishedBy: "admin" })
+
+    const disabled = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/permission-preview`, headers: { authorization: "Bearer admin" }, payload })
+    assert.equal(disabled.statusCode, 200, disabled.body)
+    const disabledResult = disabled.json()
+    assert.equal(disabledResult.bot_access.decision, "ALLOW")
+    const disabledComputer = disabledResult.runtime_decisions.filter((value: any) => value.capability_id === "computer.use")
+    assert.deepEqual(disabledComputer.map((value: any) => ({ action: value.action, decision: value.decision, effective_decision: value.effective_decision, reason_code: value.reason_code })), [
+      { action: "expose", decision: "ALLOW", effective_decision: "DENY", reason_code: "COMPUTER_USE_NOT_IN_DEFAULT_POLICY" },
+      { action: "invoke", decision: "ALLOW", effective_decision: "DENY", reason_code: "COMPUTER_USE_NOT_IN_DEFAULT_POLICY" },
+    ])
+    const disabledAudit = await modules.auditEvents.query({ tenantId, correlationId: disabledComputer[0]!.correlation_id, offset: 0, limit: 100 })
+    const disabledComputerAudit = disabledAudit.events.filter((event: any) => event.phase === "PREVIEW" && event.capability_id === "computer.use").sort((left: any, right: any) => left.action.localeCompare(right.action))
+    assert.deepEqual(disabledComputerAudit.map((event: any) => ({ action: event.action, outcome: event.outcome, decision: event.decision, reason_code: event.reason_code })), [
+      { action: "expose", outcome: "DENY", decision: "DENY", reason_code: "COMPUTER_USE_NOT_IN_DEFAULT_POLICY" },
+      { action: "invoke", outcome: "DENY", decision: "DENY", reason_code: "COMPUTER_USE_NOT_IN_DEFAULT_POLICY" },
+    ])
+
+    const enabledSeed = await modules.botAccessPolicy.getFirstPartyBotSeed({ tenantId })
+    await modules.botAccessPolicy.publishFirstPartyBotPolicy({ tenantId, baseRevision: enabledSeed.policy_revision, rules: { ...enabledSeed.rules, computer_use_enabled: true }, publishedBy: "admin" })
+    const enabled = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/permission-preview`, headers: { authorization: "Bearer admin" }, payload })
+    assert.equal(enabled.statusCode, 200, enabled.body)
+    const enabledComputer = enabled.json().runtime_decisions.filter((value: any) => value.capability_id === "computer.use")
+    assert.equal(enabledComputer.length, 2)
+    assert.ok(enabledComputer.every((value: any) => value.decision === "ALLOW" && value.effective_decision === "ALLOW" && value.reason_code.startsWith("RULE_ALLOW:")))
+    const enabledAudit = await modules.auditEvents.query({ tenantId, correlationId: enabledComputer[0]!.correlation_id, offset: 0, limit: 100 })
+    const enabledComputerAudit = enabledAudit.events.filter((event: any) => event.phase === "PREVIEW" && event.capability_id === "computer.use")
+    assert.equal(enabledComputerAudit.length, 2)
+    assert.ok(enabledComputerAudit.every((event: any) => event.outcome === "ALLOW" && event.decision === "ALLOW" && event.reason_code.startsWith("RULE_ALLOW:")))
   } finally { await app.close() }
 })
 

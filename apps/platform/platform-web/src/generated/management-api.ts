@@ -4208,6 +4208,11 @@ export type CreateSelfServiceAgentBody = {
      * @maxLength 256
      */
   display_name: string;
+  /**
+     * @minLength 1
+     * @maxLength 128
+     */
+  client_request_id?: string;
 };
 
 export const CreateSelfServiceAgent201Kind = {  PERSON: 'PERSON',
@@ -12385,6 +12390,7 @@ export type GetV1TenantsTenantIdOnePolicyFirstPartyBotRevisions200ItemRules = {
      * @items.maxLength 256
      */
   allowed_subject_ids: string[];
+  computer_use_enabled?: boolean;
 };
 
 export type GetV1TenantsTenantIdOnePolicyFirstPartyBotRevisions200Item = {
@@ -12596,6 +12602,7 @@ export type GetV1TenantsTenantIdOnePolicyFirstPartyBotDraft200Content = {
      * @items.maxLength 256
      */
   allowed_subject_ids: string[];
+  computer_use_enabled?: boolean;
 };
 } | {
   kind: 'RUNTIME_CAPABILITY';
@@ -13051,6 +13058,7 @@ export type PutV1TenantsTenantIdOnePolicyFirstPartyBotDraftBodyContent = {
      * @items.maxLength 256
      */
   allowed_subject_ids: string[];
+  computer_use_enabled?: boolean;
 };
 } | {
   kind: 'RUNTIME_CAPABILITY';
@@ -13472,6 +13480,7 @@ export type PutV1TenantsTenantIdOnePolicyFirstPartyBotDraft200Content = {
      * @items.maxLength 256
      */
   allowed_subject_ids: string[];
+  computer_use_enabled?: boolean;
 };
 } | {
   kind: 'RUNTIME_CAPABILITY';
@@ -13934,6 +13943,7 @@ export type PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftValidate200Content =
      * @items.maxLength 256
      */
   allowed_subject_ids: string[];
+  computer_use_enabled?: boolean;
 };
 } | {
   kind: 'RUNTIME_CAPABILITY';
@@ -14396,6 +14406,7 @@ export type PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftReview200Content = {
      * @items.maxLength 256
      */
   allowed_subject_ids: string[];
+  computer_use_enabled?: boolean;
 };
 } | {
   kind: 'RUNTIME_CAPABILITY';
@@ -14685,6 +14696,7 @@ export type PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftPublish200Rules = {
      * @items.maxLength 256
      */
   allowed_subject_ids: string[];
+  computer_use_enabled?: boolean;
 };
 
 export type PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftPublish200 = {
@@ -14724,6 +14736,7 @@ export type GetV1TenantsTenantIdOnePolicyFirstPartyBot200Rules = {
      * @items.maxLength 256
      */
   allowed_subject_ids: string[];
+  computer_use_enabled?: boolean;
 };
 
 export type GetV1TenantsTenantIdOnePolicyFirstPartyBot200 = {
@@ -14767,6 +14780,7 @@ export type PatchV1TenantsTenantIdOnePolicyFirstPartyBot200Rules = {
      * @items.maxLength 256
      */
   allowed_subject_ids: string[];
+  computer_use_enabled?: boolean;
 };
 
 export type PatchV1TenantsTenantIdOnePolicyFirstPartyBot200 = {
@@ -16359,6 +16373,7 @@ export type GetRuntimePolicyDraft200Content = {
      * @items.maxLength 256
      */
   allowed_subject_ids: string[];
+  computer_use_enabled?: boolean;
 };
 } | {
   kind: 'RUNTIME_CAPABILITY';
@@ -16814,6 +16829,7 @@ export type SaveRuntimePolicyDraftBodyContent = {
      * @items.maxLength 256
      */
   allowed_subject_ids: string[];
+  computer_use_enabled?: boolean;
 };
 } | {
   kind: 'RUNTIME_CAPABILITY';
@@ -17235,6 +17251,7 @@ export type SaveRuntimePolicyDraft200Content = {
      * @items.maxLength 256
      */
   allowed_subject_ids: string[];
+  computer_use_enabled?: boolean;
 };
 } | {
   kind: 'RUNTIME_CAPABILITY';
@@ -17697,6 +17714,7 @@ export type ValidateRuntimePolicyDraft200Content = {
      * @items.maxLength 256
      */
   allowed_subject_ids: string[];
+  computer_use_enabled?: boolean;
 };
 } | {
   kind: 'RUNTIME_CAPABILITY';
@@ -18159,6 +18177,7 @@ export type ReviewRuntimePolicyDraft200Content = {
      * @items.maxLength 256
      */
   allowed_subject_ids: string[];
+  computer_use_enabled?: boolean;
 };
 } | {
   kind: 'RUNTIME_CAPABILITY';
@@ -19795,6 +19814,7 @@ export type GetV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolic
      * @items.maxLength 256
      */
   allowed_subject_ids: string[];
+  computer_use_enabled?: boolean;
 };
 } | {
   kind: 'RUNTIME_CAPABILITY';
@@ -20250,6 +20270,7 @@ export type PutV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolic
      * @items.maxLength 256
      */
   allowed_subject_ids: string[];
+  computer_use_enabled?: boolean;
 };
 } | {
   kind: 'RUNTIME_CAPABILITY';
@@ -20671,6 +20692,7 @@ export type PutV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolic
      * @items.maxLength 256
      */
   allowed_subject_ids: string[];
+  computer_use_enabled?: boolean;
 };
 } | {
   kind: 'RUNTIME_CAPABILITY';
@@ -21133,6 +21155,7 @@ export type PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPoli
      * @items.maxLength 256
      */
   allowed_subject_ids: string[];
+  computer_use_enabled?: boolean;
 };
 } | {
   kind: 'RUNTIME_CAPABILITY';
@@ -21595,6 +21618,7 @@ export type PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPoli
      * @items.maxLength 256
      */
   allowed_subject_ids: string[];
+  computer_use_enabled?: boolean;
 };
 } | {
   kind: 'RUNTIME_CAPABILITY';

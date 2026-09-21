@@ -73,6 +73,12 @@ describe("CapabilityToolsPanel list builder", () => {
     expect(deniedRt?.denialKind).toBe("exposure")
     expect(deniedRt?.userMessage).toBeTruthy()
 
+    const computer = rows.find((r) => r.runtime?.capabilityId === "computer.use")
+    expect(computer?.effectiveAllow).toBe(false)
+    expect(computer?.runtime?.effective).toBe("DENY")
+    expect(computer?.title).toBe("Genio 桌面（E2B）")
+    expect(computer?.subtitle).toBe("操作這個 Bot 的受管理桌面")
+
     const needs = buildBotCapabilityRows([
       {
         resourceId: "sn",
@@ -140,6 +146,7 @@ describe("CapabilityToolsPanel list builder", () => {
     expect(rows.find((row) => row.runtime?.capabilityId === "shell.exec")?.effectiveAllow).toBe(false)
     expect(rows.find((row) => row.runtime?.capabilityId === "shell.exec")?.statusLabel).toBe("無法使用")
     expect(rows.find((row) => row.runtime?.capabilityId === "browser.open")?.effectiveAllow).toBe(true)
+    expect(rows.find((row) => row.runtime?.capabilityId === "computer.use")?.effectiveAllow).toBe(false)
 
     const composite = {
       ...snapshot,
@@ -158,7 +165,7 @@ describe("CapabilityToolsPanel list builder", () => {
 
   test("shows every runtime capability as unavailable when the effective read is unavailable", () => {
     const rows = buildBotCapabilityRows([], null)
-    expect(rows.filter((row) => row.source === "runtime")).toHaveLength(9)
+    expect(rows.filter((row) => row.source === "runtime")).toHaveLength(10)
     expect(rows.filter((row) => row.source === "runtime").every((row) => row.effectiveAllow === false)).toBe(true)
   })
 })
@@ -224,9 +231,56 @@ test("renders the capabilities and OAuth connection path in English without chan
   expect(html).toContain("This capability needs an account connection before it can be added or invoked.")
   expect(html).toContain(">Connect<")
   expect(html).toContain("Runtime capabilities")
-  expect(html).toContain("9 items")
+  expect(html).toContain("10 items")
+  expect(html).toContain("Genio desktop (E2B)")
   expect(html).toContain("Runtime policy is not available. Runtime capabilities are paused.")
   expect(html).toContain(">Retry<")
   expect(html).not.toContain("企業工具")
   expect(html).not.toContain("需連線")
+})
+
+test("renders the Genio E2B desktop adapter with its effective runtime decision", async () => {
+  const { createElement } = await import("react")
+  const { renderToStaticMarkup } = await import("react-dom/server")
+  const { CapabilityToolsPanel } = await import("./CapabilityToolsPanel")
+  const runtimePolicy: RuntimePolicySnapshot = {
+    tenant_id: "tenant-local",
+    subject_id: "person-dylan",
+    client_id: "genio-one-bot",
+    bot_id: "bot-dylan",
+    runtime_id: "codex",
+    policy_id: "desktop-policy",
+    policy_display_name: "Desktop access",
+    policy_revision: 1,
+    decisions: [{
+      tenant_id: "tenant-local",
+      subject_id: "person-dylan",
+      client_id: "genio-one-bot",
+      bot_id: "bot-dylan",
+      runtime_id: "codex",
+      policy_id: "desktop-policy",
+      policy_display_name: "Desktop access",
+      policy_revision: 1,
+      capability_id: "computer.use",
+      action: "expose",
+      target: "runtime:codex:computer.use",
+      decision: "ALLOW",
+      reason_code: "RULE_ALLOW:desktop",
+      constraints: [],
+      obligations: [],
+      correlation_id: null,
+      session_id: null,
+      evaluated_at: 1_757_000_000,
+    }],
+  }
+  const html = withEnglishBotLocale(() => renderToStaticMarkup(createElement(CapabilityToolsPanel, {
+    catalogRows: [],
+    runtimePolicy,
+    addBusy: null,
+    addMessage: "",
+    onEnterpriseAction: () => {},
+  })))
+
+  expect(html).toContain("Genio desktop (E2B)")
+  expect(html).toContain("Available")
 })

@@ -35,24 +35,16 @@ export function nativeRuntimeEnvironment(
   const record = params && typeof params === "object" && !Array.isArray(params)
     ? params as Record<string, unknown>
     : null
-  const hasEnvironmentOverride = record !== null && Object.prototype.hasOwnProperty.call(record, "environments")
   const requested = record?.environments
-  if (hasEnvironmentOverride && !Array.isArray(requested)) {
+  if (!Array.isArray(requested)) {
     return { hasRuntimeEnvironment: false, hasDesktopRuntime: false }
   }
-  if (Array.isArray(requested)) {
-    const owned = requested.map((entry) => {
-      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null
-      return ownedRuntimeEnvironment(session, (entry as { environmentId?: unknown }).environmentId, undefined, botId)
-    })
-    return {
-      hasRuntimeEnvironment: requested.length > 0 && owned.length === requested.length && owned.every((environment) => environment?.tier !== "none" && environment?.execReady === true),
-      hasDesktopRuntime: owned.some((environment) => environment?.tier === "desktop" && environment.execReady === true),
-    }
-  }
-  if (session.details.kind === "endpoint") return { hasRuntimeEnvironment: false, hasDesktopRuntime: false }
+  const owned = requested.map((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null
+    return ownedRuntimeEnvironment(session, (entry as { environmentId?: unknown }).environmentId, undefined, botId)
+  })
   return {
-    hasRuntimeEnvironment: session.details.tier !== "none" && session.details.execReady && Boolean(session.details.environmentId),
-    hasDesktopRuntime: session.details.tier === "desktop" && session.details.execReady,
+    hasRuntimeEnvironment: requested.length > 0 && owned.length === requested.length && owned.every((environment) => environment?.tier !== "none" && environment?.execReady === true),
+    hasDesktopRuntime: owned.some((environment) => environment?.tier === "desktop" && environment.execReady === true),
   }
 }

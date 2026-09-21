@@ -5,12 +5,14 @@
 import type { RuntimeCapabilityId } from "@genioone/protocol/runtime-capability-actions"
 import type { RuntimeCapabilityKind } from "./runtime-capability"
 
-export interface CodexCoreCapabilityDef {
+export interface RuntimeCapabilityCatalogDef {
   id: RuntimeCapabilityId
   kind: RuntimeCapabilityKind
   display_name: string
   description: string
 }
+
+export type CodexCoreCapabilityDef = RuntimeCapabilityCatalogDef
 
 export const CODEX_SUBSCRIPTION_CAPABILITY_DEF: CodexCoreCapabilityDef = {
   id: "codex.subscription",
@@ -68,6 +70,15 @@ export const CODEX_CORE_CAPABILITY_DEFS: readonly CodexCoreCapabilityDef[] = [
     kind: "remote_hands",
     display_name: "Remote hands",
     description: "Pair and use a verified local execution endpoint",
+  },
+] as const
+
+export const GENIO_DESKTOP_ADAPTER_CAPABILITY_DEFS: readonly RuntimeCapabilityCatalogDef[] = [
+  {
+    id: "computer.use",
+    kind: "desktop",
+    display_name: "Genio desktop (E2B)",
+    description: "Operate the Bot's managed E2B desktop",
   },
 ] as const
 

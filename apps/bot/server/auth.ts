@@ -1,5 +1,6 @@
 import type { GenioPrincipal, RuntimeBroker } from "./runtime-broker"
 import type { RuntimeTier } from "./runtime"
+import { desktopBrowserGrants, DESKTOP_BROWSER_GRANT_QUERY, readDesktopBrowserCookie, type DesktopProxySession } from "./desktop-proxy"
 
 export async function verifyGenioOneAccessToken(accessToken: string): Promise<GenioPrincipal> {
   const origin = process.env.GENIO_ONE_PLATFORM_ORIGIN?.trim() || "http://127.0.0.1:58082"
@@ -30,20 +31,6 @@ export async function requestPrincipal(request: { headers: Record<string, string
   return verifyGenioOneAccessToken(requestAccessToken(request))
 }
 
-export function extractBearerOrQueryToken(request: { headers: Record<string, string | string[] | undefined>; query?: unknown }): string | null {
-  const authorization = request.headers.authorization
-  const value = Array.isArray(authorization) ? authorization[0] : authorization
-  if (value?.startsWith("Bearer ")) {
-    const token = value.slice("Bearer ".length).trim()
-    if (token) return token
-  }
-  if (request.query && typeof request.query === "object") {
-    const queryToken = (request.query as Record<string, unknown>).token
-    if (typeof queryToken === "string" && queryToken.trim()) return queryToken.trim()
-  }
-  return null
-}
-
 export function e2bProxySession(runtimeBroker: RuntimeBroker, runtimeSessionId: string, tier?: RuntimeTier) {
   const session = runtimeBroker.get(runtimeSessionId)
   const details = tier ? session?.runtimeDetails[tier] : session?.details
@@ -55,16 +42,20 @@ export function e2bProxySession(runtimeBroker: RuntimeBroker, runtimeSessionId: 
   return { sandboxId: details.sandboxId, sandboxUrl }
 }
 
-export async function authenticateProxySession(
+export async function authenticateExecutorProxySession(
   runtimeBroker: RuntimeBroker,
   runtimeSessionId: string,
   tier: RuntimeTier | undefined,
-  request: { headers: Record<string, string | string[] | undefined>; query?: unknown },
+  request: { headers: Record<string, string | string[] | undefined> },
 ) {
   const session = runtimeBroker.get(runtimeSessionId)
   if (!session) return null
-  const token = extractBearerOrQueryToken(request)
-  if (!token) return null
+  let token: string
+  try {
+    token = requestAccessToken(request)
+  } catch {
+    return null
+  }
   try {
     const principal = await verifyGenioOneAccessToken(token)
     if (principal.tenant_id !== session.principal.tenant_id || principal.subject_id !== session.principal.subject_id) {
@@ -74,4 +65,27 @@ export async function authenticateProxySession(
     return null
   }
   return e2bProxySession(runtimeBroker, runtimeSessionId, tier)
+}
+
+function desktopGrantFromQuery(request: { query?: unknown }) {
+  if (!request.query || typeof request.query !== "object") return null
+  const value = (request.query as Record<string, unknown>)[DESKTOP_BROWSER_GRANT_QUERY]
+  return typeof value === "string" ? value : null
+}
+
+export function authenticateDesktopProxySession(
+  runtimeBroker: RuntimeBroker,
+  runtimeSessionId: string,
+  request: { headers: Record<string, string | string[] | undefined>; query?: unknown },
+  allowBootstrap: boolean,
+): DesktopProxySession | null {
+  const queryCredential = allowBootstrap ? desktopGrantFromQuery(request) : null
+  if (queryCredential) {
+    const querySession = desktopBrowserGrants.validate(runtimeBroker, runtimeSessionId, queryCredential)
+    if (querySession) return { ...querySession, bootstrap: true }
+  }
+  const cookieCredential = readDesktopBrowserCookie(request.headers.cookie)
+  if (!cookieCredential) return null
+  const session = desktopBrowserGrants.validate(runtimeBroker, runtimeSessionId, cookieCredential)
+  return session ? { ...session, bootstrap: false } : null
 }

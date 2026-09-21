@@ -52,15 +52,15 @@ test("mounts the CE starter resources through ordinary installed bindings", () =
       basePath: "/",
     },
   })
-  expect(managedMcpConfig("session/a", mounts, environment)).toEqual({
+  expect(managedMcpConfig("session/a", "bot/a", mounts, environment)).toEqual({
     "mcp_servers.genio_mcp_context7": {
-      url: "https://bot.example.test/api/mcp-gateway/session%2Fa/genio.demo.context7/mcp",
+      url: "https://bot.example.test/api/mcp-gateway/session%2Fa/bots/bot%2Fa/genio.demo.context7/mcp",
       bearer_token_env_var: "GENIO_ONE_MCP_BEARER_TOKEN",
       default_tools_approval_mode: "writes",
       required: false,
     },
     "mcp_servers.genio_mcp_archify": {
-      url: "https://bot.example.test/api/mcp-gateway/session%2Fa/genio.demo.archify/mcp",
+      url: "https://bot.example.test/api/mcp-gateway/session%2Fa/bots/bot%2Fa/genio.demo.archify/mcp",
       bearer_token_env_var: "GENIO_ONE_MCP_BEARER_TOKEN",
       default_tools_approval_mode: "writes",
       required: false,
@@ -142,12 +142,12 @@ test("keeps configured gateway transport separate from each publication endpoint
 })
 
 test("uses the local Bot relay when no public relay origin is configured", () => {
-  expect(managedMcpConfig("session/a", managedMcpMountsFromCatalog(ceCatalog, ceBindings), {
+  expect(managedMcpConfig("session/a", "bot/a", managedMcpMountsFromCatalog(ceCatalog, ceBindings), {
     GENIO_BOT_PORT: "5192",
     GENIO_ONE_MCP_URL: "http://one.localhost:1975/mcp",
   } as NodeJS.ProcessEnv)).toMatchObject({
-    "mcp_servers.genio_mcp_context7": { url: "http://127.0.0.1:5192/api/mcp-gateway/session%2Fa/genio.demo.context7/mcp" },
-    "mcp_servers.genio_mcp_archify": { url: "http://127.0.0.1:5192/api/mcp-gateway/session%2Fa/genio.demo.archify/mcp" },
+    "mcp_servers.genio_mcp_context7": { url: "http://127.0.0.1:5192/api/mcp-gateway/session%2Fa/bots/bot%2Fa/genio.demo.context7/mcp" },
+    "mcp_servers.genio_mcp_archify": { url: "http://127.0.0.1:5192/api/mcp-gateway/session%2Fa/bots/bot%2Fa/genio.demo.archify/mcp" },
   })
 })
 

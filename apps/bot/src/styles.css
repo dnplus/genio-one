@@ -1674,6 +1674,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   text-decoration: none;
   font-weight: 600;
 }
+.desktop-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.desktop-actions .activity-action {
+  font-size: 12px;
+}
 .desktop-bar a svg {
   width: 12px;
   height: 12px;

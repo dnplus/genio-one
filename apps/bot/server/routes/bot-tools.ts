@@ -5,6 +5,7 @@ import { assertCapability, PERSONAL_BOT_USE } from "../capability-gate"
 import { deliverHandoff } from "../handoff-delivery"
 import { readBotHistory, searchBotHistory } from "../bot-history-reader"
 import { BOT_WORK_SUMMARY_STATUS_GUIDANCE } from "../../shared/bot-work-summary"
+import { listBotDefaultTools, executeBotDefaultTool, isBotDefaultTool } from "../bot-default-tools"
 
 const tools = [
   { name: "request_user_input_async", description: "Ask the user 1-3 clarification questions while continuing independent work. Each question uses title (string) and optional options (array of plain strings). Do not use the blocking tool fields id, header, question, or option objects. This returns saved question IDs immediately; it does not wait for answers. Answers will be delivered later. Use for missing information or preferences, never as a substitute for tool approval. Do not repeat a pending question. To explicitly replace a pending question, pass its saved ID in replaceQuestionIds. Continue work that does not depend on the answer; do not assume an unanswered question is permission.", inputSchema: { type: "object", properties: { replaceQuestionIds: { type: "array", maxItems: 3, items: { type: "string" } }, questions: { type: "array", minItems: 1, maxItems: 3, items: { type: "object", properties: { title: { type: "string", maxLength: 1000 }, options: { type: "array", maxItems: 6, items: { type: "string", maxLength: 300 } } }, required: ["title"], additionalProperties: false } } }, required: ["questions"], additionalProperties: false }, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false } },
@@ -23,12 +24,22 @@ const tools = [
   { name: "send_to_bot", description: "Send one task or FYI to a teammate Bot. Returns acceptance immediately, not the result. Task results arrive asynchronously and resume your work. FYI is queued for idle reading, may remain quiet, and does not resume the sender. Use only for the user's task; do not fan out without explicit user direction or send acknowledgement loops.", inputSchema: { type: "object", properties: { botId: { type: "string" }, message: { type: "string", minLength: 1, maxLength: 4096 }, kind: { type: "string", enum: ["task", "fyi"] } }, required: ["botId", "message"], additionalProperties: false } },
 ]
 
+function samePrincipal(left: { tenant_id: string; subject_id: string; acting_client_id: string }, right: { tenant_id: string; subject_id: string; acting_client_id: string }) {
+  return left.tenant_id === right.tenant_id && left.subject_id === right.subject_id && left.acting_client_id === right.acting_client_id
+}
+
 export async function botToolRoutes(app: FastifyInstance, context: BotServerContext) {
   app.route({ method: ["GET", "DELETE"], url: "/api/bot-tools", handler: async (_request, reply) => reply.header("allow", "POST").code(405).send() })
   app.post("/api/bot-tools", async (request, reply) => {
     const session = context.botToolSessions.resolve(request.headers.authorization)
     if (!session || !context.botRegistry.getOwned(session.botId, session.principal)) return reply.code(401).send({ error: "BOT_TOOL_SESSION_EXPIRED" })
-    const accessToken = context.runtimeBroker.findByPrincipal(session.principal)?.accessToken ?? session.accessToken
+    const runtime = context.runtimeBroker.get(session.runtimeSessionId)
+    if (!runtime || !samePrincipal(runtime.principal, session.principal)) {
+      context.botToolSessions.invalidate(request.headers.authorization)
+      return reply.code(401).send({ error: "BOT_TOOL_SESSION_EXPIRED" })
+    }
+    const accessToken = session.accessToken ?? runtime.accessToken
+    if (!accessToken) return reply.code(401).send({ error: "BOT_TOOL_SESSION_EXPIRED" })
     const body = request.body as { id?: number | string; method?: string; params?: any }
     if (!body || typeof body.method !== "string") return reply.code(400).send({ error: "INVALID_REQUEST" })
     if (body.id === undefined) return reply.code(202).send()
@@ -37,8 +48,9 @@ export async function botToolRoutes(app: FastifyInstance, context: BotServerCont
       await assertCapability(context.capabilityGate, session.principal, PERSONAL_BOT_USE, accessToken)
       if (body.method === "initialize") return send({ protocolVersion: body.params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "genio-bot", version: "1.0.0" } })
       if (body.method === "ping") return send({})
-      if (body.method === "tools/list") return send({ tools })
+      if (body.method === "tools/list") return send({ tools: [...tools, ...await listBotDefaultTools({ context, botId: session.botId, principal: session.principal, accessToken })] })
       if (body.method !== "tools/call") return reply.send({ jsonrpc: "2.0", id: body.id, error: { code: -32601, message: "Method not found" } })
+      if (isBotDefaultTool(body.params?.name)) return send(await executeBotDefaultTool(body.params.name, body.params.arguments ?? {}, { context, botId: session.botId, principal: session.principal, accessToken }))
       let result: unknown
       if (body.params?.name === "request_user_input_async") {
         const active = context.botRegistry.timeline.activeTurns(session.botId)

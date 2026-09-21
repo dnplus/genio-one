@@ -199,9 +199,16 @@ export function RightPanel({
               </div>
               <div className="desktop-bar">
                 <span><Monitor /> {botCopy("Remote sandbox connected", "遠端沙盒已連接")}</span>
-                <a href={runtime.desktopUrl} target="_blank" rel="noreferrer">
-                  {botCopy("Open full screen", "另開全螢幕")} <ExternalLink />
-                </a>
+                <div className="desktop-actions">
+                  {onEnsureRuntime && (
+                    <button type="button" className="activity-action" onClick={() => onEnsureRuntime("desktop")}>
+                      <RefreshCw /> <span>{botCopy("Reconnect", "重新連線")}</span>
+                    </button>
+                  )}
+                  <a href={runtime.desktopUrl} target="_blank" rel="noreferrer">
+                    {botCopy("Open full screen", "另開全螢幕")} <ExternalLink />
+                  </a>
+                </div>
               </div>
             </div>
           ) : (

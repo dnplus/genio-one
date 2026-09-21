@@ -167,13 +167,14 @@ export function authorizedManagedMcpMount(
 
 export function managedMcpConfig(
   runtimeSessionId: string,
+  botId: string,
   mounts: ManagedMcpMounts = {},
   environment: NodeJS.ProcessEnv = process.env,
 ) {
   const relayOrigin = resolveBotRelayOrigin(environment)
   return Object.fromEntries(Object.values(mounts).flatMap((mount) => {
     if (!managedMcpTarget(mount, environment)) return []
-    const url = new URL(`/api/mcp-gateway/${encodeURIComponent(runtimeSessionId)}/${encodeURIComponent(mount.resourceId)}/mcp`, relayOrigin).toString()
+    const url = new URL(`/api/mcp-gateway/${encodeURIComponent(runtimeSessionId)}/bots/${encodeURIComponent(botId)}/${encodeURIComponent(mount.resourceId)}/mcp`, relayOrigin).toString()
     return [[`mcp_servers.${mount.serverName}`, {
       url,
       bearer_token_env_var: "GENIO_ONE_MCP_BEARER_TOKEN",

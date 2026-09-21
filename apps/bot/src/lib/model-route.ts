@@ -60,6 +60,15 @@ function isPolicyFailure(reason: string): boolean {
     reason === "TENANT_ADMINISTRATOR_REQUIRED"
 }
 
+export function isRuntimePolicyFailure(error: unknown): boolean {
+  return isPolicyFailure(errorText(error))
+}
+
+export function isModelRouteFailure(error: unknown): boolean {
+  const reason = errorText(error)
+  return reason.startsWith("BOT_MODEL_") || /\bcodex(?:[._-]?subscription)?\b/i.test(reason)
+}
+
 export function runtimeFailureMessage(error: unknown, context: "request" | "codex" | "runtime" = "request"): string {
   if (isGoogleGeminiPrepaymentDepleted(error)) return GOOGLE_GEMINI_PREPAYMENT_DEPLETED_MESSAGE
   if (isModelProviderRateLimited(error)) return MODEL_PROVIDER_RATE_LIMITED_MESSAGE

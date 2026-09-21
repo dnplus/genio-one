@@ -18,11 +18,12 @@ test("Bot MCP binds the caller to its credential and preserves existing handoff 
   const principal = { tenant_id: "tenant", subject_id: "owner", acting_client_id: "genio-one-bot", scopes: [] }
   const caller = registry.create(principal, { name: "A", description: "Caller" })
   const target = registry.create(principal, { name: "B", description: "Target" })
-  const config = sessions.config(caller.id, principal, "test-token")
-  expect(config.default_tools_approval_mode).toBe("auto")
-  expect(config.tools).toEqual({ request_user_input_async: { approval_mode: "approve" }, update_work_summary: { approval_mode: "approve" } })
   const broker = new RuntimeBroker({ provision: async () => { throw new Error("not needed") } })
   const runtime = await broker.start(principal, { onMessage() {}, onExit() {} }, undefined, "refreshed-test-token")
+  let replacementRuntimeId: string | undefined
+  const config = sessions.config(caller.id, principal, runtime.id)
+  expect(config.default_tools_approval_mode).toBe("auto")
+  expect(config.tools).toEqual({ request_user_input_async: { approval_mode: "approve" }, update_work_summary: { approval_mode: "approve" } })
   const gate = createCapabilityGate({ mode: "open" })
   let observedToken: string | undefined
   const app = await createBotApp({ botRegistry: registry, botToolSessions: sessions, runtimeBroker: broker, capabilityGate: { ...gate, resolve: async (owner, capability, token) => { observedToken = token; return gate.resolve(owner, capability, token) } } })
@@ -43,9 +44,11 @@ test("Bot MCP binds the caller to its credential and preserves existing handoff 
     expect(accepted.json().result.isError).toBe(false)
     const ack = JSON.parse(accepted.json().result.content[0].text)
     expect(registry.getHandoff(principal, ack.handoffId)?.fromBotId).toBe(caller.id)
-    const invalid = sessions.config(caller.id, { ...principal, subject_id: "other" }, "other-token")
+    const invalid = sessions.config(caller.id, { ...principal, subject_id: "other" }, "other-runtime")
+    const tokenBeforeDenied = observedToken
     const denied = await app.inject({ method: "POST", url: "/api/bot-tools", headers: invalid.http_headers, payload: { id: 1, method: "tools/list" } })
     expect(denied.statusCode).toBe(401)
+    expect(observedToken).toBe(tokenBeforeDenied)
     const memory = await call("remember", { key: "驗證事實", content: "Bot-owned fact", kind: "fact" })
     expect(memory.json().result.isError).toBe(false)
     expect(registry.memory.list(caller.id)[0]?.origin).toBe("bot")
@@ -81,5 +84,37 @@ test("Bot MCP binds the caller to its credential and preserves existing handoff 
     expect((await call("update_work_summary", { ...work, expectedRevision: 2, sourceMessageIds: ["target-history:private"] })).json().result.isError).toBe(true)
     expect(registry.memory.workSummary(caller.id).entry?.workSummary?.goal).toBe(work.goal)
     expect(registry.memory.workSummary(target.id).entry).toBeNull()
-  } finally { await app.close(); await broker.stop(runtime.id); registry.close(); rmSync(dir, { recursive: true, force: true }) }
+
+    const invocationTools = sessions.bindInvocation(runtime.id, caller.id, principal, "invocation-a", "delegated-tools-token")
+    expect(invocationTools.config.http_headers).toEqual(config.http_headers)
+    expect(() => sessions.bindInvocation(runtime.id, caller.id, principal, "invocation-b", "delegated-tools-token-b")).toThrow("BOT_TOOL_INVOCATION_CONFLICT")
+    const delegated = await app.inject({ method: "POST", url: "/api/bot-tools", headers: invocationTools.config.http_headers, payload: { jsonrpc: "2.0", id: 2, method: "tools/list" } })
+    expect(delegated.statusCode).toBe(200)
+    expect(observedToken).toBe("delegated-tools-token")
+    const foregroundDuringInvocation = await app.inject({ method: "POST", url: "/api/bot-tools", headers: config.http_headers, payload: { jsonrpc: "2.0", id: 3, method: "tools/list" } })
+    expect(foregroundDuringInvocation.statusCode).toBe(200)
+    expect(observedToken).toBe("delegated-tools-token")
+    await broker.start(principal, { onMessage() {}, onExit() {} }, undefined, "rotated-owner-token")
+    const delegatedAfterOwnerRotation = await app.inject({ method: "POST", url: "/api/bot-tools", headers: invocationTools.config.http_headers, payload: { jsonrpc: "2.0", id: 4, method: "tools/list" } })
+    expect(delegatedAfterOwnerRotation.statusCode).toBe(200)
+    expect(observedToken).toBe("delegated-tools-token")
+    invocationTools.release()
+    const originalNow = Date.now
+    Date.now = () => originalNow() + 32 * 60_000
+    try {
+      const foregroundAfterRotation = await app.inject({ method: "POST", url: "/api/bot-tools", headers: config.http_headers, payload: { jsonrpc: "2.0", id: 5, method: "tools/list" } })
+      expect(foregroundAfterRotation.statusCode).toBe(200)
+      expect(observedToken).toBe("rotated-owner-token")
+    } finally { Date.now = originalNow }
+    const retainedNativeConfig = await app.inject({ method: "POST", url: "/api/bot-tools", headers: invocationTools.config.http_headers, payload: { jsonrpc: "2.0", id: 6, method: "tools/list" } })
+    expect(retainedNativeConfig.statusCode).toBe(200)
+    expect(observedToken).toBe("rotated-owner-token")
+    await broker.stop(runtime.id)
+    const replacement = await broker.start(principal, { onMessage() {}, onExit() {} }, undefined, "replacement-owner-token")
+    replacementRuntimeId = replacement.id
+    const tokenBeforeReplacementDenied = observedToken
+    const replacementDenied = await app.inject({ method: "POST", url: "/api/bot-tools", headers: config.http_headers, payload: { jsonrpc: "2.0", id: 7, method: "tools/list" } })
+    expect(replacementDenied.statusCode).toBe(401)
+    expect(observedToken).toBe(tokenBeforeReplacementDenied)
+  } finally { await app.close(); if (replacementRuntimeId) await broker.stop(replacementRuntimeId); await broker.stop(runtime.id); registry.close(); rmSync(dir, { recursive: true, force: true }) }
 })

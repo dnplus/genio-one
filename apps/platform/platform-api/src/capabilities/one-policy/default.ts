@@ -72,7 +72,10 @@ function evaluateBotAccess(
   const { tenantId, principal, capabilityId } = input
   const denied = baseDecision(tenantId, principal, capabilityId, policySeed)
   if (!policySeed.enabled) return { ...denied, reason_code: "FIRST_PARTY_POLICY_DISABLED" }
-  if (capabilityId !== PERSONAL_BOT_USE) {
+  if (capabilityId !== PERSONAL_BOT_USE && capabilityId !== PERSONAL_BOT_COMPUTER_USE) {
+    return { ...denied, reason_code: "COMPUTER_USE_NOT_IN_DEFAULT_POLICY" }
+  }
+  if (capabilityId === PERSONAL_BOT_COMPUTER_USE && policySeed.rules.computer_use_enabled !== true) {
     return { ...denied, reason_code: "COMPUTER_USE_NOT_IN_DEFAULT_POLICY" }
   }
   if (principal.client_id !== "genio-one-bot") {

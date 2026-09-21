@@ -33,7 +33,10 @@ async function createApp(lifecycle: () => "ENABLED" | "DISABLED", identityLookup
   const modules = createInMemoryPlatformModules()
   await modules.identity.bootstrap({
     tenantId,
-    subjects: [{ subject_id: "person-user", kind: "PERSON", role: "USER" }],
+    subjects: [
+      { subject_id: "person-user", kind: "PERSON", role: "USER" },
+      { subject_id: "person-second", kind: "PERSON", role: "USER" },
+    ],
   })
   await modules.identity.bootstrap({
     tenantId: "tenant-other",
@@ -57,6 +60,14 @@ async function createApp(lifecycle: () => "ENABLED" | "DISABLED", identityLookup
       user: {
         tenant_id: tenantId,
         subject_id: "person-user",
+        role: "USER",
+        organization_ids: [],
+        client_id: "genio-one-bot",
+        scopes: ["genioone-management", "genioone-invocation"],
+      },
+      secondUser: {
+        tenant_id: tenantId,
+        subject_id: "person-second",
         role: "USER",
         organization_ids: [],
         client_id: "genio-one-bot",
@@ -116,6 +127,51 @@ test("a verified USER creates an AGENT through the canonical self-service bounda
 
     const inventory = await modules.identity.inventory({ tenantId })
     assert.deepEqual(inventory.subjects.filter((subject) => subject.subject_id === created.subject_id), [created])
+  } finally {
+    await app.close()
+  }
+})
+
+test("a client request id creates one stable agent, detects payload conflicts, and is isolated by verified caller", async () => {
+  const { app, modules } = await createApp(() => "ENABLED")
+  try {
+    const payload = { display_name: "Dylan Bot", client_request_id: "bot-create-1" }
+    const first = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/me/agents`, headers: { authorization: "Bearer user" }, payload })
+    const repeated = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/me/agents`, headers: { authorization: "Bearer user" }, payload })
+    assert.equal(first.statusCode, 201)
+    assert.equal(repeated.statusCode, 201)
+    assert.equal(repeated.json().subject_id, first.json().subject_id)
+    assert.equal((await modules.identity.inventory({ tenantId })).subjects.filter((subject) => subject.kind === "AGENT").length, 1)
+
+    const conflict = await app.inject({
+      method: "POST",
+      url: `/v1/tenants/${tenantId}/me/agents`,
+      headers: { authorization: "Bearer user" },
+      payload: { ...payload, display_name: "Different Bot" },
+    })
+    assert.equal(conflict.statusCode, 409)
+    assert.equal(conflict.json().code, "SELF_SERVICE_AGENT_REQUEST_CONFLICT")
+
+    const otherCaller = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/me/agents`, headers: { authorization: "Bearer secondUser" }, payload })
+    assert.equal(otherCaller.statusCode, 201)
+    assert.notEqual(otherCaller.json().subject_id, first.json().subject_id)
+    assert.equal((await modules.identity.inventory({ tenantId })).subjects.filter((subject) => subject.kind === "AGENT").length, 2)
+  } finally {
+    await app.close()
+  }
+})
+
+test("a repeated stable create still denies access after the caller is revoked", async () => {
+  const { app, modules, botAccessPolicy } = await createApp(() => "ENABLED")
+  try {
+    const payload = { display_name: "Dylan Bot", client_request_id: "bot-create-revoked" }
+    const first = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/me/agents`, headers: { authorization: "Bearer user" }, payload })
+    assert.equal(first.statusCode, 201)
+    await botAccessPolicy.setFirstPartyBotSeedEnabled({ tenantId, enabled: false, publishedBy: "test-admin", correlationId: "revoke-stable-create" })
+    const denied = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/me/agents`, headers: { authorization: "Bearer user" }, payload })
+    assert.equal(denied.statusCode, 403)
+    assert.equal(denied.json().code, "BOT_ACCESS_DENIED")
+    assert.equal((await modules.identity.inventory({ tenantId })).subjects.filter((subject) => subject.kind === "AGENT").length, 1)
   } finally {
     await app.close()
   }

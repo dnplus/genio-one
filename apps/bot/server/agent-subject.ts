@@ -9,6 +9,7 @@ export async function ensureAgentSubject(input: {
   principal: GenioPrincipal
   accessToken: string
   displayName: string
+  clientRequestId?: string
 }, environment: NodeJS.ProcessEnv = process.env): Promise<AgentSubject> {
   const platformOrigin = environment.GENIO_ONE_PLATFORM_ORIGIN?.trim() || "http://127.0.0.1:58082"
   const authorization = input.accessToken.trim()
@@ -27,6 +28,7 @@ export async function ensureAgentSubject(input: {
       },
       body: JSON.stringify({
         display_name: input.displayName.trim() || "Genio Bot",
+        ...(input.clientRequestId?.trim() ? { client_request_id: input.clientRequestId.trim() } : {}),
       }),
       signal: AbortSignal.timeout(5_000),
     })

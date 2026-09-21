@@ -9,6 +9,7 @@ import {
   addBotBinding,
   getBotCatalogAdd,
   getAccountOAuthStatus,
+  listBots,
   getBotRuntimePolicy,
   startAccountOAuth,
   type CatalogAddRow,
@@ -18,6 +19,8 @@ import {
 import { resolveCatalogAddState } from "../../../server/bot-binding-add"
 import { ProfileForm } from "../common/ProfileForm"
 import { CapabilityToolsPanel } from "./CapabilityToolsPanel"
+import { BotOwnedSkillsPanel } from "./BotOwnedSkillsPanel"
+import { BotSchedulesPanel } from "./BotSchedulesPanel"
 import type { ConnectCardPath, ConnectCardResult } from "./ConnectCard"
 import { statusLabelFor, mapEnterpriseToSurfaceStatus } from "../../../server/bot-capability-surface"
 import {
@@ -50,6 +53,28 @@ export function oauthConnectionCopy(key: OAuthConnectionCopyKey): string {
 
 export function oauthConnectionRequiredCopy(statusLabel: string): string {
   return botCopy("Connection required · Complete your OAuth connection first.", `${statusLabel} · 請先完成使用者 OAuth 連線。`)
+}
+
+function sharePolicyFor(bot: BotInstance): BotSharePolicy {
+  return bot.sharePolicy ?? {
+    visibility: "PRIVATE",
+    discoverable: false,
+    invocable: false,
+    approval: "ALWAYS_ASK",
+    audienceIds: [],
+  }
+}
+
+function modelRouteFor(bot: BotInstance): ModelRoute {
+  return bot.modelRoute === "genio-gateway" ? "genio-gateway" : "codex-subscription"
+}
+
+function sameValue(left: unknown, right: unknown) {
+  return JSON.stringify(left) === JSON.stringify(right)
+}
+
+function rebaseValue<T>(base: T, current: T, latest: T): T {
+  return sameValue(base, current) ? latest : current
 }
 
 function capabilityStatusCopy(status: ReturnType<typeof mapEnterpriseToSurfaceStatus>): string {
@@ -113,31 +138,45 @@ export function BotSettingsModal({
   modelDirectory?: ModelRoute | null
   accessToken?: string
   onClose(): void
-  onSave(updated: BotInstance): void
+  onSave(updated: BotInstance): Promise<void> | void
   onDuplicate?: () => void
   onDelete?: () => void
   onBindingsChanged?: (bot: BotInstance) => void
 }) {
-  const [tab, setTab] = useState<"basic" | "skills" | "plugins" | "sharing">("basic")
+  const [tab, setTab] = useState<"basic" | "skills" | "plugins" | "schedules" | "sharing">("basic")
+  const [skillsVisited, setSkillsVisited] = useState(false)
+  const [ownedSkillsDirty, setOwnedSkillsDirty] = useState(false)
+  const [ownedSkillsBusy, setOwnedSkillsBusy] = useState(false)
+  const [scheduleVisited, setScheduleVisited] = useState(false)
+  const [scheduleDirty, setScheduleDirty] = useState(false)
+  const [scheduleBusy, setScheduleBusy] = useState(false)
+  const [formBase, setFormBase] = useState(bot)
   const [name, setName] = useState(bot.name)
   const [title, setTitle] = useState(bot.title || bot.role)
   const [description, setDescription] = useState(bot.description || bot.role)
   const [avatar, setAvatar] = useState(bot.avatar)
   const [skills, setSkills] = useState<string[]>(bot.skills || [])
-  const [modelRoute, setModelRoute] = useState<ModelRoute>(bot.modelRoute === "genio-gateway" ? "genio-gateway" : "codex-subscription")
-  const [sharePolicy, setSharePolicy] = useState<BotSharePolicy>(bot.sharePolicy ?? {
-    visibility: "PRIVATE",
-    discoverable: false,
-    invocable: false,
-    approval: "ALWAYS_ASK",
-    audienceIds: [],
-  })
+  const [modelRoute, setModelRoute] = useState<ModelRoute>(modelRouteFor(bot))
+  const [sharePolicy, setSharePolicy] = useState<BotSharePolicy>(sharePolicyFor(bot))
   const [catalogRows, setCatalogRows] = useState<CatalogAddRow[]>([])
   const [addMessage, setAddMessage] = useState("")
   const [addBusy, setAddBusy] = useState<string | null>(null)
   const [runtimePolicy, setRuntimePolicy] = useState<RuntimePolicySnapshot | null>(null)
   const [runtimePolicyLoading, setRuntimePolicyLoading] = useState(() => Boolean(accessToken))
   const [runtimePolicyError, setRuntimePolicyError] = useState("")
+  const [saveError, setSaveError] = useState("")
+  const [profileConflict, setProfileConflict] = useState(false)
+  const [profileRefreshBusy, setProfileRefreshBusy] = useState(false)
+  const [saveMessage, setSaveMessage] = useState("")
+  const [savingSettings, setSavingSettings] = useState(false)
+  const settingsBusy = savingSettings || scheduleBusy
+  const profileSaveBlocked = savingSettings || ownedSkillsBusy || scheduleBusy
+  const confirmDiscardSettingsDraft = () => !(ownedSkillsDirty || scheduleDirty) || window.confirm(botCopy("Discard unsaved Skill or schedule edits and close settings?", "要放棄尚未儲存的 Skill 或排程修改並關閉設定嗎？"))
+  const requestClose = useCallback(() => {
+    if (settingsBusy || ownedSkillsBusy) return
+    if (!confirmDiscardSettingsDraft()) return
+    onClose()
+  }, [onClose, ownedSkillsBusy, ownedSkillsDirty, scheduleDirty, settingsBusy])
 
   const localRows = useMemo(() => {
     return (catalog?.capabilities ?? []).map((cap) => {
@@ -201,23 +240,80 @@ export function BotSettingsModal({
     return () => { cancelled = true }
   }, [tab, accessToken, bot.id, localRows, loadRuntimePolicy])
 
-  const handleSave = () => {
-    const nextDescription = description.trim() || bot.description || bot.role
-    onSave({
-      ...bot,
-      name: name.trim() || bot.name,
-      title: title.trim() || bot.title || nextDescription,
+  const updatedBot = (): BotInstance => {
+    const nextName = name.trim() || formBase.name
+    const nextDescription = description.trim() || formBase.description || formBase.role
+    const nextTitle = title.trim() || formBase.title || nextDescription
+    return {
+      ...formBase,
+      name: nextName,
+      title: nextTitle,
       description: nextDescription,
       role: nextDescription,
       avatar,
       skills,
-      // Keep existing preference projection; plugins tab no longer writes checkbox auth.
-      allowedTools: bot.allowedTools ?? [],
+      allowedTools: formBase.allowedTools ?? [],
       modelRoute,
       sharePolicy,
-    })
-    onClose()
+    }
   }
+
+  const handleSave = async () => {
+    if (profileRefreshBusy || profileSaveBlocked) return
+    setSavingSettings(true)
+    setSaveError("")
+    setSaveMessage("")
+    try {
+      await onSave(updatedBot())
+      requestClose()
+    } catch (error) {
+      const raw = error instanceof Error ? error.message : ""
+      const conflict = /REVISION_CONFLICT/i.test(raw)
+      setProfileConflict(conflict)
+      setSaveError(conflict
+        ? botCopy("This Bot changed elsewhere. Use the latest version to reapply your current edits, then save again.", "此 Bot 已在其他地方更新。請使用最新版本重新套用目前修改後再儲存。")
+        : sanitizeUserFacingError(raw, botCopy("Settings could not be saved. Your changes are still here.", "設定尚未儲存。你的修改已保留。")))
+    } finally {
+      setSavingSettings(false)
+    }
+  }
+
+  const hasNewerProfile = bot.id === formBase.id && (bot.revision ?? 0) > (formBase.revision ?? 0)
+
+  const rebaseForm = async () => {
+    if (!accessToken) {
+      setSaveError(botCopy("Sign in to load the latest Bot version. Your current edits are still here.", "請登入後載入最新 Bot 版本。目前修改仍保留在畫面上。"))
+      return
+    }
+    setProfileRefreshBusy(true)
+    try {
+      const latest = (await listBots(accessToken)).find((candidate) => candidate.id === bot.id)
+      if (!latest) throw new Error("BOT_NOT_FOUND")
+      const oldBase = formBase
+      setName((current) => rebaseValue(oldBase.name, current, latest.name))
+      setTitle((current) => rebaseValue(oldBase.title || oldBase.role, current, latest.title || latest.role))
+      setDescription((current) => rebaseValue(oldBase.description || oldBase.role, current, latest.description || latest.role))
+      setAvatar((current) => rebaseValue(oldBase.avatar, current, latest.avatar))
+      setSkills((current) => rebaseValue(oldBase.skills ?? [], current, latest.skills ?? []))
+      setModelRoute((current) => rebaseValue(modelRouteFor(oldBase), current, modelRouteFor(latest)))
+      setSharePolicy((current) => rebaseValue(sharePolicyFor(oldBase), current, sharePolicyFor(latest)))
+      setFormBase(latest)
+      setProfileConflict(false)
+      setSaveError("")
+      setSaveMessage(botCopy("Latest Bot version loaded. Review your current edits, then save to apply them.", "已載入最新 Bot 版本。請確認目前修改後再儲存，以重新套用你的內容。"))
+    } catch {
+      setSaveError(botCopy("The latest Bot version could not be loaded. Your current edits are still here; try again before saving.", "無法載入最新 Bot 版本。目前修改仍保留；請重試後再儲存。"))
+    } finally {
+      setProfileRefreshBusy(false)
+    }
+  }
+
+  const revisionNotice = (className = "") => (hasNewerProfile || profileConflict) ? (
+    <div className={`bot-default-tools-notice ${className}`.trim()} role="status">
+      <span>{botCopy("A newer Bot version is available. Your current edits stay on screen until you choose to apply them to that version.", "已有較新的 Bot 版本。目前修改會保留在畫面上，直到你選擇套用到最新版本。")}</span>
+      <button type="button" className="secondary-button" onClick={() => void rebaseForm()} disabled={profileRefreshBusy}>{botCopy("Use latest version", "使用最新版本重新套用")}</button>
+    </div>
+  ) : null
 
   const toggleSkill = (id: string) => {
     setSkills((curr) => curr.includes(id) ? curr.filter((s) => s !== id) : [...curr, id])
@@ -325,23 +421,41 @@ export function BotSettingsModal({
   }
 
   const rows = catalogRows.length > 0 ? catalogRows : localRows
+  const selectTab = (next: typeof tab) => {
+    if (settingsBusy) return
+    if (next === "skills") setSkillsVisited(true)
+    if (next === "schedules") setScheduleVisited(true)
+    setTab(next)
+  }
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        requestClose()
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [requestClose])
 
   return (
-    <div className="profile-dialog-backdrop" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="profile-dialog-backdrop" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && requestClose()}>
       <section className="profile-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-dialog-title">
         <header>
           <span>
             <strong id="profile-dialog-title">{botCopy("Bot settings", "Bot 設定")} · {bot.name}</strong>
             <small>{botCopy("Manage your profile, Bot-specific skills, and enterprise capabilities/tools", "管理基本資料、專屬技能與企業能力／工具")}</small>
           </span>
-          <button className="icon-button" aria-label={botCopy("Close settings", "關閉設定")} onClick={onClose}><X /></button>
+          <button className="icon-button" aria-label={botCopy("Close settings", "關閉設定")} onClick={requestClose} disabled={settingsBusy || ownedSkillsBusy}><X /></button>
         </header>
 
         <nav className="bot-settings-tabs">
-          <button type="button" className={`bot-tab-btn ${tab === "basic" ? "active" : ""}`} onClick={() => setTab("basic")}>{botCopy("Profile", "基本資料")}</button>
-          <button type="button" className={`bot-tab-btn ${tab === "skills" ? "active" : ""}`} onClick={() => setTab("skills")}>{botCopy("Bot skills", "專屬技能")}</button>
-          <button type="button" className={`bot-tab-btn ${tab === "plugins" ? "active" : ""}`} onClick={() => setTab("plugins")}>{botCopy("Capabilities / tools", "能力／工具")}</button>
-          <button type="button" className={`bot-tab-btn ${tab === "sharing" ? "active" : ""}`} onClick={() => setTab("sharing")}>{botCopy("Sharing & @", "分享與 @")}</button>
+          <button type="button" className={`bot-tab-btn ${tab === "basic" ? "active" : ""}`} onClick={() => selectTab("basic")} disabled={settingsBusy}>{botCopy("Profile", "基本資料")}</button>
+          <button type="button" className={`bot-tab-btn ${tab === "skills" ? "active" : ""}`} onClick={() => selectTab("skills")} disabled={settingsBusy}>{botCopy("Bot skills", "專屬技能")}</button>
+          <button type="button" className={`bot-tab-btn ${tab === "plugins" ? "active" : ""}`} onClick={() => selectTab("plugins")} disabled={settingsBusy}>{botCopy("Capabilities / tools", "能力／工具")}</button>
+          <button type="button" className={`bot-tab-btn ${tab === "schedules" ? "active" : ""}`} onClick={() => selectTab("schedules")} disabled={settingsBusy}>{botCopy("Schedules", "排程")}</button>
+          <button type="button" className={`bot-tab-btn ${tab === "sharing" ? "active" : ""}`} onClick={() => selectTab("sharing")} disabled={settingsBusy}>{botCopy("Sharing & @", "分享與 @")}</button>
         </nav>
 
         <div className="bot-tab-content">
@@ -350,7 +464,7 @@ export function BotSettingsModal({
               <div className="model-route-setting">
                 <label className="setting-field">
                   <span>{botCopy("Model route", "模型路線")}</span>
-                  <select value={modelRoute} onChange={(event) => setModelRoute(event.target.value === "genio-gateway" ? "genio-gateway" : "codex-subscription")}>
+                  <select value={modelRoute} onChange={(event) => setModelRoute(event.target.value === "genio-gateway" ? "genio-gateway" : "codex-subscription")} disabled={profileSaveBlocked}>
                     <option value="codex-subscription">{botCopy("Personal Codex", "個人 Codex")}</option>
                     <option value="genio-gateway">{botCopy("Company model (Genio Gateway)", "公司模型（Genio Gateway）")}</option>
                   </select>
@@ -366,26 +480,18 @@ export function BotSettingsModal({
               <ProfileForm
                 profile={{ name, title, description, role: description, avatar }}
                 submitLabel={botCopy("Save changes", "儲存變更")}
-                onComplete={(updated) => {
+                onChange={(updated) => {
                   setName(updated.name)
                   setTitle(updated.title)
                   setDescription(updated.description)
                   setAvatar(updated.avatar)
-                  onSave({
-                    ...bot,
-                    name: updated.name,
-                    title: updated.title,
-                    description: updated.description,
-                    role: updated.description,
-                    avatar: updated.avatar,
-                    skills,
-                    allowedTools: bot.allowedTools ?? [],
-                    modelRoute,
-                    sharePolicy,
-                  })
-                  onClose()
                 }}
+                onComplete={() => void handleSave()}
+                disabled={profileSaveBlocked}
               />
+              {revisionNotice()}
+              {saveMessage && <p role="status" className="bot-default-tools-message">{saveMessage}</p>}
+              {saveError && <p role="alert" className="bot-default-tools-error">{saveError}</p>}
               {onDelete && (
                 <div className="danger-zone-box" style={{ marginTop: "20px", paddingTop: "16px", borderTop: "1px solid #fee4e2" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -410,11 +516,13 @@ export function BotSettingsModal({
                         fontWeight: 600,
                       }}
                       onClick={() => {
+                        if (settingsBusy || ownedSkillsBusy || !confirmDiscardSettingsDraft()) return
                         if (window.confirm(`確定要刪除「${bot.name}」嗎？此動作無法復原。`)) {
                           onDelete()
                           onClose()
                         }
                       }}
+                      disabled={settingsBusy || ownedSkillsBusy}
                     >
                       <Trash2 size={14} /> 刪除 Bot
                     </button>
@@ -424,7 +532,8 @@ export function BotSettingsModal({
             </>
           )}
 
-          {tab === "skills" && (
+          {skillsVisited && (
+            <div hidden={tab !== "skills"}>
             <div className="skill-list">
               <p style={{ fontSize: "13px", color: "#657571", marginBottom: "8px" }}>
                 專屬技能是此 Bot 的作業指導手冊與 SOP 指引（Prompt），未啟用的技能不會佔用上下文：
@@ -435,6 +544,7 @@ export function BotSettingsModal({
                     type="checkbox"
                     checked={skills.includes(skill.id)}
                     onChange={() => toggleSkill(skill.id)}
+                    disabled={savingSettings}
                   />
                   <div className="skill-copy">
                     <strong>{skill.name}</strong>
@@ -443,8 +553,13 @@ export function BotSettingsModal({
                 </label>
               ))}
               <div style={{ marginTop: "16px", display: "flex", justifyContent: "flex-end" }}>
-                <button type="button" className="primary-button" onClick={handleSave}>儲存技能設定</button>
+                <button type="button" className="primary-button" disabled={savingSettings} onClick={() => void handleSave()}>儲存技能設定</button>
               </div>
+              {saveError && <p role="alert" className="bot-default-tools-error">{saveError}</p>}
+              {revisionNotice()}
+              {saveMessage && <p role="status" className="bot-default-tools-message">{saveMessage}</p>}
+              <BotOwnedSkillsPanel botId={bot.id} accessToken={accessToken} disabled={savingSettings} onDirtyChange={setOwnedSkillsDirty} onBusyChange={setOwnedSkillsBusy} />
+            </div>
             </div>
           )}
 
@@ -470,6 +585,8 @@ export function BotSettingsModal({
             />
           )}
 
+          {scheduleVisited && <div hidden={tab !== "schedules"}><BotSchedulesPanel botId={bot.id} accessToken={accessToken} onBusyChange={setScheduleBusy} onDirtyChange={setScheduleDirty} /></div>}
+
           {tab === "sharing" && (
             <div className="sharing-setting-box">
               <p style={{ fontSize: "13px", color: "#657571", marginBottom: "12px" }}>
@@ -490,8 +607,11 @@ export function BotSettingsModal({
               <label className="setting-field"><span>呼叫核准方式</span><select value={sharePolicy.approval} onChange={(event) => setSharePolicy((current) => ({ ...current, approval: event.target.value as BotSharePolicy["approval"] }))}><option value="ALWAYS_ASK">每次詢問我</option><option value="POLICY_AUTO_APPROVE">符合政策自動核准</option></select></label>
               <div className="setting-actions">
                 {onDuplicate && <button type="button" className="secondary-button" onClick={onDuplicate}><Copy /> 複製 Bot</button>}
-                <button type="button" className="primary-button" onClick={handleSave}>儲存分享設定</button>
+                <button type="button" className="primary-button" disabled={savingSettings} onClick={() => void handleSave()}>儲存分享設定</button>
               </div>
+              {saveError && <p role="alert" className="bot-default-tools-error">{saveError}</p>}
+              {revisionNotice()}
+              {saveMessage && <p role="status" className="bot-default-tools-message">{saveMessage}</p>}
             </div>
           )}
         </div>

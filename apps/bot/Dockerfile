@@ -6,6 +6,7 @@ RUN bun add --global pnpm@12.4.2
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/bot/package.json apps/bot/package.json
+COPY packages/protocol/package.json packages/protocol/package.json
 COPY packages/telemetry/package.json packages/telemetry/package.json
 RUN pnpm install --frozen-lockfile --filter genio-one-bot...
 
@@ -26,7 +27,9 @@ ENV NODE_ENV=production \
     GENIO_BOT_DEMO_CATALOG=/app/demo/catalog.json \
     PATH="/root/.bun/bin:${PATH}"
 
-RUN bun add -g @openai/codex@0.153.4 \
+COPY --from=build /workspace/apps/bot/package.json ./package.json
+
+RUN bun add -g @openai/codex@$(bun -e 'console.log(require("./package.json").devDependencies["@openai/codex"])') \
     && mkdir -p /var/lib/genio-one-bot/codex-home \
     && mkdir -p /var/lib/genio-one-bot/artifacts \
     && mkdir -p /var/lib/genio-one-bot/bot-packages

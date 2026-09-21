@@ -6,6 +6,8 @@ import type { ThreadResumeParams } from "./generated/v2/ThreadResumeParams"
 import type { TurnStartParams } from "./generated/v2/TurnStartParams"
 import { canonicalRuntimeEnvironments } from "./native-runtime-environment"
 import { nativeRuntimeConfig, nativeRuntimeSandboxMode, type NativeRuntimeEnvironment, type NativeRuntimeExposure } from "./native-runtime-policy"
+import { botRuntimeInstructions } from "./bot-runtime-instructions"
+import { botBoundDiscoveryMcpConfig, botBoundModelProviderConfig } from "./bot-model-config"
 
 const clientFields = {
   "thread/start": ["model", "serviceTier"] satisfies Array<keyof ThreadStartParams>,
@@ -43,11 +45,15 @@ export async function canonicalizeNativeParams(options: {
     if (Object.hasOwn(input, field)) clientParams[field] = input[field]
   }
   const roots = environments[0]?.runtimeWorkspaceRoots ?? []
+  if (!environments[0] && !session.runtimeDetails.none && session.details.tier && session.details.tier !== "none") {
+    throw new Error("RUNTIME_LOCAL_CONTEXT_UNAVAILABLE")
+  }
+  const cwd = environments[0]?.cwd ?? session.runtimeDetails.none?.cwd ?? session.details.cwd
   const common = {
     ...clientParams,
     approvalPolicy: "on-request",
-    environments,
-    cwd: environments[0]?.cwd ?? session.details.cwd,
+    ...(method === "thread/resume" ? {} : { environments }),
+    cwd,
     runtimeWorkspaceRoots: roots,
     ...(route.kind === "genio-gateway" ? { modelProvider: route.modelProvider } : {}),
   }
@@ -64,7 +70,11 @@ export async function canonicalizeNativeParams(options: {
     ...common,
     sandbox: writable ? "workspace-write" : "read-only",
     serviceName: "genio-one-bot",
-    baseInstructions: `You are ${bot.name}, an enterprise GenioOne personal agent. Treat server capability decisions and resource access as authoritative. ${bot.description ?? ""}`.trim(),
-    config: nativeRuntimeConfig(exposure, environment),
+    baseInstructions: botRuntimeInstructions(bot),
+    config: {
+      ...nativeRuntimeConfig(exposure, environment),
+      ...botBoundDiscoveryMcpConfig(session.id, bot.id),
+      ...(route.kind === "genio-gateway" ? botBoundModelProviderConfig(session.id, bot.id) : {}),
+    },
   }
 }

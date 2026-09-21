@@ -127,14 +127,34 @@ export function createPostgresIdentityDirectory(options: { sql: SqlAdapter }): I
       throw error
     }
   }
-  const createSelfServiceAgent = async ({ tenantId, value }: { tenantId: string; value: CreateSelfServiceAgentInput }) => create({
-    tenantId,
-    value: {
-      subject_id: `agent-${crypto.randomUUID()}`,
-      kind: "AGENT",
-      display_name: value.display_name,
-    },
-  })
+  const createSelfServiceAgent = async ({ tenantId, value, subjectId }: { tenantId: string; value: CreateSelfServiceAgentInput; subjectId?: string }) => {
+    const normalizedTenant = required(tenantId, "TENANT_REQUIRED")
+    const displayName = required(value.display_name, "SUBJECT_DISPLAY_NAME_REQUIRED")
+    const stableSubjectId = subjectId?.trim()
+    if (!stableSubjectId) return create({ tenantId: normalizedTenant, value: { subject_id: `agent-${crypto.randomUUID()}`, kind: "AGENT", display_name: displayName } })
+    const existing = async () => {
+      const result = await options.sql.query<Row>(
+        `select subject_id, kind, display_name, email, department, suspended_at, suspended_by, suspension_reason
+           from genio_one_subjects where tenant_id = $1 and subject_id = $2`,
+        [normalizedTenant, stableSubjectId],
+      )
+      return result.rows[0] ? subject(result.rows[0]) : null
+    }
+    const compatible = (candidate: Subject) => {
+      if (candidate.kind === "AGENT" && candidate.profile.display_name === displayName) return candidate
+      throw new PlatformApiError("SELF_SERVICE_AGENT_REQUEST_CONFLICT", 409)
+    }
+    const before = await existing()
+    if (before) return compatible(before)
+    try {
+      return await create({ tenantId: normalizedTenant, value: { subject_id: stableSubjectId, kind: "AGENT", display_name: displayName } })
+    } catch (error) {
+      if (!(error instanceof PlatformApiError) || error.code !== "SUBJECT_EXISTS") throw error
+      const after = await existing()
+      if (!after) throw error
+      return compatible(after)
+    }
+  }
   return {
     async inventory({ tenantId }) {
       const normalizedTenant = required(tenantId, "TENANT_REQUIRED")

@@ -162,6 +162,112 @@ test("the first-party One Policy keeps computer control closed by default", asyn
   assert.equal(decision.reason_code, "COMPUTER_USE_NOT_IN_DEFAULT_POLICY")
 })
 
+test("the first-party One Policy scopes enabled computer control through the Bot gate", async () => {
+  let connected = true
+  const modules = createInMemoryPlatformModules()
+  const policy = createDefaultOnePolicy({
+    policyAuditSink: modules.auditEvents,
+    connectionEnabled: async () => connected,
+  })
+  const administrator = {
+    subject_id: "person-platform-admin",
+    client_id: "genio-one-bot",
+    role: "TENANT_ADMINISTRATOR" as const,
+  }
+  const outsideSubject = {
+    subject_id: "person-outside",
+    client_id: "genio-one-bot",
+    role: "USER" as const,
+  }
+  const tenantId = "tenant-computer-gate"
+
+  const defaultDecision = await policy.resolveBotAccess({
+    tenantId,
+    principal: administrator,
+    capabilityId: "personal_bot.computer_use",
+  })
+  assert.equal(defaultDecision.decision, "DENY")
+  assert.equal(defaultDecision.reason_code, "COMPUTER_USE_NOT_IN_DEFAULT_POLICY")
+
+  const initial = await policy.getFirstPartyBotSeed({ tenantId })
+  const published = await policy.publishFirstPartyBotPolicy({
+    tenantId,
+    baseRevision: initial.policy_revision,
+    rules: {
+      allowed_roles: [],
+      allowed_subject_ids: [administrator.subject_id],
+      computer_use_enabled: true,
+    },
+    publishedBy: administrator.subject_id,
+  })
+  assert.equal(published.rules.computer_use_enabled, true)
+
+  const allowed = await policy.resolveBotAccess({
+    tenantId,
+    principal: administrator,
+    capabilityId: "personal_bot.computer_use",
+  })
+  assert.equal(allowed.decision, "ALLOW")
+
+  const outOfScope = await policy.resolveBotAccess({
+    tenantId,
+    principal: outsideSubject,
+    capabilityId: "personal_bot.computer_use",
+  })
+  assert.equal(outOfScope.decision, "DENY")
+  assert.equal(outOfScope.reason_code, "POLICY_SUBJECT_NOT_ALLOWED")
+
+  const wrongClient = await policy.resolveBotAccess({
+    tenantId,
+    principal: { ...administrator, client_id: "management-console" },
+    capabilityId: "personal_bot.computer_use",
+  })
+  assert.equal(wrongClient.decision, "DENY")
+  assert.equal(wrongClient.reason_code, "BOT_CLIENT_REQUIRED")
+
+  connected = false
+  const connectionDisabled = await policy.resolveBotAccess({
+    tenantId,
+    principal: administrator,
+    capabilityId: "personal_bot.computer_use",
+  })
+  assert.equal(connectionDisabled.decision, "DENY")
+  assert.equal(connectionDisabled.reason_code, "BOT_CONNECTION_DISABLED")
+
+  connected = true
+  await policy.setFirstPartyBotSeedEnabled({
+    tenantId,
+    enabled: false,
+    publishedBy: administrator.subject_id,
+    correlationId: "computer-gate-revoke",
+  })
+  const revoked = await policy.resolveBotAccess({
+    tenantId,
+    principal: administrator,
+    capabilityId: "personal_bot.computer_use",
+  })
+  assert.equal(revoked.decision, "DENY")
+  assert.equal(revoked.reason_code, "FIRST_PARTY_POLICY_DISABLED")
+})
+
+test("computer use stays denied until its runtime policy is configured", async () => {
+  const decision = await createDefaultOnePolicy().evaluateRuntime({
+    principal: {
+      tenant_id: "tenant-computer-runtime",
+      subject_id: "person-platform-admin",
+      client_id: "genio-one-bot",
+      role: "TENANT_ADMINISTRATOR",
+      organization_ids: [],
+    },
+    bot_id: "bot-computer-uat",
+    runtime_id: "codex",
+    capability_id: "computer.use",
+    action: "expose",
+  })
+  assert.equal(decision.decision, "DENY")
+  assert.equal(decision.reason_code, "POLICY_NOT_CONFIGURED")
+})
+
 test("the Platform Bot access gate follows the installed connection lifecycle", async () => {
   const tenantId = "tenant-bot-access"
   let lifecycle: "ENABLED" | "DISABLED" = "ENABLED"

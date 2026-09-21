@@ -21,10 +21,12 @@ test("the runtime capability registry declares every executable Bot policy targe
     "web_search.query",
     "mcp.invoke",
     "remote_hands.use",
+    "computer.use",
   ])
   assert.deepEqual(RUNTIME_CAPABILITY_REGISTRY["shell.exec"], ["expose", "execute"])
   assert.deepEqual(RUNTIME_CAPABILITY_REGISTRY["mcp.invoke"], ["expose", "invoke"])
   assert.deepEqual(RUNTIME_CAPABILITY_REGISTRY["remote_hands.use"], ["expose", "use"])
+  assert.deepEqual(RUNTIME_CAPABILITY_REGISTRY["computer.use"], ["expose", "invoke"])
   assert.deepEqual(RUNTIME_CAPABILITY_REGISTRY["browser.open"], ["expose"])
   assert.deepEqual(RUNTIME_CAPABILITY_REGISTRY["web_search.query"], ["expose"])
 })

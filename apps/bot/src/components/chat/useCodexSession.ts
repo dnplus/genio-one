@@ -28,11 +28,11 @@ import type { ApprovalRequest } from "./ApprovalCard"
 import type { UserInputQuestionRequest } from "./UserInputQuestionCard"
 import type { InstallElicitationRequest } from "./InstallElicitationCard"
 import type { CodexLogin } from "./ChatMessageList"
-import { registerCodexStreamListeners } from "./codex-stream-listeners"
+import { registerCodexStreamListeners, type PendingExecution } from "./codex-stream-listeners"
 import { readCodexTurns, readEarlierCodexTurns } from "./codex-history"
 import type { ThreadResumeResponse } from "../../../server/generated/v2/ThreadResumeResponse"
 import { isMissingCodexThread } from "./codex-session-recovery"
-import { gatewayModelsFromDirectory, canonicalModelRoute, COMPANY_MODEL_UNAVAILABLE_MESSAGE, modelCatalogForRoute, modelProviderForRoute, modelRouteFailureMessage, modelRoutePresentation, runtimeFailureMessage, type ModelRoute } from "../../lib/model-route"
+import { gatewayModelsFromDirectory, canonicalModelRoute, COMPANY_MODEL_UNAVAILABLE_MESSAGE, isModelRouteFailure, isRuntimePolicyFailure, modelCatalogForRoute, modelProviderForRoute, modelRouteFailureMessage, modelRoutePresentation, runtimeFailureMessage, type ModelRoute } from "../../lib/model-route"
 
 export interface UseCodexSessionOptions {
   activeBot: BotInstance
@@ -54,6 +54,7 @@ export interface CodexSession {
   threadRef: React.RefObject<string | null>
   runtime: RuntimeDetails | null
   runtimeTiers: Partial<Record<"none" | "headless" | "desktop", RuntimeDetails>>
+  executionRuntime: RuntimeDetails | null
   runtimeState: string
   setRuntimeState: Dispatch<SetStateAction<string>>
   mcpStatus: string
@@ -78,8 +79,8 @@ export interface CodexSession {
   decideElicitation: (decision: "accept" | "decline", content?: Record<string, any>) => void
   dynamicSkills: Array<{ id: string; name: string; description: string; path?: string }>
   isTurnRunning: boolean
-  startThread: (details?: RuntimeDetails | null) => Promise<void>
-  requestRuntimeTier: (tier: "headless" | "desktop") => void
+  startThread: (details?: RuntimeDetails | null) => Promise<boolean>
+  requestRuntimeTier: (tier: "headless" | "desktop") => RuntimeDetails | null
   retryGenioMcp: () => Promise<void>
   refreshPendingInteractions: () => Promise<void>
   decideApproval: (decision: "accept" | "decline") => void
@@ -92,7 +93,25 @@ export interface CodexSession {
     taskRuntime: RuntimeDetails | null
     mentionedSkills: Array<{ id: string; name: string; path?: string; kind: string }>
   }) => Promise<void>
-  queuePendingExecution: (task: string, progressId: string) => void
+  queuePendingExecution: (task: string, progressId: string, restoreDraft: PendingExecution["restoreDraft"]) => "queued" | "busy" | "stale"
+  pendingExecutionStatus: () => "none" | "busy" | "stale"
+}
+
+export function selectedExecutionRuntime(
+  tier: "headless" | null,
+  runtimeTiers: Partial<Record<"none" | "headless" | "desktop", RuntimeDetails>>,
+) {
+  const runtime = tier ? runtimeTiers[tier] ?? null : null
+  return runtimeCanExec(runtime) ? runtime : null
+}
+
+export function nativeExecutionEnvironments(runtime: RuntimeDetails | null) {
+  if (!runtime?.environmentId || runtime.tier === "none") return []
+  return [{
+    environmentId: runtime.environmentId,
+    cwd: runtime.cwd,
+    runtimeWorkspaceRoots: [runtime.cwd],
+  }]
 }
 
 export function useCodexSession({
@@ -144,18 +163,22 @@ export function useCodexSession({
   const isTurnRunningRef = useRef(false)
   const [isTurnRunningState, setIsTurnRunningState] = useState(false)
   const runtimeDetailsRef = useRef<RuntimeDetails | null>(null)
+  const selectedExecutionTierRef = useRef<"headless" | null>(null)
+  const executionRuntimeRef = useRef<RuntimeDetails | null>(null)
+  const preparedExecutionEnvironmentRef = useRef<string | null>(null)
   const completedItemIdsRef = useRef<Set<string>>(new Set())
-  const threadStartsRef = useRef(new Map<string, Promise<void>>())
+  const threadStartsRef = useRef(new Map<string, Promise<boolean>>())
   const threadBotIdRef = useRef<string | null>(null)
-  const startThreadRef = useRef<(details?: RuntimeDetails | null, options?: { skipResume?: boolean }) => Promise<void>>(async () => {})
+  const startThreadRef = useRef<(details?: RuntimeDetails | null, options?: { skipResume?: boolean }) => Promise<boolean>>(async () => false)
   const selectBotRef = useRef<(botId: string) => Promise<void>>(async () => {})
   const prepareBotRef = useRef<() => Promise<void>>(async () => {})
-  const pendingExecutionRef = useRef<{ task: string; progressId: string } | null>(null)
+  const pendingExecutionRef = useRef<PendingExecution | null>(null)
   const pendingArtifactRef = useRef<{ path: string; environmentId: string; tier: "headless" | "desktop" } | null>(null)
   const modelDirectoryModelsRef = useRef<CodexModel[]>([])
 
   const [runtime, setRuntime] = useState<RuntimeDetails | null>(null)
   const [runtimeTiers, setRuntimeTiers] = useState<Partial<Record<"none" | "headless" | "desktop", RuntimeDetails>>>({})
+  const [executionRuntime, setExecutionRuntimeState] = useState<RuntimeDetails | null>(null)
   const [runtimeState, setRuntimeState] = useState(demo ? "展示模式" : "啟動中")
   const [mcpStatus, setMcpStatus] = useState(demo ? "展示模式" : `等待 ${modelRoutePresentation(activeBot.modelRoute).providerLabel} runtime`)
   const [modelDirectory, setModelDirectory] = useState<ModelRoute | null>(null)
@@ -178,6 +201,52 @@ export function useCodexSession({
     isTurnRunningRef.current = running
     if (isMountedRef.current) setIsTurnRunningState(running)
   }, [])
+
+  const setExecutionRuntime = useCallback((next: RuntimeDetails | null) => {
+    executionRuntimeRef.current = next
+    if (isMountedRef.current) setExecutionRuntimeState(next)
+  }, [])
+
+  const clearExecutionRuntime = useCallback(() => {
+    selectedExecutionTierRef.current = null
+    preparedExecutionEnvironmentRef.current = null
+    setExecutionRuntime(null)
+  }, [setExecutionRuntime])
+
+  const restorePendingExecution = useCallback((notice = "工作區狀態已變更；原工作已保留在輸入框，請重新送出。") => {
+    const pending = pendingExecutionRef.current
+    if (!pending) return false
+    pendingExecutionRef.current = null
+    pending.restoreDraft()
+    if (pending.botId === activeBotRef.current.id) {
+      setMessages((current) => [...current.filter((message) => message.id !== pending.progressId), {
+        id: `${pending.progressId}-canceled`,
+        localOnly: true,
+        role: "system",
+        text: notice,
+        createdAt: Date.now(),
+      }])
+    }
+    return true
+  }, [setMessages])
+
+  useEffect(() => {
+    const selected = selectedExecutionRuntime(selectedExecutionTierRef.current, runtimeTiers)
+    const current = executionRuntimeRef.current
+    if (!current) return
+    if (!selected || current.environmentId !== selected.environmentId || current.tier !== selected.tier) {
+      preparedExecutionEnvironmentRef.current = null
+      setExecutionRuntime(null)
+      return
+    }
+    if (current !== selected) setExecutionRuntime(selected)
+  }, [runtimeTiers, setExecutionRuntime])
+
+  useEffect(() => {
+    const pending = pendingExecutionRef.current
+    if (pending && (pending.botId !== activeBot.id || pending.modelRoute !== canonicalModelRoute(activeBot.modelRoute))) restorePendingExecution()
+    clearExecutionRuntime()
+  }, [activeBot.id, activeBot.modelRoute, clearExecutionRuntime, restorePendingExecution])
 
   const botInstructions = useCallback((bot: BotInstance, hasExec: boolean, tier: RuntimeDetails["tier"] = "none") => {
     // Preference only — never an auth control. No binding ⇒ none (not default-all).
@@ -258,7 +327,7 @@ export function useCodexSession({
   const startThread = useCallback((details?: RuntimeDetails | null, options: { skipResume?: boolean } = {}) => {
     const r = details ?? runtimeDetailsRef.current
     const client = clientRef.current
-    if (!r || !loggedInRef.current || !client) return Promise.resolve()
+    if (!r || !loggedInRef.current || !client) return Promise.resolve(false)
 
     const bot = activeBotRef.current
     const pending = threadStartsRef.current.get(bot.id)
@@ -267,7 +336,11 @@ export function useCodexSession({
     const isCurrent = () => isMountedRef.current && activeBotRef.current.id === bot.id && canonicalModelRoute(activeBotRef.current.modelRoute) === canonicalModelRoute(bot.modelRoute) && clientRef.current === client && connectionGenerationRef.current === generation
     const uiThreadId = demo ? activeThreadIdRef.current : `thread-${bot.id}-default`
     const storageKey = codexThreadStorageKey(bot.id, uiThreadId)
-    const hasExec = runtimeCanExec(r)
+    const selectedRuntime = selectedExecutionTierRef.current === r.tier && runtimeCanExec(r) ? r : null
+    const currentExecutionRuntime = selectedRuntime ?? executionRuntimeRef.current
+    const hasExec = runtimeCanExec(currentExecutionRuntime)
+    const environments = nativeExecutionEnvironments(currentExecutionRuntime)
+    const executionTier = currentExecutionRuntime?.tier ?? "none"
     const hydrateEarlierSegments = async (currentThreadId: string) => {
       const segments = await getBotExecutionSegments(tokenRef.current, bot.id)
       for (const segment of segments) {
@@ -286,7 +359,8 @@ export function useCodexSession({
       })
     }
 
-    const threadStarting = (async () => {
+    let threadStarting!: Promise<boolean>
+    threadStarting = (async () => {
       if (isCurrent()) setThreadReady(false)
       const route = canonicalModelRoute(bot.modelRoute)
       const cachedModels = modelCatalogForRoute(route, modelDirectoryModelsRef.current, modelsRef.current)
@@ -295,7 +369,7 @@ export function useCodexSession({
         : route === "genio-gateway"
           ? []
           : (await client.request("model/list", { limit: 100, includeHidden: false }) as { data: CodexModel[] }).data
-      if (!isCurrent()) return
+      if (!isCurrent()) return false
       modelsRef.current = catalog
       setModels(catalog)
       if (catalog.length === 0) {
@@ -304,7 +378,7 @@ export function useCodexSession({
         setChannelReady(false)
         setRuntimeState(route === "genio-gateway" ? COMPANY_MODEL_UNAVAILABLE_MESSAGE : "目前沒有可用的 Codex 模型，請確認訂閱與登入狀態後重新連線。")
         setAgentState("exclaim")
-        return
+        return false
       }
       const activeModel = preferredModel(catalog, readSavedModel(bot.id), route === "codex-subscription" ? DEFAULT_CODEX_MODEL : null)
       setSelectedModel(activeModel)
@@ -322,24 +396,25 @@ export function useCodexSession({
       }
 
       if (storedThreadId) {
-        if (!isCurrent()) return
+        if (!isCurrent()) return false
         try {
-          const resumed = await client.request("thread/resume", {
+          const resumed = await client.requestRaw("thread/resume", {
               threadId: storedThreadId,
               excludeTurns: true,
               model: activeModel,
               ...(modelProviderForRoute(bot.modelRoute) ? { modelProvider: modelProviderForRoute(bot.modelRoute) } : {}),
               approvalPolicy: "on-request",
               sandbox: hasExec ? "danger-full-access" : "read-only",
-              baseInstructions: botInstructions(bot, hasExec, r.tier),
+              baseInstructions: botInstructions(bot, hasExec, executionTier),
+              environments,
             }, bot.id) as ThreadResumeResponse
           resumed.thread.turns = await readCodexTurns(client, resumed.thread.id, bot.id)
-          if (!isCurrent()) return
+          if (!isCurrent()) return false
           threadBotIdRef.current = bot.id
           threadRef.current = resumed.thread.id
           sessionStorage.setItem(storageKey, resumed.thread.id)
-          if (resumed.thread.turns.length > 0) await saveBotSession(tokenRef.current, bot.id, { appServerThreadId: resumed.thread.id, activeRuntimeTier: r.tier })
-          if (!isCurrent()) return
+          if (resumed.thread.turns.length > 0) await saveBotSession(tokenRef.current, bot.id, { appServerThreadId: resumed.thread.id, activeRuntimeTier: executionTier })
+          if (!isCurrent()) return false
           safeTimeout(() => scrollToBottom(false), 50)
           importHistory(resumed.thread.id)
           setThreadReady(true)
@@ -350,10 +425,10 @@ export function useCodexSession({
           void refreshGenioMcp(client, resumed.thread.id).catch((error) => {
             if (isMountedRef.current) setMcpStatus(error instanceof Error ? error.message : "GENIO_ONE_MCP_UNAVAILABLE")
           })
-          return
+          return true
         } catch (error) {
           if (!isMissingCodexThread(error)) throw error
-          if (!isCurrent()) return
+          if (!isCurrent()) return false
           if (persistedThreadId) await saveBotSession(tokenRef.current, bot.id, { appServerThreadId: null })
           if (persistedThreadId) setMessages((current) => current.some((message) => message.id === `session-unavailable-${storedThreadId}`) ? current : [...current, {
             id: `session-unavailable-${storedThreadId}`,
@@ -370,16 +445,12 @@ export function useCodexSession({
         approvalPolicy: "on-request",
         sandbox: hasExec ? "danger-full-access" : "read-only",
         serviceName: "genio-one-bot",
-        baseInstructions: botInstructions(bot, hasExec, r.tier),
-        environments: hasExec && r.environmentId ? [{
-          environmentId: r.environmentId,
-          cwd: r.cwd,
-          runtimeWorkspaceRoots: [r.cwd],
-        }] : [],
+        baseInstructions: botInstructions(bot, hasExec, executionTier),
+        environments,
       }, bot.id) as { thread: { id: string } }
 
       sessionStorage.setItem(storageKey, started.thread.id)
-      if (!isCurrent()) return
+      if (!isCurrent()) return false
       threadBotIdRef.current = bot.id
       threadRef.current = started.thread.id
       importHistory(started.thread.id)
@@ -389,18 +460,38 @@ export function useCodexSession({
       void refreshGenioMcp(client, started.thread.id).catch((error) => {
         if (isMountedRef.current) setMcpStatus(error instanceof Error ? error.message : "GENIO_ONE_MCP_UNAVAILABLE")
       })
+      return true
     })().catch((error) => {
-      if (!isCurrent()) return
+      if (!isCurrent()) return false
       console.warn(JSON.stringify({ event: "bot.session.restore_failed", bot_id: bot.id, reason: error instanceof Error ? error.message : "UNKNOWN" }))
-      setRuntimeState(modelRouteFailureMessage(canonicalModelRoute(bot.modelRoute), error))
+      const modelFailure = isModelRouteFailure(error)
+      if (currentExecutionRuntime && !modelFailure && isRuntimePolicyFailure(error)) {
+        clearExecutionRuntime()
+        const pending = pendingExecutionRef.current
+        if (pending?.botId === bot.id && pending.connectionGeneration === generation && pending.modelRoute === canonicalModelRoute(bot.modelRoute)) {
+          restorePendingExecution("Headless 工作區未獲授權；原工作已保留在輸入框，請取得授權後重新送出。")
+        }
+        return new Promise<boolean>((resolve) => {
+          safeTimeout(() => {
+            if (!isCurrent()) {
+              resolve(false)
+              return
+            }
+            if (threadStartsRef.current.get(bot.id) === threadStarting) threadStartsRef.current.delete(bot.id)
+            void startThreadRef.current(r, options).then(resolve)
+          }, 0)
+        })
+      }
+      setRuntimeState(modelFailure ? modelRouteFailureMessage(canonicalModelRoute(bot.modelRoute), error) : runtimeFailureMessage(error))
       setAgentState("exclaim")
+      return false
     }).finally(() => {
       if (threadStartsRef.current.get(bot.id) === threadStarting) threadStartsRef.current.delete(bot.id)
     })
     threadStartsRef.current.set(bot.id, threadStarting)
 
     return threadStarting
-  }, [botInstructions, demo, refreshGenioMcp, safeTimeout, scrollToBottom, setMessages])
+  }, [botInstructions, clearExecutionRuntime, demo, refreshGenioMcp, restorePendingExecution, safeTimeout, scrollToBottom, setMessages])
 
   startThreadRef.current = startThread
 
@@ -414,7 +505,9 @@ export function useCodexSession({
         initialized = false
         loggedInRef.current = false
         connectionGenerationRef.current++
+        restorePendingExecution()
         threadStartsRef.current.clear()
+        clearExecutionRuntime()
         setThreadReady(false)
         setChannelReady(false)
       }
@@ -482,6 +575,10 @@ export function useCodexSession({
     }
 
     const attachRuntimeDesktop = async (details: RuntimeDetails) => {
+      const bot = activeBotRef.current
+      const route = canonicalModelRoute(bot.modelRoute)
+      const generation = connectionGenerationRef.current
+      const isCurrent = () => isMountedRef.current && activeBotRef.current.id === bot.id && canonicalModelRoute(activeBotRef.current.modelRoute) === route && clientRef.current === client && connectionGenerationRef.current === generation
       runtimeDetailsRef.current = details
       if (details.execReady && details.environmentId && details.execServerUrl) {
         await client.request("environment/add", {
@@ -491,8 +588,13 @@ export function useCodexSession({
         })
         await client.request("environment/info", { environmentId: details.environmentId })
       }
-      if (initialized && loggedInRef.current) {
-        await startThreadRef.current(details)
+      if (!isCurrent()) return
+      const threadStarted = initialized && loggedInRef.current
+        ? await startThreadRef.current(details)
+        : false
+      if (threadStarted && isCurrent() && selectedExecutionTierRef.current === details.tier && runtimeCanExec(details) && details.environmentId) {
+        preparedExecutionEnvironmentRef.current = details.environmentId
+        setExecutionRuntime(details)
       }
     }
 
@@ -508,6 +610,8 @@ export function useCodexSession({
       completedItemIdsRef,
       pendingArtifactRef,
       pendingExecutionRef,
+      isPendingExecutionCurrent: (pending) => pending.botId === activeBotRef.current.id && pending.connectionGeneration === connectionGenerationRef.current && pending.modelRoute === canonicalModelRoute(activeBotRef.current.modelRoute),
+      isRuntimePrepared: (details) => selectedExecutionTierRef.current === details.tier && executionRuntimeRef.current?.environmentId === details.environmentId && preparedExecutionEnvironmentRef.current === details.environmentId,
       modelDirectoryModelsRef,
       loggedInRef,
       isTurnRunningRef,
@@ -533,6 +637,7 @@ export function useCodexSession({
       setTurnRunning,
       prepareCodexSession,
       attachRuntimeDesktop,
+      shouldPrepareRuntime: (details) => selectedExecutionTierRef.current === details.tier && runtimeCanExec(details) && preparedExecutionEnvironmentRef.current !== details.environmentId,
       onMarkBotUnread,
       onBotWorkEvent,
       onPendingExecutionReady,
@@ -555,14 +660,14 @@ export function useCodexSession({
     return () => {
       setThreadReady(false)
       setChannelReady(false)
-      startThreadRef.current = async () => {}
+      startThreadRef.current = async () => false
       selectBotRef.current = async () => {}
       prepareBotRef.current = async () => {}
       unsubscribe()
       resetConnection()
       client.close()
     }
-  }, [demo, focusInput, onMarkBotUnread, onBotWorkEvent, onPendingExecutionReady, onSignOut, prepareModelProvider, safeTimeout, setArtifacts, setMessages, setTurnRunning])
+  }, [clearExecutionRuntime, demo, focusInput, onMarkBotUnread, onBotWorkEvent, onPendingExecutionReady, onSignOut, prepareModelProvider, restorePendingExecution, safeTimeout, setArtifacts, setExecutionRuntime, setMessages, setTurnRunning])
 
   const botModelRoute = canonicalModelRoute(activeBot.modelRoute)
   const botConfigurationKey = JSON.stringify([activeBot.id, activeBot.name, activeBot.description, activeBot.role, activeBot.workspacePath, activeBot.skills, activeBot.bindings, activeBot.allowedTools])
@@ -631,6 +736,11 @@ export function useCodexSession({
   }, [demo, token])
 
   const requestRuntimeTier = useCallback((tier: "headless" | "desktop") => {
+    if (tier === "headless") {
+      selectedExecutionTierRef.current = "headless"
+      const selected = selectedExecutionRuntime("headless", runtimeTiers)
+      if (selected && executionRuntimeRef.current?.environmentId === selected.environmentId && preparedExecutionEnvironmentRef.current === selected.environmentId) return selected
+    }
     if (demo) {
       const simulated: RuntimeDetails = {
         kind: "e2b-self-hosted",
@@ -644,18 +754,23 @@ export function useCodexSession({
       }
       setRuntime(simulated)
       setRuntimeTiers((current) => ({ ...current, [tier]: simulated }))
+      if (tier === "headless") {
+        preparedExecutionEnvironmentRef.current = simulated.environmentId
+        setExecutionRuntime(simulated)
+      }
       setRuntimeState(`${tier === "desktop" ? "Desktop" : "Headless"} 就緒`)
-      return
+      return tier === "headless" ? simulated : null
     }
     const client = clientRef.current
     if (!client) {
       setRuntimeState("Codex app-server 尚未連線")
-      return
+      return null
     }
     setRuntimeState(`${tier === "desktop" ? "Desktop" : "Headless"} 啟動中`)
     setAgentState("orbit")
     client.notifyRaw("genio/runtime/ensure", { tier, botId: activeBotRef.current.id })
-  }, [demo])
+    return null
+  }, [demo, runtimeTiers, setExecutionRuntime])
 
   const retryGenioMcp = useCallback(async () => {
     const client = clientRef.current
@@ -803,23 +918,66 @@ export function useCodexSession({
     } catch (error) {
       setTurnRunning(false)
       pendingArtifactRef.current = null
+      if (executionRuntimeRef.current?.environmentId === taskRuntime?.environmentId && !isModelRouteFailure(error) && isRuntimePolicyFailure(error)) clearExecutionRuntime()
       if (isMountedRef.current) {
         setRuntimeState(error instanceof Error ? error.message : "執行失敗")
         setAgentState("exclaim")
       }
       throw error
     }
-  }, [selectedModel, setTurnRunning])
+  }, [clearExecutionRuntime, selectedModel, setTurnRunning])
 
-  const queuePendingExecution = useCallback((task: string, progressId: string) => {
-    pendingExecutionRef.current = { task, progressId }
-  }, [])
+  const queuePendingExecution = useCallback((task: string, progressId: string, restoreDraft: PendingExecution["restoreDraft"]) => {
+    const pending = pendingExecutionRef.current
+    const botId = activeBotRef.current.id
+    const generation = connectionGenerationRef.current
+    const modelRoute = canonicalModelRoute(activeBotRef.current.modelRoute)
+    if (pending) {
+      const isCurrent = pending.botId === botId && pending.connectionGeneration === generation && pending.modelRoute === modelRoute
+      if (isCurrent) return "busy"
+      const staleSameBot = pending.botId === botId
+      restorePendingExecution()
+      if (staleSameBot) return "stale"
+      pendingExecutionRef.current = {
+        task,
+        progressId,
+        botId,
+        connectionGeneration: generation,
+        modelRoute,
+        restoreDraft,
+      }
+      return "queued"
+    }
+    pendingExecutionRef.current = {
+      task,
+      progressId,
+      botId,
+      connectionGeneration: generation,
+      modelRoute,
+      restoreDraft,
+    }
+    return "queued"
+  }, [restorePendingExecution])
+
+  const pendingExecutionStatus = useCallback(() => {
+    const pending = pendingExecutionRef.current
+    if (!pending) return "none"
+    const botId = activeBotRef.current.id
+    const isCurrent = pending.botId === botId
+      && pending.connectionGeneration === connectionGenerationRef.current
+      && pending.modelRoute === canonicalModelRoute(activeBotRef.current.modelRoute)
+    if (isCurrent) return "busy"
+    const staleSameBot = pending.botId === botId
+    restorePendingExecution()
+    return staleSameBot ? "stale" : "none"
+  }, [restorePendingExecution])
 
   return {
     clientRef,
     threadRef,
     runtime,
     runtimeTiers,
+    executionRuntime,
     runtimeState,
     setRuntimeState,
     mcpStatus,
@@ -854,5 +1012,6 @@ export function useCodexSession({
     uploadFeedback,
     startTurn,
     queuePendingExecution,
+    pendingExecutionStatus,
   }
 }

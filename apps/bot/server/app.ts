@@ -36,6 +36,9 @@ import { botToolRoutes } from "./routes/bot-tools"
 import { botMemoryRoutes } from "./routes/bot-memory"
 import { modelGatewayRelayRoutes } from "./model-gateway-relay"
 import { createRuntimePolicyClient } from "./runtime-policy"
+import { botDefaultToolRoutes } from "./routes/bot-default-tools"
+import { BotSchedules } from "./bot-schedules"
+import { runBotSchedules } from "./bot-schedule-runner"
 
 export async function createBotApp(
   contextOverrides?: Partial<BotServerContext>,
@@ -51,7 +54,6 @@ export async function createBotApp(
   const runtimeBroker = contextOverrides?.runtimeBroker ?? new RuntimeBroker({ provision: createManagedDesktop })
   const runtimePolicy = contextOverrides?.runtimePolicy ?? createRuntimePolicyClient()
   const stopObserving = runtimeBroker.observe((principal, line, runtimeId) => botRegistry.recordRuntimeEvent(principal, line, runtimeId))
-  app.addHook("preClose", async () => { await runtimeBroker.close() })
   app.addHook("onClose", async () => { stopObserving() })
 
   const context: BotServerContext = {
@@ -62,10 +64,16 @@ export async function createBotApp(
     runtimeBroker,
     createCodexRuntime: contextOverrides?.createCodexRuntime,
     runtimePolicy,
+    botSchedules: contextOverrides?.botSchedules ?? new BotSchedules(botRegistry.db),
   }
   instrumentModuleGraph(context as unknown as Record<string, unknown>, "genio-one-bot")
+  const scheduleRunner = runBotSchedules(context)
   context.localHands = new LocalHands(context)
-  app.addHook("preClose", async () => { await context.localHands?.close() })
+  app.addHook("preClose", async () => {
+    scheduleRunner.stop()
+    await context.localHands?.close()
+    await runtimeBroker.close()
+  })
   reconcileTerminalInvocations(botRegistry)
   const continuationTimer = setInterval(() => {
     try { reconcileTerminalInvocations(botRegistry) }
@@ -84,6 +92,7 @@ export async function createBotApp(
   await healthRoutes(app, context)
   await botQuestionRoutes(app, context)
   await botToolRoutes(app, context)
+  await botDefaultToolRoutes(app, context)
   await botMemoryRoutes(app, context)
   await proxyRoutes(app, context)
   await botRoutes(app, context)

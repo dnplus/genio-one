@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { GENIO_GATEWAY_MODEL_PROVIDER, GOOGLE_GEMINI_PREPAYMENT_DEPLETED_MESSAGE, MODEL_PROVIDER_RATE_LIMITED_MESSAGE, modelCatalogForRoute, modelProviderForRoute, modelRouteFailureMessage, modelRoutePresentation, modelRouteRequiresCodexLogin, runtimeFailureMessage } from "./model-route"
+import { GENIO_GATEWAY_MODEL_PROVIDER, GOOGLE_GEMINI_PREPAYMENT_DEPLETED_MESSAGE, MODEL_PROVIDER_RATE_LIMITED_MESSAGE, isModelRouteFailure, isRuntimePolicyFailure, modelCatalogForRoute, modelProviderForRoute, modelRouteFailureMessage, modelRoutePresentation, modelRouteRequiresCodexLogin, runtimeFailureMessage } from "./model-route"
 
 describe("model route presentation", () => {
   test("keeps provider copy and native provider selection separate", () => {
@@ -23,6 +23,10 @@ describe("model route presentation", () => {
     expect(modelRouteFailureMessage("codex-subscription", new Error(JSON.stringify({ code: "POLICY_DISABLED", message: "POLICY_DISABLED" })))).toBe("公司政策不允許使用個人 Codex。 [POLICY_DISABLED]")
     expect(runtimeFailureMessage("DEFAULT_DENY")).toBe("公司政策不允許這項要求。 [DEFAULT_DENY]")
     expect(runtimeFailureMessage("DEFAULT_DENY", "runtime")).toBe("公司政策不允許啟動執行環境。 [DEFAULT_DENY]")
+    expect(isModelRouteFailure("DEFAULT_DENY")).toBe(false)
+    expect(isRuntimePolicyFailure("DEFAULT_DENY")).toBe(true)
+    expect(isModelRouteFailure("RULE_DENY:codex.subscription")).toBe(true)
+    expect(isModelRouteFailure("RULE_DENY:shell.exec")).toBe(false)
   })
 
   test("maps a depleted Gemini prepayment balance without exposing the provider response", () => {

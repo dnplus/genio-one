@@ -1,0 +1,31 @@
+.bot-owned-skills-panel { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.owned-skill-workspace { display: grid; grid-template-columns: minmax(170px, .55fr) minmax(0, 1.45fr); gap: 12px; min-height: 360px; }
+.owned-skill-list, .owned-skill-editor { border: 1px solid #dce4e1; border-radius: 12px; background: #fff; min-width: 0; }
+.owned-skill-list { display: flex; flex-direction: column; gap: 6px; padding: 10px; }
+.owned-skill-list > strong, .owned-skill-create > strong { padding: 2px 4px; color: #40514c; font-size: 12px; }
+.owned-skill-list > p { display: flex; align-items: center; gap: 6px; margin: 4px; color: #657571; font-size: 12px; }
+.owned-skill-list > button { display: flex; align-items: flex-start; gap: 8px; width: 100%; border: 0; border-radius: 8px; padding: 8px; background: transparent; color: #27312e; text-align: left; font: inherit; cursor: pointer; }
+.owned-skill-list > button:hover, .owned-skill-list > button.active { background: #eef7f5; color: #0c6a5e; }
+.owned-skill-list > button svg { width: 16px; flex-shrink: 0; margin-top: 1px; }
+.owned-skill-list > button span { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; font-size: 12px; font-weight: 600; }
+.owned-skill-list > button small { color: #657571; font-size: 11px; font-weight: 400; }
+.owned-skill-create { display: flex; flex-direction: column; gap: 6px; margin-top: auto; padding-top: 10px; border-top: 1px solid #e3e8e6; }
+.owned-skill-create input, .owned-skill-file-controls input, .owned-skill-file-controls select { box-sizing: border-box; width: 100%; border: 1px solid #cfdad5; border-radius: 8px; padding: 7px 8px; background: #fff; color: #27312e; font: inherit; font-size: 12px; }
+.owned-skill-create .secondary-button { min-height: 32px; padding: 0 9px; align-self: flex-start; font-size: 12px; }
+.owned-skill-editor { display: flex; flex-direction: column; gap: 12px; padding: 12px; }
+.owned-skill-editor > header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.owned-skill-editor > header > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.owned-skill-editor > header strong { color: #24302d; overflow-wrap: anywhere; }
+.owned-skill-editor > header small { color: #657571; font-size: 12px; }
+.owned-skill-empty { margin: auto; color: #657571; font-size: 13px; line-height: 1.5; text-align: center; max-width: 320px; }
+.owned-skill-file-controls { display: grid; grid-template-columns: minmax(130px, .6fr) minmax(0, 1.4fr); gap: 10px; }
+.owned-skill-file-controls label { display: flex; flex-direction: column; gap: 4px; color: #40514c; font-size: 12px; font-weight: 600; }
+.owned-skill-file-controls label > div { display: flex; gap: 6px; }
+.owned-skill-file-controls .secondary-button { min-height: 32px; padding: 0 9px; flex-shrink: 0; font-size: 12px; }
+.owned-skill-source { box-sizing: border-box; min-height: 230px; width: 100%; resize: vertical; border: 1px solid #cfdad5; border-radius: 8px; padding: 10px; background: #fcfdfd; color: #27312e; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.owned-skill-history { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding-top: 10px; border-top: 1px solid #e3e8e6; }
+.owned-skill-history > span { display: inline-flex; align-items: center; gap: 5px; color: #40514c; font-size: 12px; font-weight: 600; margin-right: auto; }
+.owned-skill-history > span svg { width: 15px; }
+.owned-skill-history .secondary-button { min-height: 30px; padding: 0 8px; font-size: 11px; }
+.owned-skill-history small { flex-basis: 100%; color: #657571; font-size: 11px; }
+@media (max-width: 640px) { .owned-skill-workspace { grid-template-columns: 1fr; } .owned-skill-list { max-height: 250px; overflow: auto; } .owned-skill-file-controls { grid-template-columns: 1fr; } }

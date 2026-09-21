@@ -89,6 +89,7 @@ function createContext(
   }
   const session = {
     id: "runtime-session",
+    relaySecret: "private-relay-secret",
     principal,
     details: { kind: "local", tier: "none", cwd: "/srv/genio", desktopUrl: null, sandboxId: null, environmentId: null, execServerUrl: null, execReady: false },
     runtimeDetails: {},
@@ -111,6 +112,7 @@ function createContext(
     setThreadHistoryStatus() {},
   }
   const runtimeBroker = {
+    get: (id: string) => id === session.id ? session : undefined,
     claimBotTurn: () => () => {},
     async start(_principal: unknown, nextCallbacks: typeof callbacks) {
       callbacks = nextCallbacks
@@ -179,9 +181,18 @@ function createContext(
     modelDirectory,
     capabilityGate,
     runtimePolicy,
+    botSchedules: { resumeAuthorized() {} },
     session,
     botToolSessions: { config: () => ({ url: "http://bot-tools", http_headers: { Authorization: "Bearer managed" }, required: false }) },
   }
+}
+
+function activateDesktop(context: ReturnType<typeof createContext>) {
+  const local = { kind: "local", tier: "none", cwd: "/local/bot", desktopUrl: null, sandboxId: null, environmentId: null, execServerUrl: null, execReady: false }
+  const desktop = { kind: "e2b-self-hosted", tier: "desktop", cwd: "/home/user", desktopUrl: "https://desktop.example", sandboxId: "desktop-sandbox", environmentId: "desktop-environment", execServerUrl: "ws://desktop.example", execReady: true }
+  context.session.details = desktop
+  context.session.runtimeDetails = { none: local, desktop }
+  return { local, desktop }
 }
 
 describe("Codex runtime policy route", () => {
@@ -202,6 +213,8 @@ describe("Codex runtime policy route", () => {
     try {
       socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
       await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/runtimeReady"))
+      expect(socket.sent.join("\n")).not.toContain("private-relay-secret")
       socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: "bot-dylan" } }))
       await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
       expect(context.runtimeMessages.find((message) => message.method === "skills/extraRoots/set")?.params).toEqual({ extraRoots: ["/srv/ce-package/skills/archify"] })
@@ -214,6 +227,74 @@ describe("Codex runtime policy route", () => {
         cwds: ["/srv/ce-package"],
         forceReload: true,
       })
+    } finally {
+      globalThis.fetch = originalFetch
+      socket.close()
+    }
+  })
+
+  test("returns only a lease-bound proxied desktop URL from runtime status", async () => {
+    const context = createContext([], [])
+    const rawDesktop = {
+      kind: "e2b-self-hosted",
+      tier: "desktop",
+      cwd: "/home/user",
+      desktopUrl: "https://6080-sandbox-1.localhost/vnc.html?autoconnect=true&password=private-vnc-password",
+      sandboxId: "sandbox-1",
+      environmentId: "e2b-desktop",
+      execServerUrl: "ws://runtime",
+      execReady: true,
+    }
+    const desktop = { details: rawDesktop, close: async () => {} }
+    context.session.details = rawDesktop
+    context.session.runtimeDetails = { desktop: rawDesktop }
+    context.session.leases = { desktop }
+    context.session.desktop = desktop
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => Response.json(principal)) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/runtime/status" }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
+      const status = socket.sent.map((line) => JSON.parse(line)).find((message) => message.id === 2)
+      expect(status.result.active.desktopUrl).toStartWith("/api/desktop/runtime-session/vnc.html?desktop_grant=")
+      expect(status.result.tiers.desktop.desktopUrl).toStartWith("/api/desktop/runtime-session/vnc.html?desktop_grant=")
+      const desktopUrl = new URL(status.result.active.desktopUrl, "http://bot.test")
+      expect([...desktopUrl.searchParams.keys()]).toEqual(["desktop_grant"])
+      expect(desktopUrl.hash).toContain("password=private-vnc-password")
+      expect(JSON.stringify(status)).not.toContain("6080-sandbox-1.localhost")
+
+      const headless = {
+        kind: "local",
+        tier: "headless",
+        cwd: "/home/user",
+        desktopUrl: null,
+        sandboxId: "sandbox-1",
+        environmentId: "e2b-headless",
+        execServerUrl: "ws://runtime",
+        execReady: true,
+      }
+      context.session.details = headless
+      context.session.runtimeDetails = { desktop: rawDesktop, headless }
+      socket.emit("message", JSON.stringify({ id: 3, method: "genio/runtime/status" }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 3))
+      const retained = socket.sent.map((line) => JSON.parse(line)).find((message) => message.id === 3)
+      expect(retained.result.active.desktopUrl).toBeNull()
+      expect(retained.result.tiers.headless.desktopUrl).toBeNull()
+      expect(retained.result.tiers.desktop.desktopUrl).toStartWith("/api/desktop/runtime-session/vnc.html?desktop_grant=")
+      expect(new URL(retained.result.tiers.desktop.desktopUrl, "http://bot.test").hash).toContain("password=private-vnc-password")
+
+      context.session.leases = {}
+      socket.emit("message", JSON.stringify({ id: 4, method: "genio/runtime/status" }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 4))
+      const expired = socket.sent.map((line) => JSON.parse(line)).find((message) => message.id === 4)
+      expect(expired.result.active.desktopUrl).toBeNull()
+      expect(expired.result.tiers.desktop.desktopUrl).toBeNull()
     } finally {
       globalThis.fetch = originalFetch
       socket.close()
@@ -277,17 +358,19 @@ describe("Codex runtime policy route", () => {
       await waitFor(() => context.runtimeMessages.some((message) => message.id === 3))
       const forwarded = context.runtimeMessages.find((message) => message.id === 3) as { params: { config: Record<string, unknown> } }
       expect(forwarded.params.config["mcp_servers.genio_mcp_context7"]).toMatchObject({
-        url: "https://bot.example.test/api/mcp-gateway/runtime-session/genio.demo.context7/mcp",
+        url: "https://bot.example.test/api/mcp-gateway/runtime-session/bots/bot-dylan/genio.demo.context7/mcp",
       })
       expect(forwarded.params.config["mcp_servers.genio_mcp_archify"]).toMatchObject({
-        url: "https://bot.example.test/api/mcp-gateway/runtime-session/genio.demo.archify/mcp",
+        url: "https://bot.example.test/api/mcp-gateway/runtime-session/bots/bot-dylan/genio.demo.archify/mcp",
       })
-      expect(catalogRequests).toBe(1)
+      expect(catalogRequests).toBe(2)
       expect(calls.filter((call) => call.capability_id === "mcp.invoke" && call.action === "expose")).toHaveLength(4)
       expect(reports.filter((report) => report.capabilityId === "mcp.invoke" && report.action === "expose").map((report) => report.outcome)).toEqual(["ALLOW", "ALLOW", "COMPLETED", "COMPLETED"])
-      expect(context.session.managedMcpMounts).toEqual({
-        "genio.demo.context7": { resourceId: "genio.demo.context7", capabilityId: "context7", serverName: "genio_mcp_context7", hostname: "context7.stellar-freight.localhost", basePath: "/" },
-        "genio.demo.archify": { resourceId: "genio.demo.archify", capabilityId: "archify", serverName: "genio_mcp_archify", hostname: "archify.stellar-freight.localhost", basePath: "/" },
+      expect(context.session.managedMcpMountsByBot).toEqual({
+        "bot-dylan": {
+          "genio.demo.context7": { resourceId: "genio.demo.context7", capabilityId: "context7", serverName: "genio_mcp_context7", hostname: "context7.stellar-freight.localhost", basePath: "/" },
+          "genio.demo.archify": { resourceId: "genio.demo.archify", capabilityId: "archify", serverName: "genio_mcp_archify", hostname: "archify.stellar-freight.localhost", basePath: "/" },
+        },
       })
     } finally {
       globalThis.fetch = originalFetch
@@ -331,7 +414,7 @@ describe("Codex runtime policy route", () => {
       await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
       socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: "bot-dylan" } }))
       await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
-      expect(context.session.managedMcpMounts).toEqual({})
+      expect(context.session.managedMcpMountsByBot).toEqual({ "bot-dylan": {} })
       expect(calls.some((call) => call.capability_id === "mcp.invoke" && call.action === "expose" && call.decision === "DENY")).toBe(true)
       expect(reports.some((report) => report.capabilityId === "mcp.invoke" && report.action === "expose" && report.outcome === "DENY")).toBe(true)
       socket.emit("message", JSON.stringify({ id: 3, method: "thread/start", params: { model: "gpt-5.6-luna", environments: [] } }))
@@ -395,16 +478,18 @@ describe("Codex runtime policy route", () => {
       await waitFor(() => context.runtimeMessages.some((message) => message.id === 3))
       const forwarded = context.runtimeMessages.find((message) => message.id === 3) as { params: { config: Record<string, unknown> } }
       expect(forwarded.params.config["mcp_servers.genio_mcp_notion"]).toMatchObject({
-        url: `https://bot.example.test/api/mcp-gateway/runtime-session/${notionResourceId}/mcp`,
+        url: `https://bot.example.test/api/mcp-gateway/runtime-session/bots/bot-dylan/${notionResourceId}/mcp`,
       })
       expect(forwarded.params.config["mcp_servers.genio_mcp_uninstalled"]).toBeUndefined()
-      expect(context.session.managedMcpMounts).toEqual({
-        [notionResourceId]: {
-          resourceId: notionResourceId,
-          capabilityId: "notion.search",
-          serverName: "genio_mcp_notion",
-          hostname: "notion.stellar-freight.localhost",
-          basePath: "/mcp",
+      expect(context.session.managedMcpMountsByBot).toEqual({
+        "bot-dylan": {
+          [notionResourceId]: {
+            resourceId: notionResourceId,
+            capabilityId: "notion.search",
+            serverName: "genio_mcp_notion",
+            hostname: "notion.stellar-freight.localhost",
+            basePath: "/mcp",
+          },
         },
       })
     } finally {
@@ -729,13 +814,14 @@ describe("Codex runtime policy route", () => {
     }
   })
 
-  test("denies a shell execution turn before forwarding when the PDP denies shell", async () => {
+  test.each(["headless", "desktop"] as const)("denies an explicitly owned %s execution turn before forwarding when the PDP denies shell", async (tier) => {
     const calls: Array<Record<string, unknown>> = []
     const reports: Array<Record<string, unknown>> = []
     const context = createContext(calls, reports, false, ["shell.exec"])
-    context.session.details = { kind: "local", tier: "headless", cwd: "/srv/genio", desktopUrl: null, sandboxId: "sandbox-1", environmentId: "e2b-headless", execServerUrl: "ws://runtime", execReady: true }
+    const environmentId = `e2b-${tier}`
+    context.session.details = { kind: "e2b-self-hosted", tier, cwd: "/srv/genio", desktopUrl: tier === "desktop" ? "https://desktop.example" : null, sandboxId: "sandbox-1", environmentId, execServerUrl: "ws://runtime", execReady: true }
     context.session.runtimeDetails = {
-      headless: context.session.details,
+      [tier]: context.session.details,
     }
     let handler: ((socket: FakeSocket) => void) | null = null
     await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
@@ -754,7 +840,7 @@ describe("Codex runtime policy route", () => {
         params: {
           threadId: "thread-dylan",
           input: [{ type: "text", text: "run a command" }],
-          environments: [{ environmentId: "e2b-headless", cwd: "/srv/genio", runtimeWorkspaceRoots: ["/srv/genio"] }],
+          environments: [{ environmentId, cwd: "/srv/genio", runtimeWorkspaceRoots: ["/srv/genio"] }],
         },
       }))
       await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 3 && JSON.parse(line).error?.code))
@@ -802,6 +888,7 @@ describe("Codex runtime policy route", () => {
     const context = createContext(calls, reports)
     context.session.details = { kind: "local", tier: "headless", cwd: "/srv/genio", desktopUrl: null, sandboxId: "sandbox-1", environmentId: "e2b-headless", execServerUrl: "ws://runtime", execReady: true }
     context.session.runtimeDetails = {
+      none: { kind: "local", tier: "none", cwd: "/local/bot", desktopUrl: null, sandboxId: null, environmentId: null, execServerUrl: null, execReady: false },
       headless: context.session.details,
     }
     let handler: ((socket: FakeSocket) => void) | null = null
@@ -820,6 +907,153 @@ describe("Codex runtime policy route", () => {
       const forwarded = context.runtimeMessages.find((message) => message.id === 3) as { params: Record<string, any> }
       expect(forwarded.params.config["features.shell_tool"]).toBe(false)
       expect(forwarded.params.sandbox).toBe("read-only")
+    } finally {
+      globalThis.fetch = originalFetch
+      socket.close()
+    }
+  })
+
+  test.each([
+    ["thread/start", "omitted", { model: "gpt-5.6-luna" }],
+    ["thread/start", "empty", { model: "gpt-5.6-luna", environments: [] }],
+    ["turn/start", "omitted", { threadId: "thread-dylan", input: [{ type: "text", text: "Continue" }] }],
+    ["turn/start", "empty", { threadId: "thread-dylan", input: [{ type: "text", text: "Continue" }], environments: [] }],
+  ] as const)("forwards %s with %s native intent as local-only", async (method, _intent, params) => {
+    const calls: Array<Record<string, unknown>> = []
+    const reports: Array<Record<string, unknown>> = []
+    const context = createContext(calls, reports, false, ["shell.exec"])
+    const { local } = activateDesktop(context)
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => new Response(JSON.stringify(principal), { status: 200 })) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: "bot-dylan" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
+      socket.emit("message", JSON.stringify({ id: 3, method, params }))
+      await waitFor(() => context.runtimeMessages.some((message) => message.id === 3))
+      const forwarded = context.runtimeMessages.find((message) => message.id === 3) as { params: Record<string, any> }
+      expect(forwarded.params.environments).toEqual([])
+      expect(forwarded.params.cwd).toBe(local.cwd)
+      expect(forwarded.params.runtimeWorkspaceRoots).toEqual([])
+      if (method === "thread/start") expect(forwarded.params.config["features.shell_tool"]).toBe(false)
+      else expect(forwarded.params.sandboxPolicy).toEqual({ type: "readOnly", networkAccess: false })
+      expect(calls.some((call) => call.capability_id === "shell.exec" && call.action === "execute")).toBe(false)
+    } finally {
+      globalThis.fetch = originalFetch
+      socket.close()
+    }
+  })
+
+  test("preserves explicit owned headless resume intent without forwarding an unsupported environment field", async () => {
+    const calls: Array<Record<string, unknown>> = []
+    const reports: Array<Record<string, unknown>> = []
+    const context = createContext(calls, reports)
+    activateDesktop(context)
+    const headless = { kind: "e2b-self-hosted", tier: "headless", cwd: "/workspace/headless", desktopUrl: null, sandboxId: "headless-sandbox", environmentId: "headless-environment", execServerUrl: "ws://headless.example", execReady: true }
+    context.session.runtimeDetails.headless = headless
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => new Response(JSON.stringify(principal), { status: 200 })) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: "bot-dylan" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
+      socket.emit("message", JSON.stringify({
+        id: 3,
+        method: "thread/resume",
+        params: { threadId: "thread-dylan", environments: [{ environmentId: "headless-environment", cwd: "/etc", runtimeWorkspaceRoots: ["/etc"] }] },
+      }))
+      await waitFor(() => context.runtimeMessages.some((message) => message.id === 3))
+      const forwarded = context.runtimeMessages.find((message) => message.id === 3) as { params: Record<string, any> }
+      expect(forwarded.params.environments).toBeUndefined()
+      expect(forwarded.params.cwd).toBe("/workspace/headless")
+      expect(forwarded.params.runtimeWorkspaceRoots).toEqual(["/workspace/headless"])
+      expect(forwarded.params.config["features.shell_tool"]).toBe(true)
+      expect(forwarded.params.config["features.unified_exec"]).toBe(true)
+      expect(forwarded.params.sandbox).toBe("workspace-write")
+      expect(calls.some((call) => call.capability_id === "shell.exec" && call.action === "execute" && call.decision === "ALLOW")).toBe(true)
+    } finally {
+      globalThis.fetch = originalFetch
+      socket.close()
+    }
+  })
+
+  test.each([
+    ["null", null],
+    ["number", 42],
+    ["string", "headless-environment"],
+    ["array", []],
+    ["empty object", {}],
+    ["non-string id", { environmentId: 42 }],
+  ] as const)("rejects a %s runtime environment descriptor before native forwarding", async (_label, descriptor) => {
+    const calls: Array<Record<string, unknown>> = []
+    const reports: Array<Record<string, unknown>> = []
+    const context = createContext(calls, reports)
+    activateDesktop(context)
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => new Response(JSON.stringify(principal), { status: 200 })) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: "bot-dylan" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
+      socket.emit("message", JSON.stringify({ id: 3, method: "thread/resume", params: { threadId: "thread-dylan", environments: [descriptor] } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 3 && JSON.parse(line).error?.code))
+      const error = socket.sent.map((line) => JSON.parse(line)).find((message) => message.id === 3)
+      expect(error.error.code).toBe("RUNTIME_ENVIRONMENT_NOT_OWNED")
+      expect(context.runtimeMessages.some((message) => message.id === 3)).toBe(false)
+      expect(calls.some((call) => call.capability_id === "shell.exec" && call.action === "execute")).toBe(false)
+      expect(socket.closeCode).toBeNull()
+    } finally {
+      globalThis.fetch = originalFetch
+      socket.close()
+    }
+  })
+
+  test.each([
+    ["omitted", {}],
+    ["empty", { environments: [] }],
+  ] as const)("clears a prior desktop environment before a %s turn", async (_intent, override) => {
+    const calls: Array<Record<string, unknown>> = []
+    const reports: Array<Record<string, unknown>> = []
+    const context = createContext(calls, reports)
+    const { local, desktop } = activateDesktop(context)
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => new Response(JSON.stringify(principal), { status: 200 })) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: "bot-dylan" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
+      socket.emit("message", JSON.stringify({ id: 3, method: "thread/start", params: { environments: [{ environmentId: desktop.environmentId, cwd: "/etc", runtimeWorkspaceRoots: ["/etc"] }] } }))
+      await waitFor(() => context.runtimeMessages.some((message) => message.id === 3))
+      const shellAuthorizations = calls.filter((call) => call.capability_id === "shell.exec" && call.action === "execute").length
+      expect(shellAuthorizations).toBe(1)
+      socket.emit("message", JSON.stringify({ id: 4, method: "turn/start", params: { threadId: "thread-dylan", input: [{ type: "text", text: "Continue" }], ...override } }))
+      await waitFor(() => context.runtimeMessages.some((message) => message.id === 4))
+      const forwarded = context.runtimeMessages.find((message) => message.id === 4) as { params: Record<string, any> }
+      expect(forwarded.params.environments).toEqual([])
+      expect(forwarded.params.cwd).toBe(local.cwd)
+      expect(forwarded.params.runtimeWorkspaceRoots).toEqual([])
+      expect(forwarded.params.sandboxPolicy).toEqual({ type: "readOnly", networkAccess: false })
+      expect(calls.filter((call) => call.capability_id === "shell.exec" && call.action === "execute")).toHaveLength(shellAuthorizations)
     } finally {
       globalThis.fetch = originalFetch
       socket.close()

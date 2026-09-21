@@ -10,7 +10,7 @@ export function reconcileTimeline(current: ChatMessage[], snapshot: ChatMessage[
   })
   for (const message of current) {
     if (ids.has(message.id)) continue
-    if (message.timelineRevision !== undefined || (message.clientMessageId && !message.runtimeItem && !acknowledged.has(message.clientMessageId))) merged.push(message)
+    if (message.localOnly || message.timelineRevision !== undefined || (message.clientMessageId && !message.runtimeItem && !acknowledged.has(message.clientMessageId))) merged.push(message)
   }
   return merged
 }

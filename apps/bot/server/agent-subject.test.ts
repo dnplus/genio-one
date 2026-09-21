@@ -73,7 +73,7 @@ describe("agent subject registration", () => {
     expect(result).toEqual({ subjectId: "agent-cp-1", mode: "control-plane" })
   })
 
-  test("uses the current user's token and self-service body", async () => {
+test("uses the current user's token and self-service body", async () => {
     const calls: Array<{ url: string; authorization: string; body: unknown }> = []
     globalThis.fetch = mock(async (url, init) => {
       const headers = init?.headers as Record<string, string>
@@ -97,4 +97,18 @@ describe("agent subject registration", () => {
       body: { display_name: "Ops Bot" },
     }])
   })
+})
+
+test("forwards a durable create request id only when supplied by the Bot", async () => {
+  let body: unknown
+  globalThis.fetch = mock(async (_url, init) => {
+    body = JSON.parse(String(init?.body))
+    return new Response(JSON.stringify({ subject_id: "agent-user-1", kind: "AGENT" }), { status: 201 })
+  }) as unknown as typeof fetch
+
+  await ensureAgentSubject({ principal, accessToken: "user-token", displayName: "Ops Bot", clientRequestId: "create-1" }, {
+    NODE_ENV: "production",
+    GENIO_ONE_PLATFORM_ORIGIN: "http://platform.test",
+  })
+  expect(body).toEqual({ display_name: "Ops Bot", client_request_id: "create-1" })
 })

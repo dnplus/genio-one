@@ -9,6 +9,8 @@ import { resolve } from "node:path"
 import { Sandbox as CoreSandbox, type CommandHandle } from "e2b"
 import { Sandbox as DesktopSandbox } from "@e2b/desktop"
 
+import { E2BDesktopDriver, type DesktopComputerDriver } from "./desktop-driver"
+import { modelGatewayRelayOrigin } from "./bot-model-config"
 import { selfHostedE2BConfiguration } from "./e2b-self-host"
 import { createJsonLineCollector } from "./jsonl"
 
@@ -36,6 +38,7 @@ export interface CodexRuntime {
 export interface ManagedDesktop {
   details: RuntimeDetails
   close(): Promise<void>
+  computer?: DesktopComputerDriver
   readFile?(path: string): Promise<Uint8Array>
   writeFile?(path: string, data: Uint8Array): Promise<void>
   openFile?(path: string): Promise<void>
@@ -61,6 +64,13 @@ export interface CodexHomeNamespace {
   actingClientId: string
   runtimeSessionId?: string
 }
+
+export type CodexRuntimeFactory = (
+  accessToken: string,
+  callbacks: RuntimeCallbacks,
+  namespace?: CodexHomeNamespace,
+  relaySecret?: string,
+) => CodexRuntime
 
 export function configuredRuntimeKind(environment: NodeJS.ProcessEnv = process.env): RuntimeKind {
   const runtime = environment.GENIO_BOT_RUNTIME?.trim() || "e2b-self-hosted"
@@ -133,7 +143,7 @@ class ServerCodexRuntime implements CodexRuntime {
   private readonly telemetry: ReturnType<typeof createNativeTelemetryReceiver> | undefined
   private readonly child: ChildProcessWithoutNullStreams
 
-  constructor(accessToken: string, callbacks: RuntimeCallbacks, namespace?: CodexHomeNamespace) {
+  constructor(accessToken: string, callbacks: RuntimeCallbacks, namespace?: CodexHomeNamespace, relaySecret = accessToken) {
     const command = resolveCodexCommand(process.env.GENIO_BOT_CODEX_COMMAND)
     const appDir = resolve(import.meta.dir, "..")
     const cwd = process.env.GENIO_BOT_SERVER_CWD?.trim()
@@ -151,10 +161,10 @@ class ServerCodexRuntime implements CodexRuntime {
     mkdirSync(codexHome, { recursive: true })
     this.links = new ObservationLinks(resolve(codexHome, `${namespacePart(namespace?.runtimeSessionId ?? "default")}-observation-links.json`), namespace?.tenantId ?? "unassigned")
     const modelGatewayUpstreamUrl = process.env.GENIO_ONE_MODEL_GATEWAY_BASE_URL?.trim()
-    const relayOrigin = process.env.GENIO_ONE_MODEL_GATEWAY_RELAY_ORIGIN?.trim().replace(/\/$/, "")
-    const modelGatewayBaseUrl = relayOrigin && namespace?.runtimeSessionId
-      ? `${relayOrigin}/api/model-gateway/${encodeURIComponent(namespace.runtimeSessionId)}/v1`
+    const modelGatewayBaseUrl = modelGatewayUpstreamUrl && namespace?.runtimeSessionId
+      ? `${modelGatewayRelayOrigin()}/api/model-gateway/${encodeURIComponent(namespace.runtimeSessionId)}/v1`
       : modelGatewayUpstreamUrl
+    const modelGatewayUsesRelay = Boolean(namespace?.runtimeSessionId)
     const collectorEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim() ||
       process.env.GENIO_ONE_OTEL_COLLECTOR_ORIGIN?.trim() ||
       (process.env.GENIO_ONE_OTEL_HTTP_PORT ? `http://127.0.0.1:${process.env.GENIO_ONE_OTEL_HTTP_PORT}` : "http://127.0.0.1:4318")
@@ -178,8 +188,10 @@ class ServerCodexRuntime implements CodexRuntime {
       env: {
         ...childEnvironment,
         CODEX_HOME: codexHome,
-        [GENIO_ONE_MCP_BEARER_TOKEN_ENV]: accessToken,
-        ...(modelGatewayBaseUrl ? { [GENIO_ONE_MODEL_GATEWAY_TOKEN_ENV]: accessToken } : {}),
+        [GENIO_ONE_MCP_BEARER_TOKEN_ENV]: relaySecret,
+        ...(modelGatewayUsesRelay
+          ? { [GENIO_ONE_MODEL_GATEWAY_TOKEN_ENV]: relaySecret }
+          : modelGatewayBaseUrl ? { [GENIO_ONE_MODEL_GATEWAY_TOKEN_ENV]: accessToken } : {}),
         OTEL_EXPORTER_OTLP_ENDPOINT: otelEndpoint,
         OTEL_SERVICE_NAME: process.env.OTEL_SERVICE_NAME?.trim() || "genio-one-bot-codex",
       },
@@ -263,16 +275,47 @@ class ServerCodexRuntime implements CodexRuntime {
   }
 }
 
+type E2BCommandResult = { exitCode: number; stdout: string }
+
+function isE2BCommandExit(error: unknown) {
+  return Boolean(error && typeof error === "object" && typeof (error as { exitCode?: unknown }).exitCode === "number")
+}
+
+export async function e2bCommandResult(run: () => Promise<E2BCommandResult>) {
+  try {
+    return await run()
+  } catch (error) {
+    if (isE2BCommandExit(error)) return null
+    throw error
+  }
+}
+
+export function requiresCodexBootstrap(result: E2BCommandResult | null, version: string) {
+  return !result || result.exitCode !== 0 || result.stdout.trim() !== `codex-cli ${version}`
+}
+
+function e2bProvisioningError(error: unknown) {
+  const value = error && typeof error === "object" ? error as { statusCode?: unknown; exitCode?: unknown } : undefined
+  return {
+    error_name: error instanceof Error ? error.name : "UnknownError",
+    ...(typeof value?.statusCode === "number" ? { error_code: value.statusCode } : {}),
+    ...(typeof value?.exitCode === "number" ? { command_exit_code: value.exitCode } : {}),
+  }
+}
+
 class SelfHostedE2BDesktop implements ManagedDesktop {
   readonly details: RuntimeDetails
+  readonly computer?: DesktopComputerDriver
 
   private constructor(
     private readonly sandbox: CoreSandbox,
     private readonly desktopSandbox: DesktopSandbox | null,
     private readonly processHandle: CommandHandle,
     details: RuntimeDetails,
+    computer?: DesktopComputerDriver,
   ) {
     this.details = details
+    this.computer = computer
   }
 
   static async create(request: RuntimeProvisionRequest, callbacks: Pick<RuntimeCallbacks, "onExit">) {
@@ -302,25 +345,16 @@ class SelfHostedE2BDesktop implements ManagedDesktop {
     try {
       stage = "codex.version"
       console.info(JSON.stringify({ event: "runtime.e2b.provisioning", stage, runtime_session_id: request.runtimeSessionId, sandbox_id: sandbox.sandboxId }))
-      let installed: { exitCode: number; stdout: string } | null = null
-      try {
-        installed = await sandbox.commands.run(`${remoteCodexPathPrefix()} codex --version`, { timeoutMs: 10_000 })
-      } catch {}
-      if (
-        !installed ||
-        installed.exitCode !== 0 ||
-        installed.stdout.trim() !== `codex-cli ${configuration.codexVersion}`
-      ) {
+      const installed = await e2bCommandResult(() => sandbox.commands.run(`${remoteCodexPathPrefix()} codex --version`, { timeoutMs: 10_000 }))
+      if (requiresCodexBootstrap(installed, configuration.codexVersion)) {
         stage = "codex.bootstrap"
         console.info(JSON.stringify({ event: "runtime.e2b.provisioning", stage, tier, runtime_session_id: request.runtimeSessionId, sandbox_id: sandbox.sandboxId }))
-        let bootstrap: { exitCode: number; stdout: string } | null = null
-        try {
-          bootstrap = await sandbox.commands.run(remoteCodexBootstrapCommand(configuration.codexVersion), { timeoutMs: 180_000 })
-        } catch {}
-        if (!bootstrap || bootstrap.exitCode !== 0 || bootstrap.stdout.trim() !== `codex-cli ${configuration.codexVersion}`) {
+        const bootstrap = await sandbox.commands.run(remoteCodexBootstrapCommand(configuration.codexVersion), {
+          timeoutMs: 180_000,
+        })
+        if (requiresCodexBootstrap(bootstrap, configuration.codexVersion)) {
           throw new Error("SELF_HOSTED_E2B_CODEX_VERSION_MISMATCH")
         }
-        installed = bootstrap
       }
 
       let desktopUrl: string | null = null
@@ -347,7 +381,7 @@ class SelfHostedE2BDesktop implements ManagedDesktop {
       )
 
       const serverPort = Number.parseInt(process.env.GENIO_BOT_PORT || "5181", 10)
-      return new SelfHostedE2BDesktop(sandbox, desktopSandbox, processHandle, {
+      const details = {
         kind: "e2b-self-hosted",
         tier,
         cwd: "/home/user",
@@ -356,19 +390,23 @@ class SelfHostedE2BDesktop implements ManagedDesktop {
         environmentId: `e2b-${sandbox.sandboxId}`,
         execServerUrl: `ws://127.0.0.1:${serverPort}/api/executor/${encodeURIComponent(request.runtimeSessionId)}?tier=${encodeURIComponent(tier)}`,
         execReady: true,
-      })
+      } satisfies RuntimeDetails
+      const computer = desktopSandbox && request.botId
+        ? new E2BDesktopDriver(desktopSandbox, {
+          runtimeSessionId: request.runtimeSessionId,
+          tenantId: request.tenantId,
+          subjectId: request.subjectId,
+          actingClientId: request.actingClientId,
+        })
+        : undefined
+      return new SelfHostedE2BDesktop(sandbox, desktopSandbox, processHandle, details, computer)
     } catch (error) {
-      const processError = error as { stdout?: string; stderr?: string }
       console.error(JSON.stringify({
         event: "runtime.e2b.provisioning.failed",
         stage,
         runtime_session_id: request.runtimeSessionId,
         sandbox_id: sandbox.sandboxId,
-        error_name: error instanceof Error ? error.name : "UnknownError",
-        error_message: error instanceof Error ? error.message : String(error),
-        error_stack: error instanceof Error ? error.stack : undefined,
-        error_stdout: processError.stdout?.trim(),
-        error_stderr: processError.stderr?.trim(),
+        ...e2bProvisioningError(error),
       }))
       await desktopSandbox?.stream.stop().catch(() => undefined)
       await sandbox.kill().catch(() => undefined)
@@ -377,6 +415,7 @@ class SelfHostedE2BDesktop implements ManagedDesktop {
   }
 
   async close() {
+    await this.computer?.close().catch(() => undefined)
     await this.processHandle.kill().catch(() => false)
     await this.desktopSandbox?.stream.stop().catch(() => undefined)
     await this.sandbox.kill().catch(() => undefined)
@@ -503,8 +542,8 @@ export function remoteExecServerCommand() {
   return "codex exec-server --listen ws://0.0.0.0:4512 --concurrent-requests 8"
 }
 
-export function createCodexRuntime(accessToken: string, callbacks: RuntimeCallbacks, namespace?: CodexHomeNamespace): CodexRuntime {
-  return new ServerCodexRuntime(accessToken, callbacks, namespace)
+export function createCodexRuntime(accessToken: string, callbacks: RuntimeCallbacks, namespace?: CodexHomeNamespace, relaySecret?: string): CodexRuntime {
+  return new ServerCodexRuntime(accessToken, callbacks, namespace, relaySecret)
 }
 
 export async function createManagedRuntime(request: RuntimeProvisionRequest, callbacks: Pick<RuntimeCallbacks, "onExit">): Promise<ManagedDesktop> {

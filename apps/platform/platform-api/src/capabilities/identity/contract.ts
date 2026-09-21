@@ -58,6 +58,7 @@ export const CreateSubjectSchema = Type.Object({
 
 export const CreateSelfServiceAgentSchema = Type.Object({
   display_name: Type.String({ minLength: 1, maxLength: 256 }),
+  client_request_id: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
 }, { additionalProperties: false })
 
 export type Subject = Static<typeof SubjectSchema>

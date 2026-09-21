@@ -3,7 +3,7 @@ import type { BootstrapSubjectInput, CreateSelfServiceAgentInput, CreateSubjectI
 export interface IdentityDirectory {
   inventory(input: { tenantId: string }): Promise<TenantIdentityInventory>
   create(input: { tenantId: string; value: CreateSubjectInput }): Promise<Subject>
-  createSelfServiceAgent(input: { tenantId: string; value: CreateSelfServiceAgentInput }): Promise<Subject>
+  createSelfServiceAgent(input: { tenantId: string; value: CreateSelfServiceAgentInput; subjectId?: string }): Promise<Subject>
   bootstrap(input: { tenantId: string; subjects: readonly BootstrapSubjectInput[] }): Promise<void>
   /**
    * Stops a Subject authenticating without deleting it, so its activity and

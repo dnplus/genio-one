@@ -33,7 +33,9 @@ export interface StreamListenerContext {
   runtimeDetailsRef: MutableRefObject<RuntimeDetails | null>
   completedItemIdsRef: MutableRefObject<Set<string>>
   pendingArtifactRef: MutableRefObject<{ path: string; environmentId: string; tier: "headless" | "desktop" } | null>
-  pendingExecutionRef: MutableRefObject<{ task: string; progressId: string } | null>
+  pendingExecutionRef: MutableRefObject<PendingExecution | null>
+  isPendingExecutionCurrent?: (pending: PendingExecution) => boolean
+  isRuntimePrepared?: (details: RuntimeDetails) => boolean
   modelDirectoryModelsRef: MutableRefObject<CodexModel[]>
   loggedInRef: MutableRefObject<boolean>
   isTurnRunningRef: MutableRefObject<boolean>
@@ -58,13 +60,23 @@ export interface StreamListenerContext {
   setTurnRunning: (running: boolean) => void
   prepareCodexSession: () => Promise<void>
   attachRuntimeDesktop: (details: RuntimeDetails) => Promise<void>
+  shouldPrepareRuntime?: (details: RuntimeDetails) => boolean
   onMarkBotUnread?: (botId: string) => void
   onBotWorkEvent?: (botId: string, type: "turn_started" | "turn_stopped" | "turn_idle") => void
   onPendingExecutionReady?: (task: string) => void
   onSignOut: () => void
   focusInput: () => void
-  startThread: (details?: RuntimeDetails | null) => Promise<void>
+  startThread: (details?: RuntimeDetails | null) => Promise<boolean>
   setIsCodexAuthenticated?: Dispatch<SetStateAction<boolean>>
+}
+
+export interface PendingExecution {
+  task: string
+  progressId: string
+  botId: string
+  connectionGeneration: number
+  modelRoute: ModelRoute
+  restoreDraft: () => void
 }
 
 export function registerCodexStreamListeners(ctx: StreamListenerContext): () => void {
@@ -165,17 +177,39 @@ export function registerCodexStreamListeners(ctx: StreamListenerContext): () => 
       setRuntimeTiers((current) => ({ ...current, [details.tier]: details }))
       runtimeFailure = null
       runtimeFailureReason = null
-      if (isDuplicateReady) return
+      if (isDuplicateReady && !ctx.shouldPrepareRuntime?.(details)) return
       setAgentState("idle")
-      void attachRuntimeDesktop(details).catch((error) => {
-        if (isMounted()) setRuntimeState(error instanceof Error ? error.message : "沙盒連接失敗")
-      })
-      if ((details.tier === "headless" || details.tier === "desktop") && pendingExecutionRef.current) {
-        const pendingTask = pendingExecutionRef.current
-        pendingExecutionRef.current = null
-        setMessages((current) => current.filter((m) => m.id !== pendingTask.progressId))
-        onPendingExecutionReady?.(pendingTask.task)
-      }
+      void (async () => {
+        try {
+          await attachRuntimeDesktop(details)
+          if ((details.tier === "headless" || details.tier === "desktop") && pendingExecutionRef.current) {
+            const pendingTask = pendingExecutionRef.current
+            safeTimeout(() => {
+              if (pendingExecutionRef.current !== pendingTask) return
+              if ((ctx.isPendingExecutionCurrent && !ctx.isPendingExecutionCurrent(pendingTask)) ||
+                (ctx.isRuntimePrepared && !ctx.isRuntimePrepared(details))) {
+                pendingExecutionRef.current = null
+                pendingTask.restoreDraft()
+                if (activeBotRef.current.id === pendingTask.botId) {
+                  setMessages((current) => [...current.filter((m) => m.id !== pendingTask.progressId), {
+                    id: `${pendingTask.progressId}-canceled`,
+                    localOnly: true,
+                    role: "system",
+                    text: `工作區狀態已變更；以下工作尚未執行，請重新送出。\n\n${pendingTask.task}`,
+                    createdAt: Date.now(),
+                  }])
+                }
+                return
+              }
+              pendingExecutionRef.current = null
+              setMessages((current) => current.filter((m) => m.id !== pendingTask.progressId))
+              onPendingExecutionReady?.(pendingTask.task)
+            }, 0)
+          }
+        } catch (error) {
+          if (isMounted()) setRuntimeState(error instanceof Error ? error.message : "沙盒連接失敗")
+        }
+      })()
     }
 
     if (message.method === "genio/runtime/provisioning") {

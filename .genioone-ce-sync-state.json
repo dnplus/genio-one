@@ -19,7 +19,7 @@
       "mode": 420
     },
     "apps/bot/.env.example": {
-      "sha256": "1264bb64c11d75520575fa1639b5c3b13914ac5af12f49ed407f675f65a74800",
+      "sha256": "db77ee3143c8564bb3c8b869d75a17d5fded8f0bb1b94d21703a0a60e63726c7",
       "mode": 420
     },
     "apps/bot/.walking-skeleton-continuity.json": {
@@ -163,7 +163,7 @@
       "mode": 420
     },
     "apps/bot/Dockerfile": {
-      "sha256": "118de7837ba9c50c2f0275a49f3d64259d8f75d9a76ae29c36aaf8c109f31630",
+      "sha256": "19f46d1b0171fb551b1fbca7ac8f1293df7c30799876761b2b2888cd996e4d1d",
       "mode": 420
     },
     "apps/bot/docs/app-server-boundary.md": {
@@ -190,8 +190,16 @@
       "sha256": "64fc00de7dadb5d1e10bfebd0b6d9f7bc3ab7ceb9ac56d99b8bf2f4013a60d65",
       "mode": 420
     },
+    "apps/bot/docs/default-tools-delivery.md": {
+      "sha256": "3064a02a7ef266b238303005cda551e20c2f0303ff485636fdc1d17f6821bc3c",
+      "mode": 420
+    },
+    "apps/bot/docs/e2b-175-development.md": {
+      "sha256": "dead73e420b86acbdcf163bf9d0c890286a62e02546517c43ba9a69343e2b7e4",
+      "mode": 420
+    },
     "apps/bot/docs/e2b-source-audit.md": {
-      "sha256": "5c484a2514ee74eabdbb2bc4c96c109ad7399627286de6a8c8c672b6c23d7f89",
+      "sha256": "fc20eaeb851b9c79b75f11b43457de0fc09f7e447f18f09ede74c3e1750c9ad9",
       "mode": 420
     },
     "apps/bot/docs/local-hands.md": {
@@ -211,7 +219,7 @@
       "mode": 420
     },
     "apps/bot/package.json": {
-      "sha256": "371d4018557b7651d07030daedaac9e339bdc1204d3ec223ed5f8a8f2d5b0721",
+      "sha256": "a9bcf3062cb79bed07ddbf97e1ebacf95c8fd36be1a33fccebfc981a4f2d3db9",
       "mode": 420
     },
     "apps/bot/README.md": {
@@ -225,6 +233,10 @@
     "apps/bot/scripts/build-e2b-template.ts": {
       "sha256": "1ea5c1137dd304f3bec6008ce70b39f93d9b38141457ebf9ffe4d887d8344cbe",
       "mode": 420
+    },
+    "apps/bot/scripts/e2b-175-firewall.sh": {
+      "sha256": "8cd694a07d943911026266d1020353796ebe08d8809e9e612d50daafdd163391",
+      "mode": 493
     },
     "apps/bot/scripts/generate-ce-demo-catalog.ts": {
       "sha256": "5d7a1c85041b42499fb02123206a84170559958295ca27046510791234500a7f",
@@ -291,23 +303,31 @@
       "mode": 420
     },
     "apps/bot/server/agent-subject.test.ts": {
-      "sha256": "f54361ac50facd3bfbcdc367fb52eb2d3c4cd35eac0e2eb9e168f8530faeeb25",
+      "sha256": "c508bfc4e2a1e8b9902ea639e91454d16f6be0a08a7b043ce82b4e0860035f5d",
       "mode": 420
     },
     "apps/bot/server/agent-subject.ts": {
-      "sha256": "c844511dd201cdbd36170091515dddb6e7f8fbe60c0a77b4b1d06429dcc42d64",
+      "sha256": "395119fbc61ac63c44cf9c5157d48556751be361cdef4f53b942a2f7aaafde15",
       "mode": 420
     },
     "apps/bot/server/app.test.ts": {
-      "sha256": "1324cba2652f541cfc920863ad510f92b9805b4696fea4c7fc39a16ae32c0ef8",
+      "sha256": "6dc5311fa6e46f366d173bb0212c35695f713286236c49c6acedf7e9324c1d02",
       "mode": 420
     },
     "apps/bot/server/app.ts": {
-      "sha256": "a3ab0a876ad480e8e75710659b4c14e1b9bf120d0004f4ada02c762d14d80f44",
+      "sha256": "2f3cd856b52dd4ff41952cf3556d32f76f24a1c1fe814c5b4869fa34ef31ee75",
+      "mode": 420
+    },
+    "apps/bot/server/auth.test.ts": {
+      "sha256": "f70dbe40d396f3332f440048f54f9076f34ffdf880d5cba41581c1923ab8e10f",
       "mode": 420
     },
     "apps/bot/server/auth.ts": {
-      "sha256": "fd3e7117b8610919d5ca969555421846d4bcbce5949ddc32f828fbf64a49e2ff",
+      "sha256": "01da703218526f9be226813235fcc8e6f168e8142edf7f5b0b9bccbb0d6e8348",
+      "mode": 420
+    },
+    "apps/bot/server/background-model-selection.ts": {
+      "sha256": "0889582e2c3a68e562ccc3505d9de61430f0789629f1be9f168555ce74e953a1",
       "mode": 420
     },
     "apps/bot/server/bot-artifact-store.ts": {
@@ -331,19 +351,27 @@
       "mode": 420
     },
     "apps/bot/server/bot-capability-surface.test.ts": {
-      "sha256": "0499d49f2d60b11d7fdb3fe242ba8a1849707d6ac1e294148e12e4917587dfa0",
+      "sha256": "a1ad387a17dd7ae7a7524eda367f86e815e43d852730e665d3ca14af5661afa6",
       "mode": 420
     },
     "apps/bot/server/bot-capability-surface.ts": {
-      "sha256": "0904ed369e53c849daa8abadb439dc211969cdac195ea63e32cbd314e689b553",
+      "sha256": "c490ec61e43ee22744fd3a0a02307e3b67d9875123a4f03342c43c36ac7183b4",
+      "mode": 420
+    },
+    "apps/bot/server/bot-computer-tools.test.ts": {
+      "sha256": "3cb9aa2b67bf954aad2eb2f384e1c63b54c20170b112ac4bb2b550a5e01a2980",
+      "mode": 420
+    },
+    "apps/bot/server/bot-computer-tools.ts": {
+      "sha256": "80efd43010cf237ad7df89e045368049c8bf449208225d71b0c1e489199884df",
       "mode": 420
     },
     "apps/bot/server/bot-context.test.ts": {
-      "sha256": "aa059fb000270881a197318e79643174dbd5066236b8b8567869351b2446f6a9",
+      "sha256": "a8386686594d34a11c6b9f7152ede516a977deb47207ef2a5ba1da6977415988",
       "mode": 420
     },
     "apps/bot/server/bot-context.ts": {
-      "sha256": "af12deb3147efdddb499d2d783df98c766a57719dda0e7c9df5a0b4235a504cf",
+      "sha256": "02a3ea7c1ca1d1d0a8e2c5136bec2784903efeed4d2aaabbd7987b1b47370292",
       "mode": 420
     },
     "apps/bot/server/bot-continuations.test.ts": {
@@ -352,6 +380,10 @@
     },
     "apps/bot/server/bot-continuations.ts": {
       "sha256": "38cabf069e2e591126791f9218a673cd2aa3e5bcef4aa4c3cbe0a0420606c538",
+      "mode": 420
+    },
+    "apps/bot/server/bot-default-tools.ts": {
+      "sha256": "829271c842997494dab62fc79751b6d53473f213066d2a50cd71c40a84b2afcc",
       "mode": 420
     },
     "apps/bot/server/bot-designer.test.ts": {
@@ -398,6 +430,14 @@
       "sha256": "96cb7c6a6ac6c4081f4aa0d7646ed39a5a4cfb955bc98bea0f461940f5c81306",
       "mode": 420
     },
+    "apps/bot/server/bot-model-config.ts": {
+      "sha256": "fa0f167e7ed9f7901305da209719365b85d149fe888222718c21f4605bee8da0",
+      "mode": 420
+    },
+    "apps/bot/server/bot-owned-skills.ts": {
+      "sha256": "a56586a6b6aae8292554be70cc9f431c3ec85ac7a2f58af8d6e47dc3824b3c53",
+      "mode": 420
+    },
     "apps/bot/server/bot-package-store.test.ts": {
       "sha256": "9e1e388a84764cee79fb42a512ff47ce9f822c7e0c0386d9d8be8a32c55db050",
       "mode": 420
@@ -419,7 +459,7 @@
       "mode": 420
     },
     "apps/bot/server/bot-registry.ts": {
-      "sha256": "5696e832733dab69bbd79792d8db01659cf64cc73b06a9384c76f125ead33383",
+      "sha256": "8fa8380bea0faba2336950b178321bb893a4449cbb11e56f2fa36503cb4a372a",
       "mode": 420
     },
     "apps/bot/server/bot-roster-status.test.ts": {
@@ -430,6 +470,34 @@
       "sha256": "3aa14a5489cd2ca4f1b29e84387c92076a67dcb6f2f711a0b11dd8bc11a9d696",
       "mode": 420
     },
+    "apps/bot/server/bot-runtime-instructions.ts": {
+      "sha256": "c37fa00779c7fa5f5819674e757e059e405f3a426b61b0c031e90fe30f68c444",
+      "mode": 420
+    },
+    "apps/bot/server/bot-schedule-runner.ts": {
+      "sha256": "f88a8bf8b200d27fbc6b98f8b1046d3ad7b62482ed6996abe56683364f216903",
+      "mode": 420
+    },
+    "apps/bot/server/bot-schedule-tools.ts": {
+      "sha256": "2b0d6b6a5ef1ccb90606a5c91f46e1df764fb0114abc3127325b264d4fa66d9c",
+      "mode": 420
+    },
+    "apps/bot/server/bot-schedules.test.ts": {
+      "sha256": "8119bee22748e0c421cb612964f2df1e9a29d3fabed4fbae7b241d31a28f75bc",
+      "mode": 420
+    },
+    "apps/bot/server/bot-schedules.ts": {
+      "sha256": "375415ea0e290f03cb268a2fe93cff6a0c5481523aac130b0b968ef96b25b070",
+      "mode": 420
+    },
+    "apps/bot/server/bot-self-tools.test.ts": {
+      "sha256": "6ef046137294e1590dcf43f2f4247108a31ce646970a586db7dbb7bc8baa1774",
+      "mode": 420
+    },
+    "apps/bot/server/bot-self-tools.ts": {
+      "sha256": "111dcd25322e43b317a87e2660c25372395ce382c83f60d84de8b4b6ee9461dc",
+      "mode": 420
+    },
     "apps/bot/server/bot-timeline.test.ts": {
       "sha256": "4bf1c0305b977f9b312e7c1e58614a1ed2f7a572b78f8c26aa58a4dbaff3e99f",
       "mode": 420
@@ -438,8 +506,12 @@
       "sha256": "816746ac61cd0e0bad74d0f8c294deee12cfb9a056e3bd82a2f635ed64cc1ae2",
       "mode": 420
     },
+    "apps/bot/server/bot-tool-contract.ts": {
+      "sha256": "cafbed046b73ab9d7a20af6c4eea249b3aa171f525a5c888d3b1b568324688d7",
+      "mode": 420
+    },
     "apps/bot/server/bot-tool-sessions.ts": {
-      "sha256": "a90f47555a9e801b3d929d108a244d3e71fef2d658b86c378286be8e5d35479a",
+      "sha256": "c93d591dbdb02bb14b58a6c60eaac094a9b11959bfc515778a567e6cb06b1170",
       "mode": 420
     },
     "apps/bot/server/bot-work-summary.test.ts": {
@@ -447,11 +519,11 @@
       "mode": 420
     },
     "apps/bot/server/caller-continuation.test.ts": {
-      "sha256": "3ebabe5ec520528dc3b5559ddc8c78ef1d21558fa9074ecf9afcb948c1376606",
+      "sha256": "005834e5c3f440e51f2ce8f081b5a4caaadc21923e2686e93c337e85295c8569",
       "mode": 420
     },
     "apps/bot/server/caller-continuation.ts": {
-      "sha256": "4eb33fbf249c95e7733083cc0ddfa8fb7c894bd5720f6daeaed6068c132e3e08",
+      "sha256": "e1c05a9d357ec3b71ab35ae720d5b0ec4d465d5a581843543e69fdf4b8c1baf3",
       "mode": 420
     },
     "apps/bot/server/capability-gate.test.ts": {
@@ -471,23 +543,31 @@
       "mode": 420
     },
     "apps/bot/server/codex-runtime-catalog.ts": {
-      "sha256": "c0c3baf2ee10eb3f073e59265e4a19e2078a7db23a36e719437c63b8bcd7c588",
+      "sha256": "77932bc6a0ec0fad15a6c6a09582f6a1f6cd33ae8cf9f24901baf49168893ef1",
       "mode": 420
     },
     "apps/bot/server/context.ts": {
-      "sha256": "321fa4c7808bb9c60d0d4614c33fe33bd8e8c71cac68758f096e10367842a2a3",
+      "sha256": "b01f953b29f8c34591fe7c1ec5c1d1edfb0ca0750586470e50c1e74fdca81264",
+      "mode": 420
+    },
+    "apps/bot/server/desktop-driver.test.ts": {
+      "sha256": "ebb847b92ee4ac07096057199a080dc1a650e94896d7d42ad72ebc816e7a4851",
+      "mode": 420
+    },
+    "apps/bot/server/desktop-driver.ts": {
+      "sha256": "c804edd5f56f5695be67424e8a7577207bbfee2cbbfe4f7f2dc9377ca24b27d5",
       "mode": 420
     },
     "apps/bot/server/desktop-proxy.test.ts": {
-      "sha256": "c1c186c2599bbc50d5e1191d53ec77d462fefb93314037b2dd382d0c0ad00d9a",
+      "sha256": "b226eccb9e93205fc92fe7c0196b596421f5b87255b97222d085a2aa66d50b78",
       "mode": 420
     },
     "apps/bot/server/desktop-proxy.ts": {
-      "sha256": "c98cea2ca791fe42b0c764b7c312662cbafd99a90248051df162ea0697316a49",
+      "sha256": "78f3a59aa8838a0fc935daff2d819e367f826ee19eaf3a04933a98f7fb60848c",
       "mode": 420
     },
     "apps/bot/server/e2b-desktop-live.ts": {
-      "sha256": "24e41d72244957420498237afef116836683dafff9bf6335523e4a4c09d48001",
+      "sha256": "cf53e6e231f87c44382db717adbc07e4bd051b2bd761b68c33de86ae0ed6a0f2",
       "mode": 420
     },
     "apps/bot/server/e2b-runtime-live.ts": {
@@ -495,11 +575,11 @@
       "mode": 420
     },
     "apps/bot/server/e2b-self-host.test.ts": {
-      "sha256": "605954247eb41146faabab755c8dda58f2a0505b5ad2c1ba8a39f54747836439",
+      "sha256": "cd5a4f643a44c4d856be184d3a23b8ba727ebf22451fa503fa8117d1abca8b25",
       "mode": 420
     },
     "apps/bot/server/e2b-self-host.ts": {
-      "sha256": "e24e527620f44b2ede8903da586c6fb3c9260cec8c28169b43ccefba894cc517",
+      "sha256": "8a222b6da2608fc7e333bc7c28be86790a56b36c0d0d645c0271ba7ff8c741f7",
       "mode": 420
     },
     "apps/bot/server/generated/AbsolutePathBuf.ts": {
@@ -3967,11 +4047,11 @@
       "mode": 420
     },
     "apps/bot/server/invocation-lifecycle.test.ts": {
-      "sha256": "e6d85bbd9ca06daf3ea9fba048af798fa1e18dd8b0ec71b94a569fd61366f140",
+      "sha256": "dc511c8605898ec4a67370b376c16bc383eb87141d3eb1fc8f3de17117958aa7",
       "mode": 420
     },
     "apps/bot/server/invocation-recovery.test.ts": {
-      "sha256": "78fa74340a977352dbb02b39aa1104d512f321f269648d0a24d091fc0c2d9e47",
+      "sha256": "1782b1f0ee27d9400ad6b5e306b2350a66917557eeb83b09150777fb6913437d",
       "mode": 420
     },
     "apps/bot/server/invocation-recovery.ts": {
@@ -3999,11 +4079,11 @@
       "mode": 420
     },
     "apps/bot/server/managed-mcp.test.ts": {
-      "sha256": "d1af7cbd59dc619247a8614571438f06ffeffe6238bf80bbb0fa818055c87dac",
+      "sha256": "ff096b9288e52d46b6c84e360e074651324392cd82966d31642eaca6a4ce14dc",
       "mode": 420
     },
     "apps/bot/server/managed-mcp.ts": {
-      "sha256": "3ed8e1ee1126ed3361b9ecad820045942a5e7368582d60059a1baf9d50a7457f",
+      "sha256": "0990555836339400ce80308dff955c836bda6d3f00f1babbbea1fe37fe731c60",
       "mode": 420
     },
     "apps/bot/server/model-directory.test.ts": {
@@ -4015,11 +4095,11 @@
       "mode": 420
     },
     "apps/bot/server/model-gateway-relay.test.ts": {
-      "sha256": "9259651f6f2208f8d482cd9437b8e7d67042bc21c2bc48a583b795df03eb56ec",
+      "sha256": "5cd8151040411f5713efb9537089d547891ee6216190dfed7c74e050056b7be9",
       "mode": 420
     },
     "apps/bot/server/model-gateway-relay.ts": {
-      "sha256": "70fb33a8354859060298eb0d614b011887cc61339e510abbd0110105e281f941",
+      "sha256": "e22a881210fc69a15bd1be01261da11ec145dd2d35cc3883c7edaceb2db383f5",
       "mode": 420
     },
     "apps/bot/server/model-response-stream.test.ts": {
@@ -4030,12 +4110,20 @@
       "sha256": "3de8d9cb11bea547e55970ad41a72b85723ccb741abb38e71d805fdacaa3eb78",
       "mode": 420
     },
+    "apps/bot/server/native-runtime-environment.test.ts": {
+      "sha256": "8fa278dcd5c7fbc1bd8d7b577b29b49c663268a130301070ec4f99e1b8df0787",
+      "mode": 420
+    },
     "apps/bot/server/native-runtime-environment.ts": {
-      "sha256": "13f9a9291af4398135a183ff00b6e110e75086fa7024b5c764e4c1655da7d886",
+      "sha256": "dfd7f95db0e8cf1d96969d22c858bd316ecdebe1a6b14b5efcc707689d0bc86f",
+      "mode": 420
+    },
+    "apps/bot/server/native-runtime-params.test.ts": {
+      "sha256": "641b05614b38b5ccffae4d43fe6c8cfccf3d654ecfcf5fc5d73dbd66ded31085",
       "mode": 420
     },
     "apps/bot/server/native-runtime-params.ts": {
-      "sha256": "2f2011678f1d64cd6122d1ca1f4d579acb0a113c66fb5a396a6ca332d747a6c2",
+      "sha256": "00ef23431ddd0adb8c559630b333c88580d230a88f969b0b06d004db80d080df",
       "mode": 420
     },
     "apps/bot/server/native-runtime-policy.ts": {
@@ -4063,11 +4151,19 @@
       "mode": 420
     },
     "apps/bot/server/question-delivery.ts": {
-      "sha256": "ed3cba4e1ed4bc88b31feb2954549b2baea317d96cb555e1880f51010cd1be4d",
+      "sha256": "7fc0f1602aa5b6f1904f19a3e596a031d0703051e0b7a5c97a710ae92027870b",
       "mode": 420
     },
     "apps/bot/server/routes/artifacts.ts": {
       "sha256": "e23af19a970f6b43709b4df6a32b64f390a7696b1f9784b2ab3e5b6a4b0b875c",
+      "mode": 420
+    },
+    "apps/bot/server/routes/bot-default-tools.test.ts": {
+      "sha256": "aaf2446dcb2fedb469338ef7f8b7d4f0975e0ad208e15880f05842251f2bc436",
+      "mode": 420
+    },
+    "apps/bot/server/routes/bot-default-tools.ts": {
+      "sha256": "af7e59f3f1a56f692175d35156144b393bfdb91ecc4f8f2ab12ad76c87de2276",
       "mode": 420
     },
     "apps/bot/server/routes/bot-memory.ts": {
@@ -4083,11 +4179,11 @@
       "mode": 420
     },
     "apps/bot/server/routes/bot-tools.test.ts": {
-      "sha256": "d3e45776f867d6a45b91ebba670be3881693667a2b627fb636a5df5702de6b92",
+      "sha256": "e215c2c84d046705ebd035de7464a7c14622339c5acc85708dead2094e44b3e1",
       "mode": 420
     },
     "apps/bot/server/routes/bot-tools.ts": {
-      "sha256": "6c36cb0a4b078abfe7ac967eae57c62a372ae5c74ce57125a8d20b3b752bd199",
+      "sha256": "12d87898cb233998ffee5bc828b85d4998afcdda91364d0a623e0b27c63169eb",
       "mode": 420
     },
     "apps/bot/server/routes/bots-bindings.test.ts": {
@@ -4102,6 +4198,10 @@
       "sha256": "ab01cdf57029fad3553f5d84c581a7bce56c6e59bb8e55e19c136789315e2bf7",
       "mode": 420
     },
+    "apps/bot/server/routes/bots-delete-schedules.test.ts": {
+      "sha256": "f319024a511bf8192e3178c218b59e158da20b7d609c6d52b8e1bfd535766560",
+      "mode": 420
+    },
     "apps/bot/server/routes/bots-designer.test.ts": {
       "sha256": "f5495f69db0d3e312eacc47dd922f7a52dc892b1e7313d012f68c97f98758174",
       "mode": 420
@@ -4111,7 +4211,7 @@
       "mode": 420
     },
     "apps/bot/server/routes/bots-handoff.test.ts": {
-      "sha256": "6da874d17f1d1c7061fc235b04898cf26d8be49c8af0a32d199cef4d5fe8cebb",
+      "sha256": "8b96067c759c6990f735b733d0fdbece62844456c584953d4b65ed09e37dd5b6",
       "mode": 420
     },
     "apps/bot/server/routes/bots-profile.test.ts": {
@@ -4131,7 +4231,7 @@
       "mode": 420
     },
     "apps/bot/server/routes/bots.ts": {
-      "sha256": "73fa27209aa5ee8c395dfdd5f06ae4be29bac9a838e9bef2154c09c929ab6330",
+      "sha256": "4dbe06764478f98b14fe1f5093acaebd4d41caa8da94603dc4d714f88fa1d788",
       "mode": 420
     },
     "apps/bot/server/routes/catalog.test.ts": {
@@ -4147,15 +4247,15 @@
       "mode": 420
     },
     "apps/bot/server/routes/codex-runtime-policy.test.ts": {
-      "sha256": "d5a2239063170e6bc40380da9a1f8eed60f226303fd6d5d8a30d3b100612ed0d",
+      "sha256": "bc9151df34c5522397976392479accd772678cc862de5543f61a8d111c8d9077",
       "mode": 420
     },
     "apps/bot/server/routes/codex.ts": {
-      "sha256": "aae336d421a2df56738b6efcbfc1f3c2e3499b7c4235875d8baaeae7b4ef4575",
+      "sha256": "29114a7d660fd10b867d0b5e7f8946fba51440aabf518b13aff50c2e9b7c96bd",
       "mode": 420
     },
     "apps/bot/server/routes/cross-owner-handoff.test.ts": {
-      "sha256": "c61c031c43380ed48315565d159737d3ee21d19699518dd424fad56f5b78d99b",
+      "sha256": "5fadbe73bbf050fad8db0f9b0ab29ff59ce2bb3328db2c1e97ed3da835981ebb",
       "mode": 420
     },
     "apps/bot/server/routes/groups.ts": {
@@ -4171,11 +4271,15 @@
       "mode": 420
     },
     "apps/bot/server/routes/invocations.ts": {
-      "sha256": "babcf15642224a74f637a4b062a77505eebf2a75d5ec2af5028c093c3a2837fc",
+      "sha256": "6ce7f03a332fe743eb1b1c029792b0792e2580bb39f24a4431d3c7235a91e697",
+      "mode": 420
+    },
+    "apps/bot/server/routes/proxy.test.ts": {
+      "sha256": "64b275be0dc2b4d685e0af2f11bf810c2c36a329c313629a25a52a3ab0fa06be",
       "mode": 420
     },
     "apps/bot/server/routes/proxy.ts": {
-      "sha256": "f8f7c706381d0d76e21b0bf4e8e947d845148c21c2bd4742291012ae3dffeb1b",
+      "sha256": "8ee62fe84e0651d228fdb2626b7f8b71d3b862e6b5f560837dfc6e66a1206717",
       "mode": 420
     },
     "apps/bot/server/routes/transcription.test.ts": {
@@ -4187,19 +4291,19 @@
       "mode": 420
     },
     "apps/bot/server/runtime-broker.test.ts": {
-      "sha256": "a21b21f7d4e79f606f21d7785af75177bb8c2005a69e21b3c7bc4f249602477a",
+      "sha256": "4616fece6c4bc9df2fc911f755ca0e8d2c2d23c0719fdcbc174347d20fba8ec9",
       "mode": 420
     },
     "apps/bot/server/runtime-broker.ts": {
-      "sha256": "1868404bbd411813b0372713d395e4635f24d64e5f294194e07b8b1e7bf66fba",
+      "sha256": "c9bc4881f8377f1cdf439b47aa1469f2cd9fcfcef1a31ec01b6efb644843e7d7",
       "mode": 420
     },
     "apps/bot/server/runtime-capability.test.ts": {
-      "sha256": "bf2c2d8ab4602a8bba73677d78adda60dd9786f4748283d5e6b2b2dc75065b94",
+      "sha256": "b73ac623bad101d8fb0e7758a6595449d166a157e54487bbb3bbbf296be7957a",
       "mode": 420
     },
     "apps/bot/server/runtime-capability.ts": {
-      "sha256": "93ac15315fd38850b45bb8c0f0305fca40f7410cc7a6bfc148094e15d7c53926",
+      "sha256": "5231f0a3b6d6f23fde52855351fd9d322271cd080af6a1ed43b63a46bfed0aaa",
       "mode": 420
     },
     "apps/bot/server/runtime-policy-contract.ts": {
@@ -4219,15 +4323,15 @@
       "mode": 420
     },
     "apps/bot/server/runtime-token-relay.test.ts": {
-      "sha256": "5978bfc81608bdb5c525cc97b4ad71f4d65da1cccab727d6f6788d676dbde6d4",
+      "sha256": "522718a6687afdbfe246e590c2c85e3be316fc399a50b7f2440fcc9350ac1776",
       "mode": 420
     },
     "apps/bot/server/runtime.test.ts": {
-      "sha256": "e96ba3fec004714e4a9b69eca11d8527c9cc7c20ad4557c963d6c8d344cd3a4e",
+      "sha256": "8f98092143f48144fe2f2aea1daffeec56a11ec957f1254ddce00c219a117323",
       "mode": 420
     },
     "apps/bot/server/runtime.ts": {
-      "sha256": "71bf10542ffedc08e34f51c3a4e1a3ae79b17e2753f6bde940be635ecad2a9ce",
+      "sha256": "a2736e59f2a75d1a630c2ab03d3ab5b6363784dcc50064628643ee0e7165934b",
       "mode": 420
     },
     "apps/bot/server/static-security.test.ts": {
@@ -4263,7 +4367,7 @@
       "mode": 420
     },
     "apps/bot/shared/bot-timeline.ts": {
-      "sha256": "74487ffbe5a65521ece7758235e19a9653a030915a31fdfd34f87336c650bb58",
+      "sha256": "c23d7b2b66b1235d27554b5393b19abf95f70fefae3f4962dcc7396969bc2661",
       "mode": 420
     },
     "apps/bot/shared/bot-work-context.ts": {
@@ -4303,7 +4407,7 @@
       "mode": 420
     },
     "apps/bot/src/app.tsx": {
-      "sha256": "5ae8c7d0a38467c96593c681f5e849e961a666abb29db0e5b2b463a9adccf5d2",
+      "sha256": "6b1c483d2e1154304232de0b1973dcf8cfea5c68d7709841eeffc4aeb9096357",
       "mode": 420
     },
     "apps/bot/src/avatar/bloub-avatar.test.ts": {
@@ -4323,7 +4427,7 @@
       "mode": 420
     },
     "apps/bot/src/bots-storage.ts": {
-      "sha256": "b4d3d489d74eb57e34ddb85616a94669f12ada54b3273f4afed01d0b8adc2b9b",
+      "sha256": "24bfcb9e0726216b83800f6125d9ea3375c26c4bf3adb97340f449c1c6853fdc",
       "mode": 420
     },
     "apps/bot/src/components/chat/ApprovalCard.tsx": {
@@ -4387,11 +4491,11 @@
       "mode": 420
     },
     "apps/bot/src/components/chat/codex-stream-listeners.test.ts": {
-      "sha256": "2bae3db78ff5199098335459845f17b16edd94065a0a8b21d89a1005315bf554",
+      "sha256": "938284ef24275aef8e317281c784265a74d224a3322ef6f0b961b2e8e849aec5",
       "mode": 420
     },
     "apps/bot/src/components/chat/codex-stream-listeners.ts": {
-      "sha256": "4302e34a44c97f35e33aa893f41e7aed3b943e7cff70de2517f8a19e71d04995",
+      "sha256": "daa59e505994c4d71eb433984710ca68cac066d485444ca259ca61a1946f0c0f",
       "mode": 420
     },
     "apps/bot/src/components/chat/composer-mentions.test.ts": {
@@ -4479,11 +4583,11 @@
       "mode": 420
     },
     "apps/bot/src/components/chat/timeline-reconciliation.test.ts": {
-      "sha256": "e2b459d6d9e847e736ec911d5dcd75bec29856368522bd559efebd0c06f30d34",
+      "sha256": "085934bc1f75b77b0480c99f8abd270f4c7236c3da32cef92abcd2a922fbbe3d",
       "mode": 420
     },
     "apps/bot/src/components/chat/timeline-reconciliation.ts": {
-      "sha256": "2237461efc6258724022c697b9ad9fcc29055325349951ad580ed9fd931f055e",
+      "sha256": "f41872cb9c6d0928dff6fca3570f0d7bfbb6e9958dcab9553d174f2593ea8b7b",
       "mode": 420
     },
     "apps/bot/src/components/chat/useBotInvocations.ts": {
@@ -4491,7 +4595,7 @@
       "mode": 420
     },
     "apps/bot/src/components/chat/useCodexSession.ts": {
-      "sha256": "54ffddd03b14dd31d4baaaea1d1702b35a538214fed95c0cb2da22fcc544b0cf",
+      "sha256": "e155d19dcdf5fa659a44bbc4c34ce248232ad3f1271f12f1ff29eee4138d5927",
       "mode": 420
     },
     "apps/bot/src/components/chat/UserInputQuestionCard.test.ts": {
@@ -4515,11 +4619,11 @@
       "mode": 420
     },
     "apps/bot/src/components/chat/Workspace.test.ts": {
-      "sha256": "4fc814b57b576db7afb0c0417638acc39925cfc601fcfbc054e0174c735fcc5c",
+      "sha256": "06320cecb5505348cc075e5a1c8009f3b5946cd9aa851e654441b624d846d232",
       "mode": 420
     },
     "apps/bot/src/components/chat/Workspace.tsx": {
-      "sha256": "301e5f902b4895e76684d7a018e239e34dc8458586ce12e9993adfea966ddcc7",
+      "sha256": "90495b64706ef09452f30ddad7959b7400d31d8edeff311fe326aefc3352fe94",
       "mode": 420
     },
     "apps/bot/src/components/chat/WorkspaceHeader.test.ts": {
@@ -4531,7 +4635,7 @@
       "mode": 420
     },
     "apps/bot/src/components/chat/WorkspaceModals.tsx": {
-      "sha256": "d55ae2e057438fc1177cbb55b2f1d77c7a41f13f9dfe617411d75d04da064453",
+      "sha256": "0e4f24be0a9c098ccb583e9314e18e368dd88921b28cc4ffb63c56fda3ced7e9",
       "mode": 420
     },
     "apps/bot/src/components/common/AppMark.test.ts": {
@@ -4559,7 +4663,7 @@
       "mode": 420
     },
     "apps/bot/src/components/common/ProfileForm.tsx": {
-      "sha256": "da3f8e172cad395bf0c4e6ce8cbef04cbd15533c0185591afc96499f651db393",
+      "sha256": "b71fab60b2f2b9cef119a3e69b653b98fb21b2933860b1f1fcc9da6fd225c840",
       "mode": 420
     },
     "apps/bot/src/components/common/SignIn.test.tsx": {
@@ -4578,20 +4682,44 @@
       "sha256": "612622a26091d31d83b93af9e78995780f294947b7a85f79c800158951aca308",
       "mode": 420
     },
+    "apps/bot/src/components/modals/BotOwnedSkillsPanel.css": {
+      "sha256": "c6ef1d69c7c57af4800015704561465fe0a28ac43edfbbae7d2142ed53100ddb",
+      "mode": 420
+    },
+    "apps/bot/src/components/modals/BotOwnedSkillsPanel.test.ts": {
+      "sha256": "cdb830e8ea2285700a02fd6c9635b05a20936b035be6d27f069a67cf9d5c941e",
+      "mode": 420
+    },
+    "apps/bot/src/components/modals/BotOwnedSkillsPanel.tsx": {
+      "sha256": "d34efed74f889ad12a5d6eaa19a478eeea4a1d8ba284adec36e7eb938b43808d",
+      "mode": 420
+    },
+    "apps/bot/src/components/modals/BotSchedulesPanel.css": {
+      "sha256": "41cd5eeccab0e28a8315babedf4b8ccf82ddbe5760fc7f7d4d9c89940373e5df",
+      "mode": 420
+    },
+    "apps/bot/src/components/modals/BotSchedulesPanel.test.ts": {
+      "sha256": "58fbd2898960c7e82509d9ceaa01ec55dff953b4219432fc5a9f292a374049a1",
+      "mode": 420
+    },
+    "apps/bot/src/components/modals/BotSchedulesPanel.tsx": {
+      "sha256": "554bfeb3a86e5ad1e561cecbd200784e506ed57bf914d78c4616ffb828fc7a20",
+      "mode": 420
+    },
     "apps/bot/src/components/modals/BotSettingsModal.test.ts": {
       "sha256": "99452751544bb1f074a758955a8cdd1e7cf54aef4ac4694207dc002c71b8201a",
       "mode": 420
     },
     "apps/bot/src/components/modals/BotSettingsModal.tsx": {
-      "sha256": "c301dacf368f68e544ef5499f71dd16ba0931bec76030bb69c001c6b3bc08fea",
+      "sha256": "a2b51e7eab71d8f9521b8726e22108b34645891405d230cb92e2d36e6d062e81",
       "mode": 420
     },
     "apps/bot/src/components/modals/CapabilityToolsPanel.test.ts": {
-      "sha256": "9df2d505c051f350cb5315741c9c37668f15cd0bdd35e66a3ceeb2623f01cb1f",
+      "sha256": "07c40274c9e62bafa3e6cec1a79ebc1fd5314fdc97aaf714fbe5a90ed8ef50ec",
       "mode": 420
     },
     "apps/bot/src/components/modals/CapabilityToolsPanel.tsx": {
-      "sha256": "8a3c42e0f78db07a425ac7e3d74ebef171fd541122f1c95ed27ba70860000f3e",
+      "sha256": "3d6728f5311b3425cdd0778afbdd07489e4ff1d18bc95b95670acba7e4121414",
       "mode": 420
     },
     "apps/bot/src/components/modals/ConnectCard.test.ts": {
@@ -4670,8 +4798,12 @@
       "sha256": "2040b3af66e0d6354784f8e036f2c164af9dbb5dcbfbfadd4626f11ef1c450fa",
       "mode": 420
     },
+    "apps/bot/src/components/panel/RightPanel.test.tsx": {
+      "sha256": "a41b1ab325f0fd37469615967682885ee8d9b7403ef1b32d3313a5bc664641c6",
+      "mode": 420
+    },
     "apps/bot/src/components/panel/RightPanel.tsx": {
-      "sha256": "a94f7cea9472c235a379505d98e9acb30388cee48fc39b321077f225af6bc30d",
+      "sha256": "73d5d13ee95d921fdddc76ad109b17477f1209cb4330121cb730b97aae864590",
       "mode": 420
     },
     "apps/bot/src/components/sidebar/index.ts": {
@@ -4699,7 +4831,11 @@
       "mode": 420
     },
     "apps/bot/src/lib/bot-api.ts": {
-      "sha256": "58bfe5c8d1e8d409c2e4bb78bb925755c54d5b57ea49cfb68ccdc335eb928d64",
+      "sha256": "efe12b5bcb2f1bcb84d9eea43fc770c472a461b6f3864dcca107502b3eda3a96",
+      "mode": 420
+    },
+    "apps/bot/src/lib/bot-default-tools-api.ts": {
+      "sha256": "644f839548c622c4ab2c410b44f11c3d739965004782bc5fda27b001c07747fa",
       "mode": 420
     },
     "apps/bot/src/lib/browser-telemetry.ts": {
@@ -4731,11 +4867,11 @@
       "mode": 420
     },
     "apps/bot/src/lib/model-route.test.ts": {
-      "sha256": "262a045c958c62b3c320dde6a15e33aa64e1c859624472365d6327c319f3b725",
+      "sha256": "d661a6dad1927a09702782cfd0de1cb68d80e4dce65baff5dcfe36c05409ad9c",
       "mode": 420
     },
     "apps/bot/src/lib/model-route.ts": {
-      "sha256": "a3351930131997528a112950adc16c8fe8b4226851063659fb63adb21fd0ff81",
+      "sha256": "761b3b945c4f46a9b9f709a03c31be8916c43fcbb34185750713086468aea3af",
       "mode": 420
     },
     "apps/bot/src/lib/primary-mcp-server.test.ts": {
@@ -4759,7 +4895,7 @@
       "mode": 420
     },
     "apps/bot/src/styles.css": {
-      "sha256": "2e769317e22a48695e8161530d91f7605b2c42584c42e78fcf347eab662eff68",
+      "sha256": "e054e0878fd8715bcf3592fde80e5b50315974122d165db2df1db4e9973e6f21",
       "mode": 420
     },
     "apps/bot/src/vendor/bloub/bot/cycles.ts": {
@@ -4824,6 +4960,14 @@
     },
     "apps/bot/tests/connection-card/serve.ts": {
       "sha256": "3044e56c6c43b714e20e4337a692793ab799cbbb708532ea1bd6b10c08328cb1",
+      "mode": 420
+    },
+    "apps/bot/tests/default-tools/default-tools.spec.ts": {
+      "sha256": "8b7c4d63dc223af168580127995738e1d2ab11851f6ea094123ffda801b205ef",
+      "mode": 420
+    },
+    "apps/bot/tests/default-tools/playwright.config.ts": {
+      "sha256": "ab4669fe12f81bc4fcfe3c5f38b8aba0c9ce22dd9c5d1538f8283015a77228e8",
       "mode": 420
     },
     "apps/bot/tests/local-hands/native.test.ts": {
@@ -5995,11 +6139,11 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/identity/contract.ts": {
-      "sha256": "770f82f4ed8ef27f1938e79c874c9e636fae25d2c97a8bba092584d507f3884f",
+      "sha256": "fe5420b94266205255d5b442fc3745566f68f52586abb8ca53eb1f4997e9dabd",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/identity/http.ts": {
-      "sha256": "9bf2161b852034977c282a3358cddd31351bd41b3213e5001be682d18ecd5096",
+      "sha256": "e1f591af371bc10462e63852730a3380407fe9d502230605aa7e8000706b173e",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/identity/keycloak.ts": {
@@ -6007,15 +6151,15 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/identity/memory.ts": {
-      "sha256": "d750b4367494538f7a4443723e0b871cab3cdee2b3915edb8237a9134de4cb87",
+      "sha256": "50eda0cc4f4206927cdf912046cc80a6ba904fc10214fff502c389af84578251",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/identity/module.ts": {
-      "sha256": "740c88e5c3f2173c7b7eaf829f30872c2dec7d61092a82c6385aa5676470f50d",
+      "sha256": "765e1df0fbc45cd8fc37dc59133792a325b3e38d1f112a0fcae06d508ad89043",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/identity/postgres.ts": {
-      "sha256": "8988b48a0c65b2809273245795a66da989a00227f96113aad90e1aa43494c6ac",
+      "sha256": "7aa7927434372ec16aba3195e02b3dae8879be389fdad00a768752da8eb10410",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/installed-services/seed.ts": {
@@ -6195,11 +6339,11 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/one-policy/default.ts": {
-      "sha256": "7430213243c41288d89c0a74d410dad9f9407119dd83f0dacfc7017dcbc37d0e",
+      "sha256": "a2580e2193ed81a0d1038b6acd4dc9bf1e27e080ea5a38608adc5e0ae9909886",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/one-policy/drafts.ts": {
-      "sha256": "429109f63836a7de2867f25d4b4367c9e2166a378640e58b8873cda11f051a57",
+      "sha256": "3d7e2508d9f2b67eb8f9227b55bed2697432c08917129914430385f6f19f9e21",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/one-policy/http.ts": {
@@ -6215,7 +6359,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/one-policy/permission-preview.ts": {
-      "sha256": "3bf704fb39e6551828e138b20e6b1e7aafef7444c368b550c92f359028286c4d",
+      "sha256": "633007ad2bbf857a46f68aee0cbf987ccb232151e1c704f7f33bfd92e74acf1d",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/one-policy/postgres.ts": {
@@ -6607,11 +6751,11 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/admin-policy-authoring.test.ts": {
-      "sha256": "0cd270746275e3436dfab17601197d3ced823c0f67d4a20e4cb13e3e88267d69",
+      "sha256": "82c0b38470469306c9fba88a29423866eed3becd887189e6c3082fdf0b9ac6ed",
       "mode": 420
     },
     "apps/platform/platform-api/test/admin-policy-postgres.test.ts": {
-      "sha256": "c7dfa36d48c27156f784d8b3dc2bd10a235d4bcf577467755799b8c84fdc0236",
+      "sha256": "e3875058c41ed0d2a6b7637c5d1efc72bfe6e738ac9203ee82eb27eaa22e49c2",
       "mode": 420
     },
     "apps/platform/platform-api/test/agent-delegations-postgres.test.ts": {
@@ -6623,7 +6767,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/agent-subject-self-service.test.ts": {
-      "sha256": "736366d3196dcaa233c50f89efd0c2b581b558bea99787c17748635d165405e5",
+      "sha256": "36320376d74007ad9686e68f3ff9a449254d5326b1606b86ded77d8ccdceef1a",
       "mode": 420
     },
     "apps/platform/platform-api/test/ai-gateway.test.ts": {
@@ -6951,7 +7095,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/one-policy.test.ts": {
-      "sha256": "71f6465d74fc453c9fa5fccbcad11288efbd4d9b10cfee102fd8784c63113dc0",
+      "sha256": "c34b57448db7d8a0169f7c8e10d0375684f1af994d0a5494016922fa0d7c349a",
       "mode": 420
     },
     "apps/platform/platform-api/test/organization-membership.test.ts": {
@@ -6959,7 +7103,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/permission-preview.test.ts": {
-      "sha256": "01ecf5169a59dcf4afc64d7d8b6671fb36f191286893a2fe54bca5499f92364e",
+      "sha256": "0c5aed369a94acbb62216cfb76efb019d5e7e109c70c7dc9e9ec1d29b3320e17",
       "mode": 420
     },
     "apps/platform/platform-api/test/persistence.test.ts": {
@@ -7063,7 +7207,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/runtime-policy.test.ts": {
-      "sha256": "c238ec9bb688e3b321203fedf36717adea17170ed5d3f74151aaaf103ae1a9aa",
+      "sha256": "c647771bdb35eb6856d317a35e4553253803c70e178465570ef5d538701b2e8a",
       "mode": 420
     },
     "apps/platform/platform-api/test/runtime-protocol.test.ts": {
@@ -7319,7 +7463,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/domain/contracts.ts": {
-      "sha256": "8f3bdb096e0d6baddb5a287f7b75012e8c71a872c82617d4fc3eaa610326cbf6",
+      "sha256": "9a2d630a6fedf672ea1e993d59b0083e7d2c86f9b5ad2a685695498ce96e67fa",
       "mode": 420
     },
     "apps/platform/platform-web/src/domain/organization-roles.ts": {
@@ -7555,7 +7699,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/features/policy/bot-policy-editor.tsx": {
-      "sha256": "e5c47285eb59fc6d1444290a48cfa6187d6b4f4e2ea4ada8440145cb8bfe5089",
+      "sha256": "c89ab3bd1aae7e53d0e44cbb022ba00ec00fb66f3ad1bfc46fdff373d31e6eb3",
       "mode": 420
     },
     "apps/platform/platform-web/src/features/policy/discard-policy-draft.tsx": {
@@ -7715,7 +7859,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/generated/management-api.ts": {
-      "sha256": "96c16c8d37bfae0017d23e914dcc03eb2f5be1e38cf4da9e34b56df216309110",
+      "sha256": "49d0f1c6ad3396b96aedaf93cd602dd480511e96c4078341b2b2f58555059903",
       "mode": 420
     },
     "apps/platform/platform-web/src/hooks/use-demo-mode.ts": {
@@ -7739,7 +7883,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/i18n.ts": {
-      "sha256": "dbcf317744de790a0c745e8d61e667521d14935b3c34c86c5a67bc62495c79c3",
+      "sha256": "72f74e1abb657ab376f1707cd2452bf6c6172a00c8934b7368e248e65630203c",
       "mode": 420
     },
     "apps/platform/platform-web/src/i18n/admin-governance.ts": {
@@ -7847,7 +7991,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/test/bot-policy-draft-lifecycle.dom.test.tsx": {
-      "sha256": "0e62a1ad718d82bf06e2e08b6df6f1cbb40151483d51eb7a3634c8ab010eab7b",
+      "sha256": "346410c9f2440d390dab9db8ae5449a0a834b562ed9f25e2a2571b593fac2812",
       "mode": 420
     },
     "apps/platform/platform-web/test/button.dom.test.tsx": {
@@ -8431,11 +8575,11 @@
       "mode": 420
     },
     "packages/protocol/src/runtime-capability-actions.test.ts": {
-      "sha256": "c5b6d1227ddad1691442dc2c3d54da3165b75b08d6bbc497a52c914143eafa4f",
+      "sha256": "892cc3ee44d8e1649cfcdc429276c6c19a8cbb163c41906088ef65c7b3f908c8",
       "mode": 420
     },
     "packages/protocol/src/runtime-capability-actions.ts": {
-      "sha256": "caab7a956e2a838b1f39fd49d136e8a240086809fcbe853e9245cb4616784d99",
+      "sha256": "c8cf746e8263e092cf1be4f4698e3f2561c483f2168b0d694881ad88e63cbc08",
       "mode": 420
     },
     "packages/protocol/src/runtime-command.test.ts": {
@@ -8539,7 +8683,7 @@
       "mode": 420
     },
     "pnpm-lock.yaml": {
-      "sha256": "6178d3f365ed890b33554c13db49b505d8dac271d4c61e4d8ff51aca7c086480",
+      "sha256": "b5638f91e6679e82953a088ecbf3f82a8e5da29a81a8c10c7f8c2b2f45d56c96",
       "mode": 420
     },
     "pnpm-workspace.yaml": {

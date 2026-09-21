@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { CODEX_CORE_CAPABILITY_DEFS, CODEX_CORE_KINDS } from "./codex-runtime-catalog"
+import { CODEX_CORE_CAPABILITY_DEFS, CODEX_CORE_KINDS, GENIO_DESKTOP_ADAPTER_CAPABILITY_DEFS } from "./codex-runtime-catalog"
 import { RUNTIME_CAPABILITY_IDS } from "@genioone/protocol/runtime-capability-actions"
 import {
   DEFAULT_RUNTIME_EXPOSE_POLICY,
@@ -35,10 +35,13 @@ describe("Epic C bot capability surface", () => {
     expect(browser?.statusLabel).toBe("無法使用")
     expect(browser?.ctaLabel).toBe("無法使用")
     expect(browser?.status).toBe("unavailable")
+    const computer = rows.find((r) => r.runtime?.capabilityId === "computer.use")
+    expect(computer?.runtime?.kind).toBe("desktop")
+    expect(computer?.effectiveAllow).toBe(false)
   })
 
   test("runtime surface covers the shared capability registry", () => {
-    const ids = ["codex.subscription", ...CODEX_CORE_CAPABILITY_DEFS.map((definition) => definition.id)]
+    const ids = ["codex.subscription", ...CODEX_CORE_CAPABILITY_DEFS.map((definition) => definition.id), ...GENIO_DESKTOP_ADAPTER_CAPABILITY_DEFS.map((definition) => definition.id)]
     expect(ids).toEqual([...RUNTIME_CAPABILITY_IDS])
     expect(ids).toContain("mcp.invoke")
     expect(ids).toContain("remote_hands.use")
@@ -49,6 +52,7 @@ describe("Epic C bot capability surface", () => {
     expect(resolveRuntimeEffectiveAllow("filesystem.read")).toBe("ALLOW")
     expect(resolveRuntimeEffectiveAllow("web_search.query")).toBe("ALLOW")
     expect(resolveRuntimeEffectiveAllow("browser.open")).toBe("DENY")
+    expect(resolveRuntimeEffectiveAllow("computer.use")).toBe("DENY")
     expect(DEFAULT_RUNTIME_EXPOSE_POLICY.deny).toContain("browser.open")
   })
 
@@ -94,7 +98,7 @@ describe("Epic C bot capability surface", () => {
 
     expect(rows.some((r) => r.source === "runtime")).toBe(true)
     expect(rows.some((r) => r.source === "enterprise")).toBe(true)
-    expect(rows.filter((r) => r.source === "runtime").length).toBe(CODEX_CORE_CAPABILITY_DEFS.length)
+    expect(rows.filter((r) => r.source === "runtime").length).toBe(CODEX_CORE_CAPABILITY_DEFS.length + GENIO_DESKTOP_ADAPTER_CAPABILITY_DEFS.length)
 
     const connect = rows.find((r) => r.key.includes("servicenow-csm"))
     expect(connect?.statusLabel).toBe("需連線")

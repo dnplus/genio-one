@@ -46,6 +46,7 @@ describe("UX P1-a handoff HTTP", () => {
       async send(line) {
         const request = JSON.parse(line)
         if (request.method === "initialize") callbacks.onMessage(JSON.stringify({ id: request.id, result: {} }))
+        if (request.method === "model/list") callbacks.onMessage(JSON.stringify({ id: request.id, result: { data: [{ id: "astra-id", model: "gpt-6-astra", hidden: false, isDefault: true }], nextCursor: null } }))
         if (request.method === "thread/resume") callbacks.onMessage(JSON.stringify({ id: request.id, error: { code: -32600, message: "no rollout found for thread id missing-thread" } }))
         if (request.method === "thread/start") callbacks.onMessage(JSON.stringify({ id: request.id, result: { thread: { id: "contract-target-thread" } } }))
         if (request.method === "turn/start") {

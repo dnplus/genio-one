@@ -6,6 +6,11 @@ const supportedLanguages = ["en", "zh-TW"] as const
 export type ConsoleLanguage = (typeof supportedLanguages)[number]
 
 const en: Record<string, string> = {
+  "Allow use of a computer environment": "Allow use of a computer environment",
+  "Computer environment enabled": "Computer environment enabled",
+  "Computer environment disabled": "Computer environment disabled",
+  "Computer use still checks Bot execution permissions and environment policy.": "Computer use still checks Bot execution permissions and environment policy.",
+  "No selected role or person means Bot access is denied.": "No selected role or person means Bot access is denied.",
   "Risk scoring is not provided by this deployment": "Risk scoring is not provided by this deployment",
   "Entitlement risk scores are not available, so none are shown. The entitlement inventory below is the current access evidence and is complete.": "Entitlement risk scores are not available, so none are shown. The entitlement inventory below is the current access evidence and is complete.",
   "Suspend": "Suspend",
@@ -1261,6 +1266,9 @@ const en: Record<string, string> = {
   "Run shell commands": "Run shell commands",
   "Browser open": "Browser open",
   "Open browser pages": "Open browser pages",
+  "Computer use": "Computer use",
+  "computer.use": "Computer use",
+  "Operate the desktop": "Operate the desktop",
   "Web search": "Web search",
   "Search the web": "Search the web",
   "Remote hands": "Remote hands",
@@ -1302,6 +1310,11 @@ const en: Record<string, string> = {
 }
 
 const zhTW: Record<string, string> = {
+  "Allow use of a computer environment": "允許使用電腦環境",
+  "Computer environment enabled": "已允許使用電腦環境",
+  "Computer environment disabled": "未允許使用電腦環境",
+  "Computer use still checks Bot execution permissions and environment policy.": "使用電腦環境時，仍會檢查 Bot 執行權限與環境政策。",
+  "No selected role or person means Bot access is denied.": "未選擇角色或人員時，會拒絕使用 Bot。",
   "Risk scoring is not provided by this deployment": "此部署未提供風險評分",
   "Entitlement risk scores are not available, so none are shown. The entitlement inventory below is the current access evidence and is complete.": "權限風險評分無法取得，因此不顯示任何評分。下方的權限清單是目前完整的存取證據。",
   "Suspend": "停用",
@@ -4502,6 +4515,9 @@ const zhTW: Record<string, string> = {
   "Run shell commands": "執行 Shell 命令",
   "Browser open": "開啟瀏覽器",
   "Open browser pages": "開啟瀏覽器頁面",
+  "Computer use": "電腦操作",
+  "computer.use": "電腦操作",
+  "Operate the desktop": "操作桌面",
   "Web search": "網路搜尋",
   "Search the web": "搜尋網路",
   "Remote hands": "遠端操作",

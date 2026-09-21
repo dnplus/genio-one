@@ -9,7 +9,8 @@
  */
 import {
   CODEX_CORE_CAPABILITY_DEFS,
-  type CodexCoreCapabilityDef,
+  GENIO_DESKTOP_ADAPTER_CAPABILITY_DEFS,
+  type RuntimeCapabilityCatalogDef,
 } from "./codex-runtime-catalog"
 import { RUNTIME_CAPABILITY_IDS } from "@genioone/protocol/runtime-capability-actions"
 import type { CatalogAddState } from "./bot-binding-add"
@@ -290,7 +291,7 @@ export function buildEnterpriseSurfaceRow(input: EnterpriseSurfaceInput): Capabi
 }
 
 export function buildRuntimeSurfaceRow(
-  def: Pick<CodexCoreCapabilityDef, "id" | "kind" | "display_name" | "description">,
+  def: Pick<RuntimeCapabilityCatalogDef, "id" | "kind" | "display_name" | "description">,
   policy: RuntimeExposePolicy = DEFAULT_RUNTIME_EXPOSE_POLICY,
   runtimeId = "codex",
 ): CapabilitySurfaceRow {
@@ -326,12 +327,12 @@ export function buildRuntimeSurfaceRow(
 
 export function buildCapabilitySurface(options: {
   enterprise?: EnterpriseSurfaceInput[]
-  runtimeDefs?: readonly CodexCoreCapabilityDef[]
+  runtimeDefs?: readonly RuntimeCapabilityCatalogDef[]
   runtimePolicy?: RuntimeExposePolicy
   runtimeId?: string
 }): CapabilitySurfaceRow[] {
   const enterpriseRows = (options.enterprise ?? []).map(buildEnterpriseSurfaceRow)
-  const defs = options.runtimeDefs ?? CODEX_CORE_CAPABILITY_DEFS
+  const defs = options.runtimeDefs ?? [...CODEX_CORE_CAPABILITY_DEFS, ...GENIO_DESKTOP_ADAPTER_CAPABILITY_DEFS]
   const runtimeRows = defs.map((def) =>
     buildRuntimeSurfaceRow(def, options.runtimePolicy ?? DEFAULT_RUNTIME_EXPOSE_POLICY, options.runtimeId ?? "codex"),
   )

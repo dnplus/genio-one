@@ -1,0 +1,35 @@
+.bot-schedules-panel { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.bot-default-tools-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.bot-default-tools-header h3 { margin: 0; color: #24302d; font-size: 15px; }
+.bot-default-tools-header p { margin: 4px 0 0; color: #657571; font-size: 13px; line-height: 1.45; }
+.bot-default-tools-actions, .schedule-row-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.bot-default-tools-actions .secondary-button, .bot-default-tools-actions .primary-button, .schedule-row-actions .secondary-button { min-height: 34px; padding: 0 10px; font-size: 12px; }
+.bot-default-tools-actions svg, .schedule-row-actions svg { width: 14px; }
+.bot-default-tools-notice, .bot-default-tools-error, .bot-default-tools-message { margin: 0; padding: 10px 12px; border-radius: 10px; font-size: 13px; line-height: 1.45; }
+.bot-default-tools-notice { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #7a5a12; background: #fff7e8; border: 1px solid #f0d9a6; }
+.bot-default-tools-notice .secondary-button { min-height: 32px; flex-shrink: 0; }
+.bot-default-tools-error { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #b42318; background: #fff4f2; border: 1px solid #fecdca; }
+.bot-default-tools-error .secondary-button { min-height: 32px; flex-shrink: 0; }
+.bot-default-tools-message { color: #236454; background: #f1f8f5; border: 1px solid #cce6d9; }
+.bot-default-tools-loading { display: flex; align-items: center; gap: 8px; color: #657571; font-size: 13px; }
+.schedule-editor { display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid #dce4e1; border-radius: 12px; background: #f8fbfa; }
+.schedule-editor-heading { display: flex; align-items: center; justify-content: space-between; color: #24302d; font-size: 14px; }
+.schedule-editor label, .schedule-editor fieldset { display: flex; flex-direction: column; gap: 5px; min-width: 0; border: 0; padding: 0; margin: 0; }
+.schedule-editor label > span, .schedule-editor legend { color: #40514c; font-size: 12px; font-weight: 600; }
+.schedule-editor input, .schedule-editor textarea, .schedule-editor select { box-sizing: border-box; width: 100%; border: 1px solid #cfdad5; border-radius: 8px; background: #fff; color: #27312e; padding: 8px 10px; font: inherit; }
+.schedule-editor textarea { min-height: 78px; resize: vertical; }
+.schedule-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.weekday-picker { display: flex; flex-wrap: wrap; gap: 6px; }
+.weekday-picker label { position: relative; display: inline-flex; cursor: pointer; }
+.weekday-picker input { position: absolute; opacity: 0; pointer-events: none; }
+.weekday-picker span { min-width: 28px; border: 1px solid #cfdad5; border-radius: 7px; padding: 5px 7px; text-align: center; color: #40514c; font-size: 12px; }
+.weekday-picker input:checked + span { border-color: #0c6a5e; background: #eaf7f3; color: #0c6a5e; font-weight: 700; }
+.text-button { border: 0; padding: 2px 0; background: transparent; color: #0c6a5e; font: inherit; font-size: 12px; cursor: pointer; }
+.schedule-row { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: start; gap: 10px; padding: 12px; border: 1px solid #dce4e1; border-radius: 12px; background: #fff; }
+.schedule-row > svg { width: 20px; color: #0c6a5e; margin-top: 2px; }
+.schedule-row-copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.schedule-row-copy strong, .schedule-row-copy small { overflow-wrap: anywhere; }
+.schedule-row-copy strong { color: #24302d; font-size: 13px; }
+.schedule-row-copy small { color: #657571; font-size: 12px; line-height: 1.4; }
+.schedule-delete-button { color: #b42318; }
+@media (max-width: 640px) { .bot-default-tools-header { flex-direction: column; } .schedule-form-grid { grid-template-columns: 1fr; } .schedule-row { grid-template-columns: 24px minmax(0, 1fr); } .schedule-row-actions { grid-column: 2; } }

@@ -9,6 +9,7 @@ import { OnePolicyBotDecisionSchema } from "./contract"
 import type { OnePolicy } from "./module"
 import { PlatformApiError } from "../errors"
 import type { AccessGroupDirectory } from "../access-groups/module"
+import { PERSONAL_BOT_COMPUTER_USE, PERSONAL_BOT_USE } from "./default"
 import { RuntimePolicyDecisionSchema, PERSONAL_BOT_RESOURCE_ID, RUNTIME_POLICY_CAPABILITY_IDS, runtimePolicyAuditEvent } from "./runtime"
 import { capabilityActions } from "@genioone/protocol/runtime-capability-actions"
 
@@ -73,10 +74,11 @@ export const permissionPreviewHttp: FastifyPluginAsync<{
       role: authorization.tenant_administrator ? "TENANT_ADMINISTRATOR" as const : membership.administrator_organization_ids.length ? "ORGANIZATION_ADMINISTRATOR" as const : "USER" as const,
       organization_ids: authorization.tenant_administrator ? [] : membership.organization_ids,
     }
-    const [catalog, policies, botAccess, accessGroups] = await Promise.all([
+    const [catalog, policies, botAccess, computerUseAccess, accessGroups] = await Promise.all([
       options.access.catalog({ tenantId, actor: { subjectId, clientId: principal.client_id, role: principal.role, organizationIds: principal.organization_ids } }),
       options.policy.listRuntimePolicies(tenantId),
-      options.policy.resolveBotAccess({ tenantId, principal, capabilityId: "personal_bot.use" }),
+      options.policy.resolveBotAccess({ tenantId, principal, capabilityId: PERSONAL_BOT_USE }),
+      options.policy.resolveBotAccess({ tenantId, principal, capabilityId: PERSONAL_BOT_COMPUTER_USE }),
       options.accessGroups.groupsForSubject({ tenantId, subjectId }),
     ])
     const targets = new Map<string, Set<ReturnType<typeof capabilityActions>[number]>>()
@@ -95,13 +97,14 @@ export const permissionPreviewHttp: FastifyPluginAsync<{
         principal, runtime_id: request.body.runtime_id, bot_id: request.body.bot_id || PERSONAL_BOT_RESOURCE_ID,
         capability_id: capabilityId, action, recordAudit: false, correlation_id: correlationId,
       })
-      const effectiveDecision = botAccess.decision === "DENY" ? { ...decision, decision: "DENY" as const, reason_code: botAccess.reason_code, policy_id: botAccess.policy_id, policy_revision: botAccess.policy_revision, policy_display_name: null, matched_policy_refs: [] } : decision
+      const applicableBotAccess = capabilityId === "computer.use" ? computerUseAccess : botAccess
+      const effectiveDecision = applicableBotAccess.decision === "DENY" ? { ...decision, decision: "DENY" as const, reason_code: applicableBotAccess.reason_code, policy_id: applicableBotAccess.policy_id, policy_revision: applicableBotAccess.policy_revision, policy_display_name: null, matched_policy_refs: [] } : decision
       await options.audit.record({ tenantId, event: {
         ...runtimePolicyAuditEvent(effectiveDecision, admin, "PREVIEW", decision.evaluated_at, { audit_event_id: crypto.randomUUID() }),
         actor_subject: { subject_id: admin.subject_id, evidence_level: "VERIFIED" },
         target_subject_id: subjectId,
       } })
-      decisions.push({ ...decision, effective_decision: effectiveDecision.decision })
+      decisions.push({ ...decision, ...(capabilityId === "computer.use" ? { reason_code: effectiveDecision.reason_code } : {}), effective_decision: effectiveDecision.decision })
     }
     reply.header("cache-control", "no-store")
     return {

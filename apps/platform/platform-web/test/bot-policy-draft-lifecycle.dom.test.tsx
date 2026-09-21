@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event"
 import { createInstance } from "i18next"
 import { I18nextProvider } from "react-i18next"
 
-import type { OnePolicyBotSeed, OverviewSnapshot } from "@/domain/contracts"
+import type { BotPolicyRules, OnePolicyBotSeed, OverviewSnapshot } from "@/domain/contracts"
 import { BotPolicyEditor } from "@/features/policy/bot-policy-editor"
 import type { PolicyDraftView } from "@/lib/product-api"
 
@@ -120,6 +120,62 @@ test("Bot policy draft follows the server-persisted validate, review, and publis
     await user.click(publish)
     await waitFor(() => expect(published).toBe(1))
     expect(screen.queryByTestId("bot-policy-draft-lifecycle")).toBeNull()
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("Bot policy saves computer environment approval through validation, review, and publishing", async () => {
+  const originalFetch = globalThis.fetch
+  const user = userEvent.setup()
+  let current = draft()
+  let savedDefinition: Record<string, unknown> | null = null
+  const transitions: string[] = []
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input)
+    if (url.endsWith("/revisions")) return json([{ policy_revision: 6, rules: { allowed_roles: [], allowed_subject_ids: [], computer_use_enabled: true }, published_by: null, published_at: 100 }])
+    if (url.endsWith("/draft") && init?.method === "PUT") {
+      const payload = JSON.parse(String(init.body)) as { content: { definition: Record<string, unknown> } }
+      savedDefinition = payload.content.definition
+      current = { ...current, content: { kind: "BOT_ACCESS", definition: payload.content.definition as BotPolicyRules } }
+      return json(current)
+    }
+    if (url.endsWith("/validate")) {
+      transitions.push("validate")
+      current = { ...current, lifecycle: "VALIDATED", validation: { actor_subject_id: "subject-admin", at: 110, content_digest: current.content_digest, correlation_id: "validation-1" } }
+      return json(current)
+    }
+    if (url.endsWith("/review")) {
+      transitions.push("review")
+      current = { ...current, lifecycle: "REVIEWED", review: { actor_subject_id: "subject-admin", at: 120, content_digest: current.content_digest, correlation_id: "review-1" } }
+      return json(current)
+    }
+    if (url.endsWith("/publish")) {
+      transitions.push("publish")
+      return json({ policy_revision: 8 })
+    }
+    if (url.endsWith("/draft")) return json(current)
+    return json({})
+  }) as typeof fetch
+
+  try {
+    await renderEditor()
+    await screen.findByTestId("bot-policy-draft-lifecycle")
+    const computerUse = screen.getByRole("checkbox", { name: "Allow use of a computer environment" })
+    expect(computerUse.getAttribute("aria-disabled")).toBe("true")
+    expect(computerUse.getAttribute("aria-checked")).toBe("false")
+    await user.click(screen.getByText("Revision history"))
+    expect(document.body.textContent).toContain("Computer environment enabled")
+
+    await user.click(screen.getByRole("button", { name: "Edit policy" }))
+    await user.click(computerUse)
+    await user.click(screen.getByRole("button", { name: "Save draft" }))
+    await waitFor(() => expect(savedDefinition).toMatchObject({ computer_use_enabled: true }))
+
+    await user.click(screen.getByRole("button", { name: "Validate saved draft" }))
+    await user.click(screen.getByRole("button", { name: "Review saved draft" }))
+    await user.click(screen.getByRole("button", { name: "Publish saved draft" }))
+    await waitFor(() => expect(transitions).toEqual(["validate", "review", "publish"]))
   } finally {
     globalThis.fetch = originalFetch
   }

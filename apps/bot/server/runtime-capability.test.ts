@@ -49,6 +49,7 @@ describe("Runtime Capability schema (Epic A-1)", () => {
     expect(RUNTIME_CAPABILITY_KINDS).toContain("browser")
     expect(RUNTIME_CAPABILITY_KINDS).toContain("web_search")
     expect(RUNTIME_CAPABILITY_KINDS).toContain("remote_hands")
+    expect(RUNTIME_CAPABILITY_KINDS).toContain("desktop")
   })
 
   test("action draft is expose / invoke / load_extension", () => {

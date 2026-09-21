@@ -66,11 +66,11 @@ export async function deliverQuestionAnswers(context: BotServerContext) {
           if (!originalStillActive) {
             if (threadId) {
               const params = await canonical("thread/resume", { threadId, excludeTurns: true })
-              params.config = { ...(params.config as object), "mcp_servers.genio_bot": context.botToolSessions.config(bot.id, principal, session.accessToken), "features.memories": false }
+              params.config = { ...(params.config as object), "mcp_servers.genio_bot": context.botToolSessions.config(bot.id, principal, session.id), "features.memories": false }
               await context.runtimeBroker.request(session.id, "thread/resume", params)
             } else {
               const params = await canonical("thread/start", {})
-              params.config = { ...(params.config as object), "mcp_servers.genio_bot": context.botToolSessions.config(bot.id, principal, session.accessToken), "features.memories": false }
+              params.config = { ...(params.config as object), "mcp_servers.genio_bot": context.botToolSessions.config(bot.id, principal, session.id), "features.memories": false }
               const result = await context.runtimeBroker.request(session.id, "thread/start", params)
               threadId = result.thread.id
               context.botRegistry.saveSession({ botId: bot.id, appServerThreadId: threadId!, activeRuntimeTier: "none" })
@@ -80,7 +80,7 @@ export async function deliverQuestionAnswers(context: BotServerContext) {
           const clientUserMessageId = `question-answer:${question.id}:${question.clientAnswerId}`
           const params = originalStillActive
             ? { threadId, expectedTurnId: question.sourceTurnId, clientUserMessageId, input }
-            : await canonical("turn/start", { threadId, clientUserMessageId, input, additionalContext: botTurnContext(context.botRegistry, bot.id, threadId!) })
+            : await canonical("turn/start", { threadId, clientUserMessageId, input, additionalContext: botTurnContext(context.botRegistry, bot.id, threadId!, {}, bot, principal) })
           context.botRegistry.questions.mark(bot.id, question.id, "sending", { deliveryThreadId: threadId, error: undefined })
           sent = true
           const result = await context.runtimeBroker.request(session.id, originalStillActive ? "turn/steer" : "turn/start", params)

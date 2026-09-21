@@ -287,11 +287,13 @@ export async function botRoutes(app: FastifyInstance, context: BotServerContext)
     try {
       const principal = await requestPrincipal(request)
       const body = request.body as Record<string, unknown>
+      if (body.expectedRevision !== undefined && (!Number.isSafeInteger(body.expectedRevision) || Number(body.expectedRevision) < 1)) throw new Error("BOT_PROFILE_REVISION_INVALID")
       const share = body.sharePolicy && typeof body.sharePolicy === "object" ? body.sharePolicy as Record<string, unknown> : undefined
       const wake = body.wake === "chat" || body.wake === "routine" || body.wake === "both" || body.wake === ""
         ? body.wake
         : undefined
       const bot = botRegistry.update((request.params as { botId: string }).botId, principal, {
+        expectedRevision: typeof body.expectedRevision === "number" ? body.expectedRevision : undefined,
         name: typeof body.name === "string" ? body.name : undefined,
         title: typeof body.title === "string" ? body.title : undefined,
         description: typeof body.description === "string" ? body.description
@@ -336,7 +338,10 @@ export async function botRoutes(app: FastifyInstance, context: BotServerContext)
     try {
       const principal = await requestPrincipal(request)
       const botId = (request.params as { botId: string }).botId
-      botRegistry.delete(botId, principal)
+      botRegistry.db.transaction(() => {
+        botRegistry.delete(botId, principal)
+        context.botSchedules.cancelBot(principal, botId)
+      })()
       return reply.code(200).send({ ok: true, botId })
     } catch (error) {
       return reply.code(400).send({ error: error instanceof Error ? error.message : "BOT_DELETE_FAILED" })

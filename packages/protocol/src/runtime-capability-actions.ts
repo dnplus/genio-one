@@ -18,6 +18,7 @@ export const RUNTIME_CAPABILITY_REGISTRY = {
   "web_search.query": ["expose"],
   "mcp.invoke": ["expose", "invoke"],
   "remote_hands.use": ["expose", "use"],
+  "computer.use": ["expose", "invoke"],
 } as const satisfies Record<string, readonly RuntimePolicyAction[]>
 
 export type RuntimeCapabilityId = keyof typeof RUNTIME_CAPABILITY_REGISTRY

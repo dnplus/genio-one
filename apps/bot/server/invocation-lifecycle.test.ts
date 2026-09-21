@@ -1,8 +1,11 @@
 import { expect, test } from "bun:test"
 import { BotRegistry } from "./bot-registry"
+import { BotSchedules } from "./bot-schedules"
+import { createCapabilityGate } from "./capability-gate"
 import { RuntimeBroker } from "./runtime-broker"
 import { BotToolSessions } from "./bot-tool-sessions"
 import { createBotModelDirectory } from "./model-directory"
+import { createRuntimePolicyClient } from "./runtime-policy"
 import { runApprovedBotInvocation } from "./routes/invocations"
 import type { BotServerContext } from "./context"
 import type { Turn } from "./generated/v2/Turn"
@@ -15,11 +18,14 @@ test("turn send rejection settles failure while broker retains its runtime", asy
   const invocation = registry.createHandoffs(principal, { fromBotId: caller.id, toBotId: target.id, fact: "Send failure" })[0]!
   const broker = new RuntimeBroker({ provision: async () => { throw new Error("not used") } })
   let closes = 0
+  const sent: Array<{ method?: string; params?: Record<string, unknown> }> = []
   const context = { botRegistry: registry, runtimeBroker: broker, botToolSessions: new BotToolSessions(), modelDirectory: createBotModelDirectory({}),
     createCodexRuntime: (_token, callbacks) => ({
       async send(line) {
         const request = JSON.parse(line)
+        sent.push(request)
         if (request.method === "initialize") callbacks.onMessage(JSON.stringify({ id: request.id, result: {} }))
+        if (request.method === "model/list") callbacks.onMessage(JSON.stringify({ id: request.id, result: { data: [{ id: "astra-id", model: "gpt-6-astra", hidden: false, isDefault: true }], nextCursor: null } }))
         if (request.method === "thread/start") callbacks.onMessage(JSON.stringify({ id: request.id, result: { thread: { id: "target-thread" } } }))
         if (request.method === "turn/start") throw new Error("pipe closed")
       },
@@ -28,11 +34,83 @@ test("turn send rejection settles failure while broker retains its runtime", asy
   } as BotServerContext
   try {
     await runApprovedBotInvocation(context, invocation.invocationId, "test-token")
+    expect(sent.find((request) => request.method === "thread/start")?.params?.model).toBe("gpt-6-astra")
+    expect(sent.find((request) => request.method === "turn/start")?.params?.model).toBe("gpt-6-astra")
     expect(registry.getInvocationForService(invocation.invocationId)?.decisionReason).toBe("TARGET_TURN_SEND_FAILED")
     expect(registry.getInvocationForService(invocation.invocationId)?.state).toBe("FAILED")
     expect(closes).toBe(0)
   } finally { await broker.close(); registry.close() }
   expect(closes).toBe(1)
+})
+
+test("handoff binds a company model thread to its target Bot relay URL", async () => {
+  const registry = new BotRegistry(":memory:")
+  const principal = { tenant_id: "tenant", subject_id: "owner", acting_client_id: "genio-one-bot", scopes: [] }
+  const caller = registry.create(principal, { name: "Caller", description: "Original" })
+  const target = registry.create(principal, { name: "Target", description: "Delegated", modelRoute: "genio-gateway" })
+  const invocation = registry.createHandoffs(principal, { fromBotId: caller.id, toBotId: target.id, fact: "Use the target route" })[0]!
+  const broker = new RuntimeBroker({ provision: async () => { throw new Error("not used") } })
+  const originalRelayOrigin = process.env.GENIO_ONE_MODEL_GATEWAY_RELAY_ORIGIN
+  const sent: Array<{ method?: string; params?: Record<string, unknown> }> = []
+  let runtimeSessionId = ""
+  let runtimeRelaySecret = ""
+  process.env.GENIO_ONE_MODEL_GATEWAY_RELAY_ORIGIN = "https://relay.example"
+  const modelDirectory = {
+    availableRoutes: () => ["genio-gateway" as const],
+    supports: () => true,
+    async resolve() {
+      return [{ publicModelId: "company-model", displayName: "Company Model", route: { kind: "genio-gateway" as const, modelProvider: "genio_one" } }]
+    },
+  }
+  const context: BotServerContext = {
+    botRegistry: registry,
+    botSchedules: new BotSchedules(registry.db),
+    capabilityGate: createCapabilityGate({ mode: "open" }),
+    runtimeBroker: broker,
+    botToolSessions: new BotToolSessions(),
+    modelDirectory,
+    runtimePolicy: createRuntimePolicyClient(),
+    createCodexRuntime: (_token, callbacks, namespace, relaySecret) => {
+      runtimeSessionId = namespace?.runtimeSessionId ?? ""
+      runtimeRelaySecret = relaySecret ?? ""
+      return {
+        async send(line: string) {
+          const request = JSON.parse(line)
+          sent.push(request)
+          if (request.method === "initialize") callbacks.onMessage(JSON.stringify({ id: request.id, result: {} }))
+          if (request.method === "thread/start") callbacks.onMessage(JSON.stringify({ id: request.id, result: { thread: { id: "target-thread" } } }))
+          if (request.method === "turn/start") {
+            callbacks.onMessage(JSON.stringify({ id: request.id, result: { turn: { id: "target-turn" } } }))
+            callbacks.onMessage(JSON.stringify({ method: "turn/completed", params: { threadId: "target-thread", turn: { id: "target-turn", status: "completed", items: [{ type: "agentMessage", text: "done" }] } } }))
+          }
+        },
+        async close() {},
+      }
+    },
+  }
+  try {
+    await runApprovedBotInvocation(context, invocation.invocationId, "test-token")
+    const threadStart = sent.find((request) => request.method === "thread/start")
+    const turnStart = sent.find((request) => request.method === "turn/start")
+    expect(threadStart?.params?.config).toMatchObject({
+      "mcp_servers.genio_discovery": {
+        url: `https://relay.example/api/discovery-mcp/${encodeURIComponent(runtimeSessionId)}/bots/${encodeURIComponent(target.id)}/mcp`,
+        bearer_token_env_var: "GENIO_ONE_MCP_BEARER_TOKEN",
+      },
+      "model_providers.genio_one.base_url": `https://relay.example/api/model-gateway/${encodeURIComponent(runtimeSessionId)}/bots/${encodeURIComponent(target.id)}/v1`,
+    })
+    expect(threadStart?.params?.model).toBe("company-model")
+    expect(turnStart?.params?.model).toBe("company-model")
+    const runtimeSession = broker.get(runtimeSessionId)
+    if (!runtimeSession) throw new Error("RUNTIME_SESSION_NOT_FOUND")
+    expect(runtimeRelaySecret).toBe(runtimeSession.relaySecret)
+    expect(registry.getInvocationForService(invocation.invocationId)?.state).toBe("COMPLETED")
+  } finally {
+    if (originalRelayOrigin === undefined) delete process.env.GENIO_ONE_MODEL_GATEWAY_RELAY_ORIGIN
+    else process.env.GENIO_ONE_MODEL_GATEWAY_RELAY_ORIGIN = originalRelayOrigin
+    await broker.close()
+    registry.close()
+  }
 })
 
 test.each(["preparing", "initializing", "running"] as const)("shutdown waits for invocation runtime while %s and prevents later starts", async (phase) => {
@@ -53,13 +131,9 @@ test.each(["preparing", "initializing", "running"] as const)("shutdown waits for
   let spawned = 0
   let closes = 0
   const sent: string[] = []
-  const directory = createBotModelDirectory({})
   const context = {
     botRegistry: registry, runtimeBroker: broker, botToolSessions: new BotToolSessions(),
-    modelDirectory: { ...directory, resolve: async (...args) => {
-      if (phase === "preparing") { reached(); await setup }
-      return directory.resolve(...args)
-    } },
+    modelDirectory: createBotModelDirectory({}),
     createCodexRuntime: (_token, callbacks) => {
       spawned++
       return {
@@ -68,6 +142,10 @@ test.each(["preparing", "initializing", "running"] as const)("shutdown waits for
           sent.push(request.method)
           if (request.method === "skills/extraRoots/set" && phase === "initializing") { reached(); await setup }
           if (request.method === "initialize") callbacks.onMessage(JSON.stringify({ id: request.id, result: {} }))
+          if (request.method === "model/list") {
+            if (phase === "preparing") { reached(); await setup }
+            callbacks.onMessage(JSON.stringify({ id: request.id, result: { data: [{ id: "astra-id", model: "gpt-6-astra", hidden: false, isDefault: true }], nextCursor: null } }))
+          }
           if (request.method === "thread/start") callbacks.onMessage(JSON.stringify({ id: request.id, result: { thread: { id: "target-thread" } } }))
           if (request.method === "turn/start") {
             callbacks.onMessage(JSON.stringify({ id: request.id, result: { turn: { id: "shutdown-turn" } } }))
@@ -85,14 +163,12 @@ test.each(["preparing", "initializing", "running"] as const)("shutdown waits for
     let finished = false
     const shutdown = broker.close().then(() => { finished = true })
     releaseSetup()
-    if (phase !== "preparing") {
-      await closing
-      await Promise.resolve()
-      expect(finished).toBe(false)
-      releaseClose()
-    }
+    await closing
+    await Promise.resolve()
+    expect(finished).toBe(false)
+    releaseClose()
     await Promise.all([task, shutdown])
-    expect(closes).toBe(phase === "preparing" ? 0 : 1)
+    expect(closes).toBe(1)
     if (phase === "initializing") {
       expect(sent).not.toContain("plugin/list")
       expect(sent).not.toContain("thread/start")
@@ -107,7 +183,7 @@ test.each(["preparing", "initializing", "running"] as const)("shutdown waits for
     }
     const later = registry.createHandoffs(principal, { fromBotId: caller.id, toBotId: target.id, fact: "Wait for restart" })[0]!
     await runApprovedBotInvocation(context, later.invocationId, "test-token")
-    expect(spawned).toBe(phase === "preparing" ? 0 : 1)
+    expect(spawned).toBe(1)
     expect(registry.getInvocationForService(later.invocationId)?.state).toBe("APPROVED")
   } finally { releaseSetup(); releaseClose(); await broker.close(); registry.close() }
 })
@@ -128,6 +204,7 @@ test("handoff waits for native work then reuses its owner writer without closing
     async send(line) {
       const request = JSON.parse(line)
       sent.push(request)
+      if (request.method === "model/list") events.onMessage(JSON.stringify({ id: request.id, result: { data: [{ id: "astra-id", model: "gpt-6-astra", hidden: false, isDefault: true }], nextCursor: null } }))
       if (request.method === "thread/resume") events.onMessage(JSON.stringify({ id: request.id, result: { thread: { id: "owned-thread" } } }))
       if (request.method === "turn/start") {
         events.onMessage(JSON.stringify({ id: request.id, result: { turn: { id: "handoff-turn" } } }))
@@ -152,10 +229,12 @@ test("handoff waits for native work then reuses its owner writer without closing
     expect(registry.getInvocationForService(invocation.invocationId)?.state).toBe("COMPLETED")
     expect(spawned).toBe(0)
     expect(closes).toBe(0)
-    expect(sent.map((request) => request.method)).toEqual(["thread/resume", "turn/start"])
-    expect(sent[0].params.threadId).toBe("owned-thread")
-    expect(sent[1].params.approvalPolicy).toBe("on-request")
-    expect(sent[1].params.sandboxPolicy).toEqual({ type: "readOnly", networkAccess: false })
+    expect(sent.map((request) => request.method)).toEqual(["model/list", "thread/resume", "turn/start"])
+    expect(sent[1].params.threadId).toBe("owned-thread")
+    expect(sent[1].params.model).toBe("gpt-6-astra")
+    expect(sent[2].params.model).toBe("gpt-6-astra")
+    expect(sent[2].params.approvalPolicy).toBe("on-request")
+    expect(sent[2].params.sandboxPolicy).toEqual({ type: "readOnly", networkAccess: false })
     expect(browserMessages.every((message) => message.id === undefined)).toBe(true)
     expect(broker.get(session.id)).toBeDefined()
   } finally { await broker.close(); registry.close() }
@@ -198,6 +277,7 @@ test("browser joining an offline handoff shares the initializing process", async
       async send(line) {
         const request = JSON.parse(line)
         if (request.method === "initialize") { initializes++; completeInitialize = () => callbacks.onMessage(JSON.stringify({ id: request.id, result: { version: "native" } })); ready() }
+        if (request.method === "model/list") callbacks.onMessage(JSON.stringify({ id: request.id, result: { data: [{ id: "astra-id", model: "gpt-6-astra", hidden: false, isDefault: true }], nextCursor: null } }))
         if (request.method === "thread/start") callbacks.onMessage(JSON.stringify({ id: request.id, result: { thread: { id: "offline-thread" } } }))
         if (request.method === "turn/start") {
           callbacks.onMessage(JSON.stringify({ id: request.id, result: { turn: { id: "offline-turn" } } }))

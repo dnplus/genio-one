@@ -2,7 +2,8 @@ import { Readable } from "node:stream"
 import WebSocket from "ws"
 import type { FastifyInstance } from "fastify"
 
-import { authenticateProxySession } from "../auth"
+import { authenticateDesktopProxySession, authenticateExecutorProxySession } from "../auth"
+import { appendDesktopLocationCleanup, desktopBrowserCookie, DESKTOP_BROWSER_GRANT_QUERY } from "../desktop-proxy"
 import type { BotServerContext } from "../context"
 
 export async function proxyRoutes(app: FastifyInstance, context: BotServerContext) {
@@ -11,7 +12,7 @@ export async function proxyRoutes(app: FastifyInstance, context: BotServerContex
     if (path && (path.startsWith("//") || path.includes("://") || path.includes("\\"))) {
       return reply.code(400).send({ error: "INVALID_PATH" })
     }
-    const session = await authenticateProxySession(context.runtimeBroker, runtimeSessionId, "desktop", request)
+    const session = authenticateDesktopProxySession(context.runtimeBroker, runtimeSessionId, request, path === "vnc.html")
     if (!session) return reply.code(404).send({ error: "DESKTOP_SESSION_NOT_FOUND" })
     const target = new URL(path || "vnc.html", session.sandboxUrl)
     const response = await fetch(target, {
@@ -24,12 +25,21 @@ export async function proxyRoutes(app: FastifyInstance, context: BotServerContex
     const cacheControl = response.headers.get("cache-control")
     if (contentType) reply.header("content-type", contentType)
     if (cacheControl) reply.header("cache-control", cacheControl)
-    return reply.code(response.status).send(Buffer.from(await response.arrayBuffer()))
+    if (path === "vnc.html" && response.ok && session.bootstrap) {
+      const credential = typeof (request.query as Record<string, unknown> | undefined)?.[DESKTOP_BROWSER_GRANT_QUERY] === "string"
+        ? (request.query as Record<string, string>)[DESKTOP_BROWSER_GRANT_QUERY]
+        : null
+      if (credential) reply.header("set-cookie", desktopBrowserCookie(runtimeSessionId, credential, session.grantExpiresAt))
+      reply.header("cache-control", "no-store")
+      reply.header("referrer-policy", "no-referrer")
+    }
+    const body = new Uint8Array(await response.arrayBuffer())
+    return reply.code(response.status).send(path === "vnc.html" && response.ok ? appendDesktopLocationCleanup(body) : Buffer.from(body))
   })
 
   app.get("/api/desktop/:runtimeSessionId/websockify", { websocket: true }, async (socket, request) => {
     const { runtimeSessionId } = request.params as { runtimeSessionId: string }
-    const session = await authenticateProxySession(context.runtimeBroker, runtimeSessionId, "desktop", request)
+    const session = authenticateDesktopProxySession(context.runtimeBroker, runtimeSessionId, request, false)
     if (!session) {
       socket.close(1008, "DESKTOP_SESSION_NOT_FOUND")
       return
@@ -41,7 +51,7 @@ export async function proxyRoutes(app: FastifyInstance, context: BotServerContex
     const { runtimeSessionId } = request.params as { runtimeSessionId: string }
     const query = request.query as { tier?: string }
     const tier = query.tier === "desktop" || query.tier === "headless" ? query.tier : undefined
-    const session = await authenticateProxySession(context.runtimeBroker, runtimeSessionId, tier, request)
+    const session = await authenticateExecutorProxySession(context.runtimeBroker, runtimeSessionId, tier, request)
     if (!session) {
       socket.close(1008, "EXECUTOR_SESSION_NOT_FOUND")
       return

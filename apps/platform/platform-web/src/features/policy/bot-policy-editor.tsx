@@ -135,7 +135,7 @@ export function BotPolicyEditor({ tenantId, policy, canEdit, data, onPublished, 
       <details className="rounded-lg border p-4"><summary className="cursor-pointer font-medium">{t("Revision history")}</summary>
         <div className="mt-3 flex flex-col gap-3">{history.map((item) => <div key={item.policy_revision} className="text-sm">
           <span className="font-medium">{t("Revision")} {item.policy_revision}</span> · {new Date(item.published_at * 1000).toLocaleString()} · {item.published_by ? data.identity?.subjects.find((subject) => subject.subject_id === item.published_by)?.profile.display_name ?? item.published_by : t("Installation")}
-          <div className="text-muted-foreground">{item.rules.allowed_roles.map((role) => t(role)).join(", ")} {item.rules.allowed_subject_ids.map((id) => data.identity?.subjects.find((subject) => subject.subject_id === id)?.profile.display_name ?? id).join(", ")}</div>
+          <div className="text-muted-foreground">{item.rules.allowed_roles.map((role) => t(role)).join(", ")} {item.rules.allowed_subject_ids.map((id) => data.identity?.subjects.find((subject) => subject.subject_id === id)?.profile.display_name ?? id).join(", ")} · {item.rules.computer_use_enabled ? t("Computer environment enabled") : t("Computer environment disabled")}</div>
         </div>)}</div>
       </details>
       <FieldGroup>
@@ -152,8 +152,12 @@ export function BotPolicyEditor({ tenantId, policy, canEdit, data, onPublished, 
           </div>)}
           {editing ? <SearchableSelect value="" options={(data.identity?.subjects ?? []).filter((subject) => subject.kind === "PERSON" && !rules.allowed_subject_ids.includes(subject.subject_id)).map((subject) => ({ value: subject.subject_id, label: subject.profile.display_name ?? subject.profile.email ?? subject.subject_id, description: subject.profile.email ?? undefined }))} onValueChange={(id) => { if (id) { setRules((value) => ({ ...value, allowed_subject_ids: [...value.allowed_subject_ids, id] })) } }} placeholder={t("Select a person")} searchPlaceholder={t("Search people")} emptyLabel={t("No results.")} /> : null}
         </Field>
+        <Field orientation="horizontal">
+          <Checkbox id="policy-computer-use" disabled={!editing || busy} checked={rules.computer_use_enabled === true} onCheckedChange={(checked) => { setRules((value) => ({ ...value, computer_use_enabled: checked === true })) }} />
+          <div className="grid gap-1"><FieldLabel htmlFor="policy-computer-use">{t("Allow use of a computer environment")}</FieldLabel><p className="text-sm text-muted-foreground">{t("Computer use still checks Bot execution permissions and environment policy.")}</p></div>
+        </Field>
       </FieldGroup>
-      <p className="text-sm text-muted-foreground">{t("Computer use is not granted by this policy. No selected role or person means access is denied.")}</p>
+      <p className="text-sm text-muted-foreground">{t("No selected role or person means Bot access is denied.")}</p>
       {editing ? <div className="flex flex-wrap justify-end gap-2">
         <Button variant="outline" disabled={busy} onClick={() => { restoreDraftInputs(); setEditing(false); setError(""); setConflict(false) }}>{t("Cancel")}</Button>
         <Button disabled={busy} onClick={() => void save()}>{t("Save draft")}</Button>

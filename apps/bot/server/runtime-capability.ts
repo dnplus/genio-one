@@ -18,6 +18,7 @@ export const RUNTIME_CAPABILITY_KINDS = [
   "plugin",
   "skill",
   "remote_hands",
+  "desktop",
   "model",
   "sub_agent",
 ] as const

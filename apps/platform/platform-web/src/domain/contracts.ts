@@ -453,6 +453,7 @@ export interface PolicyDecision {
 export interface BotPolicyRules {
   allowed_roles: Array<"TENANT_ADMINISTRATOR" | "ORGANIZATION_ADMINISTRATOR" | "USER">
   allowed_subject_ids: string[]
+  computer_use_enabled?: boolean
 }
 
 export interface OnePolicyBotSeed {

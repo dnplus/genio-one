@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify"
 import { TypeBoxTypeProvider } from "@fastify/type-provider-typebox"
+import { createHash } from "node:crypto"
 
 import { PlatformApiError } from "../errors"
 import { CreateSelfServiceAgentSchema, CreateSubjectSchema, IdentityPathSchema, SubjectPathSchema, SubjectSchema, SuspendSubjectSchema, TenantIdentityInventorySchema } from "./contract"
@@ -52,6 +53,15 @@ export const identityHttp: FastifyPluginAsync<{
         )
       }
     }
+  }
+  function selfServiceAgentSubjectId(tenantId: string, subjectId: string, clientId: string, clientRequestId: string) {
+    const digest = createHash("sha256")
+      .update(tenantId).update("\0")
+      .update(subjectId).update("\0")
+      .update(clientId).update("\0")
+      .update(clientRequestId)
+      .digest("hex")
+    return `agent-${digest}`
   }
   routes.get(
     "/v1/tenants/:tenant_id/identity",
@@ -171,7 +181,7 @@ export const identityHttp: FastifyPluginAsync<{
           typeof body !== "object" ||
           body === null ||
           Array.isArray(body) ||
-          Object.keys(body).some((key) => key !== "display_name")
+          Object.keys(body).some((key) => key !== "display_name" && key !== "client_request_id")
         ) {
           throw new PlatformApiError("REQUEST_VALIDATION_FAILED", 400, "Request validation failed")
         }
@@ -262,6 +272,9 @@ export const identityHttp: FastifyPluginAsync<{
       return reply.code(201).send(await options.directory.createSelfServiceAgent({
         tenantId: request.params.tenant_id,
         value: request.body,
+        subjectId: request.body.client_request_id
+          ? selfServiceAgentSubjectId(request.params.tenant_id, principal.subject_id, principal.client_id, request.body.client_request_id)
+          : undefined,
       }))
     },
   )

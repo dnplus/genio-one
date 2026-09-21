@@ -7,6 +7,7 @@ export interface ChatMessage {
   replyToMessageId?: string
   images?: string[]
   timelineRevision?: number
+  localOnly?: boolean
   legacySource?: { sourceKey: string; position: number; originalRole: string }
   clientMessageId?: string
   runtimeThreadId?: string
