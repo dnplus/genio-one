@@ -7351,7 +7351,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/components/ui/combobox.tsx": {
-      "sha256": "cdcd543b2ff8385cac0c5d2162b3c0e03003577fc267641af7b82b0b2a69260e",
+      "sha256": "773665c0203f76d93e6c9023f1e47a38e180b00296a0910f807b33c5ef4e9d7d",
       "mode": 420
     },
     "apps/platform/platform-web/src/components/ui/command.tsx": {
@@ -7359,7 +7359,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/components/ui/dialog.tsx": {
-      "sha256": "b7e38c6614215796858ecc6f89dba5794e2d791b0f9bf553ff783f59439553c8",
+      "sha256": "4e6ef73214596add15309c073a922bd624fc11ca11493182bdda1731b610adf7",
       "mode": 420
     },
     "apps/platform/platform-web/src/components/ui/dropdown-menu.tsx": {
@@ -7415,11 +7415,11 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/components/ui/sheet.tsx": {
-      "sha256": "5513f156144874d574219bff5c48a263fb790c91c94b28792492c6b0da35aad9",
+      "sha256": "2f18a84c897e16c74e9f409910065c85a31b8ef14ac0cac020a3104c5eb62467",
       "mode": 420
     },
     "apps/platform/platform-web/src/components/ui/sidebar.tsx": {
-      "sha256": "6dd727ac760303f588d74d05cc7d0ef1a3bbd05a7d29f9ae5c72f96e85273536",
+      "sha256": "7b981eb94b46959ec6d59209ee70944b0fb9b4e8e935e886e3517fd5dd2afe9d",
       "mode": 420
     },
     "apps/platform/platform-web/src/components/ui/skeleton.tsx": {
@@ -7883,7 +7883,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/i18n.ts": {
-      "sha256": "72f74e1abb657ab376f1707cd2452bf6c6172a00c8934b7368e248e65630203c",
+      "sha256": "46016739dc96e53738ae3698612353beef2e7f809358533f6b7feb39ec0aa722",
       "mode": 420
     },
     "apps/platform/platform-web/src/i18n/admin-governance.ts": {

@@ -1307,6 +1307,7 @@ const en: Record<string, string> = {
   Ready: "Ready",
   "Select at least one verified and healthy Connection candidate.": "Select at least one verified and healthy Connection candidate.",
   CONNECTION_MANDATORY_OBLIGATION_UNSUPPORTED: "No Connection satisfies the mandatory One Policy obligations.",
+  Clear: "Clear",
 }
 
 const zhTW: Record<string, string> = {
@@ -3325,6 +3326,7 @@ const zhTW: Record<string, string> = {
   "Displays the mobile sidebar.": "顯示行動版側邊欄。",
   "Toggle Sidebar": "切換側邊欄",
   Close: "關閉",
+  Clear: "清除",
   "{{title}} unavailable": "{{title}} 無法使用",
   "This Product API surface has not been connected to the Console yet.": "此 Product API 介面尚未連接到 Console。",
   "Self-service": "自助服務",

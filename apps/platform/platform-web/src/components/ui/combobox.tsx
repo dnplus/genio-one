@@ -12,6 +12,7 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group"
 import { ChevronDownIcon, XIcon, CheckIcon } from "lucide-react"
+import { useTranslation } from "react-i18next"
 
 const Combobox = ComboboxPrimitive.Root
 
@@ -36,15 +37,19 @@ function ComboboxTrigger({
   )
 }
 
-function ComboboxClear({ className, ...props }: ComboboxPrimitive.Clear.Props) {
+function ComboboxClear({ className, "aria-label": ariaLabel, ...props }: ComboboxPrimitive.Clear.Props) {
+  const { t } = useTranslation()
+  const label = ariaLabel ?? t("Clear")
   return (
     <ComboboxPrimitive.Clear
       data-slot="combobox-clear"
-      render={<InputGroupButton variant="ghost" size="icon-xs" />}
+      aria-label={label}
+      render={<InputGroupButton aria-label={label} variant="ghost" size="icon-xs" />}
       className={cn(className)}
       {...props}
     >
       <XIcon className="pointer-events-none" />
+      <span className="sr-only">{label}</span>
     </ComboboxPrimitive.Clear>
   )
 }
@@ -243,6 +248,7 @@ function ComboboxChip({
   showRemove?: boolean
   removeLabel?: string
 }) {
+  const { t } = useTranslation()
   return (
     <ComboboxPrimitive.Chip
       data-slot="combobox-chip"
@@ -255,12 +261,13 @@ function ComboboxChip({
       {children}
       {showRemove && (
         <ComboboxPrimitive.ChipRemove
-          render={<Button variant="ghost" size="icon-xs" />}
+          render={<Button aria-label={removeLabel ?? t("Remove")} variant="ghost" size="icon-xs" />}
           className="-ml-1 opacity-50 hover:opacity-100"
           data-slot="combobox-chip-remove"
-          aria-label={removeLabel}
+          aria-label={removeLabel ?? t("Remove")}
         >
           <XIcon className="pointer-events-none" />
+          <span className="sr-only">{removeLabel ?? t("Remove")}</span>
         </ComboboxPrimitive.ChipRemove>
       )}
     </ComboboxPrimitive.Chip>

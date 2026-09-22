@@ -254,15 +254,18 @@ function Sidebar({
 function SidebarTrigger({
   className,
   onClick,
+  "aria-label": ariaLabel,
   ...props
 }: React.ComponentProps<typeof Button>) {
   const { toggleSidebar } = useSidebar()
   const { t } = useTranslation()
+  const label = ariaLabel ?? t("Toggle Sidebar")
 
   return (
     <Button
       data-sidebar="trigger"
       data-slot="sidebar-trigger"
+      aria-label={label}
       variant="ghost"
       size="icon-sm"
       className={cn(className)}
@@ -273,7 +276,7 @@ function SidebarTrigger({
       {...props}
     >
       <PanelLeftIcon />
-      <span className="sr-only">{t("Toggle Sidebar")}</span>
+      <span className="sr-only">{label}</span>
     </Button>
   )
 }

@@ -122,6 +122,7 @@ function SheetContent({
             data-slot="sheet-close"
             render={
               <Button
+                aria-label={t("Close")}
                 variant="ghost"
                 className={cn("absolute right-3", isWorkspace ? "top-4" : "top-3")}
                 size="icon-sm"
