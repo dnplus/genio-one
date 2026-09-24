@@ -8439,7 +8439,7 @@
       "mode": 420
     },
     "deploy/helm/genio-one/templates/gateway-runtime.yaml": {
-      "sha256": "724d06c60e29553380522b2e779754152cf4d4b508a5f5ae01326934ff94bd5c",
+      "sha256": "5b29dc1d806d9c0d5b02481e6a1447fddb0a7c505149a5627f2307343a42e7a2",
       "mode": 420
     },
     "deploy/helm/genio-one/templates/gravitee.yaml": {
@@ -8487,7 +8487,7 @@
       "mode": 420
     },
     "deploy/helm/genio-one/values.yaml": {
-      "sha256": "07d694c8c0e6aad9b02f527b4f36df244b14b2ac757f1121b123c8450edcba0f",
+      "sha256": "82d567ebd03c1c62389dfa5a928ce47dc99730b82cfe70484d322b1490088363",
       "mode": 420
     },
     "docs/public/ce/assets/resource-management.png": {

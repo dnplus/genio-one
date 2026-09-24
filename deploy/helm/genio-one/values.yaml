@@ -119,6 +119,7 @@ platform:
 
 gateway:
   replicas: 2
+  connectionHealthAllowedHosts: []
   displayName: Default Genio Gateway
   siteId: default-site
   region: default-region

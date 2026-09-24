@@ -177,6 +177,9 @@ spec:
             - { name: GENIO_ONE_GATEWAY_OTEL_HOST, value: {{ printf "%s-otel-ingress.%s.svc.cluster.local" (include "genio-one.fullname" .) .Release.Namespace | quote }} }
             - { name: GENIO_ONE_GATEWAY_OTEL_PORT, value: "4317" }
             - { name: GENIO_ONE_GATEWAY_OTEL_HTTP_PORT, value: "4318" }
+            {{- if .Values.gateway.connectionHealthAllowedHosts }}
+            - { name: GENIO_ONE_CONNECTION_HEALTH_ALLOWED_HOSTS, value: {{ join "," .Values.gateway.connectionHealthAllowedHosts | quote }} }
+            {{- end }}
           resources: {{- toYaml .Values.gateway.resources | nindent 12 }}
           securityContext: { runAsUser: 1000, runAsGroup: 1000, allowPrivilegeEscalation: false, capabilities: { drop: [ALL] }, readOnlyRootFilesystem: true }
           volumeMounts:
