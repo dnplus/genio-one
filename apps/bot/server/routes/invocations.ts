@@ -49,7 +49,7 @@ async function assertInvocationCapabilities(accessToken: string | undefined, inv
 export async function runApprovedBotInvocation(context: BotServerContext, requestId: string, accessToken?: string) {
   const invocation = context.botRegistry.getInvocationForService(requestId)
   if (!invocation) return
-  const release = context.runtimeBroker.claimBotTurn(invocation.targetBotId)
+  const release = context.runtimeBroker.claimBotTurn(invocation.targetBotId, context.runtimeBroker.findBySubject(invocation.tenantId, invocation.targetOwnerSubjectId)?.id)
   if (!release) return
   try { await context.runtimeBroker.runInvocationTask(() => executeApprovedBotInvocation(context, requestId, accessToken, release)) }
   finally { release() }

@@ -7,6 +7,8 @@ import { createRuntimePolicyClient, requireRuntimePolicyDecision, RuntimePolicyU
 import type { GenioPrincipal } from "./runtime-broker"
 import type { RuntimePolicyDecision } from "./runtime-policy-contract"
 
+const managedPlacement = [{ kind: "execution_placement", parameters: { execution_domain: "MANAGED_CLOUD" } }]
+
 const principal: GenioPrincipal = {
   tenant_id: "tenant-local",
   subject_id: "person-dylan",
@@ -41,6 +43,94 @@ function decision(overrides: Record<string, unknown> = {}): RuntimePolicyDecisio
 }
 
 describe("RuntimePolicyClient", () => {
+  test("inspects placement without making a generic decision executable", async () => {
+    const client = createRuntimePolicyClient({
+      fetch: async () => new Response(JSON.stringify(decision({ capability_id: "remote_hands.use", action: "use", target: "runtime:codex:remote_hands.use", constraints: managedPlacement })), { status: 200 }),
+    })
+    const input = { principal, botId: "bot-dylan", capabilityId: "remote_hands.use" as const, action: "use" as const }
+    const generic = await client.resolve(input)
+    expect(generic.decision).toBe("DENY")
+    const inspected = await client.resolve({ ...input, handsPlacement: { mode: "inspect" } })
+    expect(inspected.decision).toBe("ALLOW")
+    expect(() => requireRuntimePolicyDecision(inspected)).toThrow("RUNTIME_POLICY_CONSTRAINT_UNSUPPORTED")
+    expect(() => requireRuntimePolicyDecision(inspected, { mode: "inspect" })).toThrow("RUNTIME_POLICY_PLACEMENT_CONTEXT_INVALID")
+    await expect(client.authorize({ ...input, handsPlacement: { mode: "inspect" } })).rejects.toThrow("RUNTIME_POLICY_PLACEMENT_CONTEXT_INVALID")
+  })
+
+  test("read shows the selected domain without authorizing execution", async () => {
+    const client = createRuntimePolicyClient({
+      fetch: async () => new Response(JSON.stringify(decision({ capability_id: "remote_hands.use", action: "use", target: "runtime:codex:remote_hands.use", constraints: managedPlacement })), { status: 200 }),
+    })
+    const snapshot = await client.read({ principal, botId: "bot-dylan", capabilityIds: ["remote_hands.use"] })
+    expect(snapshot.decisions[0]?.decision).toBe("ALLOW")
+    expect(snapshot.decisions[0]?.constraints).toEqual(managedPlacement)
+    expect(() => requireRuntimePolicyDecision(snapshot.decisions[0]!)).toThrow("RUNTIME_POLICY_CONSTRAINT_UNSUPPORTED")
+  })
+
+  test("enforces policy domain against the pinned workspace provider", async () => {
+    const client = createRuntimePolicyClient({
+      fetch: async (_input, init) => {
+        const body = JSON.parse(String(init?.body)) as { correlation_id: string }
+        return new Response(JSON.stringify(decision({ capability_id: "remote_hands.use", action: "use", target: "runtime:codex:remote_hands.use", correlation_id: body.correlation_id, constraints: managedPlacement })), { status: 200 })
+      },
+    })
+    const input = { principal, botId: "bot-dylan", capabilityId: "remote_hands.use" as const, action: "use" as const, correlationId: "placement-1" }
+    const allowed = await client.authorize({ ...input, handsPlacement: { mode: "enforce", provider: "cloudflare-hands" } })
+    expect(allowed.decision).toBe("ALLOW")
+    expect(requireRuntimePolicyDecision(allowed, { mode: "enforce", provider: "cloudflare-hands" })).toBe(allowed)
+    const changed = await client.authorize({ ...input, handsPlacement: { mode: "enforce", provider: "e2b-self-hosted" } })
+    expect(changed.decision).toBe("DENY")
+    expect(changed.reason_code).toBe("POLICY_PLACEMENT_CHANGED")
+    expect(() => requireRuntimePolicyDecision(changed, { mode: "enforce", provider: "e2b-self-hosted" })).toThrow("POLICY_PLACEMENT_CHANGED")
+  })
+
+  test("without a placement rule only the deployment provider is allowed", async () => {
+    const client = createRuntimePolicyClient({
+      environment: { GENIO_BOT_RUNTIME: "e2b-self-hosted" },
+      fetch: async (_input, init) => {
+        const body = JSON.parse(String(init?.body)) as { correlation_id: string }
+        return new Response(JSON.stringify(decision({ capability_id: "remote_hands.use", action: "use", target: "runtime:codex:remote_hands.use", correlation_id: body.correlation_id })), { status: 200 })
+      },
+    })
+    const input = { principal, botId: "bot-dylan", capabilityId: "remote_hands.use" as const, action: "use" as const, correlationId: "placement-default" }
+    expect((await client.authorize({ ...input, handsPlacement: { mode: "enforce", provider: "e2b-self-hosted" } })).decision).toBe("ALLOW")
+    const override = await client.authorize({ ...input, handsPlacement: { mode: "enforce", provider: "cloudflare-hands" } })
+    expect(override.decision).toBe("DENY")
+    expect(override.reason_code).toBe("POLICY_PLACEMENT_CHANGED")
+  })
+
+  test("Local Endpoint enforces its ON_PREM domain without presenting itself as E2B", async () => {
+    const makeClient = (placementDomain: "ON_PREM" | "MANAGED_CLOUD" | null, configuredRuntime: string) => createRuntimePolicyClient({
+      environment: { GENIO_BOT_RUNTIME: configuredRuntime },
+      fetch: async (_input, init) => {
+        const body = JSON.parse(String(init?.body)) as { correlation_id: string }
+        return new Response(JSON.stringify(decision({
+          capability_id: "remote_hands.use",
+          action: "use",
+          target: "runtime:codex:remote_hands.use",
+          correlation_id: body.correlation_id,
+          constraints: placementDomain ? [{ kind: "execution_placement", parameters: { execution_domain: placementDomain } }] : [],
+        })), { status: 200 })
+      },
+    })
+    const input = { principal, botId: "bot-dylan", capabilityId: "remote_hands.use" as const, action: "use" as const, correlationId: "local-endpoint-1", handsPlacement: { mode: "enforce" as const, localEndpoint: true as const } }
+    const onPrem = await makeClient("ON_PREM", "cloudflare-hands").authorize(input)
+    expect(onPrem.decision).toBe("ALLOW")
+    expect(requireRuntimePolicyDecision(onPrem, input.handsPlacement)).toBe(onPrem)
+    const managed = await makeClient("MANAGED_CLOUD", "e2b-self-hosted").authorize(input)
+    expect(managed.decision).toBe("DENY")
+    expect(managed.reason_code).toBe("POLICY_PLACEMENT_CHANGED")
+    expect((await makeClient(null, "local").authorize(input)).decision).toBe("ALLOW")
+    const cloudDefault = await makeClient(null, "cloudflare-hands").authorize(input)
+    expect(cloudDefault.decision).toBe("DENY")
+    expect(cloudDefault.reason_code).toBe("POLICY_PLACEMENT_CHANGED")
+  })
+
+  test("placement on another capability and unknown constraints remain denied", () => {
+    expect(() => requireRuntimePolicyDecision(decision({ constraints: managedPlacement }))).toThrow("RUNTIME_POLICY_CONSTRAINT_UNSUPPORTED")
+    expect(() => requireRuntimePolicyDecision(decision({ capability_id: "remote_hands.use", action: "use", target: "runtime:codex:remote_hands.use", constraints: [{ kind: "path_allowlist", parameters: { paths: ["/tmp"] } }] }), { mode: "enforce", provider: "e2b-self-hosted" })).toThrow("RUNTIME_POLICY_CONSTRAINT_UNSUPPORTED")
+  })
+
   test("reads an effective decision with server identity and query fields", async () => {
     const requests: Array<{ url: string; method: string; authorization: string | null }> = []
     const client = createRuntimePolicyClient({
@@ -95,6 +185,7 @@ describe("RuntimePolicyClient", () => {
   })
 
   test("fails closed before execution when a decision action or target is not registered", () => {
+    expect(() => requireRuntimePolicyDecision(decision({ capability_id: "code.javascript", action: "execute", target: "runtime:codex:code.javascript" }))).not.toThrow()
     expect(() => requireRuntimePolicyDecision(decision({ action: "invoke" }))).toThrow("RUNTIME_POLICY_RESPONSE_INVALID")
     expect(() => requireRuntimePolicyDecision(decision({ target: "runtime:codex:model.invoke" }))).toThrow("RUNTIME_POLICY_RESPONSE_INVALID")
   })
@@ -221,17 +312,19 @@ describe("RuntimePolicyClient", () => {
     const snapshot = await client.read({
       principal,
       botId: "bot-dylan",
-      capabilityIds: ["codex.subscription", "model.invoke", "shell.exec"],
+      capabilityIds: ["codex.subscription", "model.invoke", "code.javascript", "shell.exec"],
     })
 
     expect(requests).toEqual([
       { capabilityId: "codex.subscription", action: "use" },
       { capabilityId: "model.invoke", action: "invoke" },
+      { capabilityId: "code.javascript", action: "execute" },
       { capabilityId: "shell.exec", action: "execute" },
     ])
     expect(snapshot.decisions.map((item) => [item.capability_id, item.action])).toEqual([
       ["codex.subscription", "use"],
       ["model.invoke", "invoke"],
+      ["code.javascript", "execute"],
       ["shell.exec", "execute"],
     ])
   })

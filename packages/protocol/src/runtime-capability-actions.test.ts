@@ -14,6 +14,7 @@ test("the runtime capability registry declares every executable Bot policy targe
   assert.deepEqual(RUNTIME_CAPABILITY_IDS, [
     "codex.subscription",
     "model.invoke",
+    "code.javascript",
     "shell.exec",
     "filesystem.read",
     "filesystem.write",
@@ -24,6 +25,7 @@ test("the runtime capability registry declares every executable Bot policy targe
     "computer.use",
   ])
   assert.deepEqual(RUNTIME_CAPABILITY_REGISTRY["shell.exec"], ["expose", "execute"])
+  assert.deepEqual(RUNTIME_CAPABILITY_REGISTRY["code.javascript"], ["expose", "execute"])
   assert.deepEqual(RUNTIME_CAPABILITY_REGISTRY["mcp.invoke"], ["expose", "invoke"])
   assert.deepEqual(RUNTIME_CAPABILITY_REGISTRY["remote_hands.use"], ["expose", "use"])
   assert.deepEqual(RUNTIME_CAPABILITY_REGISTRY["computer.use"], ["expose", "invoke"])
@@ -36,11 +38,14 @@ test("the static registry rejects action pairs that do not have an enforcing run
   assert.equal(isRuntimeCapabilityId("plugin.install"), false)
   assert.equal(isRuntimeCapabilityId("adapter.discovered"), false)
   assert.equal(isRuntimeCapabilityAction("shell.exec", "execute"), true)
+  assert.equal(isRuntimeCapabilityAction("code.javascript", "execute"), true)
+  assert.equal(isRuntimeCapabilityAction("code.javascript", "invoke"), false)
   assert.equal(isRuntimeCapabilityAction("shell.exec", "invoke"), false)
   assert.equal(isRuntimeCapabilityAction("remote_hands.use", "use"), true)
   assert.equal(isRuntimeCapabilityAction("browser.open", "invoke"), false)
   assert.equal(isRuntimeCapabilityAction("web_search.query", "invoke"), false)
   assert.equal(defaultRuntimeCapabilityAction("shell.exec"), "execute")
+  assert.equal(defaultRuntimeCapabilityAction("code.javascript"), "execute")
   assert.equal(defaultRuntimeCapabilityAction("mcp.invoke"), "invoke")
   assert.equal(defaultRuntimeCapabilityAction("remote_hands.use"), "use")
   assert.equal(defaultRuntimeCapabilityAction("browser.open"), "expose")

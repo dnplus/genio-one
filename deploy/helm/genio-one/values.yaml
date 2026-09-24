@@ -153,6 +153,19 @@ bot:
     type: ClusterIP
     port: 5181
   runtime: local
+  e2b:
+    domain: ""
+    apiUrl: ""
+    sandboxUrl: ""
+    desktopBaseTemplate: desktop-self-hosted
+    desktopTemplate: genio-bot-desktop
+    headlessTemplate: genio-bot-headless
+    apiKeySecretName: ""
+    apiKeySecretKey: api-key
+  cfHands:
+    origin: ""
+    tokenSecretName: ""
+    tokenSecretKey: token
   persistence:
     enabled: true
     storageClass: ""

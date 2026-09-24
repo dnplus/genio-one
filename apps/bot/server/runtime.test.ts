@@ -64,10 +64,14 @@ describe("Codex app-server launch", () => {
     const child = codexChildEnvironment({
       GENIO_ONE_RUNTIME_REPORT_KEY_ID: "genio-one-bot-runtime",
       GENIO_ONE_RUNTIME_REPORT_PRIVATE_KEY_PEM: "private-key",
+      E2B_API_KEY: "e2b-server-secret",
+      GENIO_CF_HANDS_TOKEN: "cloudflare-server-secret",
       GENIO_ONE_MCP_BEARER_TOKEN: "session-token",
     })
     expect(child.GENIO_ONE_RUNTIME_REPORT_KEY_ID).toBeUndefined()
     expect(child.GENIO_ONE_RUNTIME_REPORT_PRIVATE_KEY_PEM).toBeUndefined()
+    expect(child.E2B_API_KEY).toBeUndefined()
+    expect(child.GENIO_CF_HANDS_TOKEN).toBeUndefined()
     expect(child.GENIO_ONE_MCP_BEARER_TOKEN).toBe("session-token")
   })
 
@@ -82,12 +86,15 @@ describe("Codex app-server launch", () => {
     expect(pendingRuntimeDetails("e2b-self-hosted")).toEqual({
       kind: "e2b-self-hosted",
       tier: "none",
-      cwd: "/home/user",
+      cwd: "/home/user/workspace",
       desktopUrl: null,
       sandboxId: null,
       environmentId: null,
       execServerUrl: null,
       execReady: false,
+      workspaceId: null,
+      workspaceRevision: null,
+      leaseId: null,
     })
   })
 

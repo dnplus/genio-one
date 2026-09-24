@@ -6,7 +6,7 @@ import { assertCapability, PERSONAL_BOT_COMPUTER_USE } from "./capability-gate"
 import type { BotServerContext } from "./context"
 import type { RuntimeSession } from "./runtime-broker"
 import type { ManagedDesktop } from "./runtime"
-import { requireRuntimePolicyDecision } from "./runtime-policy"
+import { requireRuntimePolicyDecision, RuntimePolicyDeniedError } from "./runtime-policy"
 import {
   defaultRuntimeCapabilityAction,
   type RuntimeCapabilityId,
@@ -39,7 +39,7 @@ function frame(data: WebSocket.RawData) {
   return Array.isArray(data) ? Buffer.concat(data) : Buffer.isBuffer(data) ? data : Buffer.from(data)
 }
 
-function capability(method: string): RuntimeCapabilityId | null {
+export function executorMethodCapability(method: string): RuntimeCapabilityId | null {
   if (["initialize", "initialized", "environment/info"].includes(method)) return null
   if (method.startsWith("process/")) return "shell.exec"
   if (["fs/writeFile", "fs/createDirectory", "fs/remove", "fs/copy", "fs/rename"].includes(method)) return "filesystem.write"
@@ -76,10 +76,14 @@ export class LocalHands {
   ) {
     await assertCapability(this.context.capabilityGate, session.principal, PERSONAL_BOT_COMPUTER_USE, session.accessToken)
     const input = this.input(session, botId, capabilityId, action)
-    const decision = await this.context.runtimePolicy.authorize({ ...input, correlationId: randomUUID() })
-    try { return requireRuntimePolicyDecision(decision) }
+    const handsPlacement = capabilityId === "remote_hands.use" && action === "use"
+      ? { mode: "enforce" as const, localEndpoint: true as const }
+      : undefined
+    const decision = await this.context.runtimePolicy.authorize({ ...input, correlationId: randomUUID(), ...(handsPlacement ? { handsPlacement } : {}) })
+    try { return requireRuntimePolicyDecision(decision, handsPlacement) }
     catch (error) {
-      if (decision.correlation_id) await this.context.runtimePolicy.report({ ...input, correlationId: decision.correlation_id, outcome: "DENY", reasonCode: decision.reason_code })
+      const reasonCode = error instanceof RuntimePolicyDeniedError ? error.decision.reason_code : decision.reason_code
+      if (decision.correlation_id) await this.context.runtimePolicy.report({ ...input, correlationId: decision.correlation_id, outcome: reasonCode === "POLICY_PLACEMENT_CHANGED" ? "FAILED" : "DENY", reasonCode })
       throw error
     }
   }
@@ -241,11 +245,14 @@ export class LocalHands {
         if (binary || frame(data).length > MAX_MESSAGE_BYTES || lease.closed || lease.endpoint.readyState !== WebSocket.OPEN || lease.endpoint.bufferedAmount > MAX_MESSAGE_BYTES) throw new Error("LOCAL_HANDS_DISCONNECTED")
         const message = JSON.parse(data.toString())
         if (typeof message.method !== "string") throw new Error("LOCAL_HANDS_REQUEST_INVALID")
-        const capabilityId = capability(message.method)
+        const capabilityId = executorMethodCapability(message.method)
         if (capabilityId) {
           if (message.id === undefined || lease.pending.size >= 64) throw new Error("LOCAL_HANDS_REQUEST_INVALID")
           const action = defaultRuntimeCapabilityAction(capabilityId)
           if (!action) throw new Error("RUNTIME_POLICY_CAPABILITY_INVALID")
+          const placement = await this.authorize(lease.session, lease.botId, "remote_hands.use", "use")
+          await this.reportDecision(lease.session, lease.botId, placement, "ALLOW", "LOCAL_HANDS_OPERATION_PLACEMENT_ALLOWED")
+          if (lease.closed) throw new Error("LOCAL_HANDS_DISCONNECTED")
           const decision = await this.authorize(lease.session, lease.botId, capabilityId, action)
           if (lease.closed) throw new Error("LOCAL_HANDS_DISCONNECTED")
           const key = JSON.stringify(message.id)

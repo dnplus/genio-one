@@ -1005,7 +1005,6 @@ ${availableSkillsList}`,
     try {
       const imported = await importBotArtifact(token, activeBot.id, artifact.artifactId, "desktop", {
         targetEnvironmentId: desktop.environmentId,
-        targetPath: "/home/user/presentation.html",
         open: true,
       })
       if (!isMountedRef.current) return

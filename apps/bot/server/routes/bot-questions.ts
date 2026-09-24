@@ -23,7 +23,7 @@ export async function botQuestionRoutes(app: FastifyInstance, context: BotServer
         const principal = await requestPrincipal(request)
         const session = context.runtimeBroker.findByPrincipal(principal)
         if (!session?.initialized) throw new Error("BOT_RUNTIME_NOT_READY")
-        const release = context.runtimeBroker.claimBotTurn(botId)
+        const release = context.runtimeBroker.claimBotTurn(botId, session.id)
         if (!release) throw new Error("BOT_TURN_BUSY")
         try {
           if (question.deliveryThreadId) {

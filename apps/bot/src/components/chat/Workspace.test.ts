@@ -48,8 +48,8 @@ test("does not exempt workspace or execution requests that mention owner tools",
 })
 
 test("keeps a desktop-only session outside native execution while retaining an explicitly selected Headless workspace", () => {
-  const desktop = { kind: "e2b-self-hosted", tier: "desktop", cwd: "/desktop", desktopUrl: "https://desktop.test/vnc.html", sandboxId: "desktop", environmentId: "desktop-env", execServerUrl: "ws://desktop", execReady: true } as const
-  const headless = { kind: "e2b-self-hosted", tier: "headless", cwd: "/workspace", desktopUrl: null, sandboxId: "headless", environmentId: "headless-env", execServerUrl: "ws://headless", execReady: true } as const
+  const desktop = { kind: "e2b-self-hosted", tier: "desktop", cwd: "/desktop", desktopUrl: "https://desktop.test/vnc.html", sandboxId: "desktop", workspaceId: "workspace-1", workspaceRevision: 3, leaseId: "lease-desktop", environmentId: "desktop-env", execServerUrl: "ws://desktop", execReady: true } as const
+  const headless = { kind: "e2b-self-hosted", tier: "headless", cwd: "/workspace", desktopUrl: null, sandboxId: "headless", workspaceId: "workspace-1", workspaceRevision: 3, leaseId: "lease-headless", environmentId: "headless-env", execServerUrl: "ws://headless", execReady: true } as const
   const tiers = { desktop, headless }
 
   expect(selectedExecutionRuntime(null, tiers)).toBeNull()

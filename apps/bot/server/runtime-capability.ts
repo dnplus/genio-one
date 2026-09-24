@@ -11,6 +11,7 @@
 /** Native / adapter-discovered capability kinds (decision 4 core four + extensions). */
 export const RUNTIME_CAPABILITY_KINDS = [
   "shell",
+  "code",
   "filesystem",
   "browser",
   "web_search",

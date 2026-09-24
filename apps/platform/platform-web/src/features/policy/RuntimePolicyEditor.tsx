@@ -29,6 +29,7 @@ import {
   type RuntimePolicyScope,
 } from "@/lib/product-api"
 import { RUNTIME_CAPABILITY_IDS, RUNTIME_CAPABILITY_REGISTRY, runtimeCapabilityActions } from "@genioone/protocol/runtime-capability-actions"
+import { isHandsExecutionPlacementTarget, readHandsExecutionPlacement } from "@genioone/protocol/hands-placement"
 
 const runtimeRoles: RuntimePolicyRole[] = ["TENANT_ADMINISTRATOR", "ORGANIZATION_ADMINISTRATOR", "USER"]
 function emptyScope(): RuntimePolicyScope {
@@ -81,7 +82,7 @@ export function finalRuntimePolicyDefinition(value: RuntimePolicyDefinition): Ru
       target: { runtime_id: rule.target.runtime_id.trim(), capability_id: rule.target.capability_id.trim() },
       actions: [...new Set(rule.actions)],
       effect: rule.effect,
-      constraints: [],
+      constraints: structuredClone(rule.constraints),
       obligations: rule.obligations.filter((obligation) => obligation.kind === "audit"),
     })),
   }
@@ -280,6 +281,7 @@ export function RuntimePolicyEditor({
     const hasAllowRule = value.rules.some((rule) => rule.effect === "ALLOW")
     if (hasAllowRule && !scopeHasSelection(value.scope) && !unrestrictedScopeConfirmed) problems.push(t("An ALLOW rule with no scope applies to everyone in this Tenant. Confirm this explicitly before checking the policy."))
     const ids = new Set<string>()
+    const placementDomains = new Set<string>()
     value.rules.forEach((rule) => {
       if (!rule.rule_id || !rule.target.runtime_id || !rule.target.capability_id || rule.actions.length === 0) problems.push(t("Each rule needs an ID, runtime, capability, and action."))
       if (value.scope.runtime_ids.length && !value.scope.runtime_ids.includes(rule.target.runtime_id)) problems.push(t("Rule runtime must be included in policy scope."))
@@ -287,8 +289,21 @@ export function RuntimePolicyEditor({
       if (!registeredActions || rule.actions.some((action) => !(registeredActions as readonly string[]).includes(action))) problems.push("RUNTIME_POLICY_CAPABILITY_NOT_REGISTERED")
       if (ids.has(rule.rule_id)) problems.push(t("Rule IDs must be unique."))
       ids.add(rule.rule_id)
+      if (rule.constraints.length > 0) {
+        if (rule.effect !== "ALLOW" || rule.actions.length !== 1 || !isHandsExecutionPlacementTarget(rule.target.runtime_id, rule.target.capability_id, rule.actions[0]!)) {
+          problems.push("RUNTIME_POLICY_CONSTRAINT_UNSUPPORTED")
+        } else {
+          try {
+            const domain = readHandsExecutionPlacement(rule.constraints)
+            if (domain) placementDomains.add(domain)
+          } catch (error) {
+            problems.push(error instanceof Error ? error.message : "POLICY_PLACEMENT_INVALID")
+          }
+        }
+      }
     })
-    if (definition.rules.some((rule) => rule.constraints.length > 0 || rule.obligations.some((obligation) => obligation.kind !== "audit"))) problems.push("RUNTIME_POLICY_UNSUPPORTED_DETAILS")
+    if (placementDomains.size > 1) problems.push("POLICY_PLACEMENT_CONFLICT")
+    if (definition.rules.some((rule) => rule.obligations.some((obligation) => obligation.kind !== "audit"))) problems.push("RUNTIME_POLICY_UNSUPPORTED_DETAILS")
     if (problems.length) {
       setError(problems[0]!)
       return false
@@ -403,7 +418,7 @@ export function RuntimePolicyEditor({
         {!scopeHasSelection(definition.scope) ? <div className="flex flex-col gap-3 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-sm"><p>{t("No scope selected: this policy is tenant-wide unless a populated dimension narrows it.")}</p>{definition.rules.some((rule) => rule.effect === "ALLOW") ? <Field orientation="horizontal"><Checkbox disabled={!editing || busy} checked={unrestrictedScopeConfirmed} onCheckedChange={(checked) => setUnrestrictedScopeConfirmed(checked === true)} /><FieldLabel>{t("I understand this ALLOW applies to everyone in this Tenant.")}</FieldLabel></Field> : <p className="text-muted-foreground">{t("No scope selected: DENY rules still apply to every matching request.")}</p>}</div> : null}
       </FieldGroup>
       <RuntimeCapabilityGroups rules={definition.rules} scopeRuntimeIds={definition.scope.runtime_ids} runtimeOptions={runtimeOptions} capabilityOptions={capabilityOptions} disabled={!editing || busy} onChange={(rules) => setDefinition((current) => ({ ...current, rules }))} />
-      {draft?.lifecycle === "REVIEWED" ? <div className="rounded-lg border p-4"><h3 className="font-medium">{t("Actual permissions to publish")}</h3><p className="text-sm text-muted-foreground">{t("Discovery and invocation are separate permissions.")}</p><ul className="mt-3 space-y-2 text-sm">{definition.rules.map((rule) => <li key={rule.rule_id}>{capabilityOptions.find((option) => option.value === rule.target.capability_id)?.label ?? rule.target.capability_id} · {runtimeOptions.find((option) => option.value === rule.target.runtime_id)?.label ?? rule.target.runtime_id} · {t(rule.effect)} · {rule.actions.map((action) => t(action)).join("、")} · {rule.obligations.map((value) => t(value.kind)).join("、")}</li>)}</ul></div> : null}
+      {draft?.lifecycle === "REVIEWED" ? <div className="rounded-lg border p-4"><h3 className="font-medium">{t("Actual permissions to publish")}</h3><p className="text-sm text-muted-foreground">{t("Discovery and invocation are separate permissions.")}</p><ul className="mt-3 space-y-2 text-sm">{definition.rules.map((rule) => <li key={rule.rule_id}>{capabilityOptions.find((option) => option.value === rule.target.capability_id)?.label ?? rule.target.capability_id} · {runtimeOptions.find((option) => option.value === rule.target.runtime_id)?.label ?? rule.target.runtime_id} · {t(rule.effect)} · {rule.actions.map((action) => t(action)).join("、")} · {rule.constraints.map((value) => value.kind === "execution_placement" ? t(String(value.parameters.execution_domain)) : t(value.kind)).join("、")} · {rule.obligations.map((value) => t(value.kind)).join("、")}</li>)}</ul></div> : null}
       {editing ? <div className="flex flex-wrap justify-end gap-2 border-t pt-4"><Button variant="outline" disabled={busy} onClick={() => { setDefinition(initialDefinition(policy, policyId, initialDisplayName)); setEditing(false) }}>{t("Cancel")}</Button><Button variant="outline" disabled={busy} onClick={() => void checkDefinition()}>{t("Check policy")}</Button><Button disabled={busy} onClick={() => void save()}>{t("Save draft")}</Button></div> : null}
       {draft && canEdit ? <div className="flex flex-col gap-3 rounded-lg border p-4"><div className="flex flex-wrap items-center gap-2"><Badge variant="outline">{t("Draft")} {draft.version}</Badge><Badge variant="outline">{t(draft.lifecycle)}</Badge><span>{t("Based on revision")} {draft.base_revision}</span></div><p className="break-all font-mono text-xs text-muted-foreground">{draft.content_digest}</p>{draft.validation ? <p className="text-sm">{t("Validate draft")} · {subjectLabel(draft.validation.actor_subject_id)} · {new Date(draft.validation.at * 1000).toLocaleString()}</p> : null}{draft.review ? <p className="text-sm">{t("Review draft")} · {subjectLabel(draft.review.actor_subject_id)} · {new Date(draft.review.at * 1000).toLocaleString()}</p> : null}<div className="flex flex-wrap gap-2"><DiscardPolicyDraft path={draftPath} version={draft.version} onDiscarded={resetAfterDiscard} /><Button disabled={busy || Boolean(dirty) || draft.lifecycle !== "DRAFT"} variant="outline" onClick={() => void validate()}>{t("Validate draft")}</Button><Button disabled={busy || Boolean(dirty) || draft.lifecycle !== "VALIDATED"} variant="outline" onClick={() => void review()}>{t("Review draft")}</Button><Button disabled={busy || Boolean(dirty) || draft.lifecycle !== "REVIEWED"} onClick={() => void publish()}>{t("Publish revision")}</Button></div></div> : null}
       <details className="rounded-lg border p-4"><summary className="cursor-pointer font-medium">{t("Revision history and source comparison")}</summary><div className="mt-4 flex flex-col gap-4">{history.length ? <><Field><FieldLabel>{t("Compare source revision")}</FieldLabel><SearchableSelect value={compareRevision} options={history.map((revision) => ({ value: String(revision.revision), label: `${t("Revision")} ${revision.revision}`, description: `${revision.enabled ? t("Enabled") : t("Disabled")} · ${t(revision.provenance)}` }))} onValueChange={setCompareRevision} placeholder={t("Select a revision")} searchPlaceholder={t("Search revisions")} emptyLabel={t("No revisions available.")} /></Field>{selectedComparison ? <RevisionSummary revision={selectedComparison} subjectLabel={subjectLabel} runtimeOptions={runtimeOptions} capabilityOptions={capabilityOptions} /> : null}</> : <p className="text-sm text-muted-foreground">{t("No published runtime revisions yet.")}</p>}</div></details>

@@ -4,6 +4,8 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { BotRegistry } from "./bot-registry"
+import { BotWorkspaceStore } from "./bot-workspace-store"
+import type { HandsPlacementGate } from "./hands-placement-gate"
 import { BotSchedules } from "./bot-schedules"
 import { reconcileTerminalInvocations, recoverApprovedInvocations, recoverNativeInvocationResults } from "./invocation-recovery"
 import type { Turn } from "./generated/v2/Turn"
@@ -197,6 +199,8 @@ test("cross-owner recovery supplies its exchanged target credential to the bound
   }
   const context: BotServerContext = {
     botRegistry: registry,
+    workspaces: new BotWorkspaceStore(registry.db, (botId, owner) => registry.getOwned(botId, owner)),
+    handsPlacement: {} as HandsPlacementGate,
     botSchedules: new BotSchedules(registry.db),
     botDeletionReconciler: {} as BotDeletionReconciler,
     runtimeBroker: broker,
@@ -462,6 +466,8 @@ test("concurrent offline cross-owner handoffs keep each Bot's credential across 
   }
   const context: BotServerContext = {
     botRegistry: registry,
+    workspaces: new BotWorkspaceStore(registry.db, (botId, owner) => registry.getOwned(botId, owner)),
+    handsPlacement: {} as HandsPlacementGate,
     botSchedules: new BotSchedules(registry.db),
     botDeletionReconciler: {} as BotDeletionReconciler,
     runtimeBroker: broker,

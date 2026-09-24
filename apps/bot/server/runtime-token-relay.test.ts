@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test"
 import Fastify from "fastify"
 import { BotRegistry } from "./bot-registry"
+import { BotWorkspaceStore } from "./bot-workspace-store"
+import type { HandsPlacementGate } from "./hands-placement-gate"
 import { BotSchedules } from "./bot-schedules"
 import { BotToolSessions } from "./bot-tool-sessions"
 import { createCapabilityGate } from "./capability-gate"
@@ -137,6 +139,8 @@ test("Bot-bound Discovery keeps an invocation credential with its owned Bot", as
     await modelGatewayRelayRoutes(app, {
       runtimeBroker: broker,
       botRegistry: registry,
+      workspaces: new BotWorkspaceStore(registry.db, (botId, owner) => registry.getOwned(botId, owner)),
+      handsPlacement: {} as HandsPlacementGate,
       botSchedules: new BotSchedules(registry.db),
       botDeletionReconciler: {} as BotDeletionReconciler,
       botToolSessions: new BotToolSessions(),

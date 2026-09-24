@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { LocalHands } from "./local-hands"
+import { executorMethodCapability, LocalHands } from "./local-hands"
 
 class FakeSocket {
   readonly OPEN = 1
@@ -42,9 +42,10 @@ function waitFor(check: () => boolean) {
   })
 }
 
-function fixture({ failAcceptedReport = false }: { failAcceptedReport?: boolean } = {}) {
+function fixture({ failAcceptedReport = false, placementDomain }: { failAcceptedReport?: boolean; placementDomain?: "ON_PREM" | "MANAGED_CLOUD" } = {}) {
   const calls: Array<Record<string, unknown>> = []
   const reports: Array<Record<string, unknown>> = []
+  let currentPlacementDomain = placementDomain
   const session = {
     id: "runtime-session",
     principal: {
@@ -95,7 +96,9 @@ function fixture({ failAcceptedReport = false }: { failAcceptedReport?: boolean 
           target: `runtime:codex:${input.capabilityId}`,
           decision: "ALLOW" as const,
           reason_code: "RULE_ALLOW:runtime",
-          constraints: [],
+          constraints: input.capabilityId === "remote_hands.use" && input.action === "use" && currentPlacementDomain
+            ? [{ kind: "execution_placement", parameters: { execution_domain: currentPlacementDomain } }]
+            : [],
           obligations: [{ kind: "audit", enforcement_point_id: "AGENT_RUNTIME", parameters: {} }],
           correlation_id: input.correlationId,
           session_id: "runtime-session",
@@ -111,10 +114,19 @@ function fixture({ failAcceptedReport = false }: { failAcceptedReport?: boolean 
       },
     },
   }
-  return { hands: new LocalHands(context as never), calls, reports, session }
+  return { hands: new LocalHands(context as never), calls, reports, session, setPlacementDomain(domain: "ON_PREM" | "MANAGED_CLOUD") { currentPlacementDomain = domain } }
 }
 
 describe("local hands runtime policy", () => {
+  test("shares one executor RPC capability classifier", () => {
+    expect(executorMethodCapability("initialize")).toBeNull()
+    expect(executorMethodCapability("environment/info")).toBeNull()
+    expect(executorMethodCapability("process/start")).toBe("shell.exec")
+    expect(executorMethodCapability("fs/readFile")).toBe("filesystem.read")
+    expect(executorMethodCapability("fs/writeFile")).toBe("filesystem.write")
+    expect(() => executorMethodCapability("desktop/click")).toThrow("LOCAL_HANDS_METHOD_UNSUPPORTED")
+  })
+
   test("exposes remote hands before pairing and uses it at endpoint acceptance", async () => {
     const { hands, calls, reports, session } = fixture()
     const pairing = await hands.pair(session as never, "bot-dylan")
@@ -133,8 +145,41 @@ describe("local hands runtime policy", () => {
     }, 5181)
 
     expect(calls).toHaveLength(2)
-    expect(calls[1]).toMatchObject({ capabilityId: "remote_hands.use", action: "use" })
+    expect(calls[1]).toMatchObject({ capabilityId: "remote_hands.use", action: "use", handsPlacement: { mode: "enforce", localEndpoint: true } })
     expect(reports[1]).toMatchObject({ capabilityId: "remote_hands.use", action: "use", outcome: "COMPLETED", reasonCode: "REMOTE_HANDS_ENDPOINT_ACCEPTED" })
+    await hands.close()
+  })
+
+  test("an ON_PREM placement permits the existing Local Endpoint without naming an E2B provider", async () => {
+    const { hands, calls, reports, session } = fixture({ placementDomain: "ON_PREM" })
+    const pairing = await hands.pair(session as never, "bot-dylan")
+    const endpoint = new FakeSocket()
+    await hands.accept(endpoint as never, {
+      token: pairing.token,
+      version: 1,
+      executorVersion: pairing.executorVersion,
+      cwd: "/workspace",
+      hostname: "developer-mac",
+    }, 5181)
+    expect(calls[1]?.handsPlacement).toEqual({ mode: "enforce", localEndpoint: true })
+    expect(reports[1]).toMatchObject({ outcome: "COMPLETED", reasonCode: "REMOTE_HANDS_ENDPOINT_ACCEPTED" })
+    expect(session.leases.headless).toBeDefined()
+    await hands.close()
+  })
+
+  test("a MANAGED_CLOUD placement rejects Local Endpoint before attaching a lease", async () => {
+    const { hands, reports, session } = fixture({ placementDomain: "MANAGED_CLOUD" })
+    const pairing = await hands.pair(session as never, "bot-dylan")
+    const endpoint = new FakeSocket()
+    await expect(hands.accept(endpoint as never, {
+      token: pairing.token,
+      version: 1,
+      executorVersion: pairing.executorVersion,
+      cwd: "/workspace",
+      hostname: "developer-mac",
+    }, 5181)).rejects.toThrow("POLICY_PLACEMENT_CHANGED")
+    expect(session.leases.headless).toBeUndefined()
+    expect(reports[1]).toMatchObject({ outcome: "FAILED", reasonCode: "POLICY_PLACEMENT_CHANGED" })
     await hands.close()
   })
 
@@ -190,7 +235,7 @@ describe("local hands runtime policy", () => {
   })
 
   test("uses the registry action for every local shell and filesystem operation", async () => {
-    const { hands, calls, session } = fixture()
+    const { hands, calls, reports, session } = fixture()
     const pairing = await hands.pair(session as never, "bot-dylan")
     const endpoint = new FakeSocket()
     await hands.accept(endpoint as never, {
@@ -206,12 +251,42 @@ describe("local hands runtime policy", () => {
     hands.attachConsumer(ready.endpointId, executorUrl.searchParams.get("token"), consumer as never)
 
     consumer.emit("message", JSON.stringify({ id: 1, method: "process/start", params: { processId: "process-1" } }))
-    await waitFor(() => calls.length === 3)
-    expect(calls[2]).toMatchObject({ capabilityId: "shell.exec", action: "execute" })
+    await waitFor(() => calls.length === 4)
+    expect(calls[2]).toMatchObject({ capabilityId: "remote_hands.use", action: "use", handsPlacement: { mode: "enforce", localEndpoint: true } })
+    expect(reports[2]).toMatchObject({ capabilityId: "remote_hands.use", action: "use", outcome: "ALLOW", reasonCode: "LOCAL_HANDS_OPERATION_PLACEMENT_ALLOWED" })
+    expect(calls[3]).toMatchObject({ capabilityId: "shell.exec", action: "execute" })
 
     consumer.emit("message", JSON.stringify({ id: 2, method: "fs/readFile", params: { path: "/workspace/readme.md" } }))
-    await waitFor(() => calls.length === 4)
-    expect(calls[3]).toMatchObject({ capabilityId: "filesystem.read", action: "invoke" })
+    await waitFor(() => calls.length === 6)
+    expect(calls[4]).toMatchObject({ capabilityId: "remote_hands.use", action: "use", handsPlacement: { mode: "enforce", localEndpoint: true } })
+    expect(calls[5]).toMatchObject({ capabilityId: "filesystem.read", action: "invoke" })
+    await hands.close()
+  })
+
+  test("a changed placement blocks new work on an existing Local Endpoint", async () => {
+    const { hands, calls, reports, session, setPlacementDomain } = fixture({ placementDomain: "ON_PREM" })
+    const pairing = await hands.pair(session as never, "bot-dylan")
+    const endpoint = new FakeSocket()
+    await hands.accept(endpoint as never, {
+      token: pairing.token,
+      version: 1,
+      executorVersion: pairing.executorVersion,
+      cwd: "/workspace",
+      hostname: "developer-mac",
+    }, 5181)
+    const ready = JSON.parse(endpoint.sent[0]!) as { endpointId: string }
+    const executorUrl = new URL(hands.executorUrl(ready.endpointId))
+    const consumer = new FakeSocket()
+    hands.attachConsumer(ready.endpointId, executorUrl.searchParams.get("token"), consumer as never)
+    setPlacementDomain("MANAGED_CLOUD")
+
+    consumer.emit("message", JSON.stringify({ id: 1, method: "process/start", params: { processId: "new-process" } }))
+    await waitFor(() => endpoint.readyState !== endpoint.OPEN)
+    expect(calls).toHaveLength(3)
+    expect(calls[2]).toMatchObject({ capabilityId: "remote_hands.use", action: "use", handsPlacement: { mode: "enforce", localEndpoint: true } })
+    expect(reports[2]).toMatchObject({ outcome: "FAILED", reasonCode: "POLICY_PLACEMENT_CHANGED" })
+    expect(session.leases.headless).toBeUndefined()
+    expect(endpoint.sent).toHaveLength(1)
     await hands.close()
   })
 })

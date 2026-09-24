@@ -1,5 +1,7 @@
 import type { CapabilityGate } from "./capability-gate"
 import type { BotRegistry } from "./bot-registry"
+import type { BotWorkspaceStore } from "./bot-workspace-store"
+import type { HandsPlacementGate } from "./hands-placement-gate"
 import type { BotModelDirectory } from "./model-directory"
 import type { RuntimeBroker } from "./runtime-broker"
 import type { CodexRuntimeFactory } from "./runtime"
@@ -15,6 +17,8 @@ export interface BotServerContext {
   capabilityGate: CapabilityGate
   modelDirectory: BotModelDirectory
   botRegistry: BotRegistry
+  workspaces: BotWorkspaceStore
+  handsPlacement: HandsPlacementGate
   createCodexRuntime?: CodexRuntimeFactory
   runtimePolicy: RuntimePolicyResolver
 }

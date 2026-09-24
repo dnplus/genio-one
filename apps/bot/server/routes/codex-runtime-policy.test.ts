@@ -131,6 +131,7 @@ function createContext(
   }
   const runtimeBroker = {
     get: (id: string) => id === session.id ? session : undefined,
+    refreshWorkspaceDetails() {},
     claimBotTurn: () => () => {},
     async start(_principal: unknown, nextCallbacks: typeof callbacks) {
       callbacks = nextCallbacks
@@ -209,6 +210,8 @@ function createContext(
     modelDirectory,
     capabilityGate,
     runtimePolicy,
+    workspaces: { get: () => ({ workspaceId: "workspace-dylan", provider: "e2b-self-hosted" }), active: () => null },
+    handsPlacement: { async run(_actor: unknown, _provider: unknown, task: () => unknown) { return task() }, async authorizeUse() {}, async authorizeLocalEndpoint() {} },
     botSchedules: { resumeAuthorized() {} },
     session,
     botToolSessions: { config: () => ({ url: "http://bot-tools", http_headers: { Authorization: "Bearer managed" }, required: false }) },
@@ -217,7 +220,7 @@ function createContext(
 
 function activateDesktop(context: ReturnType<typeof createContext>) {
   const local = { kind: "local", tier: "none", cwd: "/local/bot", desktopUrl: null, sandboxId: null, environmentId: null, execServerUrl: null, execReady: false }
-  const desktop = { kind: "e2b-self-hosted", tier: "desktop", cwd: "/home/user", desktopUrl: "https://desktop.example", sandboxId: "desktop-sandbox", environmentId: "desktop-environment", execServerUrl: "ws://desktop.example", execReady: true }
+  const desktop = { kind: "e2b-self-hosted", tier: "desktop", cwd: "/home/user", desktopUrl: "https://desktop.example", sandboxId: "desktop-sandbox", environmentId: "desktop-environment", execServerUrl: "ws://desktop.example", execReady: true, workspaceId: "workspace-dylan" }
   context.session.details = desktop
   context.session.runtimeDetails = { none: local, desktop }
   return { local, desktop }
@@ -272,8 +275,17 @@ describe("Codex runtime policy route", () => {
       environmentId: "e2b-desktop",
       execServerUrl: "ws://runtime",
       execReady: true,
+      workspaceId: "workspace-dylan",
+      botId: "bot-dylan",
     }
-    const desktop = { details: rawDesktop, close: async () => {} }
+    const desktop = {
+      details: rawDesktop,
+      proxy: {
+        executor: { url: "http://e2b.test/", headers: { "E2b-Sandbox-Id": "sandbox-1", "E2b-Sandbox-Port": "4512" } },
+        desktop: { url: "http://e2b.test/", headers: { "E2b-Sandbox-Id": "sandbox-1", "E2b-Sandbox-Port": "6080" } },
+      },
+      close: async () => {},
+    }
     context.session.details = rawDesktop
     context.session.runtimeDetails = { desktop: rawDesktop }
     context.session.leases = { desktop }
@@ -287,6 +299,8 @@ describe("Codex runtime policy route", () => {
     try {
       socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
       await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 11, method: "genio/bot/select", params: { botId: "bot-dylan" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 11))
       socket.emit("message", JSON.stringify({ id: 2, method: "genio/runtime/status" }))
       await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
       const status = socket.sent.map((line) => JSON.parse(line)).find((message) => message.id === 2)
@@ -306,9 +320,12 @@ describe("Codex runtime policy route", () => {
         environmentId: "e2b-headless",
         execServerUrl: "ws://runtime",
         execReady: true,
+        botId: "bot-dylan",
+        workspaceId: "workspace-dylan",
       }
       context.session.details = headless
       context.session.runtimeDetails = { desktop: rawDesktop, headless }
+      context.session.leases.headless = { details: headless, close: async () => {} }
       socket.emit("message", JSON.stringify({ id: 3, method: "genio/runtime/status" }))
       await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 3))
       const retained = socket.sent.map((line) => JSON.parse(line)).find((message) => message.id === 3)
@@ -968,7 +985,7 @@ describe("Codex runtime policy route", () => {
     const reports: Array<Record<string, unknown>> = []
     const context = createContext(calls, reports, false, ["shell.exec"])
     const environmentId = `e2b-${tier}`
-    context.session.details = { kind: "e2b-self-hosted", tier, cwd: "/srv/genio", desktopUrl: tier === "desktop" ? "https://desktop.example" : null, sandboxId: "sandbox-1", environmentId, execServerUrl: "ws://runtime", execReady: true }
+    context.session.details = { kind: "e2b-self-hosted", tier, cwd: "/srv/genio", desktopUrl: tier === "desktop" ? "https://desktop.example" : null, sandboxId: "sandbox-1", environmentId, execServerUrl: "ws://runtime", execReady: true, workspaceId: "workspace-dylan" }
     context.session.runtimeDetails = {
       [tier]: context.session.details,
     }
@@ -1103,7 +1120,7 @@ describe("Codex runtime policy route", () => {
     const reports: Array<Record<string, unknown>> = []
     const context = createContext(calls, reports)
     activateDesktop(context)
-    const headless = { kind: "e2b-self-hosted", tier: "headless", cwd: "/workspace/headless", desktopUrl: null, sandboxId: "headless-sandbox", environmentId: "headless-environment", execServerUrl: "ws://headless.example", execReady: true }
+    const headless = { kind: "e2b-self-hosted", tier: "headless", cwd: "/workspace/headless", desktopUrl: null, sandboxId: "headless-sandbox", environmentId: "headless-environment", execServerUrl: "ws://headless.example", execReady: true, workspaceId: "workspace-dylan" }
     context.session.runtimeDetails.headless = headless
     let handler: ((socket: FakeSocket) => void) | null = null
     await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)

@@ -3,6 +3,11 @@ import type { BotRegistry } from "./bot-registry"
 import type { BotSchedules } from "./bot-schedules"
 import { platformOrigin } from "./platform-origin"
 import type { GenioPrincipal, RuntimeBroker } from "./runtime-broker"
+import type { BotWorkspaceStore } from "./bot-workspace-store"
+
+export class BotWorkspaceBusyError extends Error {
+  constructor() { super("BOT_WORKSPACE_BUSY") }
+}
 
 export class PlatformDistillationCancellationError extends Error {
   constructor(readonly code: string, readonly statusCode: 401 | 403 | 503) {
@@ -62,7 +67,12 @@ export class BotDeletionReconciler {
     private readonly botRegistry: BotRegistry,
     private readonly botSchedules: BotSchedules,
     private readonly runtimeBroker: RuntimeBroker,
+    private readonly workspaces?: BotWorkspaceStore,
   ) {}
+
+  private assertWorkspaceIdle(principal: GenioPrincipal, botId: string) {
+    if (this.runtimeBroker.hasActiveBotLease(principal.tenant_id, principal.subject_id, botId) || this.workspaces?.hasInFlightForBot(botId)) throw new BotWorkspaceBusyError()
+  }
 
   async reconcile() {
     if (this.reconciling || this.runtimeBroker.isClosing()) return
@@ -103,10 +113,16 @@ export class BotDeletionReconciler {
     this.inFlight.set(tokenKey, pending)
     void (async () => {
       try {
+        this.assertWorkspaceIdle(principal, botId)
         await cancelPlatformDistillation(accessToken, principal.tenant_id, botId)
+        this.assertWorkspaceIdle(principal, botId)
         finalizePendingBotDeletion(this.botRegistry, this.botSchedules, principal, botId)
         resolveAttempt()
       } catch (error) {
+        if (error instanceof BotWorkspaceBusyError) {
+          batch.ambiguous = true
+          rejectAttempt(error)
+        } else
         if (error instanceof PlatformDistillationCancellationError) {
           if (error.statusCode === 401 || error.statusCode === 403) {
             try {
@@ -124,6 +140,7 @@ export class BotDeletionReconciler {
           }
         } else {
           batch.ambiguous = true
+          console.warn(JSON.stringify({ event: "bot.deletion.reconcile.failed", bot_id: botId, reason: error instanceof Error ? error.message : String(error) }))
           rejectAttempt(new PlatformDistillationCancellationError("DISTILLATION_CANCELLATION_UNAVAILABLE", 503))
         }
       } finally {

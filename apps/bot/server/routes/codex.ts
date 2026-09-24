@@ -9,7 +9,7 @@ import type { FastifyInstance } from "fastify"
 import { assertCapability, CapabilityDeniedError, PERSONAL_BOT_COMPUTER_USE, PERSONAL_BOT_USE } from "../capability-gate"
 import { desktopBrowserGrants, proxiedDesktopUrl } from "../desktop-proxy"
 import { verifyGenioOneAccessToken } from "../auth"
-import { createCodexRuntime as defaultCreateCodexRuntime, type CodexRuntime, type RuntimeDetails, type RuntimeTier } from "../runtime"
+import { configuredRuntimeKind, pendingRuntimeDetails, createCodexRuntime as defaultCreateCodexRuntime, type CodexRuntime, type RuntimeDetails, type RuntimeTier } from "../runtime"
 import { setBotSelection, setManagedMcpMounts, type RuntimeSession } from "../runtime-broker"
 import type { BotServerContext } from "../context"
 import type { BotModelPlan } from "../model-directory"
@@ -139,6 +139,14 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
       desktopUrl: desktop?.details === details ? desktopUrl(session, desktop.details) : null,
     }
   }
+  const runtimeDetailsForBot = (session: RuntimeSession, botId: string | null): RuntimeDetails => {
+    const leases = Object.values(session.leases)
+    const active = leases.find((lease) => lease?.details === session.details && lease.details.execReady && (lease.details.botId ?? lease.details.endpoint?.botId) === botId)
+      ?? leases.find((lease) => lease?.details.execReady && (lease.details.botId ?? lease.details.endpoint?.botId) === botId)
+    if (active) return active.details
+    const workspace = botId ? context.workspaces.active(session.principal, botId) : null
+    return { ...pendingRuntimeDetails(workspace?.provider ?? configuredRuntimeKind()), botId, workspaceId: workspace?.workspaceId ?? null, workspaceRevision: workspace?.revision ?? null }
+  }
 
   app.get("/api/codex", { websocket: true }, (socket) => {
     let closed = false
@@ -147,6 +155,14 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
     let sessionAccessToken: string | null = null
     let starting = false
     let selectedBotId: string | null = null
+    const authorizeHandsUse = async (session: RuntimeSession, botId: string, details: RuntimeDetails) => {
+      const actor = { principal: session.principal, botId, accessToken: sessionAccessToken ?? session.accessToken ?? "", sessionId: session.id }
+      if (details.kind === "endpoint") return context.handsPlacement.authorizeLocalEndpoint(actor)
+      if (details.kind !== "e2b-self-hosted" && details.kind !== "cloudflare-hands") return
+      const workspace = details.workspaceId ? context.workspaces.get(session.principal, botId, details.workspaceId) : null
+      if (!workspace || workspace.provider !== details.kind) throw new Error("RUNTIME_WORKSPACE_NOT_OWNED")
+      await context.handsPlacement.authorizeUse(actor, workspace.provider)
+    }
     let botSelectionVersion = 0
     const botRequests = new Map<number | string, { method: string; botId: string; session: RuntimeSession; threadId?: string; historyRevision: number; runtimeTier?: RuntimeTier; authorizations: RuntimePolicyDecision[] }>()
     const pendingHostAuthorizations = new Map<number | string, { session: RuntimeSession; botId: string; decision: RuntimePolicyDecision }>()
@@ -428,8 +444,10 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
               socket.send(JSON.stringify({
                 id: message.id,
                 result: {
-                  active: runtimeDetailsForClient(session, session.details),
-                  tiers: Object.fromEntries(Object.entries(session.runtimeDetails).map(([tier, details]) => [tier, runtimeDetailsForClient(session, details)])),
+                  active: runtimeDetailsForClient(session, runtimeDetailsForBot(session, selectedBotId)),
+                  tiers: Object.fromEntries(Object.entries(session.runtimeDetails)
+                    .filter(([, details]) => details.tier !== "none" && (details.botId ?? details.endpoint?.botId) === selectedBotId)
+                    .map(([tier, details]) => [tier, runtimeDetailsForClient(session, details)])),
                   runtimeSessionId: session.id,
                 },
               }))
@@ -437,11 +455,13 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
             return
           }
           if (message.method === "genio/bot/select") {
-            const selectionVersion = ++botSelectionVersion
             const session = runtimeSession
             const botId = typeof message.params?.botId === "string" ? message.params.botId : ""
-            selectedBotId = null
-            if (session) setBotSelection(session, null)
+            const selectionVersion = ++botSelectionVersion
+            if (selectedBotId !== botId) {
+              selectedBotId = null
+              if (session) { setBotSelection(session, null); runtimeBroker.refreshWorkspaceDetails(session.id) }
+            }
             if (!session || !botId) {
               if (socket.readyState === socket.OPEN) socket.send(JSON.stringify({ id: message.id, error: { code: "BOT_REQUIRED", message: "A Bot must be selected" } }))
               return
@@ -538,6 +558,7 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
               assertCurrentSelection()
               selectedBotId = selectedBot.id
               setBotSelection(session, { botId: selectedBot.id, usageContext, mcpMounts })
+              runtimeBroker.refreshWorkspaceDetails(session.id)
               if (socket.readyState === socket.OPEN) socket.send(JSON.stringify({ id: message.id, result: {
                 botId: selectedBot.id,
                 modelDirectory: selectedBot.modelRoute,
@@ -550,6 +571,7 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
               if (isCurrentSelection()) {
                 selectedBotId = null
                 setBotSelection(session, null)
+                runtimeBroker.refreshWorkspaceDetails(session.id)
                 sendRuntimePolicyError(error instanceof Error ? error.message : "BOT_SELECT_FAILED", undefined, message.id)
               } else if (socket.readyState === socket.OPEN) {
                 socket.send(JSON.stringify({ id: message.id, error: { code: "BOT_SELECTION_SUPERSEDED", message: "BOT_SELECTION_SUPERSEDED" } }))
@@ -620,12 +642,18 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
           if (message.method === "genio/runtime/stop") {
             const session = runtimeSession
             if (!session) return
-            const tier = message.params?.tier === "desktop" || message.params?.tier === "headless" ? message.params.tier : undefined
-            void runtimeBroker.stop(session.id, tier)
+            const tier: "desktop" | "headless" | undefined = message.params?.tier === "desktop" || message.params?.tier === "headless" ? message.params.tier : undefined
+            if (!selectedBotId) { sendRuntimePolicyError("BOT_NOT_SELECTED", tier, message.id); return }
+            const targetLeases = tier ? [session.leases[tier]] : Object.values(session.leases)
+            if (targetLeases.some((lease) => lease && (lease.details.botId ?? lease.details.endpoint?.botId) !== selectedBotId) || (!tier && runtimeBroker.hasOtherBotTurn(session.id, selectedBotId))) {
+              sendRuntimePolicyError("RUNTIME_WORKSPACE_NOT_OWNED", tier, message.id)
+              return
+            }
+            void runtimeBroker.stop(session.id, tier, selectedBotId)
               .then(() => {
                 if (socket.readyState === socket.OPEN) socket.send(JSON.stringify({ method: "genio/runtime/stopped", params: {
                   tier: tier ?? "all",
-                  active: runtimeSession?.details,
+                  active: runtimeSession ? runtimeDetailsForBot(runtimeSession, selectedBotId) : null,
                 } }))
               })
               .catch((error) => {
@@ -643,6 +671,13 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
             if (!owned) {
               if (socket.readyState === socket.OPEN) socket.send(JSON.stringify({ id: message.id, error: { code: runtimeSession?.details.tier === "none" ? "REMOTE_RUNTIME_REQUIRED" : "RUNTIME_ENVIRONMENT_NOT_OWNED", message: "Only a Runtime Broker provisioned environment may be attached" } }))
               return
+            }
+            if (runtimeSession && selectedBotId) {
+              try { await authorizeHandsUse(runtimeSession, selectedBotId, owned) }
+              catch (error) {
+                if (socket.readyState === socket.OPEN) socket.send(JSON.stringify({ id: message.id, error: { code: error instanceof Error ? error.message : "RUNTIME_POLICY_DENIED" } }))
+                return
+              }
             }
             if (owned.kind === "endpoint") message.params = { ...message.params, execServerUrl: context.localHands!.executorUrl(owned.environmentId!) }
           }
@@ -730,6 +765,11 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
                 })
               }
               if (isNativeExecutionRequest && nativeEnvironment?.hasRuntimeEnvironment) {
+                const environments = Array.isArray(message.params?.environments) ? message.params.environments : []
+                for (const environment of environments) {
+                  const details = ownedRuntimeEnvironment(runtimeSession, environment?.environmentId, undefined, botId)
+                  if (details) await authorizeHandsUse(runtimeSession, botId, details)
+                }
                 authorizations.push(await authorizeRuntime(runtimeSession, botId, SHELL_EXEC_CAPABILITY, runtimeExecutionAction(SHELL_EXEC_CAPABILITY)))
               }
             } catch (error) {
@@ -748,7 +788,7 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
               }
             }
             if (message.method === "turn/start" && message.id !== undefined) {
-              const release = runtimeBroker.claimBotTurn(botId)
+              const release = runtimeBroker.claimBotTurn(botId, runtimeSession.id)
               if (!release || botRegistry.timeline.hasRunningTurns(botId)) {
                 release?.()
                 await Promise.all(authorizations.map((decision) => reportRuntimeDecision(runtimeSession!, botId, decision, "FAILED", "BOT_TURN_BUSY")))

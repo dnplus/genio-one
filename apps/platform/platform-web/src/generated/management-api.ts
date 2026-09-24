@@ -12082,6 +12082,11 @@ export const PreviewUserPermissions200RuntimeDecisionsItemDecision = {  ALLOW: '
   DENY: 'DENY',
 } as const
 export type PreviewUserPermissions200RuntimeDecisionsItemConstraintsItem = {
+  kind: 'execution_placement';
+  parameters: {
+  execution_domain: 'ON_PREM' | 'MANAGED_CLOUD';
+};
+} | {
   kind: 'path_allowlist';
   parameters: {
   /**
@@ -12688,6 +12693,11 @@ export type GetV1TenantsTenantIdOnePolicyFirstPartyBotDraft200Content = {
   effect: 'ALLOW' | 'DENY';
   /** @maxItems 128 */
   constraints: ({
+  kind: 'execution_placement';
+  parameters: {
+  execution_domain: 'ON_PREM' | 'MANAGED_CLOUD';
+};
+} | {
   kind: 'path_allowlist';
   parameters: {
   /**
@@ -13144,6 +13154,11 @@ export type PutV1TenantsTenantIdOnePolicyFirstPartyBotDraftBodyContent = {
   effect: 'ALLOW' | 'DENY';
   /** @maxItems 128 */
   constraints: ({
+  kind: 'execution_placement';
+  parameters: {
+  execution_domain: 'ON_PREM' | 'MANAGED_CLOUD';
+};
+} | {
   kind: 'path_allowlist';
   parameters: {
   /**
@@ -13566,6 +13581,11 @@ export type PutV1TenantsTenantIdOnePolicyFirstPartyBotDraft200Content = {
   effect: 'ALLOW' | 'DENY';
   /** @maxItems 128 */
   constraints: ({
+  kind: 'execution_placement';
+  parameters: {
+  execution_domain: 'ON_PREM' | 'MANAGED_CLOUD';
+};
+} | {
   kind: 'path_allowlist';
   parameters: {
   /**
@@ -14029,6 +14049,11 @@ export type PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftValidate200Content =
   effect: 'ALLOW' | 'DENY';
   /** @maxItems 128 */
   constraints: ({
+  kind: 'execution_placement';
+  parameters: {
+  execution_domain: 'ON_PREM' | 'MANAGED_CLOUD';
+};
+} | {
   kind: 'path_allowlist';
   parameters: {
   /**
@@ -14492,6 +14517,11 @@ export type PostV1TenantsTenantIdOnePolicyFirstPartyBotDraftReview200Content = {
   effect: 'ALLOW' | 'DENY';
   /** @maxItems 128 */
   constraints: ({
+  kind: 'execution_placement';
+  parameters: {
+  execution_domain: 'ON_PREM' | 'MANAGED_CLOUD';
+};
+} | {
   kind: 'path_allowlist';
   parameters: {
   /**
@@ -14942,6 +14972,11 @@ export const ListRuntimePolicies200ItemRulesItemEffect = {  ALLOW: 'ALLOW',
   DENY: 'DENY',
 } as const
 export type ListRuntimePolicies200ItemRulesItemConstraintsItem = {
+  kind: 'execution_placement';
+  parameters: {
+  execution_domain: 'ON_PREM' | 'MANAGED_CLOUD';
+};
+} | {
   kind: 'path_allowlist';
   parameters: {
   /**
@@ -15204,6 +15239,11 @@ export const GetRuntimePolicy200RulesItemEffect = {  ALLOW: 'ALLOW',
   DENY: 'DENY',
 } as const
 export type GetRuntimePolicy200RulesItemConstraintsItem = {
+  kind: 'execution_placement';
+  parameters: {
+  execution_domain: 'ON_PREM' | 'MANAGED_CLOUD';
+};
+} | {
   kind: 'path_allowlist';
   parameters: {
   /**
@@ -15472,6 +15512,11 @@ export const SetRuntimePolicyEnabled200RulesItemEffect = {  ALLOW: 'ALLOW',
   DENY: 'DENY',
 } as const
 export type SetRuntimePolicyEnabled200RulesItemConstraintsItem = {
+  kind: 'execution_placement';
+  parameters: {
+  execution_domain: 'ON_PREM' | 'MANAGED_CLOUD';
+};
+} | {
   kind: 'path_allowlist';
   parameters: {
   /**
@@ -15734,6 +15779,11 @@ export const ListRuntimePolicyRevisions200ItemRulesItemEffect = {  ALLOW: 'ALLOW
   DENY: 'DENY',
 } as const
 export type ListRuntimePolicyRevisions200ItemRulesItemConstraintsItem = {
+  kind: 'execution_placement';
+  parameters: {
+  execution_domain: 'ON_PREM' | 'MANAGED_CLOUD';
+};
+} | {
   kind: 'path_allowlist';
   parameters: {
   /**
@@ -15996,6 +16046,11 @@ export const GetRuntimePolicyRevision200RulesItemEffect = {  ALLOW: 'ALLOW',
   DENY: 'DENY',
 } as const
 export type GetRuntimePolicyRevision200RulesItemConstraintsItem = {
+  kind: 'execution_placement';
+  parameters: {
+  execution_domain: 'ON_PREM' | 'MANAGED_CLOUD';
+};
+} | {
   kind: 'path_allowlist';
   parameters: {
   /**
@@ -16459,6 +16514,11 @@ export type GetRuntimePolicyDraft200Content = {
   effect: 'ALLOW' | 'DENY';
   /** @maxItems 128 */
   constraints: ({
+  kind: 'execution_placement';
+  parameters: {
+  execution_domain: 'ON_PREM' | 'MANAGED_CLOUD';
+};
+} | {
   kind: 'path_allowlist';
   parameters: {
   /**
@@ -16915,6 +16975,11 @@ export type SaveRuntimePolicyDraftBodyContent = {
   effect: 'ALLOW' | 'DENY';
   /** @maxItems 128 */
   constraints: ({
+  kind: 'execution_placement';
+  parameters: {
+  execution_domain: 'ON_PREM' | 'MANAGED_CLOUD';
+};
+} | {
   kind: 'path_allowlist';
   parameters: {
   /**
@@ -17337,6 +17402,11 @@ export type SaveRuntimePolicyDraft200Content = {
   effect: 'ALLOW' | 'DENY';
   /** @maxItems 128 */
   constraints: ({
+  kind: 'execution_placement';
+  parameters: {
+  execution_domain: 'ON_PREM' | 'MANAGED_CLOUD';
+};
+} | {
   kind: 'path_allowlist';
   parameters: {
   /**
@@ -17800,6 +17870,11 @@ export type ValidateRuntimePolicyDraft200Content = {
   effect: 'ALLOW' | 'DENY';
   /** @maxItems 128 */
   constraints: ({
+  kind: 'execution_placement';
+  parameters: {
+  execution_domain: 'ON_PREM' | 'MANAGED_CLOUD';
+};
+} | {
   kind: 'path_allowlist';
   parameters: {
   /**
@@ -18263,6 +18338,11 @@ export type ReviewRuntimePolicyDraft200Content = {
   effect: 'ALLOW' | 'DENY';
   /** @maxItems 128 */
   constraints: ({
+  kind: 'execution_placement';
+  parameters: {
+  execution_domain: 'ON_PREM' | 'MANAGED_CLOUD';
+};
+} | {
   kind: 'path_allowlist';
   parameters: {
   /**
@@ -18534,6 +18614,11 @@ export const PublishRuntimePolicyDraft200RulesItemEffect = {  ALLOW: 'ALLOW',
   DENY: 'DENY',
 } as const
 export type PublishRuntimePolicyDraft200RulesItemConstraintsItem = {
+  kind: 'execution_placement';
+  parameters: {
+  execution_domain: 'ON_PREM' | 'MANAGED_CLOUD';
+};
+} | {
   kind: 'path_allowlist';
   parameters: {
   /**
@@ -18765,6 +18850,11 @@ export const GetRuntimePolicyEffective200Decision = {  ALLOW: 'ALLOW',
   DENY: 'DENY',
 } as const
 export type GetRuntimePolicyEffective200ConstraintsItem = {
+  kind: 'execution_placement';
+  parameters: {
+  execution_domain: 'ON_PREM' | 'MANAGED_CLOUD';
+};
+} | {
   kind: 'path_allowlist';
   parameters: {
   /**
@@ -19028,6 +19118,11 @@ export const AuthorizeRuntimePolicy200Decision = {  ALLOW: 'ALLOW',
   DENY: 'DENY',
 } as const
 export type AuthorizeRuntimePolicy200ConstraintsItem = {
+  kind: 'execution_placement';
+  parameters: {
+  execution_domain: 'ON_PREM' | 'MANAGED_CLOUD';
+};
+} | {
   kind: 'path_allowlist';
   parameters: {
   /**
@@ -19371,6 +19466,11 @@ export const ReportRuntimePolicyOutcome201Decision = {  ALLOW: 'ALLOW',
   DENY: 'DENY',
 } as const
 export type ReportRuntimePolicyOutcome201ConstraintsItem = {
+  kind: 'execution_placement';
+  parameters: {
+  execution_domain: 'ON_PREM' | 'MANAGED_CLOUD';
+};
+} | {
   kind: 'path_allowlist';
   parameters: {
   /**
@@ -19900,6 +20000,11 @@ export type GetV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolic
   effect: 'ALLOW' | 'DENY';
   /** @maxItems 128 */
   constraints: ({
+  kind: 'execution_placement';
+  parameters: {
+  execution_domain: 'ON_PREM' | 'MANAGED_CLOUD';
+};
+} | {
   kind: 'path_allowlist';
   parameters: {
   /**
@@ -20356,6 +20461,11 @@ export type PutV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolic
   effect: 'ALLOW' | 'DENY';
   /** @maxItems 128 */
   constraints: ({
+  kind: 'execution_placement';
+  parameters: {
+  execution_domain: 'ON_PREM' | 'MANAGED_CLOUD';
+};
+} | {
   kind: 'path_allowlist';
   parameters: {
   /**
@@ -20778,6 +20888,11 @@ export type PutV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPolic
   effect: 'ALLOW' | 'DENY';
   /** @maxItems 128 */
   constraints: ({
+  kind: 'execution_placement';
+  parameters: {
+  execution_domain: 'ON_PREM' | 'MANAGED_CLOUD';
+};
+} | {
   kind: 'path_allowlist';
   parameters: {
   /**
@@ -21241,6 +21356,11 @@ export type PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPoli
   effect: 'ALLOW' | 'DENY';
   /** @maxItems 128 */
   constraints: ({
+  kind: 'execution_placement';
+  parameters: {
+  execution_domain: 'ON_PREM' | 'MANAGED_CLOUD';
+};
+} | {
   kind: 'path_allowlist';
   parameters: {
   /**
@@ -21704,6 +21824,11 @@ export type PostV1TenantsTenantIdResourcesResourceIdCapabilitiesCapabilityIdPoli
   effect: 'ALLOW' | 'DENY';
   /** @maxItems 128 */
   constraints: ({
+  kind: 'execution_placement';
+  parameters: {
+  execution_domain: 'ON_PREM' | 'MANAGED_CLOUD';
+};
+} | {
   kind: 'path_allowlist';
   parameters: {
   /**
@@ -29196,6 +29321,11 @@ export type ListGatewayAuthorizationAuditEvents200 = (({
   reason_code: string;
   /** @maxItems 128 */
   constraints: ({
+  kind: 'execution_placement';
+  parameters: {
+  execution_domain: 'ON_PREM' | 'MANAGED_CLOUD';
+};
+} | {
   kind: 'path_allowlist';
   parameters: {
   /**
@@ -29691,6 +29821,11 @@ export type ListGatewayAuthorizationAuditEvents200 = (({
   reason_code: string;
   /** @maxItems 128 */
   constraints: ({
+  kind: 'execution_placement';
+  parameters: {
+  execution_domain: 'ON_PREM' | 'MANAGED_CLOUD';
+};
+} | {
   kind: 'path_allowlist';
   parameters: {
   /**

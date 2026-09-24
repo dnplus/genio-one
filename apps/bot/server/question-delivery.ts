@@ -36,7 +36,7 @@ export async function deliverQuestionAnswers(context: BotServerContext) {
       const principal = { tenant_id: row.tenant_id, subject_id: row.owner_subject_id, acting_client_id: "genio-one-bot", scopes: ["genioone-invocation"] }
       const session = context.runtimeBroker.findByPrincipal(principal)
       if (!session?.initialized || !session.accessToken) continue
-      const release = context.runtimeBroker.claimBotTurn(entry.botId)
+      const release = context.runtimeBroker.claimBotTurn(entry.botId, session.id)
       if (!release) continue
       try {
         await assertCapability(context.capabilityGate, principal, PERSONAL_BOT_USE, session.accessToken)

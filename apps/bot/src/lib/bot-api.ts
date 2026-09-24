@@ -69,12 +69,16 @@ export interface ArtifactRef {
   artifactId: string
   tenantId: string
   botId: string
-  sourceTier: RuntimeTier
+  sourceTier: Exclude<RuntimeTier, "none"> | "isolate"
   sourceEnvironmentId: string
   path: string
   digest: string
   contentType: string
   size: number
+  storageProvider: "e2b-self-hosted" | "cloudflare-hands"
+  sourceWorkspaceId: string | null
+  sourceRevision: number | null
+  storageRef: string | null
   createdAt: number
 }
 
@@ -241,6 +245,11 @@ export async function listBotArtifacts(token: string, botId: string) {
 export async function registerBotArtifactFromRuntime(token: string, botId: string, input: {
   sourceTier: Exclude<RuntimeTier, "none">
   sourceEnvironmentId: string
+  path: string
+  contentType?: string
+} | {
+  sourceTier: "isolate"
+  sourceWorkspaceId: string
   path: string
   contentType?: string
 }) {

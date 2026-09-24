@@ -3,6 +3,7 @@ import { createHash } from "node:crypto"
 import { Type, type Static } from "typebox"
 import * as Value from "typebox/value"
 import { RUNTIME_CAPABILITY_IDS } from "@genioone/protocol/runtime-capability-actions"
+import { isHandsExecutionPlacementTarget, readHandsExecutionPlacement } from "@genioone/protocol/hands-placement"
 
 const Identifier = Type.String({ minLength: 1, maxLength: 256 })
 const StringList = Type.Array(Identifier, { maxItems: 2_048, uniqueItems: true })
@@ -39,6 +40,10 @@ export const RuntimePolicyScopeSchema = Type.Object({
 }, { additionalProperties: false })
 
 const RuntimePolicyConstraintParameters = Type.Union([
+  Type.Object({
+    kind: Type.Literal("execution_placement"),
+    parameters: Type.Object({ execution_domain: Type.Union([Type.Literal("ON_PREM"), Type.Literal("MANAGED_CLOUD")]) }, { additionalProperties: false }),
+  }, { additionalProperties: false }),
   Type.Object({
     kind: Type.Literal("path_allowlist"),
     parameters: Type.Object({ paths: StringList }, { additionalProperties: false }),
@@ -321,6 +326,19 @@ function mergeConstraints(values: readonly RuntimePolicyConstraint[]): RuntimePo
   return [...result.values()]
 }
 
+function enforceRuntimeConstraints(decision: RuntimePolicyDecision): RuntimePolicyDecision {
+  if (decision.decision !== "ALLOW" || decision.constraints.length === 0) return decision
+  if (!isHandsExecutionPlacementTarget(decision.runtime_id, decision.capability_id, decision.action)) {
+    return { ...decision, decision: "DENY", reason_code: "RUNTIME_POLICY_CONSTRAINT_UNSUPPORTED" }
+  }
+  try {
+    readHandsExecutionPlacement(decision.constraints)
+    return decision
+  } catch (error) {
+    return { ...decision, decision: "DENY", reason_code: error instanceof Error ? error.message : "POLICY_PLACEMENT_INVALID" }
+  }
+}
+
 function mergeObligations(values: readonly RuntimePolicyObligation[]): RuntimePolicyObligation[] {
   const result = new Map<string, RuntimePolicyObligation>()
   for (const value of values) result.set(obligationKey(value), value)
@@ -400,13 +418,13 @@ export function evaluateRuntimePolicy(
   if (deny) return { ...applicable, reason_code: `RULE_DENY:${deny.rule_id}` }
   const allow = matching.filter((rule) => rule.effect === "ALLOW")
   if (allow.length === 0) return { ...applicable, reason_code: "DEFAULT_DENY" }
-  return {
+  return enforceRuntimeConstraints({
     ...applicable,
     decision: "ALLOW",
     reason_code: `RULE_ALLOW:${allow[0]!.rule_id}`,
     constraints: mergeConstraints(allow.flatMap((rule) => rule.constraints)),
     obligations: mergeObligations(allow.flatMap((rule) => rule.obligations)),
-  }
+  })
 }
 
 export function evaluateRuntimePolicies(
@@ -448,14 +466,14 @@ export function evaluateRuntimePolicies(
   const winner = allow[0]!
   const decision = evaluateRuntimePolicy(winner.policy, input, options)
   const refs = refsForEntries(allow)
-  return {
+  return enforceRuntimeConstraints({
     ...decision,
     decision: "ALLOW",
     reason_code: `RULE_ALLOW:${winner.rule.rule_id}`,
     constraints: mergeConstraints(allow.flatMap((entry) => entry.rule.constraints)),
     obligations: mergeObligations(allow.flatMap((entry) => entry.rule.obligations)),
     matched_policy_refs: refs,
-  }
+  })
 }
 
 export function runtimePolicyAuditEvent(

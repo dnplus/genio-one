@@ -35,15 +35,11 @@ export async function requestPrincipal(request: { headers: Record<string, string
   return verifyGenioOneAccessToken(requestAccessToken(request))
 }
 
-export function e2bProxySession(runtimeBroker: RuntimeBroker, runtimeSessionId: string, tier?: RuntimeTier) {
+export function executorProxySession(runtimeBroker: RuntimeBroker, runtimeSessionId: string, tier?: RuntimeTier) {
   const session = runtimeBroker.get(runtimeSessionId)
-  const details = tier ? session?.runtimeDetails[tier] : session?.details
-  if (!details?.sandboxId || details.kind !== "e2b-self-hosted") return null
-  const configured = process.env.E2B_SANDBOX_URL?.trim()
-  if (!configured) return null
-  const sandboxUrl = new URL(configured)
-  if (sandboxUrl.protocol !== "http:" && sandboxUrl.protocol !== "https:") return null
-  return { sandboxId: details.sandboxId, sandboxUrl }
+  const lease = tier === "headless" || tier === "desktop" ? session?.leases[tier] : session?.desktop
+  if (!lease || !lease.details.execReady || !lease.proxy?.executor) return null
+  return lease.proxy.executor
 }
 
 export async function authenticateExecutorProxySession(
@@ -62,13 +58,13 @@ export async function authenticateExecutorProxySession(
   }
   try {
     const principal = await verifyGenioOneAccessToken(token)
-    if (principal.tenant_id !== session.principal.tenant_id || principal.subject_id !== session.principal.subject_id) {
+    if (principal.tenant_id !== session.principal.tenant_id || principal.subject_id !== session.principal.subject_id || principal.acting_client_id !== session.principal.acting_client_id) {
       return null
     }
   } catch {
     return null
   }
-  return e2bProxySession(runtimeBroker, runtimeSessionId, tier)
+  return executorProxySession(runtimeBroker, runtimeSessionId, tier)
 }
 
 function desktopGrantFromQuery(request: { query?: unknown }) {

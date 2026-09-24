@@ -2,9 +2,14 @@ import { randomBytes, randomUUID } from "node:crypto"
 import { CodexRpcChannels } from "./codex-rpc-channels"
 import { PendingInteractions } from "./pending-interactions"
 import type { ManagedMcpMounts } from "./managed-mcp"
+import type { HandsWorkspace } from "@genioone/protocol/hands"
+import type { BotWorkspaceStore } from "./bot-workspace-store"
+import type { HandsPlacementGate } from "./hands-placement-gate"
 
 import {
   PendingRuntime,
+  configuredRuntimeKind,
+  pendingRuntimeDetails,
   type CodexRuntime,
   type ManagedDesktop,
   type RuntimeCallbacks,
@@ -89,17 +94,38 @@ interface ManagedRuntimeSession {
 const executableTiers = new Set<Exclude<RuntimeTier, "none">>(["headless", "desktop"])
 
 export class RuntimeBroker {
-  private readonly botTurnClaims = new Map<string, symbol>()
+  private readonly botTurnClaims = new Map<string, { token: symbol; sessionId?: string }>()
+  hasOtherBotTurn(sessionId: string, botId: string) {
+    const session = this.sessions.get(sessionId)?.session
+    return Boolean(session && Array.from(this.botTurnClaims).some(([current, claim]) => current !== botId && (claim.sessionId === sessionId || (!claim.sessionId && this.workspaces?.belongsToOwner(session.principal, current)))))
+  }
 
-  claimBotTurn(botId: string): (() => void) | null {
+  claimBotTurn(botId: string, sessionId?: string): (() => void) | null {
     if (this.closing || this.botTurnClaims.has(botId)) return null
+    if (Array.from(this.stoppingSessions.keys()).some((id) => {
+      const session = this.sessions.get(id)?.session
+      return session && this.workspaces?.belongsToOwner(session.principal, botId)
+    })) return null
     const claim = Symbol(botId)
-    this.botTurnClaims.set(botId, claim)
-    return () => { if (this.botTurnClaims.get(botId) === claim) this.botTurnClaims.delete(botId) }
+    this.botTurnClaims.set(botId, { token: claim, sessionId })
+    return () => { if (this.botTurnClaims.get(botId)?.token === claim) this.botTurnClaims.delete(botId) }
   }
 
   private closing = false
   isClosing() { return this.closing }
+  hasProvisioning(id: string) { return this.tierProvisioning.has(id) }
+  hasActiveBotLease(tenantId: string, ownerSubjectId: string, botId: string) {
+    return Array.from(this.sessions.values()).some((managed) =>
+      managed.session.principal.tenant_id === tenantId &&
+      managed.session.principal.subject_id === ownerSubjectId &&
+      (this.tierProvisioningTargets.get(managed.session.id)?.botId === botId || Object.values(managed.session.leases).some((lease) => lease?.details.botId === botId && lease.details.kind !== "endpoint")),
+    )
+  }
+  hasActiveWorkspaceLease(workspaceId: string) {
+    return Array.from(this.sessions.values()).some((managed) =>
+      this.tierProvisioningTargets.get(managed.session.id)?.workspaceId === workspaceId || Object.values(managed.session.leases).some((lease) => lease?.details.workspaceId === workspaceId),
+    )
+  }
   private readonly invocationTasks = new Set<Promise<void>>()
 
   runInvocationTask(task: () => Promise<void>): Promise<void> {
@@ -120,11 +146,32 @@ export class RuntimeBroker {
   private readonly principalSessions = new Map<string, string>()
   private readonly opening = new Map<string, Promise<ManagedRuntimeSession>>()
   private readonly tierProvisioning = new Map<string, Promise<RuntimeSession>>()
+  private readonly tierProvisioningTargets = new Map<string, { botId: string | null; workspaceId: string | null }>()
+  private readonly stoppingSessions = new Map<string, Promise<void>>()
 
   constructor(
     private readonly provider: RuntimeProvider,
     private readonly disconnectGraceMs = 600_000,
+    private readonly workspaces?: BotWorkspaceStore,
+    private readonly handsPlacement?: HandsPlacementGate,
   ) {}
+
+  refreshWorkspaceDetails(id: string) {
+    const session = this.sessions.get(id)?.session
+    if (!session) return
+    const kind = configuredRuntimeKind()
+    const workspace = kind !== "local" && session.selectedBotId && this.workspaces
+      ? this.workspaces.active(session.principal, session.selectedBotId)
+      : null
+    const pending = pendingRuntimeDetails(kind === "local" ? kind : workspace?.provider ?? kind)
+    pending.botId = session.selectedBotId ?? null
+    pending.workspaceId = workspace?.workspaceId ?? null
+    pending.workspaceRevision = workspace?.revision ?? null
+    session.runtimeDetails.none = pending
+    const active = Object.values(session.leases).find((lease) => lease?.details.execReady && lease.details.botId === session.selectedBotId && lease.details.workspaceId === workspace?.workspaceId)
+    session.details = active?.details ?? pending
+    session.desktop = active ?? new PendingRuntime(pending)
+  }
 
   async start(
     principal: GenioPrincipal,
@@ -137,6 +184,8 @@ export class RuntimeBroker {
     const existingId = this.principalSessions.get(principalKey)
     const existing = existingId ? this.sessions.get(existingId) : null
     if (existing) {
+      const stopping = this.stoppingSessions.get(existing.session.id)
+      if (stopping) { await stopping; return this.start(principal, callbacks, codexFactory, accessToken) }
       if (!existing.session.codex && codexFactory) {
         existing.session.initialized = false
         existing.session.initializeResult = undefined
@@ -195,26 +244,70 @@ export class RuntimeBroker {
   ): Promise<RuntimeSession> {
     if (this.closing) throw new Error("RUNTIME_BROKER_CLOSING")
     if (!executableTiers.has(tier)) throw new Error("RUNTIME_TIER_INVALID")
+    if (this.stoppingSessions.has(id)) throw new Error("RUNTIME_BROKER_STOPPING")
     const managed = this.sessions.get(id)
     if (!managed) throw new Error("RUNTIME_SESSION_NOT_FOUND")
-    const current = managed.session.leases[tier]
+    let current = managed.session.leases[tier]
     if (current) {
       if (current.details.kind === "endpoint" && (!current.details.execReady || current.details.endpoint?.botId !== botId)) throw new Error("LOCAL_HANDS_DISCONNECTED")
-      managed.session.details = current.details
-      managed.session.runtimeDetails[tier] = current.details
-      return managed.session
+      if (current.details.kind === "endpoint") {
+        managed.session.details = current.details
+        managed.session.runtimeDetails[tier] = current.details
+        return managed.session
+      }
     }
     if (managed.session.details.kind === "local") throw new Error("LOCAL_RUNTIME_HAS_NO_EXEC")
-    const key = `${id}:${tier}`
+    const key = id
     const pending = this.tierProvisioning.get(key)
-    if (pending) return pending
-    const provisioning = this.provisionTier(managed, tier, botId)
+    if (pending) { await pending; return this.ensure(id, tier, botId) }
+    const retry = this.workspaces?.unresolvedLeaseAttempt(managed.session.principal, id)
+    if (retry && (retry.tier !== tier || retry.botId !== botId)) throw new Error("WORKSPACE_BUSY")
+    if (current && current.details.kind !== "endpoint" && (current.details.botId ?? null) !== (botId ?? null)) throw new Error("WORKSPACE_BUSY")
+    if (Object.entries(managed.session.leases).some(([otherTier, lease]) => otherTier !== tier && lease && lease.details.kind !== "endpoint")) throw new Error("WORKSPACE_BUSY")
+    const activeWorkspaceId = botId && this.workspaces ? this.workspaces.active(managed.session.principal, botId)?.workspaceId ?? null : null
+    this.tierProvisioningTargets.set(key, { botId: botId ?? null, workspaceId: activeWorkspaceId })
+    const provisioning = this.acquireTier(managed, tier, botId)
     this.tierProvisioning.set(key, provisioning)
     try {
       return await provisioning
     } finally {
       this.tierProvisioning.delete(key)
+      this.tierProvisioningTargets.delete(key)
     }
+  }
+
+  private async acquireTier(managed: ManagedRuntimeSession, tier: Exclude<RuntimeTier, "none">, botId?: string): Promise<RuntimeSession> {
+    const session = managed.session
+    const workspace = botId && this.workspaces
+      ? this.handsPlacement
+        ? await this.handsPlacement.ensureWorkspace({ principal: session.principal, botId, sessionId: session.id, accessToken: this.accessTokenForBot(session.id, botId) || "" })
+        : this.workspaces.ensureActive(session.principal, botId)
+      : undefined
+    const retry = this.workspaces?.unresolvedLeaseAttempt(session.principal, session.id)
+    if (retry && retry.workspaceId !== (workspace?.workspaceId ?? null)) throw new Error("WORKSPACE_BUSY")
+    const target = this.tierProvisioningTargets.get(session.id)
+    if (target) target.workspaceId = workspace?.workspaceId ?? null
+    const current = session.leases[tier]
+    if (current && current.details.execReady && (current.details.botId ?? null) === (botId ?? null) && (current.details.workspaceId ?? null) === (workspace?.workspaceId ?? null)) {
+      session.details = current.details
+      session.runtimeDetails[tier] = current.details
+      return session
+    }
+    if (current || Object.entries(session.leases).some(([otherTier, lease]) => otherTier !== tier && lease && lease.details.kind !== "endpoint")) throw new Error("WORKSPACE_BUSY")
+    if (workspace && this.workspaces?.active(session.principal, botId!)?.workspaceId !== workspace.workspaceId) throw new Error("WORKSPACE_CHANGED")
+    const ready = await this.provisionTier(managed, tier, botId, workspace)
+    if (workspace && this.workspaces?.active(session.principal, botId!)?.workspaceId !== workspace.workspaceId) {
+      const lease = session.leases[tier]
+      if (lease) {
+        lease.details.execReady = false
+        await lease.close()
+        delete session.leases[tier]
+        delete session.runtimeDetails[tier]
+        this.refreshWorkspaceDetails(session.id)
+      }
+      throw new Error("WORKSPACE_CHANGED")
+    }
+    return ready
   }
 
   async ensureExec(id: string, botId?: string) {
@@ -224,7 +317,7 @@ export class RuntimeBroker {
   attachEndpoint(id: string, desktop: ManagedDesktop, notify = true) {
     const managed = this.sessions.get(id)
     if (!managed || this.closing) throw new Error("RUNTIME_SESSION_NOT_FOUND")
-    if (managed.session.leases.headless || this.tierProvisioning.has(`${id}:headless`)) throw new Error("LOCAL_HANDS_RUNTIME_CONFLICT")
+    if (managed.session.leases.headless || this.tierProvisioning.has(id)) throw new Error("LOCAL_HANDS_RUNTIME_CONFLICT")
     const session = managed.session
     session.leases.headless = desktop
     session.runtimeDetails.headless = desktop.details
@@ -364,24 +457,31 @@ export class RuntimeBroker {
     managed: ManagedRuntimeSession,
     tier: Exclude<RuntimeTier, "none">,
     botId?: string,
+    workspace?: HandsWorkspace,
   ) {
     const session = managed.session
-    const desktop = await this.provider.provision({
+    let provisionedLease: ManagedDesktop | null = null
+    let earlyExitReason: string | null = null
+    const cloudflare = workspace?.provider === "cloudflare-hands"
+    const leaseRequestId = cloudflare && workspace && this.workspaces
+      ? this.workspaces.reserveLeaseAttempt(workspace, tier, session.id, session.principal.acting_client_id)
+      : randomUUID()
+    let desktop: ManagedDesktop
+    try {
+      desktop = await this.provider.provision({
       runtimeSessionId: session.id,
+      leaseRequestId,
       tenantId: session.principal.tenant_id,
       subjectId: session.principal.subject_id,
       actingClientId: session.principal.acting_client_id,
       ...(botId ? { botId } : {}),
+      ...(workspace ? { workspace } : {}),
       tier,
     }, {
       onExit: (reason) => {
-        delete session.leases[tier]
-        delete session.runtimeDetails[tier]
-        if (session.details.tier === tier) {
-          session.details = this.activeDetails(session)
-          const fallbackLease = session.leases.desktop ?? session.leases.headless
-          session.desktop = fallbackLease ?? new PendingRuntime(session.details)
-        }
+        if (!provisionedLease) { earlyExitReason = reason; return }
+        if (session.leases[tier] !== provisionedLease || !provisionedLease.details.execReady) return
+        void this.stop(session.id, tier).catch((error) => console.error(JSON.stringify({ event: "runtime.broker.lease.checkpoint_failed", runtime_session_id: session.id, tier, error: error instanceof Error ? error.message : String(error) })))
         console.warn(JSON.stringify({
           event: "runtime.broker.lease.exited",
           runtime_session_id: session.id,
@@ -392,11 +492,21 @@ export class RuntimeBroker {
         for (const listener of managed.listeners) listener.onMessage(event)
       },
     })
+    } catch (error) {
+      if (cloudflare && workspace && this.workspaces && error instanceof Error && error.message === "HANDS_LEASE_LOST") this.workspaces.rotateLostLeaseAttempt(workspace.workspaceId, tier, leaseRequestId)
+      throw error
+    }
+    provisionedLease = desktop
+    if (earlyExitReason) {
+      await desktop.close().catch(() => undefined)
+      throw new Error(`RUNTIME_LEASE_EXITED_BEFORE_READY:${earlyExitReason}`)
+    }
     if (!this.sessions.has(session.id)) {
       console.warn(JSON.stringify({ event: "runtime.broker.provision.aborted", runtime_session_id: session.id, tier }))
       await desktop.close().catch(() => undefined)
       throw new Error("RUNTIME_SESSION_ABORTED")
     }
+    if (cloudflare && workspace && this.workspaces) this.workspaces.markLeaseAttemptReady(workspace.workspaceId, tier, leaseRequestId)
     session.leases[tier] = desktop
     session.runtimeDetails[tier] = desktop.details
     session.details = desktop.details
@@ -473,35 +583,58 @@ export class RuntimeBroker {
     }
   }
 
-  async stop(id: string, tier?: Exclude<RuntimeTier, "none">) {
-    const managed = this.sessions.get(id)
-    if (!managed) return
-    if (tier) {
-      const lease = managed.session.leases[tier]
-      if (!lease) return
-      delete managed.session.leases[tier]
-      delete managed.session.runtimeDetails[tier]
-      await lease.close()
-      if (managed.session.details.tier === tier) {
-        managed.session.details = this.activeDetails(managed.session)
-        const fallbackLease = managed.session.leases.desktop ?? managed.session.leases.headless
-        managed.session.desktop = fallbackLease ?? new PendingRuntime(managed.session.details)
-      }
-      console.info(JSON.stringify({ event: "runtime.broker.lease.stopped", runtime_session_id: id, tier }))
+  async stop(id: string, tier?: Exclude<RuntimeTier, "none">, expectedBotId?: string) {
+    if (!tier) {
+      const current = this.stoppingSessions.get(id)
+      if (current) return current
+      const pending = Promise.resolve().then(() => this.stopSession(id, expectedBotId))
+      this.stoppingSessions.set(id, pending)
+      try { await pending }
+      finally { if (this.stoppingSessions.get(id) === pending) this.stoppingSessions.delete(id) }
       return
     }
-    this.sessions.delete(id)
-    if (this.principalSessions.get(managed.principalKey) === id) this.principalSessions.delete(managed.principalKey)
-    if (managed.disconnectTimer) clearTimeout(managed.disconnectTimer)
+    const managed = this.sessions.get(id)
+    if (!managed) return
+    const provisioning = this.tierProvisioning.get(id)
+    if (provisioning) await provisioning.catch(() => undefined)
+    if (expectedBotId && this.tierProvisioningTargets.get(id)?.botId && this.tierProvisioningTargets.get(id)?.botId !== expectedBotId) throw new Error("RUNTIME_WORKSPACE_NOT_OWNED")
+    const lease = managed.session.leases[tier]
+    if (!lease) {
+      if (this.workspaces?.unresolvedLeaseAttempt(managed.session.principal, id)?.tier === tier) throw new Error("HANDS_PROVISION_UNCONFIRMED")
+      return
+    }
+    if (expectedBotId && (lease.details.botId ?? lease.details.endpoint?.botId) !== expectedBotId) throw new Error("RUNTIME_WORKSPACE_NOT_OWNED")
+    lease.details.execReady = false
+    try { await lease.close() }
+    catch (error) { lease.details.execReady = true; throw error }
+    if (managed.session.leases[tier] !== lease) return
+    delete managed.session.leases[tier]
+    delete managed.session.runtimeDetails[tier]
+    if (managed.session.details.tier === tier) this.refreshWorkspaceDetails(id)
+    console.info(JSON.stringify({ event: "runtime.broker.lease.stopped", runtime_session_id: id, tier }))
+  }
+
+  private async stopSession(id: string, expectedBotId?: string) {
+    const managed = this.sessions.get(id)
+    if (!managed) return
+    const provisioning = this.tierProvisioning.get(id)
+    if (provisioning) await provisioning.catch(() => undefined)
+    if (this.workspaces?.unresolvedLeaseAttempt(managed.session.principal, id)) throw new Error("HANDS_PROVISION_UNCONFIRMED")
+    if (expectedBotId && (this.hasOtherBotTurn(id, expectedBotId) || Object.values(managed.session.leases).some((lease) => lease && (lease.details.botId ?? lease.details.endpoint?.botId) !== expectedBotId))) throw new Error("RUNTIME_WORKSPACE_NOT_OWNED")
     const session = managed.session
     if (session.codex) {
       try {
         await session.codex.close()
+        session.codex = undefined
+        session.initialized = false
       } catch (error) {
         console.warn("Failed to close codex on session stop:", error)
       }
     }
-    await Promise.all(Object.values(session.leases).map((lease) => lease?.close()))
+    for (const leaseTier of ["desktop", "headless"] as const) await this.stop(id, leaseTier)
+    this.sessions.delete(id)
+    if (this.principalSessions.get(managed.principalKey) === id) this.principalSessions.delete(managed.principalKey)
+    if (managed.disconnectTimer) clearTimeout(managed.disconnectTimer)
     console.info(JSON.stringify({
       event: "runtime.broker.stopped",
       runtime_session_id: id,
@@ -604,6 +737,7 @@ export class RuntimeBroker {
   }
 
   private activeDetails(session: RuntimeSession): RuntimeDetails {
-    return session.runtimeDetails.desktop ?? session.runtimeDetails.headless ?? session.runtimeDetails.none ?? new PendingRuntime().details
+    const workspaceId = session.runtimeDetails.none?.workspaceId
+    return Object.values(session.leases).find((lease) => lease?.details.botId === session.selectedBotId && lease.details.workspaceId === workspaceId)?.details ?? session.runtimeDetails.none ?? new PendingRuntime().details
   }
 }

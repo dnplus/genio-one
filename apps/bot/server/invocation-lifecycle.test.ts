@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test"
 import { BotRegistry } from "./bot-registry"
+import { BotWorkspaceStore } from "./bot-workspace-store"
+import type { HandsPlacementGate } from "./hands-placement-gate"
 import { BotSchedules } from "./bot-schedules"
 import { createCapabilityGate } from "./capability-gate"
 import { RuntimeBroker } from "./runtime-broker"
@@ -65,6 +67,8 @@ test("handoff binds a company model thread to its target Bot relay URL", async (
   }
   const context: BotServerContext = {
     botRegistry: registry,
+    workspaces: new BotWorkspaceStore(registry.db, (botId, owner) => registry.getOwned(botId, owner)),
+    handsPlacement: {} as HandsPlacementGate,
     botSchedules: new BotSchedules(registry.db),
     botDeletionReconciler: {} as BotDeletionReconciler,
     capabilityGate: createCapabilityGate({ mode: "open" }),

@@ -1,4 +1,5 @@
 import type { GenioPrincipal } from "./runtime-broker"
+import type { HandsProvider } from "@genioone/protocol/hands"
 import {
   RUNTIME_CAPABILITY_IDS,
   RUNTIME_POLICY_ACTIONS,
@@ -69,6 +70,7 @@ export interface RuntimePolicyResolveInput {
   sessionId?: string
   correlationId?: string
   accessToken?: string
+  handsPlacement?: { mode: "inspect" } | { mode: "enforce"; provider: HandsProvider } | { mode: "enforce"; localEndpoint: true }
 }
 
 export interface RuntimePolicyReadInput {

@@ -480,6 +480,10 @@ export class BotRegistry {
         digest text not null,
         content_type text not null,
         size integer not null,
+        storage_provider text not null default 'e2b-self-hosted',
+        source_workspace_id text,
+        source_revision integer,
+        storage_ref text,
         created_at integer not null
       )
       ;
@@ -524,6 +528,16 @@ export class BotRegistry {
     this.ensureSelfManagementSchema()
     this.ensureTeamWorkspaceSchema()
     this.ensurePendingDeletionSchema()
+    this.ensureArtifactSchema()
+  }
+
+  private ensureArtifactSchema() {
+    const columns = this.db.query("pragma table_info(bot_artifacts)").all() as Array<{ name: string }>
+    const names = new Set(columns.map((column) => column.name))
+    if (!names.has("storage_provider")) this.db.exec("alter table bot_artifacts add column storage_provider text not null default 'e2b-self-hosted'")
+    if (!names.has("source_workspace_id")) this.db.exec("alter table bot_artifacts add column source_workspace_id text")
+    if (!names.has("source_revision")) this.db.exec("alter table bot_artifacts add column source_revision integer")
+    if (!names.has("storage_ref")) this.db.exec("alter table bot_artifacts add column storage_ref text")
   }
 
   private ensureTeamWorkspaceSchema() {
@@ -931,6 +945,8 @@ export class BotRegistry {
   }
 
   private deleteRecord(botId: string, principal: GenioPrincipal) {
+    const workspaceTable = this.db.query("select 1 from sqlite_master where type = 'table' and name = 'bot_workspaces'").get()
+    if (workspaceTable) this.db.query("update bot_workspaces set active = 0, orphaned_at = ?, updated_at = ? where bot_id = ? and tenant_id = ? and owner_subject_id = ? and orphaned_at is null").run(Date.now(), Date.now(), botId, principal.tenant_id, principal.subject_id)
     this.db.query(`insert into bot_evidence_source_tombstones (bot_id, tenant_id, owner_subject_id, deleted_at)
       values (?, ?, ?, ?) on conflict(bot_id) do update set
         tenant_id = excluded.tenant_id,

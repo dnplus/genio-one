@@ -226,7 +226,7 @@ export class BotScheduleRunner {
       logSchedule(botSchedules.markRun(run.id, "AUTH_REQUIRED", { error: "SCHEDULE_LOGIN_REQUIRED" }), "bot.schedule.auth_required", { phase: "capability_authorization", reason: "SCHEDULE_LOGIN_REQUIRED", runtimeSessionId: session.id })
       return
     }
-    const release = runtimeBroker.claimBotTurn(run.botId)
+    const release = runtimeBroker.claimBotTurn(run.botId, session.id)
     if (!release || botRegistry.timeline.hasRunningTurns(run.botId)) {
       release?.()
       botSchedules.markRun(run.id, "QUEUED", { error: "BOT_TURN_BUSY" })

@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto"
+import type { HandsProvider } from "@genioone/protocol/hands"
+import { handsProviderDomain, isHandsExecutionPlacementTarget, readHandsExecutionPlacement } from "@genioone/protocol/hands-placement"
 
 import {
   RUNTIME_REPORT_KEY_ID_HEADER,
@@ -25,6 +27,7 @@ import {
   type RuntimePolicySnapshot,
   runtimePolicyDecisionTarget,
 } from "./runtime-policy-contract"
+import { configuredHandsProvider } from "./bot-workspace-store"
 
 export class RuntimePolicyUnavailableError extends Error {
   readonly code: string
@@ -188,25 +191,44 @@ function decisionForInput(decision: RuntimePolicyDecision, input: RuntimePolicyR
   return decision
 }
 
-function withEnforceableRuntimeRequirements(decision: RuntimePolicyDecision): RuntimePolicyDecision {
+function withEnforceableRuntimeRequirements(
+  decision: RuntimePolicyDecision,
+  handsPlacement?: RuntimePolicyResolveInput["handsPlacement"],
+  defaultProvider?: HandsProvider,
+): RuntimePolicyDecision {
   if (decision.decision === "DENY") return decision
-  if (decision.constraints.length > 0) {
-    return {
-      ...decision,
-      decision: "DENY",
-      reason_code: "RUNTIME_POLICY_CONSTRAINT_UNSUPPORTED",
-    }
-  }
+  const deny = (reasonCode: string): RuntimePolicyDecision => ({ ...decision, decision: "DENY", reason_code: reasonCode })
   if (decision.obligations.some((obligation) => obligation.kind !== "audit")) {
-    return {
-      ...decision,
-      decision: "DENY",
-      reason_code: "RUNTIME_POLICY_OBLIGATION_UNSUPPORTED",
+    return deny("RUNTIME_POLICY_OBLIGATION_UNSUPPORTED")
+  }
+  if (handsPlacement && !isHandsExecutionPlacementTarget(decision.runtime_id, decision.capability_id, decision.action)) {
+    return deny("RUNTIME_POLICY_PLACEMENT_CONTEXT_INVALID")
+  }
+  if (decision.constraints.length === 0) {
+    if (handsPlacement?.mode === "enforce") {
+      const fallback = defaultProvider ?? configuredHandsProvider()
+      if ("provider" in handsPlacement ? handsPlacement.provider !== fallback : handsProviderDomain(fallback) !== "ON_PREM") {
+        return deny("POLICY_PLACEMENT_CHANGED")
+      }
     }
+    return decision
   }
-  return {
-    ...decision,
+  if (!isHandsExecutionPlacementTarget(decision.runtime_id, decision.capability_id, decision.action)) return deny("RUNTIME_POLICY_CONSTRAINT_UNSUPPORTED")
+  let domain: ReturnType<typeof readHandsExecutionPlacement>
+  try {
+    domain = readHandsExecutionPlacement(decision.constraints)
+  } catch (error) {
+    return deny(error instanceof Error ? error.message : "POLICY_PLACEMENT_INVALID")
   }
+  if (handsPlacement?.mode === "inspect") return decision
+  if (handsPlacement?.mode !== "enforce") return deny("RUNTIME_POLICY_CONSTRAINT_UNSUPPORTED")
+  try {
+    const actualDomain = "provider" in handsPlacement ? handsProviderDomain(handsPlacement.provider) : "ON_PREM"
+    if (domain !== actualDomain) return deny("POLICY_PLACEMENT_CHANGED")
+  } catch {
+    return deny("HANDS_PROVIDER_INVALID")
+  }
+  return decision
 }
 
 export function createRuntimePolicyClient(options: RuntimePolicyClientOptions = {}): RuntimePolicyResolver {
@@ -219,6 +241,7 @@ export function createRuntimePolicyClient(options: RuntimePolicyClientOptions = 
   const reportPrivateKeyPem = options.reportPrivateKeyPem ?? environment.GENIO_ONE_RUNTIME_REPORT_PRIVATE_KEY_PEM ?? ""
   const fetcher = options.fetch ?? fetch
   const timeoutMs = options.timeoutMs ?? 2_000
+  const defaultHandsProvider = configuredHandsProvider(environment)
   function signReport(body: Record<string, unknown>): string {
     if (!reportKeyId || !reportPrivateKeyPem) throw new RuntimePolicyUnavailableError("RUNTIME_POLICY_REPORT_SIGNER_UNAVAILABLE")
     try {
@@ -308,24 +331,29 @@ export function createRuntimePolicyClient(options: RuntimePolicyClientOptions = 
 
   const resolver: RuntimePolicyResolver = {
     async resolve(input) {
-      return withEnforceableRuntimeRequirements(await requestDecision("GET", input))
+      return withEnforceableRuntimeRequirements(await requestDecision("GET", input), input.handsPlacement, defaultHandsProvider)
     },
     async authorize(input) {
+      if (input.handsPlacement?.mode === "inspect") throw new RuntimePolicyUnavailableError("RUNTIME_POLICY_PLACEMENT_CONTEXT_INVALID")
       const raw = await requestDecision("POST", input)
-      return withEnforceableRuntimeRequirements(raw)
+      return withEnforceableRuntimeRequirements(raw, input.handsPlacement, defaultHandsProvider)
     },
     async read(input: RuntimePolicyReadInput): Promise<RuntimePolicySnapshot> {
       const runtimeId = input.runtimeId ?? RUNTIME_POLICY_RUNTIME_ID
       const capabilityIds = input.capabilityIds ?? RUNTIME_POLICY_CAPABILITY_IDS
-      const decisions = await Promise.all(capabilityIds.map((capabilityId) => resolver.resolve({
-        principal: input.principal,
-        botId: input.botId,
-        runtimeId,
-        capabilityId,
-        action: input.action ?? defaultReadAction(capabilityId),
-        sessionId: input.sessionId,
-        accessToken: input.accessToken,
-      })))
+      const decisions = await Promise.all(capabilityIds.map((capabilityId) => {
+        const action = input.action ?? defaultReadAction(capabilityId)
+        return resolver.resolve({
+          principal: input.principal,
+          botId: input.botId,
+          runtimeId,
+          capabilityId,
+          action,
+          sessionId: input.sessionId,
+          accessToken: input.accessToken,
+          ...(isHandsExecutionPlacementTarget(runtimeId, capabilityId, action) ? { handsPlacement: { mode: "inspect" as const } } : {}),
+        })
+      }))
       const first = decisions[0]
       if (!first) throw new RuntimePolicyUnavailableError("RUNTIME_POLICY_RESPONSE_INVALID")
       const policyMetadata = new Map<string, { policy_display_name: string | null; policy_revision: number | null }>()
@@ -360,7 +388,14 @@ export function createRuntimePolicyClient(options: RuntimePolicyClientOptions = 
   return resolver
 }
 
-export function requireRuntimePolicyDecision(decision: RuntimePolicyDecision): RuntimePolicyDecision {
+export function requireRuntimePolicyDecision(
+  decision: RuntimePolicyDecision,
+  handsPlacement?: RuntimePolicyResolveInput["handsPlacement"],
+): RuntimePolicyDecision {
+  if (handsPlacement?.mode === "inspect") throw new RuntimePolicyUnavailableError("RUNTIME_POLICY_PLACEMENT_CONTEXT_INVALID")
+  if (handsPlacement?.mode === "enforce" && !nonEmptyString(decision.correlation_id)) {
+    throw new RuntimePolicyUnavailableError("RUNTIME_POLICY_CORRELATION_INVALID")
+  }
   let target: ReturnType<typeof runtimePolicyDecisionTarget>
   try {
     target = runtimePolicyDecisionTarget(decision)
@@ -370,7 +405,7 @@ export function requireRuntimePolicyDecision(decision: RuntimePolicyDecision): R
   if (decision.target !== `runtime:${decision.runtime_id}:${target.capabilityId}`) {
     throw new RuntimePolicyUnavailableError("RUNTIME_POLICY_RESPONSE_INVALID")
   }
-  const enforceable = withEnforceableRuntimeRequirements(decision)
+  const enforceable = withEnforceableRuntimeRequirements(decision, handsPlacement)
   if (enforceable.decision === "ALLOW") return enforceable
   throw new RuntimePolicyDeniedError(enforceable)
 }

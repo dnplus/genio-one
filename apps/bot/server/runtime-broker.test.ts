@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test"
+import { mkdtempSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 
 import { managedMcpMountsForBot, RuntimeBroker, setBotSelection, type GenioPrincipal, type RuntimeProvider } from "./runtime-broker"
 import type { ManagedDesktop, RuntimeProvisionRequest, RuntimeCallbacks } from "./runtime"
+import { BotRegistry } from "./bot-registry"
+import { BotWorkspaceStore } from "./bot-workspace-store"
 
 const principal: GenioPrincipal = {
   tenant_id: "tenant-keycloak-local",
@@ -27,6 +32,139 @@ function execDesktop(sandboxId: string): ManagedDesktop {
 }
 
 describe("RuntimeBroker", () => {
+  test("Cloudflare lease retry identity survives broker restart and remote revision drift, rotates on LOST, and changes after release", async () => {
+    const root = mkdtempSync(join(tmpdir(), "genio-hands-lease-retry-"))
+    const databasePath = join(root, "bots.sqlite")
+    const artifactRoot = join(root, "artifacts")
+    const workspaceRoot = join(root, "workspaces")
+    const registries: BotRegistry[] = []
+    const requests: string[] = []
+    let store!: BotWorkspaceStore
+    let remoteKey: string | null = null
+    let remoteRevision = 0
+    let remoteLost = false
+    let loseFirstResponse = true
+    let loseRotatedResponse = true
+    let loseAheadResponse = false
+    const provider: RuntimeProvider = {
+      async provision(request) {
+        const requestKey = request.leaseRequestId!
+        requests.push(requestKey)
+        if (remoteKey && remoteLost && remoteKey === requestKey) throw new Error("HANDS_LEASE_LOST")
+        if (remoteKey && !remoteLost && remoteKey !== requestKey) throw new Error("HANDS_LEASE_BUSY")
+        if (loseAheadResponse) {
+          loseAheadResponse = false
+          store.updateRevision(request.workspace!.workspaceId, remoteRevision)
+          throw new TypeError("CF_AHEAD_RESPONSE_LOST")
+        }
+        const recoveringLostLease = remoteLost
+        remoteKey = requestKey
+        remoteLost = false
+        if (loseFirstResponse) { loseFirstResponse = false; throw new TypeError("CF_RESPONSE_LOST") }
+        if (loseRotatedResponse && recoveringLostLease) { loseRotatedResponse = false; throw new TypeError("CF_ROTATED_RESPONSE_LOST") }
+        return {
+          details: {
+            kind: "cloudflare-hands",
+            tier: request.tier,
+            cwd: "/workspace",
+            desktopUrl: null,
+            sandboxId: null,
+            environmentId: `hands-${requestKey}`,
+            execServerUrl: "ws://executor.test",
+            execReady: true,
+            botId: request.botId,
+            workspaceId: request.workspace?.workspaceId,
+            leaseId: requestKey,
+          },
+          async close() {
+            if (remoteKey !== requestKey) return
+            remoteKey = null
+            remoteRevision += 1
+            store.updateRevision(request.workspace!.workspaceId, remoteRevision)
+          },
+        }
+      },
+    }
+    const open = async () => {
+      const registry = new BotRegistry(databasePath, artifactRoot)
+      registries.push(registry)
+      store = new BotWorkspaceStore(registry.db, (botId, actor) => registry.getOwned(botId, actor), workspaceRoot)
+      const broker = new RuntimeBroker(provider, 600_000, store)
+      const session = await broker.start(principal, { onMessage() {}, onExit() {} })
+      return { registry, broker, session }
+    }
+    try {
+      const first = await open()
+      const bot = first.registry.create(principal, { name: "Cloud lease", description: "Durable retry" })
+      store.create(principal, bot.id, "cloudflare-hands")
+      const otherClient = { ...principal, acting_client_id: "other-bot-client" }
+      await expect(first.broker.ensure(first.session.id, "headless", bot.id)).rejects.toThrow("CF_RESPONSE_LOST")
+      expect(store.unresolvedLeaseAttempt(principal, first.session.id)?.botId).toBe(bot.id)
+      expect(store.unresolvedLeaseAttempt(principal, "another-session")).toBeNull()
+      expect(store.unresolvedLeaseAttempt({ ...principal, acting_client_id: "another-client" }, first.session.id)).toBeNull()
+      const otherPendingSession = await first.broker.start(otherClient, { onMessage() {}, onExit() {} })
+      await expect(first.broker.ensure(otherPendingSession.id, "headless", bot.id)).rejects.toThrow("WORKSPACE_BUSY")
+      expect(requests).toHaveLength(1)
+      await expect(first.broker.ensure(first.session.id, "desktop", bot.id)).rejects.toThrow("WORKSPACE_BUSY")
+      await expect(first.broker.stop(first.session.id, "headless")).rejects.toThrow("HANDS_PROVISION_UNCONFIRMED")
+      await first.broker.close()
+      first.registry.close()
+
+      const second = await open()
+      await second.broker.ensure(second.session.id, "headless", bot.id)
+      expect(second.session.id).not.toBe(first.session.id)
+      expect(requests[1]).toBe(requests[0])
+      const otherReadySession = await second.broker.start(otherClient, { onMessage() {}, onExit() {} })
+      await expect(second.broker.ensure(otherReadySession.id, "headless", bot.id)).rejects.toThrow("WORKSPACE_BUSY")
+      expect(requests).toHaveLength(2)
+      await second.broker.stop(second.session.id, "headless")
+      expect(store.active(principal, bot.id)?.revision).toBe(1)
+      await second.broker.ensure(second.session.id, "headless", bot.id)
+      expect(requests[2]).not.toBe(requests[0])
+      remoteRevision = 2
+      loseAheadResponse = true
+      second.registry.close()
+
+      const third = await open()
+      await expect(third.broker.ensure(third.session.id, "headless", bot.id)).rejects.toThrow("CF_AHEAD_RESPONSE_LOST")
+      expect(requests[3]).toBe(requests[2])
+      expect(store.active(principal, bot.id)?.revision).toBe(2)
+      third.registry.close()
+
+      const fourth = await open()
+      await fourth.broker.ensure(fourth.session.id, "headless", bot.id)
+      expect(requests[4]).toBe(requests[3])
+      remoteLost = true
+      fourth.registry.close()
+
+      const fifth = await open()
+      await expect(fifth.broker.ensure(fifth.session.id, "headless", bot.id)).rejects.toThrow("HANDS_LEASE_LOST")
+      expect(requests[5]).toBe(requests[4])
+      fifth.registry.close()
+
+      const sixth = await open()
+      await expect(sixth.broker.ensure(sixth.session.id, "headless", bot.id)).rejects.toThrow("CF_ROTATED_RESPONSE_LOST")
+      expect(requests[6]).not.toBe(requests[5])
+      sixth.registry.close()
+
+      const seventh = await open()
+      await seventh.broker.ensure(seventh.session.id, "headless", bot.id)
+      expect(requests[7]).toBe(requests[6])
+      await seventh.broker.stop(seventh.session.id, "headless")
+      expect(store.active(principal, bot.id)?.revision).toBe(3)
+      await seventh.broker.ensure(seventh.session.id, "headless", bot.id)
+      expect(requests[8]).not.toBe(requests[7])
+      await seventh.broker.stop(seventh.session.id)
+      const releasedWorkspace = store.active(otherClient, bot.id)!
+      const nextClientKey = store.reserveLeaseAttempt(releasedWorkspace, "headless", "other-session", otherClient.acting_client_id)
+      expect(nextClientKey).not.toBe(requests[8])
+      seventh.registry.close()
+    } finally {
+      for (const registry of registries) { try { registry.close() } catch {} }
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   test("keeps delegated invocation credentials bound to each Bot while owner OAuth rotates", async () => {
     const broker = new RuntimeBroker({ provision: async () => execDesktop("invocation-credentials") })
     const session = await broker.start(principal, { onMessage() {}, onExit() {} }, undefined, "owner-token-a")
@@ -130,7 +268,7 @@ describe("RuntimeBroker", () => {
     await broker.stop(restored.id)
     expect(broker.waitingFor(restored.id, ["thread-a"])).toBeUndefined()
   })
-  test("keeps headless and desktop leases separate while sharing the server Codex session", async () => {
+  test("keeps another Bot lease running until it is explicitly released", async () => {
     const requests: RuntimeProvisionRequest[] = []
     const provider: RuntimeProvider = {
       async provision(request) {
@@ -153,9 +291,12 @@ describe("RuntimeBroker", () => {
     const broker = new RuntimeBroker(provider)
     const session = await broker.start(principal, { onMessage() {}, onExit() {} })
     await broker.ensure(session.id, "headless", "bot-a")
+    await expect(broker.ensure(session.id, "desktop", "bot-b")).rejects.toThrow("WORKSPACE_BUSY")
+    expect(broker.get(session.id)?.runtimeDetails.headless?.execReady).toBe(true)
+    await broker.stop(session.id, "headless")
     await broker.ensure(session.id, "desktop", "bot-b")
     expect(requests.map((request) => [request.tier, request.botId])).toEqual([["headless", "bot-a"], ["desktop", "bot-b"]])
-    expect(broker.get(session.id)?.runtimeDetails.headless?.desktopUrl).toBeNull()
+    expect(broker.get(session.id)?.runtimeDetails.headless).toBeUndefined()
     expect(broker.get(session.id)?.runtimeDetails.desktop?.desktopUrl).toBe("https://desktop.test")
     await broker.stop(session.id)
   })
@@ -178,7 +319,7 @@ describe("RuntimeBroker", () => {
     await broker.stop(session.id)
   })
 
-  test("keeps the headless lease active when the desktop lease exits", async () => {
+  test("requires an explicit tier release and clears a failed desktop lease", async () => {
     let desktopExit: ((reason: string) => void) | null = null
     const events: string[] = []
     const provider: RuntimeProvider = {
@@ -202,10 +343,13 @@ describe("RuntimeBroker", () => {
     const broker = new RuntimeBroker(provider)
     const session = await broker.start(principal, { onMessage: (message) => events.push(message), onExit() {} })
     await broker.ensure(session.id, "headless")
+    await expect(broker.ensure(session.id, "desktop")).rejects.toThrow("WORKSPACE_BUSY")
+    await broker.stop(session.id, "headless")
     await broker.ensure(session.id, "desktop")
     desktopExit!("desktop stopped")
-    expect(broker.get(session.id)?.details.tier).toBe("headless")
-    expect(broker.get(session.id)?.runtimeDetails.headless?.execReady).toBe(true)
+    await Bun.sleep(0)
+    expect(broker.get(session.id)?.details.tier).toBe("none")
+    expect(broker.get(session.id)?.runtimeDetails.headless).toBeUndefined()
     expect(events.some((message) => message.includes("genio/runtime/error"))).toBeTrue()
     await broker.stop(session.id)
   })
@@ -233,6 +377,7 @@ describe("RuntimeBroker", () => {
     expect(ready.details.execReady).toBe(true)
     expect(requests).toEqual([{
       runtimeSessionId: session.id,
+      leaseRequestId: expect.any(String),
       tenantId: "tenant-keycloak-local",
       subjectId: "person-platform-admin",
       actingClientId: "genio-one-bot",
@@ -403,6 +548,7 @@ describe("RuntimeBroker", () => {
     // Process exits unexpectedly
     codexCallback!.onExit("crash")
     expect(clientExited).toBeTrue()
+    await Bun.sleep(0)
     expect(broker.get(session.id)).toBeNull()
 
     // Next connection starts a fresh session instead of returning dead one

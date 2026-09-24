@@ -20,7 +20,7 @@ export async function continueCallers(context: BotServerContext) {
       const threadId = entry.thread_id ?? context.botRegistry.getSession(entry.bot_id)?.appServerThreadId
       if (!bot || !threadId || !context.botRegistry.ownsThread(principal, bot.id, threadId)) continue
       if (context.botRegistry.questions.pending().some((question) => question.botId === bot.id && question.delivery === "queued")) continue
-      const release = context.runtimeBroker.claimBotTurn(bot.id)
+      const release = context.runtimeBroker.claimBotTurn(bot.id, session.id)
       if (!release) continue
       try {
         if (context.botRegistry.timeline.hasRunningTurns(bot.id)) continue

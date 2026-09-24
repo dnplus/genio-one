@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { assertCapability, PERSONAL_BOT_USE, PERSONAL_BOT_COMPUTER_USE } from "./capability-gate"
 import { computerToolDefinitions, executeComputerTool } from "./bot-computer-tools"
+import { isolateToolDefinitions, executeIsolateTool } from "./bot-isolate-tool"
 import { scheduleToolDefinitions, executeScheduleTool } from "./bot-schedule-tools"
 import { selfToolDefinitions, executeSelfTool } from "./bot-self-tools"
 import type { BotToolExecution, BotToolResponse } from "./bot-tool-contract"
@@ -10,22 +11,36 @@ const families = [
   { definitions: selfToolDefinitions, execute: executeSelfTool },
   { definitions: scheduleToolDefinitions, execute: executeScheduleTool },
   { definitions: computerToolDefinitions, execute: executeComputerTool },
+  { definitions: isolateToolDefinitions, execute: executeIsolateTool },
 ]
 
 export const botDefaultToolDefinitions = families.flatMap((family) => family.definitions)
 
 export async function listBotDefaultTools(execution: BotToolExecution) {
   const { context, botId, principal, accessToken } = execution
+  const workspace = context.workspaces.active(principal, botId)
+  let isolateAvailable = false
+  try {
+    const provider = workspace?.provider ?? await context.handsPlacement.providerForNew({ principal, botId, accessToken, sessionId: context.runtimeBroker.findByPrincipal(principal)?.id })
+    if (provider === "cloudflare-hands" && process.env.GENIO_CF_HANDS_ORIGIN?.trim() && process.env.GENIO_CF_HANDS_TOKEN?.trim()) {
+      const snapshot = await context.runtimePolicy.read({ principal, botId, runtimeId: "codex", capabilityIds: ["code.javascript"], action: "expose", accessToken })
+      const decision = snapshot.decisions.find((entry) => entry.capability_id === "code.javascript" && entry.action === "expose")
+      if (decision) { requireRuntimePolicyDecision(decision); isolateAvailable = true }
+    }
+  } catch {}
+  let computerAvailable = false
   try {
     await assertCapability(context.capabilityGate, principal, PERSONAL_BOT_COMPUTER_USE, accessToken)
     const snapshot = await context.runtimePolicy.read({ principal, botId, runtimeId: "codex", capabilityIds: ["computer.use"], action: "expose", accessToken })
     const decision = snapshot.decisions.find((entry) => entry.capability_id === "computer.use" && entry.action === "expose")
     if (!decision) throw new Error("COMPUTER_EXPOSURE_UNAVAILABLE")
     requireRuntimePolicyDecision(decision)
-    return botDefaultToolDefinitions
-  } catch {
-    return botDefaultToolDefinitions.filter((definition) => !computerToolDefinitions.some((computer) => computer.name === definition.name))
-  }
+    computerAvailable = true
+  } catch {}
+  return botDefaultToolDefinitions.filter((definition) =>
+    (isolateAvailable || !isolateToolDefinitions.some((isolate) => isolate.name === definition.name)) &&
+    (computerAvailable || !computerToolDefinitions.some((computer) => computer.name === definition.name)),
+  )
 }
 
 export function isBotDefaultTool(name: unknown): name is string {

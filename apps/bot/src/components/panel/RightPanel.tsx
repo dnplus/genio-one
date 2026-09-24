@@ -30,7 +30,7 @@ import {
 } from "../chat/hands-ui"
 import { LoginWallCard } from "../modals/LoginWallCard"
 import type { LoginWallView } from "../chat/hands-ui"
-import { botCopy, botDisplayName, botStatusText, isEnglishBotLocale } from "../../lib/ui-copy"
+import { botCopy, botDisplayName, botStatusText, handsProviderLabel, handsWorkspaceLabel, isEnglishBotLocale } from "../../lib/ui-copy"
 
 export type RightPanelTab = "work" | "threads" | "memory" | "desktop" | "activities"
 
@@ -40,6 +40,14 @@ export interface ActivityEntry {
   detail: string
   status: "waiting" | "running" | "done" | "failed"
   kind: "runtime" | "mcp" | "command" | "file" | "web"
+}
+
+function artifactSourceLabel(artifact: ArtifactRef) {
+  const tier = artifact.sourceTier === "isolate"
+    ? botCopy("JavaScript isolate", "JS 隔離執行")
+    : artifact.sourceTier === "headless" ? "Headless" : "Desktop"
+  const provider = artifact.storageProvider === "cloudflare-hands" ? "Cloudflare Hands" : botCopy("Self-hosted E2B", "自架 E2B")
+  return `${tier} · ${provider}`
 }
 
 export function RightPanel({
@@ -103,6 +111,8 @@ export function RightPanel({
   const [threadSearch, setThreadSearch] = useState("")
   const displayBotName = botDisplayName(bot)
   const desktopRuntime = runtimeTiers?.desktop ?? (runtime?.tier === "desktop" ? runtime : null)
+  const remoteRuntime = desktopRuntime ?? runtimeTiers?.headless ?? runtime
+  const handsProvider = handsProviderLabel(remoteRuntime)
 
   const filteredMessages = messages.filter((message) =>
     !threadSearch.trim() || message.text.toLowerCase().includes(threadSearch.toLowerCase())
@@ -195,7 +205,7 @@ export function RightPanel({
           {runtime?.desktopUrl ? (
             <div className="desktop-view">
               <div className="desktop-frame">
-                <iframe src={runtime.desktopUrl} title="E2B Managed Desktop" />
+                <iframe src={runtime.desktopUrl} title={botCopy("Managed Desktop", "受控電腦")} />
               </div>
               <div className="desktop-bar">
                 <span><Monitor /> {botCopy("Remote sandbox connected", "遠端沙盒已連接")}</span>
@@ -228,9 +238,15 @@ export function RightPanel({
               )}
             </div>
           )}
+          {handsProvider && (
+            <div className="activity-step hands-runtime-status" data-testid="hands-runtime-status">
+              <span className={runtimeCanExec(remoteRuntime) ? "done" : ""}><Monitor /></span>
+              <p><strong>{handsProvider}</strong><small>{handsWorkspaceLabel(remoteRuntime)}</small></p>
+            </div>
+          )}
           <div className="hands-preview-panel" data-testid="hands-preview-panel">
             <div className="hands-preview-heading">
-              <strong>Hands 預覽</strong>
+              <strong>Hands 模擬預覽</strong>
               <small>{USER_SCOPED_COMPUTER_COPY.securityNote}</small>
             </div>
             {(() => {
@@ -247,16 +263,16 @@ export function RightPanel({
                     <div className="hands-preview-frame" data-testid="hands-mock-preview">
                       <div className="hands-mock-surface">
                         <Monitor />
-                        <span>Mock Hands 預覽（Epic E e2b-mock）</span>
+                        <span>模擬電腦畫面</span>
                         <code>{summary.previewUrl}</code>
                       </div>
                     </div>
                   ) : (
                     <div className="hands-preview-offline">
-                      <small>尚未開啟 remote_hands.desktop 預覽。允許後可 mock 預覽／session；拒絕則無法開啟。</small>
+                      <small>授權允許時可檢視模擬畫面；此區不會啟動或改變真正的遠端工作區。</small>
                       {onOpenHandsPreview && (
                         <button type="button" className="primary-button" onClick={onOpenHandsPreview}>
-                          <Monitor /> 開啟 Hands 預覽（mock）
+                          <Monitor /> 開啟 Hands 模擬預覽
                         </button>
                       )}
                     </div>
@@ -276,12 +292,12 @@ export function RightPanel({
 
           {(artifacts?.length ?? 0) > 0 && (
             <div className="desktop-artifact-panel">
-              <div className="desktop-artifact-heading"><strong>Server 產物</strong><small>跨 sandbox 必須明確匯入</small></div>
+              <div className="desktop-artifact-heading"><strong>{botCopy("Workspace artifacts", "工作區產物")}</strong><small>{botCopy("Import requires a matching provider", "僅可匯入相同提供者的桌面")}</small></div>
               {artifacts!.map((artifact) => (
                 <div className="desktop-artifact-row" key={artifact.artifactId}>
-                  <span><FileText /><strong>{artifact.path.split("/").at(-1) || artifact.artifactId}</strong></span>
-                  <button type="button" className="secondary-button" disabled={!desktopRuntime?.execReady || !onImportArtifact} onClick={() => onImportArtifact?.(artifact)}>
-                    在 Desktop 開啟
+                  <span><FileText /><span className="desktop-artifact-text"><strong>{artifact.path.split("/").at(-1) || artifact.artifactId}</strong><small>{artifactSourceLabel(artifact)}</small></span></span>
+                  <button type="button" className="secondary-button" disabled={!desktopRuntime?.execReady || !onImportArtifact || artifact.storageProvider !== desktopRuntime?.kind} onClick={() => onImportArtifact?.(artifact)} title={desktopRuntime && artifact.storageProvider !== desktopRuntime.kind ? botCopy("This artifact belongs to another Hands provider", "產物與桌面屬於不同的 Hands 提供者") : undefined}>
+                    {desktopRuntime && artifact.storageProvider !== desktopRuntime.kind ? botCopy("Different provider", "提供者不同") : botCopy("Open in Desktop", "在 Desktop 開啟")}
                   </button>
                 </div>
               ))}
@@ -297,13 +313,14 @@ export function RightPanel({
             <h3>{botCopy("Environment connection status", "環境連線狀態")}</h3>
               <span className="runtime-state active">{botStatusText(status)}</span>
             </div>
-            <div className="activity-step">
+            <div className="activity-step hands-runtime-status">
               <span className={runtimeCanExec(runtime) ? "done" : ""}>
                 <Monitor />
               </span>
               <p>
-                <strong>{botCopy("Remote sandbox", "遠端沙盒")}</strong>
-                <small>{runtimeCanExec(runtime) ? botCopy(`${runtime?.tier === "desktop" ? "Desktop" : "Headless"} ready for execution`, `${runtime?.tier === "desktop" ? "Desktop" : "Headless"} 可執行`) : botCopy("Not started (conversation and enterprise tools remain available)", "尚未啟動（對話與企業工具仍可用）")}</small>
+                <strong>{runtime?.kind === "endpoint" ? botCopy("Local endpoint", "本機 Endpoint") : handsProviderLabel(runtime) ?? botCopy("Remote sandbox", "遠端沙盒")}</strong>
+                <small>{runtime?.kind === "endpoint" ? botCopy(`Local workspace: ${runtime.cwd}`, `本機工作資料夾：${runtime.cwd}`) : runtimeCanExec(runtime) ? botCopy(`${runtime?.tier === "desktop" ? "Desktop" : "Headless"} ready for execution`, `${runtime?.tier === "desktop" ? "Desktop" : "Headless"} 可執行`) : botCopy("Not started (conversation and enterprise tools remain available)", "尚未啟動（對話與企業工具仍可用）")}</small>
+                {handsProviderLabel(runtime) && <small>{handsWorkspaceLabel(runtime)}</small>}
               </p>
               {onEnsureRuntime && !runtimeTiers?.headless && (
                 <button type="button" className="activity-action" onClick={() => onEnsureRuntime("headless")}>

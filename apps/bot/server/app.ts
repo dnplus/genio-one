@@ -14,6 +14,8 @@ import Fastify, { type FastifyInstance } from "fastify"
 
 import { createCapabilityGate } from "./capability-gate"
 import { BotRegistry } from "./bot-registry"
+import { BotWorkspaceStore } from "./bot-workspace-store"
+import { HandsPlacementGate } from "./hands-placement-gate"
 import { createBotModelDirectory } from "./model-directory"
 import { createManagedDesktop } from "./runtime"
 import { RuntimeBroker } from "./runtime-broker"
@@ -23,6 +25,7 @@ import { healthRoutes } from "./routes/health"
 import { proxyRoutes } from "./routes/proxy"
 import { botRoutes } from "./routes/bots"
 import { artifactRoutes } from "./routes/artifacts"
+import { workspaceRoutes } from "./routes/workspaces"
 import { catalogRoutes } from "./routes/catalog"
 import { ceDemoRoutes } from "./routes/ce-demo"
 import { invocationRoutes } from "./routes/invocations"
@@ -55,11 +58,13 @@ export async function createBotApp(
   await app.register(websocket)
 
   const botRegistry = contextOverrides?.botRegistry ?? new BotRegistry()
+  const workspaces = contextOverrides?.workspaces ?? new BotWorkspaceStore(botRegistry.db, (botId, principal) => botRegistry.getOwned(botId, principal))
   const distillationBackfillProgress = new SQLiteDistillationBackfillProgressStore(botRegistry.db)
   const capabilityGate = contextOverrides?.capabilityGate ?? createCapabilityGate()
   const modelDirectory = contextOverrides?.modelDirectory ?? createBotModelDirectory()
-  const runtimeBroker = contextOverrides?.runtimeBroker ?? new RuntimeBroker({ provision: createManagedDesktop })
   const runtimePolicy = contextOverrides?.runtimePolicy ?? createRuntimePolicyClient()
+  const handsPlacement = contextOverrides?.handsPlacement ?? new HandsPlacementGate(runtimePolicy, workspaces)
+  const runtimeBroker = contextOverrides?.runtimeBroker ?? new RuntimeBroker({ provision: (request, callbacks) => createManagedDesktop(request, callbacks, workspaces) }, 600_000, workspaces, handsPlacement)
   const distillation = attachDistillation({
     registry: botRegistry,
     sessions: {
@@ -100,10 +105,12 @@ export async function createBotApp(
   app.addHook("onClose", async () => { distillation.stop(); stopObserving() })
 
   const botSchedules = contextOverrides?.botSchedules ?? new BotSchedules(botRegistry.db)
-  const botDeletionReconciler = new BotDeletionReconciler(botRegistry, botSchedules, runtimeBroker)
+  const botDeletionReconciler = new BotDeletionReconciler(botRegistry, botSchedules, runtimeBroker, workspaces)
   const context: BotServerContext = {
     botToolSessions: contextOverrides?.botToolSessions ?? new BotToolSessions(),
     botRegistry,
+    workspaces,
+    handsPlacement,
     capabilityGate,
     modelDirectory,
     runtimeBroker,
@@ -146,6 +153,7 @@ export async function createBotApp(
   await proxyRoutes(app, context)
   await botRoutes(app, context)
   await artifactRoutes(app, context)
+  await workspaceRoutes(app, context)
   await catalogRoutes(app, context)
   await ceDemoRoutes(app, context)
   await invocationRoutes(app, context)

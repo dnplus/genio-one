@@ -11,6 +11,7 @@ export type RuntimePolicyAction = (typeof RUNTIME_POLICY_ACTIONS)[number]
 export const RUNTIME_CAPABILITY_REGISTRY = {
   "codex.subscription": ["expose", "use"],
   "model.invoke": ["expose", "invoke"],
+  "code.javascript": ["expose", "execute"],
   "shell.exec": ["expose", "execute"],
   "filesystem.read": ["expose", "invoke"],
   "filesystem.write": ["expose", "invoke"],

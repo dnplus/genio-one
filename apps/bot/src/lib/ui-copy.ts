@@ -1,3 +1,5 @@
+import type { RuntimeDetails } from "./codex-client"
+
 export function isEnglishBotLocale() {
   return typeof window !== "undefined" && new URLSearchParams(window.location.search).get("lang") === "en"
 }
@@ -11,6 +13,21 @@ export function botDisplayName(bot: { name: string; sourceResourceId?: string | 
     return botCopy("CE Documentation & Product Bot", bot.name)
   }
   return bot.name
+}
+
+export function handsProviderLabel(runtime: RuntimeDetails | null | undefined): string | null {
+  if (runtime?.kind === "e2b-self-hosted") return botCopy("Self-hosted E2B", "自架 E2B")
+  if (runtime?.kind === "cloudflare-hands") return "Cloudflare Hands"
+  return null
+}
+
+export function handsWorkspaceLabel(runtime: RuntimeDetails | null | undefined): string | null {
+  if (!handsProviderLabel(runtime)) return null
+  if (!runtime?.workspaceId) return botCopy("No workspace selected", "尚未選定工作區")
+  const revision = runtime.workspaceRevision === null || runtime.workspaceRevision === undefined
+    ? ""
+    : botCopy(` · saved revision ${runtime.workspaceRevision}`, ` · 已保存版本 ${runtime.workspaceRevision}`)
+  return botCopy(`Workspace ${runtime.workspaceId}`, `工作區 ${runtime.workspaceId}`) + revision
 }
 
 export function botStatusText(value: string) {

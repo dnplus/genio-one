@@ -23,6 +23,10 @@ function runtimeSession(id = "runtime-1") {
       execServerUrl: "ws://executor.example",
       execReady: true,
     },
+    proxy: {
+      executor: { url: "http://e2b.test/", headers: { "E2b-Sandbox-Id": "sandbox-1", "E2b-Sandbox-Port": "4512" } },
+      desktop: { url: "http://e2b.test/", headers: { "E2b-Sandbox-Id": "sandbox-1", "E2b-Sandbox-Port": "6080" } },
+    },
     close: async () => {},
   }
   return {
@@ -75,7 +79,7 @@ describe("DesktopBrowserGrants", () => {
       const grants = new DesktopBrowserGrants(100, () => now)
       const credential = grants.issue(broker, session.id)
       expect(credential).not.toBeNull()
-      expect(grants.validate(broker, session.id, credential!)).toMatchObject({ sandboxId: "sandbox-1", grantExpiresAt: 1_100 })
+      expect(grants.validate(broker, session.id, credential!)).toMatchObject({ target: { headers: { "E2b-Sandbox-Id": "sandbox-1" } }, grantExpiresAt: 1_100 })
       expect(grants.validate(broker, "other-runtime", credential!)).toBeNull()
 
       session.leases.desktop = { ...session.leases.desktop! }

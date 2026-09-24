@@ -36,7 +36,7 @@ export function buildBotCapabilityRows(catalogRows: CatalogAddRow[], runtimePoli
     ...CODEX_CORE_CAPABILITY_DEFS,
     ...GENIO_DESKTOP_ADAPTER_CAPABILITY_DEFS.map((definition) => ({
       ...definition,
-      display_name: botCopy("Genio desktop (E2B)", "Genio 桌面（E2B）"),
+      display_name: botCopy("Genio desktop", "Genio 桌面"),
       description: botCopy("Operate this Bot's managed desktop", "操作這個 Bot 的受管理桌面"),
     })),
   ]

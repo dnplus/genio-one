@@ -10,7 +10,7 @@ const COMPUTER_USE_CAPABILITY = "computer.use"
 
 export const computerToolDefinitions: readonly BotToolDefinition[] = [{
   name: "computer_use",
-  description: "Operate the Bot's managed E2B desktop through a governed screenshot, pointer, keyboard, or scroll action. Take a screenshot first, pass its observationRevision to every mutating action, and never retry an action after an uncertain result. This never controls the Bot host or a Local Hands endpoint.",
+  description: "Operate the Bot's managed desktop through a governed screenshot, pointer, keyboard, or scroll action. Take a screenshot first, pass its observationRevision to every mutating action, and never retry an action after an uncertain result. This never controls the Bot host or a Local Hands endpoint.",
   inputSchema: {
     type: "object",
     properties: {
@@ -68,8 +68,8 @@ function computerOperation(args: unknown): { operation: DesktopComputerOperation
   throw new Error("COMPUTER_OPERATION_INVALID")
 }
 
-function response(operation: DesktopComputerOperation, result: { revision: number; screenshot?: Uint8Array }): BotToolResponse {
-  const status = { provider: "e2b-desktop-adapter", operation: operation.operation, observationRevision: result.revision }
+function response(operation: DesktopComputerOperation, result: { revision: number; screenshot?: Uint8Array }, provider: string): BotToolResponse {
+  const status = { provider, operation: operation.operation, observationRevision: result.revision }
   if (!result.screenshot) return { content: [{ type: "text", text: JSON.stringify(status) }] }
   return {
     content: [
@@ -234,7 +234,7 @@ export async function executeComputerTool(name: string, args: unknown, execution
     if (context.runtimeBroker.get(session.id) !== session) throw new Error("RUNTIME_SESSION_CHANGED")
     const lease = session.leases.desktop
     const computer = lease?.computer
-    if (!lease || lease.details.kind !== "e2b-self-hosted" || lease.details.tier !== "desktop" || !computer) throw new Error("E2B_DESKTOP_REQUIRED")
+    if (!lease || (lease.details.kind !== "e2b-self-hosted" && lease.details.kind !== "cloudflare-hands") || lease.details.tier !== "desktop" || !computer || !lease.details.execReady || lease.details.botId !== botId) throw new Error("MANAGED_DESKTOP_REQUIRED")
     if (
       computer.binding.runtimeSessionId !== session.id ||
       computer.binding.tenantId !== principal.tenant_id ||
@@ -254,7 +254,7 @@ export async function executeComputerTool(name: string, args: unknown, execution
       },
     })
     outcome = "COMPLETED"
-    return response(parsed.operation, result)
+    return response(parsed.operation, result, lease.details.kind)
   } catch (error) {
     reasonCode = error instanceof Error ? error.message : "COMPUTER_OPERATION_FAILED"
     throw error

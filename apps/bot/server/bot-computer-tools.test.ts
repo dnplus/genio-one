@@ -51,7 +51,7 @@ function fakeDesktop(): E2BDesktopSdk {
 }
 
 function lease(request: RuntimeProvisionRequest, withComputer = true): ManagedDesktop {
-  const details = { kind: "e2b-self-hosted" as const, tier: "desktop" as const, cwd: "/home/user", desktopUrl: "https://desktop", sandboxId: "sandbox", environmentId: "e2b-sandbox", execServerUrl: "ws://executor", execReady: true }
+  const details = { kind: "e2b-self-hosted" as const, tier: "desktop" as const, cwd: "/home/user", desktopUrl: "https://desktop", sandboxId: "sandbox", environmentId: "e2b-sandbox", execServerUrl: "ws://executor", execReady: true, botId: request.botId ?? null }
   const computer = withComputer ? new E2BDesktopDriver(fakeDesktop(), { runtimeSessionId: request.runtimeSessionId, tenantId: request.tenantId, subjectId: request.subjectId, actingClientId: request.actingClientId }) : undefined
   return {
     details,
@@ -107,7 +107,7 @@ test("computer tool returns an E2B screenshot and reports the same governed oper
 test("computer tool fails closed without a managed E2B computer lease", async () => {
   const value = await fixture({ withComputer: false })
   try {
-    await expect(executeComputerTool("computer_use", { operation: "screenshot" }, { context: value.context, botId: value.bot.id, principal, accessToken: "access-token" })).rejects.toThrow("E2B_DESKTOP_REQUIRED")
+    await expect(executeComputerTool("computer_use", { operation: "screenshot" }, { context: value.context, botId: value.bot.id, principal, accessToken: "access-token" })).rejects.toThrow("MANAGED_DESKTOP_REQUIRED")
     expect(value.reports).toHaveLength(2)
   } finally { await cleanup(value) }
 })
@@ -192,10 +192,11 @@ test("computer tool binds shared desktop observations to the Bot that captured t
   try {
     await executeComputerTool("computer_use", { operation: "screenshot" }, { context: value.context, botId: value.bot.id, principal, accessToken: "access-token" })
     const other = value.registry.create(principal, { name: "Other", description: "Other Bot" })
-    await expect(executeComputerTool("computer_use", { operation: "click", x: 1, y: 1, expectedRevision: 1 }, { context: value.context, botId: other.id, principal, accessToken: "access-token" })).rejects.toThrow("COMPUTER_OBSERVATION_BOT_MISMATCH")
+    await expect(executeComputerTool("computer_use", { operation: "click", x: 1, y: 1, expectedRevision: 1 }, { context: value.context, botId: other.id, principal, accessToken: "access-token" })).rejects.toThrow("WORKSPACE_BUSY")
+    await value.broker.stop(value.session.id, "desktop")
     await executeComputerTool("computer_use", { operation: "screenshot" }, { context: value.context, botId: other.id, principal, accessToken: "access-token" })
-    await expect(executeComputerTool("computer_use", { operation: "click", x: 1, y: 1, expectedRevision: 1 }, { context: value.context, botId: value.bot.id, principal, accessToken: "access-token" })).rejects.toThrow("COMPUTER_OBSERVATION_STALE")
-    await expect(executeComputerTool("computer_use", { operation: "click", x: 1, y: 1, expectedRevision: 2 }, { context: value.context, botId: other.id, principal, accessToken: "access-token" })).resolves.toBeDefined()
+    await expect(executeComputerTool("computer_use", { operation: "click", x: 1, y: 1, expectedRevision: 1 }, { context: value.context, botId: other.id, principal, accessToken: "access-token" })).resolves.toBeDefined()
+    await expect(executeComputerTool("computer_use", { operation: "click", x: 1, y: 1, expectedRevision: 1 }, { context: value.context, botId: value.bot.id, principal, accessToken: "access-token" })).rejects.toThrow("WORKSPACE_BUSY")
     const computer = value.session.leases.desktop!.computer!
     await value.broker.stop(value.session.id)
     await expect(computer.execute({ operation: "screenshot" }, { actorBotId: value.bot.id })).rejects.toThrow("COMPUTER_DRIVER_CLOSED")

@@ -6,7 +6,8 @@ import { createManagementApi } from "../src/app"
 import { createInMemoryPlatformModules } from "../src/capabilities/platform-modules"
 import type { ResourceConnectionRegistry } from "../src/capabilities/connections/module"
 import { createStaticPrincipalAuthenticator } from "../src/capabilities/tenancy-auth/memory"
-import { PERSONAL_BOT_RESOURCE_ID, evaluateRuntimePolicy } from "../src/capabilities/one-policy/runtime"
+import { PERSONAL_BOT_RESOURCE_ID, evaluateRuntimePolicies, evaluateRuntimePolicy } from "../src/capabilities/one-policy/runtime"
+import { validateRuntimePolicyForPublication } from "../src/capabilities/one-policy/runtime-policy-validator"
 import {
   RUNTIME_REPORT_KEY_ID_HEADER,
   RUNTIME_REPORT_SIGNATURE_HEADER,
@@ -36,6 +37,126 @@ function runtimeDefinition(scope: Record<string, unknown>, effect: "ALLOW" | "DE
     },
   }
 }
+
+function placementDefinition(domain: "ON_PREM" | "MANAGED_CLOUD") {
+  return {
+    kind: "RUNTIME_CAPABILITY" as const,
+    definition: {
+      display_name: "Hands placement",
+      scope: { subject_ids: ["person-uat-dylan"], organization_ids: [], roles: [], client_ids: [], bot_ids: [], runtime_ids: [] },
+      rules: [{
+        rule_id: "allow-hands",
+        target: { runtime_id: "codex", capability_id: "remote_hands.use" },
+        actions: ["use" as const],
+        effect: "ALLOW" as const,
+        constraints: [{ kind: "execution_placement" as const, parameters: { execution_domain: domain } }],
+        obligations: [],
+      }],
+    },
+  }
+}
+
+test("published Hands placement resolves to the policy domain and ignores a requested backend", { timeout: 30_000 }, async () => {
+  const { modules } = platformModulesWithBotConnection("ENABLED", { runtimeReportKeyId: "runtime-policy-test", runtimeReportPublicKeyPem })
+  const app = await createManagementApi({ modules, resourceCatalog: modules.resources, principalAuthenticator: principals() })
+  const policyPath = `/v1/tenants/${tenantId}/one-policy/runtime-policies/hands-placement`
+  try {
+    const saved = await app.inject({ method: "PUT", url: `${policyPath}/draft`, headers: adminHeaders, payload: { expected_version: 0, base_revision: 0, content: placementDefinition("MANAGED_CLOUD") } })
+    assert.equal(saved.statusCode, 200, saved.body)
+    const reviewed = await reviewRuntimeDraft(app, `${policyPath}/draft`, saved.json())
+    const published = await app.inject({ method: "POST", url: `${policyPath}/draft/publish`, headers: adminHeaders, payload: { expected_version: reviewed.version, expected_content_digest: reviewed.content_digest } })
+    assert.equal(published.statusCode, 200, published.body)
+    const reopened = await app.inject({ method: "GET", url: policyPath, headers: adminHeaders })
+    assert.equal(reopened.statusCode, 200, reopened.body)
+    assert.deepEqual(reopened.json().rules[0].constraints, placementDefinition("MANAGED_CLOUD").definition.rules[0]?.constraints)
+    const effectiveUrl = `/v1/tenants/${tenantId}/one-policy/runtime-effective?bot_id=managed-genio-bot&runtime_id=codex&capability_id=remote_hands.use&action=use`
+    const effective = await app.inject({ method: "GET", url: `${effectiveUrl}&provider=e2b-self-hosted`, headers: { authorization: "Bearer dylan" } })
+    assert.equal(effective.statusCode, 200, effective.body)
+    assert.equal(effective.json().decision, "ALLOW")
+    assert.deepEqual(effective.json().constraints, [{ kind: "execution_placement", parameters: { execution_domain: "MANAGED_CLOUD" } }])
+    const authorized = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-authorize`, headers: { authorization: "Bearer dylan" }, payload: { correlation_id: "hands-placement-1", bot_id: "managed-genio-bot", runtime_id: "codex", capability_id: "remote_hands.use", action: "use", provider: "e2b-self-hosted" } })
+    assert.equal(authorized.statusCode, 200, authorized.body)
+    assert.deepEqual(authorized.json().constraints, effective.json().constraints)
+    const reportBody = { correlation_id: "hands-placement-1", bot_id: "managed-genio-bot", runtime_id: "codex", capability_id: "remote_hands.use", action: "use", outcome: "FAILED", reason_code: "POLICY_PLACEMENT_CHANGED" }
+    const report = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-report`, headers: {
+      authorization: "Bearer dylan",
+      [RUNTIME_REPORT_KEY_ID_HEADER]: "runtime-policy-test",
+      [RUNTIME_REPORT_SIGNATURE_HEADER]: signRuntimeReport(reportBody, runtimeReportPrivateKeyPem),
+    }, payload: reportBody })
+    assert.equal(report.statusCode, 201, report.body)
+    assert.equal(report.json().reason_code, "POLICY_PLACEMENT_CHANGED")
+    assert.equal(report.json().authorization_audit_event_id, "hands-placement-1:authorize")
+  } finally {
+    await app.close()
+  }
+})
+
+test("publication rejects unsupported targets and conflicting placement domains", () => {
+  const definition = placementDefinition("ON_PREM").definition
+  assert.doesNotThrow(() => validateRuntimePolicyForPublication(definition))
+  assert.throws(() => validateRuntimePolicyForPublication({ ...definition, rules: [{ ...definition.rules[0]!, actions: ["expose"] }] } as never), /RUNTIME_POLICY_CONSTRAINT_UNSUPPORTED/)
+  assert.throws(() => validateRuntimePolicyForPublication({ ...definition, rules: [{ ...definition.rules[0]!, constraints: [{ kind: "path_allowlist", parameters: { paths: ["/workspace"] } }] }] } as never), /RUNTIME_POLICY_CONSTRAINT_UNSUPPORTED/)
+  assert.throws(() => validateRuntimePolicyForPublication({ ...definition, rules: [definition.rules[0]!, { ...definition.rules[0]!, rule_id: "allow-hands-cloud", constraints: [{ kind: "execution_placement", parameters: { execution_domain: "MANAGED_CLOUD" } }] }] } as never), /POLICY_PLACEMENT_CONFLICT/)
+  assert.throws(() => validateRuntimePolicyForPublication({ ...definition, rules: [{ ...definition.rules[0]!, constraints: [{ kind: "execution_placement", parameters: { execution_domain: "UNKNOWN" } }] }] } as never), /POLICY_PLACEMENT_INVALID/)
+})
+
+test("independently published placement policies fail closed when their domains conflict", () => {
+  const revision = (policyId: string, domain: "ON_PREM" | "MANAGED_CLOUD") => ({
+    tenant_id: tenantId,
+    policy_id: policyId,
+    revision: 1,
+    provenance: "TENANT_AUTHORED" as const,
+    enabled: true,
+    ...placementDefinition(domain).definition,
+    display_name: policyId,
+    published_by_subject_id: "person-admin",
+    created_at: 1,
+    published_at: 1,
+  })
+  const result = evaluateRuntimePolicies([revision("on-prem", "ON_PREM"), revision("managed", "MANAGED_CLOUD")], {
+    tenant_id: tenantId,
+    subject_id: "person-uat-dylan",
+    client_id: "genio-one-bot",
+    role: "USER",
+    organization_ids: [],
+    bot_id: "managed-genio-bot",
+    runtime_id: "codex",
+    capability_id: "remote_hands.use",
+    action: "use",
+    evaluated_at: 1,
+  })
+  assert.equal(result.decision, "DENY")
+  assert.equal(result.reason_code, "POLICY_PLACEMENT_CONFLICT")
+})
+
+test("JavaScript execution can publish and resolve independently of shell execution", { timeout: 30_000 }, async () => {
+  const { modules } = platformModulesWithBotConnection()
+  const app = await createManagementApi({ modules, resourceCatalog: modules.resources, principalAuthenticator: principals() })
+  const policyPath = `/v1/tenants/${tenantId}/one-policy/runtime-policies/javascript-execution`
+  try {
+    const content = {
+      kind: "RUNTIME_CAPABILITY",
+      definition: {
+        display_name: "JavaScript execution",
+        scope: { subject_ids: ["person-uat-dylan"], organization_ids: [], roles: [], client_ids: [], bot_ids: [], runtime_ids: [] },
+        rules: [{ rule_id: "allow-javascript", target: { runtime_id: "codex", capability_id: "code.javascript" }, actions: ["execute"], effect: "ALLOW", constraints: [], obligations: [] }],
+      },
+    }
+    const saved = await app.inject({ method: "PUT", url: `${policyPath}/draft`, headers: adminHeaders, payload: { expected_version: 0, base_revision: 0, content } })
+    assert.equal(saved.statusCode, 200, saved.body)
+    const reviewed = await reviewRuntimeDraft(app, `${policyPath}/draft`, saved.json())
+    const published = await app.inject({ method: "POST", url: `${policyPath}/draft/publish`, headers: adminHeaders, payload: { expected_version: reviewed.version, expected_content_digest: reviewed.content_digest } })
+    assert.equal(published.statusCode, 200, published.body)
+    const effective = await app.inject({ method: "GET", url: `/v1/tenants/${tenantId}/one-policy/runtime-effective?bot_id=managed-genio-bot&runtime_id=codex&capability_id=code.javascript&action=execute`, headers: { authorization: "Bearer dylan" } })
+    assert.equal(effective.statusCode, 200, effective.body)
+    assert.equal(effective.json().decision, "ALLOW")
+    const shell = await app.inject({ method: "GET", url: `/v1/tenants/${tenantId}/one-policy/runtime-effective?bot_id=managed-genio-bot&runtime_id=codex&capability_id=shell.exec&action=execute`, headers: { authorization: "Bearer dylan" } })
+    assert.equal(shell.statusCode, 200, shell.body)
+    assert.equal(shell.json().decision, "DENY")
+  } finally {
+    await app.close()
+  }
+})
 
 function principals() {
   return createStaticPrincipalAuthenticator({

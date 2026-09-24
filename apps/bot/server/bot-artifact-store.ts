@@ -1,11 +1,13 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { randomUUID } from "node:crypto"
+import { isHandsRelativePath } from "@genioone/protocol/hands"
+import type { HandsProvider } from "@genioone/protocol/hands"
 import type { Database } from "bun:sqlite"
 
 import type { GenioPrincipal } from "./runtime-broker"
 
-export type RuntimeTier = "none" | "headless" | "desktop"
+export type RuntimeTier = "none" | "isolate" | "headless" | "desktop"
 
 export interface ArtifactRef {
   artifactId: string
@@ -17,11 +19,19 @@ export interface ArtifactRef {
   digest: string
   contentType: string
   size: number
+  storageProvider: HandsProvider
+  sourceWorkspaceId: string | null
+  sourceRevision: number | null
+  storageRef: string | null
   createdAt: number
 }
 
 function isRuntimeTier(value: unknown): value is RuntimeTier {
-  return value === "none" || value === "headless" || value === "desktop"
+  return value === "none" || value === "isolate" || value === "headless" || value === "desktop"
+}
+
+function validArtifactPath(path: string) {
+  return ["/home/user/", "/workspace/"].some((root) => path.startsWith(root) && isHandsRelativePath(path.slice(root.length)))
 }
 
 export class BotArtifactStore {
@@ -51,6 +61,7 @@ export class BotArtifactStore {
   }
 
   registerArtifact(principal: GenioPrincipal, input: {
+    artifactId?: string
     botId: string
     sourceTier: RuntimeTier
     sourceEnvironmentId: string
@@ -58,16 +69,23 @@ export class BotArtifactStore {
     digest: string
     contentType?: string
     size?: number
+    storageProvider?: HandsProvider
+    sourceWorkspaceId?: string | null
+    sourceRevision?: number | null
+    storageRef?: string | null
   }): ArtifactRef {
     const bot = this.getOwnedBot(input.botId, principal)
     if (!bot) throw new Error("BOT_NOT_FOUND")
     if (!isRuntimeTier(input.sourceTier) || input.sourceTier === "none") throw new Error("ARTIFACT_RUNTIME_TIER_INVALID")
-    const path = input.path.trim()
-    if (!/^\/home\/user\/[A-Za-z0-9._/-]+$/.test(path) || path.split("/").includes("..")) throw new Error("ARTIFACT_PATH_INVALID")
+    const path = input.path
+    if (!validArtifactPath(path)) throw new Error("ARTIFACT_PATH_INVALID")
     const digest = input.digest.trim()
     if (!digest) throw new Error("ARTIFACT_DIGEST_REQUIRED")
+    const storageProvider = input.storageProvider ?? "e2b-self-hosted"
+    if (storageProvider !== "e2b-self-hosted" && storageProvider !== "cloudflare-hands") throw new Error("ARTIFACT_STORAGE_PROVIDER_INVALID")
+    if (storageProvider === "cloudflare-hands" && (!input.sourceWorkspaceId || !input.storageRef)) throw new Error("ARTIFACT_STORAGE_REFERENCE_REQUIRED")
     const artifact: ArtifactRef = {
-      artifactId: `artifact-${randomUUID()}`,
+      artifactId: input.artifactId ?? `artifact-${randomUUID()}`,
       tenantId: principal.tenant_id,
       botId: bot.id,
       sourceTier: input.sourceTier,
@@ -76,11 +94,16 @@ export class BotArtifactStore {
       digest,
       contentType: input.contentType?.trim() || "application/octet-stream",
       size: Number.isFinite(input.size) && (input.size ?? 0) >= 0 ? Math.floor(input.size!) : 0,
+      storageProvider,
+      sourceWorkspaceId: input.sourceWorkspaceId?.trim() || null,
+      sourceRevision: Number.isSafeInteger(input.sourceRevision) && Number(input.sourceRevision) >= 0 ? Number(input.sourceRevision) : null,
+      storageRef: input.storageRef?.trim() || null,
       createdAt: Date.now(),
     }
+    if (!/^artifact-[a-f0-9-]+$/i.test(artifact.artifactId)) throw new Error("ARTIFACT_ID_INVALID")
     if (!artifact.sourceEnvironmentId) throw new Error("ARTIFACT_ENVIRONMENT_REQUIRED")
-    this.db.query(`insert into bot_artifacts (artifact_id, tenant_id, bot_id, source_tier, source_environment_id, path, digest, content_type, size, created_at)
-      values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    this.db.query(`insert into bot_artifacts (artifact_id, tenant_id, bot_id, source_tier, source_environment_id, path, digest, content_type, size, storage_provider, source_workspace_id, source_revision, storage_ref, created_at)
+      values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
       artifact.artifactId,
       artifact.tenantId,
       artifact.botId,
@@ -90,6 +113,10 @@ export class BotArtifactStore {
       artifact.digest,
       artifact.contentType,
       artifact.size,
+      artifact.storageProvider,
+      artifact.sourceWorkspaceId,
+      artifact.sourceRevision,
+      artifact.storageRef,
       artifact.createdAt,
     )
     return artifact
@@ -120,6 +147,10 @@ export class BotArtifactStore {
       digest: String(row.digest),
       contentType: String(row.content_type),
       size: Number(row.size),
+      storageProvider: row.storage_provider === "cloudflare-hands" ? "cloudflare-hands" : "e2b-self-hosted",
+      sourceWorkspaceId: typeof row.source_workspace_id === "string" ? row.source_workspace_id : null,
+      sourceRevision: Number.isSafeInteger(row.source_revision) ? Number(row.source_revision) : null,
+      storageRef: typeof row.storage_ref === "string" ? row.storage_ref : null,
       createdAt: Number(row.created_at),
     }
   }

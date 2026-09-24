@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import type { RuntimePolicyRule } from "@/lib/product-api"
-import { groupRuntimeRules, updateSharedRuleSettings } from "./runtime-rule-groups"
+import { canEditHandsPlacement, groupRuntimeRules, hasHandsPlacement, sharedConstraintsForRuntimeRule, updateSharedRuleSettings } from "./runtime-rule-groups"
 
 const model: RuntimePolicyRule = { rule_id: "model", target: { runtime_id: "codex", capability_id: "model.invoke" }, actions: ["invoke"], effect: "ALLOW", constraints: [], obligations: [{ kind: "audit", parameters: {} }] }
 const subscription: RuntimePolicyRule = { ...model, rule_id: "subscription", target: { runtime_id: "codex", capability_id: "codex.subscription" }, actions: ["use"] }
@@ -23,4 +23,22 @@ test("explicit individual settings stay in the group and survive shared edits", 
   const next = updateSharedRuleSettings(rules, ["model", "subscription"], { ...model, effect: "DENY", obligations: [] })
   expect(next[0]!.effect).toBe("DENY")
   expect(next[1]).toEqual(exception)
+})
+
+test("shared edits retain placement only on the Hands rule", () => {
+  const hands: RuntimePolicyRule = { ...subscription, rule_id: "hands", target: { runtime_id: "codex", capability_id: "remote_hands.use" }, constraints: [{ kind: "execution_placement", parameters: { execution_domain: "MANAGED_CLOUD" } }] }
+  const next = updateSharedRuleSettings([hands, model], ["hands", "model"], { ...hands, obligations: [] })
+  expect(next[0]?.constraints).toEqual(hands.constraints)
+  expect(next[1]?.constraints).toEqual([])
+  expect(sharedConstraintsForRuntimeRule(hands, model)).toEqual([])
+  expect(sharedConstraintsForRuntimeRule(model, hands)).toEqual(hands.constraints)
+})
+
+test("placement editing requires a standalone ALLOW use rule", () => {
+  const useRule: RuntimePolicyRule = { ...subscription, target: { runtime_id: "codex", capability_id: "remote_hands.use" } }
+  expect(canEditHandsPlacement(useRule)).toBe(true)
+  expect(canEditHandsPlacement({ ...useRule, actions: ["expose", "use"] })).toBe(false)
+  expect(canEditHandsPlacement({ ...useRule, effect: "DENY" })).toBe(false)
+  expect(canEditHandsPlacement({ ...useRule, actions: ["expose"] })).toBe(false)
+  expect(hasHandsPlacement({ ...useRule, constraints: [{ kind: "execution_placement", parameters: { execution_domain: "ON_PREM" } }] })).toBe(true)
 })

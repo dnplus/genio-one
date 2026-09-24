@@ -5,11 +5,14 @@ import type { ServerNotification } from "../../server/generated/ServerNotificati
 import type { ServerRequest } from "../../server/generated/ServerRequest"
 
 export interface RuntimeDetails {
-  kind: "e2b-self-hosted" | "local" | "endpoint"
+  kind: "e2b-self-hosted" | "cloudflare-hands" | "local" | "endpoint"
   tier: "none" | "headless" | "desktop"
   cwd: string
   desktopUrl: string | null
   sandboxId: string | null
+  workspaceId: string | null
+  workspaceRevision: number | null
+  leaseId: string | null
   environmentId: string | null
   execServerUrl: string | null
   execReady: boolean

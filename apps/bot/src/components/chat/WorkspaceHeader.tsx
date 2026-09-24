@@ -7,10 +7,17 @@ import type { BotInstance } from "../../bots-storage"
 import type { StateId } from "../../vendor/bloub/bot/states"
 import type { GenioCatalog } from "../../lib/genio-one"
 import { boundEnterpriseToolCount } from "../../lib/catalog-surface"
-import { botCopy, botDisplayName, botStatusText } from "../../lib/ui-copy"
+import { botCopy, botDisplayName, botStatusText, handsProviderLabel, handsWorkspaceLabel } from "../../lib/ui-copy"
 
 export function getDesktopStatus(runtime: RuntimeDetails | null) {
   if (runtime?.kind === "endpoint") return { text: runtime.execReady ? "本機已連接" : "本機已離線", active: runtime.execReady, offline: !runtime.execReady, title: `本機工作資料夾：${runtime.cwd}` }
+  const provider = handsProviderLabel(runtime)
+  if (provider) {
+    const workspace = handsWorkspaceLabel(runtime)
+    if (runtime?.desktopUrl) return { text: botCopy(`${provider} desktop`, `${provider} 電腦`), active: true, offline: false, title: `${provider} · ${workspace} · ${botCopy("Desktop connected", "受控電腦已連線")}` }
+    if (runtimeCanExec(runtime)) return { text: botCopy(`${provider} ready`, `${provider} 就緒`), active: true, offline: true, title: `${provider} · ${workspace} · ${botCopy("Remote sandbox ready for execution", "遠端沙盒可執行")}` }
+    return { text: botCopy(`${provider} not started`, `${provider} 未啟動`), active: false, offline: true, title: `${provider} · ${workspace} · ${botCopy("Execution is not started", "執行環境尚未啟動")}` }
+  }
   if (runtime?.desktopUrl) {
     return { text: "受控電腦", active: true, offline: false, title: "遠端受控電腦已連線，點擊切換畫面" }
   }

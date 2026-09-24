@@ -58,10 +58,66 @@ spec:
               value: "5181"
             - name: GENIO_BOT_RUNTIME
               value: {{ .Values.bot.runtime | default "local" | quote }}
+            {{- $handsRuntime := .Values.bot.runtime | default "local" }}
+            {{- if not (has $handsRuntime (list "local" "e2b-self-hosted" "cloudflare-hands")) }}
+            {{- fail "bot.runtime must be local, e2b-self-hosted, or cloudflare-hands" }}
+            {{- end }}
+            {{- if ne $handsRuntime "local" }}
+            {{- $hasE2b := and .Values.bot.e2b.domain .Values.bot.e2b.apiKeySecretName }}
+            {{- $hasCfHands := and .Values.bot.cfHands.origin .Values.bot.cfHands.tokenSecretName }}
+            {{- if and (or .Values.bot.e2b.domain .Values.bot.e2b.apiKeySecretName .Values.bot.e2b.apiUrl .Values.bot.e2b.sandboxUrl) (not $hasE2b) }}
+            {{- fail "bot.e2b.domain and bot.e2b.apiKeySecretName are required together" }}
+            {{- end }}
+            {{- if and (or .Values.bot.cfHands.origin .Values.bot.cfHands.tokenSecretName) (not $hasCfHands) }}
+            {{- fail "bot.cfHands.origin and bot.cfHands.tokenSecretName are required together" }}
+            {{- end }}
+            {{- if and (eq $handsRuntime "e2b-self-hosted") (not $hasE2b) }}
+            {{- fail "self-hosted E2B is the default Hands provider but bot.e2b is not configured" }}
+            {{- end }}
+            {{- if and (eq $handsRuntime "cloudflare-hands") (not $hasCfHands) }}
+            {{- fail "Cloudflare Hands is the default Hands provider but bot.cfHands is not configured" }}
+            {{- end }}
+            {{- if $hasE2b }}
+            - name: E2B_DOMAIN
+              value: {{ .Values.bot.e2b.domain | quote }}
+            {{- if .Values.bot.e2b.apiUrl }}
+            - name: E2B_API_URL
+              value: {{ .Values.bot.e2b.apiUrl | quote }}
+            {{- end }}
+            {{- if .Values.bot.e2b.sandboxUrl }}
+            - name: E2B_SANDBOX_URL
+              value: {{ .Values.bot.e2b.sandboxUrl | quote }}
+            {{- end }}
+            - name: E2B_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.bot.e2b.apiKeySecretName | quote }}
+                  key: {{ .Values.bot.e2b.apiKeySecretKey | default "api-key" | quote }}
+                  optional: false
+            - name: GENIO_BOT_E2B_DESKTOP_BASE_TEMPLATE
+              value: {{ .Values.bot.e2b.desktopBaseTemplate | quote }}
+            - name: GENIO_BOT_E2B_DESKTOP_TEMPLATE
+              value: {{ .Values.bot.e2b.desktopTemplate | quote }}
+            - name: GENIO_BOT_E2B_HEADLESS_TEMPLATE
+              value: {{ .Values.bot.e2b.headlessTemplate | quote }}
+            {{- end }}
+            {{- if $hasCfHands }}
+            - name: GENIO_CF_HANDS_ORIGIN
+              value: {{ .Values.bot.cfHands.origin | quote }}
+            - name: GENIO_CF_HANDS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.bot.cfHands.tokenSecretName | quote }}
+                  key: {{ .Values.bot.cfHands.tokenSecretKey | default "token" | quote }}
+                  optional: false
+            {{- end }}
+            {{- end }}
             - name: GENIO_BOT_CODEX_HOME
               value: "/var/lib/genio-one-bot/codex-home"
             - name: GENIO_BOT_REGISTRY_DB
               value: "/var/lib/genio-one-bot/bot-registry.sqlite"
+            - name: GENIO_BOT_WORKSPACE_STORE
+              value: "/var/lib/genio-one-bot/workspaces"
             - name: GENIO_BOT_ARTIFACT_STORE
               value: "/var/lib/genio-one-bot/artifacts"
             - name: GENIO_BOT_PACKAGE_STORE

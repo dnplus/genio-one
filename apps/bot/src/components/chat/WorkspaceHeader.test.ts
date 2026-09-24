@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { DEFAULT_BLOUB_AVATAR } from "../../avatar/bloub-avatar"
 import type { BotInstance } from "../../bots-storage"
+import type { RuntimeDetails } from "../../lib/codex-client"
 import { demoCatalog } from "../common/helpers"
-import { getToolStatus } from "./WorkspaceHeader"
+import { getDesktopStatus, getToolStatus } from "./WorkspaceHeader"
 
 const windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window")
 
@@ -76,5 +77,38 @@ describe("WorkspaceHeader getToolStatus", () => {
   test("does not treat runtime MCP count as this bot's tool count", () => {
     expect(getToolStatus("已連線", null, dummyBot).text).toBe("尚未加入工具")
     expect(getToolStatus("4 個工具 · 就緒", null, dummyBot).text).toBe("尚未加入工具")
+  })
+})
+
+const cloudflare: RuntimeDetails = {
+  kind: "cloudflare-hands",
+  tier: "headless",
+  cwd: "/home/user",
+  desktopUrl: null,
+  sandboxId: "cf-sandbox",
+  workspaceId: "workspace-1",
+  workspaceRevision: 4,
+  leaseId: "lease-1",
+  environmentId: "environment-1",
+  execServerUrl: "ws://executor",
+  execReady: true,
+}
+
+test("header status names the active Hands provider and workspace", () => {
+  expect(getDesktopStatus(cloudflare)).toEqual({
+    text: "Cloudflare Hands 就緒",
+    active: true,
+    offline: true,
+    title: "Cloudflare Hands · 工作區 workspace-1 · 已保存版本 4 · 遠端沙盒可執行",
+  })
+  expect(getDesktopStatus({ ...cloudflare, tier: "desktop", desktopUrl: "/api/desktop/runtime-1/vnc.html" }).text).toBe("Cloudflare Hands 電腦")
+})
+
+test("local endpoint keeps its own status and folder", () => {
+  expect(getDesktopStatus({ ...cloudflare, kind: "endpoint", cwd: "/local/project" })).toEqual({
+    text: "本機已連接",
+    active: true,
+    offline: false,
+    title: "本機工作資料夾：/local/project",
   })
 })

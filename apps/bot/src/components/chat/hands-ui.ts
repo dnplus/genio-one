@@ -24,11 +24,10 @@ export interface LoginWallView {
 }
 
 export const USER_SCOPED_COMPUTER_COPY = {
-  headline: "共用電腦（依使用者，非依 Bot）",
+  headline: "舊版共用電腦模擬預覽",
   body:
-    "同一帳號的所有 Bot 共用一台電腦（檔案、瀏覽器工作階段、命令列憑證）。" +
-    "每個 Bot 可以有自己的桌面視窗，但那不是安全隔離；授權仍走 One Policy。",
-  securityNote: "安全＝One Policy，≠ 一 Bot 一機",
+    "此區只展示舊版共用電腦模型的 mock 互動。實際遠端執行請以提供者與工作區狀態為準；授權仍走 One Policy。",
+  securityNote: "模擬預覽，不代表目前 Hands 工作區",
 } as const
 
 export function handsPreviewStatusLabel(status: HandsComputerView["status"] | HandsComputerView | null): string {

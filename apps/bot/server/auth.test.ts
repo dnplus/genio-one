@@ -16,6 +16,10 @@ function runtimeSession() {
       execServerUrl: "ws://executor.example",
       execReady: true,
     },
+    proxy: {
+      executor: { url: "http://e2b.test/", headers: { "E2b-Sandbox-Id": "sandbox-1", "E2b-Sandbox-Port": "4512" } },
+      desktop: { url: "http://e2b.test/", headers: { "E2b-Sandbox-Id": "sandbox-1", "E2b-Sandbox-Port": "6080" } },
+    },
     close: async () => {},
   }
   return {
@@ -41,23 +45,23 @@ test("desktop grants bootstrap the VNC document once and become cookie-only brow
       headers: {},
       query: { [DESKTOP_BROWSER_GRANT_QUERY]: credential },
     }, true)
-    expect(initial).toMatchObject({ sandboxId: "sandbox-1", bootstrap: true })
+    expect(initial).toMatchObject({ target: { headers: { "E2b-Sandbox-Id": "sandbox-1" } }, bootstrap: true })
     expect(authenticateDesktopProxySession(broker, runtime.id, {
       headers: {},
       query: { [DESKTOP_BROWSER_GRANT_QUERY]: credential },
     }, false)).toBeNull()
     expect(authenticateDesktopProxySession(broker, runtime.id, {
       headers: { cookie: `${DESKTOP_BROWSER_COOKIE}=${credential}` },
-    }, false)).toMatchObject({ sandboxId: "sandbox-1", bootstrap: false })
+    }, false)).toMatchObject({ target: { headers: { "E2b-Sandbox-Id": "sandbox-1" } }, bootstrap: false })
     const renewed = desktopBrowserGrants.issue(broker, runtime.id)!
     expect(authenticateDesktopProxySession(broker, runtime.id, {
       headers: { cookie: `${DESKTOP_BROWSER_COOKIE}=${credential}` },
       query: { [DESKTOP_BROWSER_GRANT_QUERY]: renewed },
-    }, true)).toMatchObject({ sandboxId: "sandbox-1", bootstrap: true })
+    }, true)).toMatchObject({ target: { headers: { "E2b-Sandbox-Id": "sandbox-1" } }, bootstrap: true })
     expect(authenticateDesktopProxySession(broker, runtime.id, {
       headers: { cookie: `${DESKTOP_BROWSER_COOKIE}=${credential}` },
       query: { [DESKTOP_BROWSER_GRANT_QUERY]: "invalid" },
-    }, true)).toMatchObject({ sandboxId: "sandbox-1", bootstrap: false })
+    }, true)).toMatchObject({ target: { headers: { "E2b-Sandbox-Id": "sandbox-1" } }, bootstrap: false })
   } finally {
     if (previous === undefined) delete process.env.E2B_SANDBOX_URL
     else process.env.E2B_SANDBOX_URL = previous

@@ -16,26 +16,27 @@ type DesktopBrowserGrant = {
 }
 
 export type DesktopProxySession = {
-  sandboxId: string
-  sandboxUrl: URL
+  target: { url: URL; headers: Record<string, string> }
+  websocketTarget: { url: URL; headers: Record<string, string> }
   grantExpiresAt: number
   bootstrap: boolean
 }
 
 function currentDesktopLease(session: RuntimeSession | null | undefined): DesktopLease | null {
   const lease = session?.leases.desktop
-  if (!lease || lease.details.kind !== "e2b-self-hosted" || lease.details.tier !== "desktop" || !lease.details.sandboxId) return null
+  if (!lease || !lease.details.execReady || lease.details.tier !== "desktop" || !lease.proxy?.desktop) return null
   return lease
 }
 
 function currentDesktopProxySession(session: RuntimeSession | null | undefined, lease: DesktopLease): Omit<DesktopProxySession, "grantExpiresAt" | "bootstrap"> | null {
-  if (session?.leases.desktop !== lease) return null
-  const configured = process.env.E2B_SANDBOX_URL?.trim()
-  if (!configured) return null
+  if (session?.leases.desktop !== lease || !lease.details.execReady || !lease.proxy?.desktop) return null
   try {
-    const sandboxUrl = new URL(configured)
-    if ((sandboxUrl.protocol !== "http:" && sandboxUrl.protocol !== "https:") || sandboxUrl.username || sandboxUrl.password || sandboxUrl.pathname !== "/" || sandboxUrl.search || sandboxUrl.hash) return null
-    return { sandboxId: lease.details.sandboxId!, sandboxUrl }
+    const url = new URL(lease.proxy.desktop.url)
+    if ((url.protocol !== "http:" && url.protocol !== "https:") || url.username || url.password || url.search || url.hash || !url.pathname.endsWith("/")) return null
+    const websocket = lease.proxy.desktopWebSocket ?? lease.proxy.desktop
+    const websocketUrl = new URL(websocket.url)
+    if ((websocketUrl.protocol !== "http:" && websocketUrl.protocol !== "https:") || websocketUrl.username || websocketUrl.password || websocketUrl.search || websocketUrl.hash) return null
+    return { target: { url, headers: lease.proxy.desktop.headers }, websocketTarget: { url: websocketUrl, headers: websocket.headers } }
   } catch {
     return null
   }
@@ -64,6 +65,7 @@ export class DesktopBrowserGrants {
     const grant = this.grants.get(credential)
     if (!grant || grant.runtimeSessionId !== runtimeSessionId) return null
     const session = runtimeBroker.get(runtimeSessionId)
+    if (currentDesktopLease(session) !== grant.lease) return null
     const proxySession = currentDesktopProxySession(session, grant.lease)
     if (!proxySession) return null
     return { ...proxySession, grantExpiresAt: grant.expiresAt }
@@ -84,7 +86,7 @@ function validDesktopGrant(credential: string) {
 }
 
 function allowedVncOptions(upstream: URL): URLSearchParams | null {
-  if ((upstream.protocol !== "http:" && upstream.protocol !== "https:") || upstream.username || upstream.password || upstream.pathname !== "/vnc.html" || upstream.hash) return null
+  if ((upstream.protocol !== "http:" && upstream.protocol !== "https:") || upstream.username || upstream.password || !upstream.pathname.endsWith("/vnc.html") || upstream.hash) return null
   const query = new URLSearchParams()
   for (const [key, value] of upstream.searchParams) {
     if (query.has(key)) return null

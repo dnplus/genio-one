@@ -76,7 +76,7 @@ describe("CapabilityToolsPanel list builder", () => {
     const computer = rows.find((r) => r.runtime?.capabilityId === "computer.use")
     expect(computer?.effectiveAllow).toBe(false)
     expect(computer?.runtime?.effective).toBe("DENY")
-    expect(computer?.title).toBe("Genio 桌面（E2B）")
+    expect(computer?.title).toBe("Genio 桌面")
     expect(computer?.subtitle).toBe("操作這個 Bot 的受管理桌面")
 
     const needs = buildBotCapabilityRows([
@@ -165,7 +165,8 @@ describe("CapabilityToolsPanel list builder", () => {
 
   test("shows every runtime capability as unavailable when the effective read is unavailable", () => {
     const rows = buildBotCapabilityRows([], null)
-    expect(rows.filter((row) => row.source === "runtime")).toHaveLength(10)
+    expect(rows.filter((row) => row.source === "runtime")).toHaveLength(11)
+    expect(rows.find((row) => row.runtime?.capabilityId === "code.javascript")?.effectiveAllow).toBe(false)
     expect(rows.filter((row) => row.source === "runtime").every((row) => row.effectiveAllow === false)).toBe(true)
   })
 })
@@ -231,15 +232,16 @@ test("renders the capabilities and OAuth connection path in English without chan
   expect(html).toContain("This capability needs an account connection before it can be added or invoked.")
   expect(html).toContain(">Connect<")
   expect(html).toContain("Runtime capabilities")
-  expect(html).toContain("10 items")
-  expect(html).toContain("Genio desktop (E2B)")
+  expect(html).toContain("11 items")
+  expect(html).toContain("Workspace JavaScript")
+  expect(html).toContain("Genio desktop")
   expect(html).toContain("Runtime policy is not available. Runtime capabilities are paused.")
   expect(html).toContain(">Retry<")
   expect(html).not.toContain("企業工具")
   expect(html).not.toContain("需連線")
 })
 
-test("renders the Genio E2B desktop adapter with its effective runtime decision", async () => {
+test("renders the provider-neutral Genio desktop adapter with its effective runtime decision", async () => {
   const { createElement } = await import("react")
   const { renderToStaticMarkup } = await import("react-dom/server")
   const { CapabilityToolsPanel } = await import("./CapabilityToolsPanel")
@@ -281,6 +283,6 @@ test("renders the Genio E2B desktop adapter with its effective runtime decision"
     onEnterpriseAction: () => {},
   })))
 
-  expect(html).toContain("Genio desktop (E2B)")
+  expect(html).toContain("Genio desktop")
   expect(html).toContain("Available")
 })

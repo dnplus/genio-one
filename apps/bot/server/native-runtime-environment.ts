@@ -21,6 +21,8 @@ export function ownedRuntimeEnvironment(session: RuntimeSession, environmentId: 
   if (typeof environmentId !== "string" || !environmentId.trim()) return null
   return Object.values(session.runtimeDetails).find((details) =>
     details.tier !== "none" &&
+    details.execReady &&
+    (!details.botId || details.botId === (botId ?? session.selectedBotId)) &&
     (!details.endpoint || (details.execReady && details.endpoint.botId === (botId ?? session.selectedBotId))) &&
     details.environmentId === environmentId &&
     (execServerUrl === undefined || details.execServerUrl === execServerUrl)

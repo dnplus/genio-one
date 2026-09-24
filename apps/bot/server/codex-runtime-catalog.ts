@@ -30,6 +30,12 @@ export const CODEX_CORE_CAPABILITY_DEFS: readonly CodexCoreCapabilityDef[] = [
     description: "Invoke an entitled model through the managed gateway",
   },
   {
+    id: "code.javascript",
+    kind: "code",
+    display_name: "Workspace JavaScript",
+    description: "Execute JavaScript in the authorized L1 workspace isolate without native shell access",
+  },
+  {
     id: "shell.exec",
     kind: "shell",
     display_name: "Shell",
@@ -69,7 +75,7 @@ export const CODEX_CORE_CAPABILITY_DEFS: readonly CodexCoreCapabilityDef[] = [
     id: "remote_hands.use",
     kind: "remote_hands",
     display_name: "Remote hands",
-    description: "Pair and use a verified local execution endpoint",
+    description: "Use an authorized Hands execution provider and workspace, including a verified local endpoint",
   },
 ] as const
 
@@ -77,11 +83,11 @@ export const GENIO_DESKTOP_ADAPTER_CAPABILITY_DEFS: readonly RuntimeCapabilityCa
   {
     id: "computer.use",
     kind: "desktop",
-    display_name: "Genio desktop (E2B)",
-    description: "Operate the Bot's managed E2B desktop",
+    display_name: "Genio desktop",
+    description: "Operate the Bot's authorized managed desktop",
   },
 ] as const
 
 /** Core four kinds that discover() must surface. */
-export const CODEX_CORE_KINDS = ["model", "shell", "filesystem", "browser", "web_search", "mcp", "remote_hands"] as const
+export const CODEX_CORE_KINDS = ["model", "shell", "code", "filesystem", "browser", "web_search", "mcp", "remote_hands"] as const
 export type CodexCoreKind = (typeof CODEX_CORE_KINDS)[number]

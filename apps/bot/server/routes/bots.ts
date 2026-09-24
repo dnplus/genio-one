@@ -11,7 +11,7 @@ import {
 import { RuntimePolicyUnavailableError } from "../runtime-policy"
 import type { GenioPrincipal } from "../runtime-broker"
 import { BotUsageContextError, resolveBotUsageContext } from "../usage-context"
-import { PlatformDistillationCancellationError } from "../bot-deletion-reconciler"
+import { BotWorkspaceBusyError, PlatformDistillationCancellationError } from "../bot-deletion-reconciler"
 import { normalizeTeamWorkspaceId } from "../bot-registry"
 import { platformOrigin } from "../platform-origin"
 
@@ -388,12 +388,14 @@ export async function botRoutes(app: FastifyInstance, context: BotServerContext)
       principal = await requestPrincipal(request)
       botId = (request.params as { botId: string }).botId
       const accessToken = requestAccessToken(request)
+      if (context.runtimeBroker.hasActiveBotLease(principal.tenant_id, principal.subject_id, botId) || context.workspaces.hasInFlightForBot(botId)) return reply.code(409).send({ error: "BOT_WORKSPACE_BUSY" })
       const deletionReconciler = context.botDeletionReconciler
       deletion = botRegistry.beginPendingDeletion(botId, principal)
       if (!deletion) return reply.code(404).send({ error: "BOT_NOT_FOUND" })
       await deletionReconciler.attempt(principal, botId, accessToken)
       return reply.code(200).send({ ok: true, botId })
     } catch (error) {
+      if (error instanceof BotWorkspaceBusyError) return reply.code(409).send({ error: error.message })
       if (error instanceof PlatformDistillationCancellationError) return reply.code(error.statusCode).send({ error: error.code })
       const message = error instanceof Error ? error.message : "BOT_DELETE_FAILED"
       return reply.code(message.startsWith("GENIO_ONE_SESSION_") ? 401 : message === "BOT_NOT_FOUND" ? 404 : 400).send({ error: message })
