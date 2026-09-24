@@ -9,6 +9,7 @@ const platformDir = resolve(root, "apps/platform")
 const botDir = resolve(root, "apps/bot")
 const envFile = resolve(platformDir, ".env.local")
 const confirmationPhrase = "CLEAN LOCAL GENIO DATA"
+const devServicePorts = [5173, 5180, 5181, 58082, 8182]
 
 const preserveTables = [
   "schema_migrations",
@@ -61,9 +62,8 @@ function captured(command, args, cwd = root) {
   return spawnSync(command, args, { cwd, encoding: "utf8" })
 }
 
-function assertDevStopped() {
-  const ports = [5173, 5180, 5181, 58082]
-  const busy = ports.flatMap((port) => runningPids(port).map((pid) => `${port}/${pid}`))
+function assertDevStopped({ ports = devServicePorts, findRunningPids = runningPids } = {}) {
+  const busy = ports.flatMap((port) => findRunningPids(port).map((pid) => `${port}/${pid}`))
   if (busy.length > 0) throw new Error(`請先停止本地 dev 服務：${busy.join(", ")}`)
 }
 
@@ -133,4 +133,4 @@ export async function cleanLocalDev({ input = process.stdin, output = process.st
   return true
 }
 
-export { cleanPlan, confirmationPhrase }
+export { assertDevStopped, cleanPlan, confirmationPhrase, devServicePorts }

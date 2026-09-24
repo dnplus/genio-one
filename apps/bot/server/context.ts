@@ -8,6 +8,7 @@ import type { RuntimePolicyResolver } from "./runtime-policy-contract"
 
 export interface BotServerContext {
   botSchedules: import("./bot-schedules").BotSchedules
+  botDeletionReconciler: import("./bot-deletion-reconciler").BotDeletionReconciler
   localHands?: import("./local-hands").LocalHands
   botToolSessions: BotToolSessions
   runtimeBroker: RuntimeBroker

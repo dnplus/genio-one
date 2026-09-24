@@ -1,15 +1,301 @@
 import { spawn, spawnSync } from "node:child_process"
-import { createPrivateKey, createPublicKey, generateKeyPairSync } from "node:crypto"
-import { existsSync, mkdirSync, readFileSync, readlinkSync, writeFileSync } from "node:fs"
-import { createConnection } from "node:net"
-import { resolve } from "node:path"
+import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync } from "node:crypto"
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { cleanLocalDev } from "./local-dev-clean.mjs"
+import {
+  createDistillationTriageHandoff,
+  parseDistillationTriageHandoff,
+  readDistillationTriageHandoff,
+  removeDistillationTriageHandoff,
+} from "../runtimes/gateway/controller/local-distillation-triage-handoff.mjs"
+import {
+  distillationPortRole,
+  listeningPortOwners,
+  portIsOccupied,
+  portOwnerRevalidation,
+  processCommand,
+  processCwd,
+} from "../runtimes/gateway/controller/local-port-owner.mjs"
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)))
 const platformDir = resolve(root, "apps/platform")
 const botDir = resolve(root, "apps/bot")
+const gatewayDir = resolve(root, "runtimes/gateway")
 const signingKeyDir = resolve(platformDir, ".local/gateway-runtime/keys")
+const distillationLaunchConfigurationPath = resolve(platformDir, ".local/gateway-runtime/distillation-launch-configuration")
+const processorAdapterCredentialNames = "GENIO_ONE_PROCESSOR_ADAPTER_CREDENTIAL_ENV_NAMES"
+
+export function configureDistillationLaunch(serviceList, startupNames, env, fileExists) {
+  const configuredFile = typeof env.GENIO_ONE_PROCESSOR_ADAPTERS_FILE === "string" ? env.GENIO_ONE_PROCESSOR_ADAPTERS_FILE.trim() : ""
+  const file = configuredFile ? resolve(gatewayDir, configuredFile) : ""
+  const enabled = Boolean(file) && fileExists(file)
+  const bot = serviceList.find((service) => service.name === "bot-server")
+  const triage = serviceList.find((service) => service.name === "distillation-triage")
+  const platform = serviceList.find((service) => service.name === "platform-api")
+  // Platform starts from apps/platform, so a relative adapter path must reach it already resolved.
+  if (platform && file) platform.env.GENIO_ONE_PROCESSOR_ADAPTERS_FILE = file
+  if (!enabled) {
+    delete bot.env.GENIO_ONE_DISTILLATION_TRIAGE_URL
+    delete bot.env.GENIO_ONE_DISTILLATION_TRIAGE_TOKEN
+    delete bot.env.GENIO_ONE_DISTILLATION_ADAPTER_ID
+    delete triage.env.GENIO_ONE_PROCESSOR_ADAPTERS_FILE
+    return startupNames.filter((name) => name !== "distillation-triage")
+  }
+  triage.env.GENIO_ONE_PROCESSOR_ADAPTERS_FILE = file
+  return startupNames
+}
+
+function configuredCredentialEnvironmentNames(environment) {
+  const serialized = environment[processorAdapterCredentialNames]
+  if (typeof serialized !== "string") return []
+  return [...new Set(serialized.split(","))]
+}
+
+function referencedCredentialEnvironmentNames(registry, allowedNames) {
+  if (!registry || typeof registry !== "object" || !Array.isArray(registry.adapters)) return []
+  const allowed = new Set(allowedNames)
+  return [...new Set(registry.adapters
+    .map((adapter) => adapter && typeof adapter === "object" ? adapter.credential_env : undefined)
+    .filter((name) => typeof name === "string" && allowed.has(name)))].sort()
+}
+
+function processorAdapterCredentialDigest(serializedRegistry, environment) {
+  const names = configuredCredentialEnvironmentNames(environment)
+  let registry = null
+  try {
+    registry = JSON.parse(String(serializedRegistry))
+  } catch {}
+  const referenced = referencedCredentialEnvironmentNames(registry, names)
+  return createHash("sha256").update(JSON.stringify({
+    names: environment[processorAdapterCredentialNames] ?? null,
+    values: referenced.map((name) => [name, environment[name] ?? null]),
+  })).digest("hex")
+}
+
+export function distillationLaunchConfiguration(serviceList, readFile = readFileSync, environment = process.env) {
+  const bot = serviceList.find((service) => service.name === "bot-server")
+  const triage = serviceList.find((service) => service.name === "distillation-triage")
+  const adaptersFile = triage.env.GENIO_ONE_PROCESSOR_ADAPTERS_FILE
+  const serializedRegistry = adaptersFile ? readFile(adaptersFile, "utf8") : null
+  const adaptersDigest = serializedRegistry === null
+    ? null
+    : createHash("sha256").update(serializedRegistry).digest("hex")
+  const credentialDigest = serializedRegistry === null
+    ? null
+    : processorAdapterCredentialDigest(serializedRegistry, environment)
+  return createHash("sha256").update(JSON.stringify({
+    bot: {
+      triageUrl: bot.env.GENIO_ONE_DISTILLATION_TRIAGE_URL ?? null,
+      triageToken: bot.env.GENIO_ONE_DISTILLATION_TRIAGE_TOKEN ?? null,
+      adapterId: bot.env.GENIO_ONE_DISTILLATION_ADAPTER_ID ?? null,
+    },
+    triage: {
+      listen: triage.env.GENIO_ONE_AI_PROCESSOR_HTTP_LISTEN ?? null,
+      token: triage.env.GENIO_ONE_DISTILLATION_TRIAGE_TOKEN ?? null,
+      adaptersFile: adaptersFile ?? null,
+      adaptersDigest,
+      credentialDigest,
+    },
+  })).digest("hex")
+}
+
+export function distillationLaunchState(configuration, botOwners, triageOwners = []) {
+  return JSON.stringify({
+    schema_version: 2,
+    configuration,
+    botPids: botOwners.map((owner) => owner.pid).sort(),
+    triagePids: triageOwners.map((owner) => owner.pid).sort(),
+  })
+}
+
+function launchConfiguration(state) {
+  try {
+    const parsed = JSON.parse(state)
+    return parsed && typeof parsed === "object" && parsed.schema_version === 2 && typeof parsed.configuration === "string"
+      ? parsed.configuration
+      : null
+  } catch {
+    return null
+  }
+}
+
+export function canRestartStandaloneDistillationTriage(owners, checkoutRoot) {
+  return owners.length > 0 && owners.every((owner) => distillationPortRole(owner, checkoutRoot) === "local-triage")
+}
+
+export function adoptDistillationProcessor({ owners, checkoutRoot, handoffExists, createHandoff }) {
+  if (owners.length === 0 || !owners.every((owner) => distillationPortRole(owner, checkoutRoot) === "processor")) return false
+  if (!handoffExists()) createHandoff()
+  return true
+}
+
+export async function reconcileDistillationLaunchConfiguration(input) {
+  if (input.previous === input.current) return false
+  const previousConfiguration = launchConfiguration(input.previous)
+  const currentConfiguration = launchConfiguration(input.current)
+  if (
+    input.hasAdoptedProcessor?.() &&
+    (!previousConfiguration || !currentConfiguration || previousConfiguration !== currentConfiguration)
+  ) {
+    throw new Error("Gateway Runtime owns the active Processor; restart and reapply it before changing local distillation adapter or credential configuration")
+  }
+  await input.stopBot()
+  await input.stopTriage()
+  return true
+}
+
+export function nextTriageHandoffAction({ processorListening, handoffExists, timedOut }) {
+  if (processorListening) return "active"
+  if (handoffExists && !timedOut) return "wait"
+  return "restore"
+}
+
+export function triageHandoffStartupRecoveryOptions({ handoffExists, portOccupied, handoffPhase }) {
+  if (!handoffExists || portOccupied) return undefined
+  return unmanagedTriageRecoveryOptions({ handoffPhase })
+}
+
+export function triageHandoffPhase(contents) {
+  return parseDistillationTriageHandoff(contents).phase
+}
+
+export function shouldMonitorUnmanagedTriageHandoff({ handoffExists, triageChildActive, recoveryActive, processorActive }) {
+  return handoffExists && !triageChildActive && !recoveryActive && !processorActive
+}
+
+export function unmanagedTriageRecoveryOptions({ handoffPhase }) {
+  return { waitForProcessor: handoffPhase === "taking-over" }
+}
+
+export function triggerUnmanagedTriageRecovery(input) {
+  if (!shouldMonitorUnmanagedTriageHandoff(input)) return false
+  void input.recover(unmanagedTriageRecoveryOptions(input))
+  return true
+}
+
+export function nextTriageRestoreAction({ portOccupied, ownersVerified }) {
+  if (!portOccupied) return "spawn"
+  return ownersVerified ? "ready" : "wait"
+}
+
+export function sameServiceOwners(expectedOwners, currentOwners) {
+  return expectedOwners.length === currentOwners.length && expectedOwners.every((owner) =>
+    currentOwners.some((current) =>
+      current.pid === owner.pid && current.cwd === owner.cwd && current.command === owner.command
+    )
+  )
+}
+
+export function canCompleteTriageRecovery({ service, expectedOwners, currentOwners, healthy }) {
+  return healthy && expectedOwners.length > 0 &&
+    currentOwners.every((owner) => serviceOwnerMatches(service, owner)) &&
+    sameServiceOwners(expectedOwners, currentOwners)
+}
+
+function readTriageHandoff() {
+  return readDistillationTriageHandoff(root)
+}
+
+function sameTriageHandoff(expected, current) {
+  return Boolean(expected && current) &&
+    expected.managed === current.managed &&
+    expected.targetPath === current.targetPath &&
+    expected.contents === current.contents &&
+    expected.generation === current.generation
+}
+
+function clearTriageHandoff(expected) {
+  if (!sameTriageHandoff(expected, readTriageHandoff())) return false
+  return removeDistillationTriageHandoff(expected)
+}
+
+let triageRecovery = null
+function recoverDistillationTriageAfterHandoff({ handoff = readTriageHandoff(), waitForProcessor = handoff?.phase === "taking-over" } = {}) {
+  if (triageRecovery) return triageRecovery
+  if (!handoff) return Promise.resolve()
+  const service = services.find((item) => item.name === "distillation-triage")
+  triageRecovery = (async () => {
+    const deadline = Date.now() + (waitForProcessor ? 120_000 : 0)
+    while (!stopping && Date.now() < deadline) {
+      const currentHandoff = readTriageHandoff()
+      if (!sameTriageHandoff(handoff, currentHandoff)) return
+      const owners = serviceOwners(service)
+      const action = nextTriageHandoffAction({
+        processorListening: owners.some((owner) => distillationPortRole(owner, root) === "processor"),
+        handoffExists: Boolean(currentHandoff),
+        timedOut: false,
+      })
+      if (action === "active") return
+      if (action === "restore") break
+      await new Promise((resolveWait) => setTimeout(resolveWait, 500))
+    }
+    if (stopping) return
+    const currentHandoff = readTriageHandoff()
+    if (!sameTriageHandoff(handoff, currentHandoff)) return
+    const owners = serviceOwners(service)
+    const action = nextTriageHandoffAction({
+      processorListening: owners.some((owner) => distillationPortRole(owner, root) === "processor"),
+      handoffExists: Boolean(currentHandoff),
+      timedOut: true,
+    })
+    if (action === "active") return
+    if (children.has(service.name)) return
+    const occupied = await portIsOccupied(service.port)
+    const restoreOwners = occupied ? serviceOwners(service) : []
+    const restoreAction = nextTriageRestoreAction({
+      portOccupied: occupied,
+      ownersVerified: restoreOwners.length > 0 && restoreOwners.every((owner) => serviceOwnerMatches(service, owner)),
+    })
+    if (restoreAction === "ready") {
+      const health = await probe(service)
+      const confirmedOwners = serviceOwners(service)
+      if (!canCompleteTriageRecovery({
+        service,
+        expectedOwners: restoreOwners,
+        currentOwners: confirmedOwners,
+        healthy: Boolean(health && service.healthy(health.body, health.response)),
+      })) return
+      clearTriageHandoff(handoff)
+      return
+    }
+    if (restoreAction === "wait") return
+    if (!sameTriageHandoff(handoff, readTriageHandoff())) return
+    if (!spawnService(service)) return
+    let healthy
+    try {
+      healthy = await waitForHealthy(service)
+    } catch {
+      if (!stopping) await shutdown(1)
+      return
+    }
+    if (healthy) clearTriageHandoff(handoff)
+    else if (!stopping) await shutdown(1)
+  })().finally(() => { triageRecovery = null })
+  return triageRecovery
+}
+
+function monitorUnmanagedTriageHandoff() {
+  const handoff = readTriageHandoff()
+  const handoffExists = Boolean(handoff)
+  const triageChildActive = children.has("distillation-triage")
+  const recoveryActive = Boolean(triageRecovery)
+  if (!handoffExists || triageChildActive || recoveryActive) return
+  const service = services.find((item) => item.name === "distillation-triage")
+  const processorActive = serviceOwners(service)
+    .some((owner) => distillationPortRole(owner, root) === "processor")
+  triggerUnmanagedTriageRecovery({
+    handoffExists,
+    triageChildActive,
+    recoveryActive,
+    processorActive,
+    handoffPhase: handoff.phase,
+    recover: (options) => recoverDistillationTriageAfterHandoff({ ...options, handoff }),
+  })
+}
+
+export { distillationPortRole }
 const localPlatformOrigin = "http://127.0.0.1:58082"
 const localBotServiceEndpoint = "http://127.0.0.1:5181"
 const localRuntimeReportKeyId = "local-bot-runtime-report"
@@ -69,6 +355,9 @@ const services = [
       GENIO_BOT_RUNTIME: "local",
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://127.0.0.1:54320",
       GENIO_ONE_PLATFORM_ORIGIN: localPlatformOrigin,
+      GENIO_ONE_DISTILLATION_TRIAGE_URL: "http://127.0.0.1:8182/v1/distillation-triage",
+      GENIO_ONE_DISTILLATION_TRIAGE_TOKEN: "local-distillation-triage",
+      GENIO_ONE_DISTILLATION_ADAPTER_ID: "jev-production",
     },
   },
   {
@@ -86,9 +375,53 @@ const services = [
     },
     env: { GENIO_ONE_PLATFORM_ORIGIN: localPlatformOrigin },
   },
+  {
+    name: "distillation-triage",
+    url: "http://127.0.0.1:8182/healthz",
+    port: 8182,
+    cwd: gatewayDir,
+    args: ["dev:distillation-triage"],
+    marker: "local-distillation-triage.ts",
+    healthy(body) {
+      return body?.status === "ok" && body?.component === "local-distillation-triage"
+    },
+    stale() {
+      return false
+    },
+    handoffRecovery({ occupied }) {
+      const handoff = readTriageHandoff()
+      return triageHandoffStartupRecoveryOptions({
+        handoffExists: Boolean(handoff),
+        portOccupied: occupied,
+        handoffPhase: handoff?.phase,
+      })
+    },
+    adopt(owners) {
+      return adoptDistillationProcessor({
+        owners,
+        checkoutRoot: root,
+        handoffExists() {
+          return Boolean(readTriageHandoff())
+        },
+        createHandoff() {
+          createDistillationTriageHandoff(root, "ready")
+        },
+      })
+    },
+    onUnexpectedExit() {
+      const handoff = readTriageHandoff()
+      if (!handoff) return undefined
+      void recoverDistillationTriageAfterHandoff({ handoff })
+      return "ignore"
+    },
+    env: {
+      GENIO_ONE_AI_PROCESSOR_HTTP_LISTEN: "127.0.0.1:8182",
+      GENIO_ONE_DISTILLATION_TRIAGE_TOKEN: "local-distillation-triage",
+    },
+  },
 ]
 
-const startupServiceNames = ["bot-server", "platform-api", "platform-web", "bot-web"]
+const startupServiceNames = ["distillation-triage", "bot-server", "platform-api", "platform-web", "bot-web"]
 
 const children = new Map()
 let stopping = false
@@ -162,66 +495,27 @@ async function probe(service) {
   }
 }
 
-function portOwners(port) {
-  const lsof = spawnSync("lsof", ["-tiTCP:" + port, "-sTCP:LISTEN", "-n", "-P"], { encoding: "utf8" })
-  const lsofOwners = lsof.status === 0
-    ? lsof.stdout.trim().split(/\s+/).filter((value) => /^\d+$/.test(value))
-    : []
-  if (lsofOwners.length > 0) return [...new Set(lsofOwners)]
-
-  // lsof is not installed on every supported local development host. ss is
-  // available on current Linux distributions and exposes the listener PID.
-  const ss = spawnSync("ss", ["-ltnp", `sport = :${port}`], { encoding: "utf8" })
-  const ssOutput = typeof ss.stdout === "string" ? ss.stdout : ""
-  const ssOwners = [...ssOutput.matchAll(/pid=(\d+)/g)].map((match) => match[1])
-  if (ssOwners.length > 0) return [...new Set(ssOwners)]
-
-  // fuser is the portability fallback for smaller Linux images without ss.
-  const fuser = spawnSync("fuser", ["-n", "tcp", String(port)], { encoding: "utf8" })
-  if (fuser.status !== 0 || typeof fuser.stdout !== "string") return []
-  return [...new Set(fuser.stdout.match(/\b\d+\b/g)?.filter((value) => value !== String(port)) ?? [])]
-}
-
-function processCommand(pid) {
-  const result = spawnSync("ps", ["-p", pid, "-o", "command="], { encoding: "utf8" })
-  return result.status === 0 ? result.stdout.trim() : ""
-}
-
-function processCwd(pid) {
-  try {
-    return readlinkSync(`/proc/${pid}/cwd`)
-  } catch {
-    const result = spawnSync("lsof", ["-a", "-p", pid, "-d", "cwd", "-Fn"], { encoding: "utf8" })
-    const path = typeof result.stdout === "string"
-      ? result.stdout.split(/\r?\n/).find((line) => line.startsWith("n"))?.slice(1)
-      : ""
-    return path ?? ""
-  }
-}
-
-function portIsOccupied(port) {
-  return new Promise((resolveOccupied) => {
-    const socket = createConnection({ host: "127.0.0.1", port })
-    const finish = (occupied) => {
-      socket.destroy()
-      resolveOccupied(occupied)
-    }
-    socket.once("connect", () => finish(true))
-    socket.once("error", () => finish(false))
-    socket.setTimeout(300, () => finish(false))
-  })
-}
-
 export function serviceOwnerMatches(service, owner) {
   return owner.cwd === service.cwd && owner.command.includes(service.marker)
 }
 
+export function signalVerifiedServiceOwner({ service, owner, currentOwner, signal }) {
+  const state = portOwnerRevalidation(owner, currentOwner)
+  if (state === "exited") return "exited"
+  if (state === "changed" || !serviceOwnerMatches(service, currentOwner)) {
+    throw new Error(`${service.name} port ${service.port} owner changed before signal`)
+  }
+  try {
+    signal(owner.pid)
+  } catch (error) {
+    if (error?.code === "ESRCH") return "exited"
+    throw error
+  }
+  return "signaled"
+}
+
 function serviceOwners(service) {
-  return portOwners(service.port).map((pid) => ({
-    pid,
-    cwd: processCwd(pid),
-    command: processCommand(pid),
-  }))
+  return listeningPortOwners(service.port)
 }
 
 function assertServiceOwners(service, owners) {
@@ -249,8 +543,50 @@ async function stopStale(service) {
     return
   }
   assertServiceOwners(service, owners)
-  for (const { pid } of owners) process.kill(Number(pid), "SIGTERM")
+  for (const owner of owners) {
+    signalVerifiedServiceOwner({
+      service,
+      owner,
+      currentOwner: { cwd: processCwd(owner.pid), command: processCommand(owner.pid) },
+      signal(pid) { process.kill(Number(pid), "SIGTERM") },
+    })
+  }
   await waitForPortFree(service.port)
+}
+
+async function stopDistillationTriage(service) {
+  const handoff = readTriageHandoff()
+  const owners = serviceOwners(service)
+  if (owners.length === 0) {
+    if (await portIsOccupied(service.port)) assertServiceOwners(service, owners)
+    return
+  }
+  const unrelated = owners.filter((owner) => distillationPortRole(owner, root) === "other")
+  if (unrelated.length > 0) {
+    throw new Error(`${service.name} port ${service.port} is occupied by a process outside this checkout: ${unrelated.map((owner) => `${owner.pid} cwd=${owner.cwd || "unknown"} command=${owner.command || "unknown"}`).join("; ")}`)
+  }
+  if (!canRestartStandaloneDistillationTriage(owners, root)) return
+  for (const owner of owners) {
+    signalVerifiedServiceOwner({
+      service,
+      owner,
+      currentOwner: { cwd: processCwd(owner.pid), command: processCommand(owner.pid) },
+      signal(pid) { process.kill(Number(pid), "SIGTERM") },
+    })
+  }
+  await waitForPortFree(service.port)
+  clearTriageHandoff(handoff)
+}
+
+function recordedDistillationLaunchConfiguration() {
+  return existsSync(distillationLaunchConfigurationPath)
+    ? readFileSync(distillationLaunchConfigurationPath, "utf8").trim()
+    : ""
+}
+
+function recordDistillationLaunchConfiguration(configuration) {
+  mkdirSync(dirname(distillationLaunchConfigurationPath), { recursive: true })
+  writeFileSync(distillationLaunchConfigurationPath, `${configuration}\n`, { mode: 0o600 })
 }
 
 function spawnService(service) {
@@ -261,7 +597,16 @@ function spawnService(service) {
     stdio: "inherit",
   })
   children.set(service.name, child)
-  watchServiceExit(child, service)
+  watchServiceExit(child, service, {
+    report: (event) => {
+      if (service.onUnexpectedExit?.() === "ignore") return
+      process.stderr.write(`${JSON.stringify(event)}\n`)
+    },
+    onUnexpectedExit: (code) => {
+      if (service.onUnexpectedExit?.() === "ignore") return
+      shutdown(code)
+    },
+  })
   process.stdout.write(`${JSON.stringify({ event: "local-dev.service-started", service: service.name, port: service.port })}\n`)
   return true
 }
@@ -311,11 +656,21 @@ async function ensureService(service) {
     process.stdout.write(`${JSON.stringify({ event: "local-dev.service-existing", service: service.name, port: service.port })}\n`)
     return true
   }
+  const handoffRecovery = service.handoffRecovery?.({ occupied, owners })
+  if (handoffRecovery) {
+    await recoverDistillationTriageAfterHandoff(handoffRecovery)
+    if (stopping) return false
+    return ensureService(service)
+  }
   if (result && service.stale(result.body, result.response)) {
     await stopStale(service)
     if (stopping) return false
     process.stdout.write(`${JSON.stringify({ event: "local-dev.service-stale-restarted", service: service.name, port: service.port })}\n`)
   } else if (occupied) {
+    if (typeof service.adopt === "function" && service.adopt(owners)) {
+      process.stdout.write(`${JSON.stringify({ event: "local-dev.service-adopted", service: service.name, port: service.port })}\n`)
+      return true
+    }
     assertServiceOwners(service, owners)
     throw new Error(`${service.name} port ${service.port} is occupied but does not expose the expected health contract`)
   }
@@ -370,15 +725,34 @@ async function main() {
   if (!(await ensureIdentity()) || stopping) return
   await runCommand("pnpm", ["env:up:analytics"], platformDir)
   if (stopping) return
-  for (const name of startupServiceNames.slice(0, 2)) {
+  const launchNames = configureDistillationLaunch(services, startupServiceNames, process.env, existsSync)
+  const configuration = distillationLaunchConfiguration(services, readFileSync, process.env)
+  const bot = services.find((service) => service.name === "bot-server")
+  const triage = services.find((service) => service.name === "distillation-triage")
+  const standaloneTriageOwners = () => serviceOwners(triage)
+    .filter((owner) => distillationPortRole(owner, root) === "local-triage")
+  await reconcileDistillationLaunchConfiguration({
+    previous: recordedDistillationLaunchConfiguration(),
+    current: distillationLaunchState(configuration, serviceOwners(bot), standaloneTriageOwners()),
+    hasAdoptedProcessor: () => serviceOwners(triage)
+      .some((owner) => distillationPortRole(owner, root) === "processor"),
+    stopBot: () => stopStale(bot),
+    stopTriage: () => stopDistillationTriage(triage),
+  })
+  if (stopping) return
+  const sequential = launchNames.filter((name) => name !== "platform-web" && name !== "bot-web")
+  const parallel = launchNames.filter((name) => name === "platform-web" || name === "bot-web")
+  for (const name of sequential) {
     if (!(await ensureService(services.find((service) => service.name === name))) || stopping) return
   }
-  const started = await Promise.all(startupServiceNames.slice(2).map((name) =>
+  const started = await Promise.all(parallel.map((name) =>
     ensureService(services.find((service) => service.name === name)),
   ))
   if (stopping || started.some((value) => !value)) return
+  recordDistillationLaunchConfiguration(distillationLaunchState(configuration, serviceOwners(bot), standaloneTriageOwners()))
   process.stdout.write(`${JSON.stringify({ event: "local-dev.ready", services: services.map((service) => service.name), origins: { platform: "http://127.0.0.1:5173/management", bot: "http://127.0.0.1:5180/" } })}\n`)
-  keepAlive = setInterval(() => {}, 60_000)
+  monitorUnmanagedTriageHandoff()
+  keepAlive = setInterval(monitorUnmanagedTriageHandoff, 500)
   await new Promise(() => {})
 }
 

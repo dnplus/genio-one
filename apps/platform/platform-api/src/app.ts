@@ -53,6 +53,7 @@ import { applicationHttp } from "./capabilities/applications/http"
 import { runtimeInventoryHttp } from "./capabilities/runtime-inventory/http"
 import { siemHttp } from "./capabilities/siem/http"
 import { notificationHttp } from "./capabilities/notifications/http"
+import { distillationHttp, type BotFetch, type KnowledgeEvidenceReader } from "./capabilities/distillation/http"
 import { configurationHttp } from "./capabilities/configuration/http"
 import {
   PublicLoginBrandingSchema,
@@ -102,6 +103,9 @@ export interface ManagementApiDependencies {
   identityProviders?: IdentityProviderRegistry
   /** Mirrors Subject suspension into the identity provider when configured. */
   subjectSessionControl?: SubjectSessionControl
+  botServiceEndpoint?: string
+  botFetch?: BotFetch
+  knowledgeEvidenceReader?: KnowledgeEvidenceReader
   logger?: boolean
   demoProjectArchifyEndpoint?: string
   demoProjectArchifyCredentialRef?: string
@@ -409,6 +413,14 @@ export async function createManagementApi(dependencies: ManagementApiDependencie
     }
   })
 
+  app.addHook("onSend", async (_request, reply) => {
+    if (reply.raw.headersSent) return
+    reply.header("x-content-type-options", "nosniff")
+    reply.header("x-frame-options", "DENY")
+    reply.header("referrer-policy", "strict-origin-when-cross-origin")
+    reply.header("x-xss-protection", "0")
+  })
+
   app.addHook("onRequest", authorization.authenticate)
 
   app.addHook("preValidation", authorization.normalize)
@@ -562,6 +574,14 @@ export async function createManagementApi(dependencies: ManagementApiDependencie
   })
   await app.register(siemHttp, { forwarder: dependencies.modules.siem })
   await app.register(notificationHttp, { store: dependencies.modules.notifications })
+  await app.register(distillationHttp, {
+    store: dependencies.modules.distillation,
+    accessGroups: dependencies.modules.accessGroups,
+    organizations: dependencies.modules.organizations,
+    botServiceEndpoint: dependencies.botServiceEndpoint,
+    fetchImpl: dependencies.botFetch,
+    evidenceReader: dependencies.knowledgeEvidenceReader,
+  })
   await app.register(configurationHttp, { store: dependencies.modules.configuration })
   await app.register(gatewayDiagnosticSettingsHttp, {
     store: dependencies.modules.gatewayDiagnosticSettings,

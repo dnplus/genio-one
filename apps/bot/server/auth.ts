@@ -2,13 +2,17 @@ import type { GenioPrincipal, RuntimeBroker } from "./runtime-broker"
 import type { RuntimeTier } from "./runtime"
 import { desktopBrowserGrants, DESKTOP_BROWSER_GRANT_QUERY, readDesktopBrowserCookie, type DesktopProxySession } from "./desktop-proxy"
 
-export async function verifyGenioOneAccessToken(accessToken: string): Promise<GenioPrincipal> {
+export async function verifyGenioOneAccessToken(accessToken: string, signal?: AbortSignal): Promise<GenioPrincipal> {
+  if (signal?.aborted) throw signal.reason
   const origin = process.env.GENIO_ONE_PLATFORM_ORIGIN?.trim() || "http://127.0.0.1:58082"
   const response = await fetch(new URL("/v1/identity/session", origin), {
     headers: { authorization: `Bearer ${accessToken}`, accept: "application/json" },
+    ...(signal ? { signal } : {}),
   })
-  if (!response.ok) throw new Error("GENIO_ONE_SESSION_REJECTED")
+  if (signal?.aborted) throw signal.reason
+  if (!response.ok) throw Object.assign(new Error("GENIO_ONE_SESSION_REJECTED"), { status: response.status })
   const principal = await response.json() as Partial<GenioPrincipal>
+  if (signal?.aborted) throw signal.reason
   if (
     !principal.tenant_id?.trim() ||
     !principal.subject_id?.trim() ||

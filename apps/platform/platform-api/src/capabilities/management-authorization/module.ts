@@ -114,9 +114,16 @@ function assertOrganizationManager(principal: Principal, organizationId: string 
   )
 }
 
+function principalHasScope(principal: Principal, allowed: readonly string[]): boolean {
+  return principal.scopes === undefined || allowed.some((scope) => principal.scopes!.includes(scope))
+}
+
+export function principalHasManagementScope(principal: Principal): boolean {
+  return principalHasScope(principal, [MANAGEMENT_SCOPE])
+}
+
 function assertPrincipalScope(principal: Principal, allowed: readonly string[]): void {
-  if (principal.scopes === undefined) return
-  if (allowed.some((scope) => principal.scopes!.includes(scope))) return
+  if (principalHasScope(principal, allowed)) return
   throw new PlatformApiError(
     "INSUFFICIENT_SCOPE",
     403,
@@ -296,12 +303,23 @@ function isInvocationRoute(route: TenantRoute, method: string): boolean {
   if (method === "GET" && (route.rest[0] === "catalog" || route.rest[0] === "me")) return true
   if (method === "GET" && route.rest[0] === "one-policy" && route.rest[1] === "bot-access") return true
   if (method === "GET" && route.rest[0] === "one-policy" && route.rest[1] === "runtime-effective") return true
+  if (isManagementOnlyKnowledgeCandidateRoute(route, method)) return false
+  if (method === "GET" && route.rest[0] === "knowledge-candidates") return true
+  if (method === "GET" && route.rest[0] === "distillation-markers") return true
+  if (method === "GET" && route.rest[0] === "team-workspaces") return true
   if (method !== "POST") return false
   if (route.rest[0] === "one-policy" && ["runtime-authorize", "runtime-report"].includes(route.rest[1] ?? "")) return true
   if (route.rest[0] === "resource-onboarding-requests") return true
   if (route.rest[0] === "invocations" && route.rest[1] === "authorize") return true
   return route.rest[0] === "access-requests" &&
     (route.rest.length === 1 || (route.rest.length === 3 && route.rest[2] === "cancel"))
+}
+
+function isManagementOnlyKnowledgeCandidateRoute(route: TenantRoute, method: string): boolean {
+  return method === "GET" &&
+    route.rest.length === 3 &&
+    route.rest[0] === "knowledge-candidates" &&
+    (route.rest[2] === "review-context" || route.rest[2] === "evidence")
 }
 
 function isFirstPartyBotSeedMutation(route: TenantRoute, method: string): boolean {
@@ -314,7 +332,18 @@ function isUseCaseCatalogRead(route: TenantRoute, method: string): boolean {
   return method === "GET" && route.rest.length === 3 && route.rest[0] === "organizations" && route.rest[2] === "use-cases"
 }
 
+function isDistillationBotCancellation(route: TenantRoute, method: string): boolean {
+  return method === "DELETE" &&
+    route.rest.length === 3 &&
+    route.rest[0] === "distillation-markers" &&
+    route.rest[1] === "bots" &&
+    Boolean(route.rest[2])
+}
+
 function requiredRouteScopes(route: TenantRoute, method: string): readonly string[] {
+  if (isDistillationBotCancellation(route, method)) return [MANAGEMENT_SCOPE, INVOCATION_SCOPE]
+  if (method === "POST" && route.rest[0] === "distillation-markers") return [INVOCATION_SCOPE]
+  if (isManagementOnlyKnowledgeCandidateRoute(route, method)) return [MANAGEMENT_SCOPE]
   if (isEndpointRuntimeTransport(route, method)) return [ENDPOINT_RUNTIME_SCOPE]
   if (method === "POST" && route.rest.length === 2 && route.rest[0] === "endpoints" && route.rest[1] === "bootstrap") return [MANAGEMENT_SCOPE, INVOCATION_SCOPE]
   if (isRuntimeControlTransport(route, method) || isRuntimeSelfRegistration(route, method) || isConnectionHealthObservation(route, method)) {

@@ -3,7 +3,7 @@ import test from "node:test"
 import Fastify from "fastify"
 import { registerHttpObservability } from "./fastify-observability"
 
-test("HTTP observations retain request and response evidence without exporting credentials", async () => {
+test("HTTP observations retain regular evidence and omit sensitive responses", async () => {
   const originalFetch = globalThis.fetch
   const originalOrigin = process.env.OTEL_EXPORTER_OTLP_ENDPOINT
   process.env.OTEL_EXPORTER_OTLP_ENDPOINT = "http://collector.test"
@@ -12,18 +12,35 @@ test("HTTP observations retain request and response evidence without exporting c
   const app = Fastify()
   registerHttpObservability(app, "test-http")
   app.post("/echo/:id", async (request, reply) => reply.code(201).send(request.body))
+  app.get("/evidence", { config: { sensitiveResponse: true } }, async () => ({ turns: [{ text: "evidence-turn-secret" }] }))
   try {
     const response = await app.inject({ method: "POST", url: "/echo/123?purpose=verify", headers: { authorization: "Bearer credential-only-value", traceparent: `00-${"a".repeat(32)}-${"b".repeat(16)}-00` }, payload: { message: "payload-evidence", password: "credential-only-value" } })
     assert.equal(response.statusCode, 201)
+    const evidence = await app.inject({ method: "GET", url: "/evidence" })
+    assert.equal(evidence.statusCode, 200)
+    const missing = await app.inject({ method: "GET", url: "/missing" })
+    assert.equal(missing.statusCode, 404)
     await app.close()
-    const span = exports.find(value => value.resourceSpans).resourceSpans[0].scopeSpans[0].spans[0]
+    const spans = exports.flatMap(value => value.resourceSpans?.flatMap((resourceSpan: any) => resourceSpan.scopeSpans.flatMap((scopeSpan: any) => scopeSpan.spans)) ?? [])
+    const span = spans.find((value: any) => value.name === "POST /echo/:id")
+    assert.ok(span)
     assert.equal(span.traceId, "a".repeat(32))
     assert.equal(span.parentSpanId, "b".repeat(16))
     const attributes = Object.fromEntries(span.attributes.map((value: any) => [value.key, value.value.stringValue ?? value.value.intValue]))
     assert.equal(attributes["http.response.status_code"], "201")
     assert.ok(String(attributes["genio.request"]).includes("payload-evidence"))
     assert.ok(String(attributes["genio.response"]).includes("payload-evidence"))
+    const sensitiveSpan = spans.find((value: any) => value.name === "GET /evidence")
+    assert.ok(sensitiveSpan)
+    const sensitiveAttributes = Object.fromEntries(sensitiveSpan.attributes.map((value: any) => [value.key, value.value.stringValue ?? value.value.intValue]))
+    assert.equal(sensitiveAttributes["genio.response"], JSON.stringify({ availability: "OMITTED_SENSITIVE_RESPONSE" }))
+    const logs = exports.flatMap(value => value.resourceLogs?.flatMap((resourceLog: any) => resourceLog.scopeLogs.flatMap((scopeLog: any) => scopeLog.logRecords)) ?? [])
+    const sensitiveLog = logs.find((value: any) => Object.fromEntries(value.attributes.map((attribute: any) => [attribute.key, attribute.value.stringValue ?? attribute.value.intValue]))["http.route"] === "/evidence")
+    assert.ok(sensitiveLog)
+    const sensitiveLogAttributes = Object.fromEntries(sensitiveLog.attributes.map((value: any) => [value.key, value.value.stringValue ?? value.value.intValue]))
+    assert.equal(sensitiveLogAttributes["genio.response"], JSON.stringify({ availability: "OMITTED_SENSITIVE_RESPONSE" }))
     assert.ok(!JSON.stringify(exports).includes("credential-only-value"))
+    assert.ok(!JSON.stringify(exports).includes("evidence-turn-secret"))
     assert.ok(exports.some(value => value.resourceLogs))
     assert.ok(exports.some(value => value.resourceMetrics))
   } finally {

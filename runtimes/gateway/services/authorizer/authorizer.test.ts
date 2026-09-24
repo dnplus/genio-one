@@ -349,6 +349,7 @@ test("Envoy gRPC ext_authz allows with trusted context and fixed decision header
     assert.equal(responseHeaders.get("x-genio-trusted-capability-id"), input.capabilityId)
     assert.equal(responseHeaders.get("x-genio-trusted-correlation-id"), input.correlationId)
     assert.equal(responseHeaders.get("x-genio-correlation-id"), input.correlationId)
+    assert.equal(responseHeaders.get("x-request-id"), input.correlationId)
     assert.equal(responseHeaders.get("x-genio-trusted-release-id"), "release-7")
     assert.equal(responseHeaders.get("x-genio-trusted-release-gateway-id"), "ai-gateway")
     assert.equal(responseHeaders.get("x-genio-trusted-release-head-revision"), "7")
@@ -384,6 +385,113 @@ test("Envoy gRPC ext_authz allows with trusted context and fixed decision header
       ),
     )
     assert.equal(allowed.denied_response, undefined)
+  } finally {
+    Date.now = originalNow
+    await stop()
+  }
+})
+
+test("real Bot check keeps the canonical correlation when Envoy rewrites the request trace nibble", async () => {
+  const originalNow = Date.now
+  Date.now = () => now * 1000
+  const canonicalCorrelationId = "3f9890e3-d4ca-4274-ace0-a2e4c77a2225"
+  const envoyRequestId = "3f9890e3-d4ca-9274-ace0-a2e4c77a2225"
+  const botBundle: CompiledAuthorizationBundle = {
+    ...bundle,
+    rules: bundle.rules.map((rule) => ({ ...rule, acting_client_ids: ["genio-one-bot"] })),
+  }
+  const events: AuthorizationDecisionEvent[] = []
+  const { client, stop } = await startAuthorizationClient(
+    { async current() { return { ...bundleSnapshot(), bundle: botBundle } } },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    (event) => events.push(event),
+  )
+  try {
+    const request = checkRequest()
+    const http = (request.attributes as any).request.http
+    http.headers = {
+      ...http.headers,
+      ["x-request-id"]: envoyRequestId,
+      ["x-genio-correlation-id"]: canonicalCorrelationId,
+      ["x-genio-verified-client"]: "genio-one-bot",
+    }
+    const allowed = await check(client, request)
+    assert.equal(allowed.status.code, grpc.status.OK)
+    const responseHeaders = new Map(
+      allowed.ok_response.headers.map((entry: any) => [entry.header.key, entry.header.value]),
+    )
+    assert.equal(responseHeaders.get("x-genio-trusted-correlation-id"), canonicalCorrelationId)
+    assert.equal(responseHeaders.get("x-genio-correlation-id"), canonicalCorrelationId)
+    assert.equal(responseHeaders.get("x-request-id"), canonicalCorrelationId)
+    assert.equal(
+      allowed.ok_response.headers.find((entry: any) => entry.header.key === "x-request-id")?.append_action,
+      2,
+    )
+    assert.equal(events[0]?.input.correlationId, canonicalCorrelationId)
+  } finally {
+    Date.now = originalNow
+    await stop()
+  }
+})
+
+test("untrusted correlation headers cannot replace the Envoy request ID", async () => {
+  const originalNow = Date.now
+  Date.now = () => now * 1000
+  const envoyRequestId = "3f9890e3-d4ca-9274-ace0-a2e4c77a2225"
+  const { client, stop } = await startAuthorizationClient({
+    async current() {
+      return bundleSnapshot()
+    },
+  })
+  try {
+    for (const correlationId of [
+      "attacker-correlation",
+      "3f9890e3-d4ca-4274-ace0-a2e4c77a2225",
+    ]) {
+      const request = checkRequest()
+      const http = (request.attributes as any).request.http
+      http.headers = {
+        ...http.headers,
+        ["x-request-id"]: envoyRequestId,
+        ["x-genio-correlation-id"]: correlationId,
+      }
+      const allowed = await check(client, request)
+      assert.equal(allowed.status.code, grpc.status.OK)
+      const responseHeaders = new Map(
+        allowed.ok_response.headers.map((entry: any) => [entry.header.key, entry.header.value]),
+      )
+      assert.equal(responseHeaders.get("x-genio-trusted-correlation-id"), envoyRequestId)
+    }
+  } finally {
+    Date.now = originalNow
+    await stop()
+  }
+})
+
+test("missing verified Bot client fails closed even when a canonical correlation header is supplied", async () => {
+  const originalNow = Date.now
+  Date.now = () => now * 1000
+  const { client, stop } = await startAuthorizationClient({
+    async current() {
+      return bundleSnapshot()
+    },
+  })
+  try {
+    const request = checkRequest()
+    const http = (request.attributes as any).request.http
+    http.headers = {
+      ...http.headers,
+      ["x-request-id"]: "3f9890e3-d4ca-9274-ace0-a2e4c77a2225",
+      ["x-genio-correlation-id"]: "3f9890e3-d4ca-4274-ace0-a2e4c77a2225",
+    }
+    delete http.headers["x-genio-verified-client"]
+    const denied = await check(client, request)
+    assert.equal(denied.status.code, grpc.status.UNAUTHENTICATED)
+    assert.equal(denied.ok_response, undefined)
   } finally {
     Date.now = originalNow
     await stop()

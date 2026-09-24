@@ -12,6 +12,7 @@ import { createCapabilityGate } from "./capability-gate"
 import { createBotModelDirectory } from "./model-directory"
 import { BotToolSessions } from "./bot-tool-sessions"
 import type { BotServerContext } from "./context"
+import type { BotDeletionReconciler } from "./bot-deletion-reconciler"
 import { modelGatewayRelayRoutes } from "./model-gateway-relay"
 import type { RuntimePolicyResolveInput } from "./runtime-policy-contract"
 import { runApprovedBotInvocation } from "./routes/invocations"
@@ -197,6 +198,7 @@ test("cross-owner recovery supplies its exchanged target credential to the bound
   const context: BotServerContext = {
     botRegistry: registry,
     botSchedules: new BotSchedules(registry.db),
+    botDeletionReconciler: {} as BotDeletionReconciler,
     runtimeBroker: broker,
     capabilityGate: createCapabilityGate({ mode: "open" }),
     modelDirectory: {
@@ -461,6 +463,7 @@ test("concurrent offline cross-owner handoffs keep each Bot's credential across 
   const context: BotServerContext = {
     botRegistry: registry,
     botSchedules: new BotSchedules(registry.db),
+    botDeletionReconciler: {} as BotDeletionReconciler,
     runtimeBroker: broker,
     capabilityGate: createCapabilityGate({ mode: "open" }),
     modelDirectory: {

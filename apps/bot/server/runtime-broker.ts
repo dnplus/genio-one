@@ -581,6 +581,13 @@ export class RuntimeBroker {
     )?.session ?? null
   }
 
+  activeSessionPrincipals(): GenioPrincipal[] {
+    return Array.from(this.sessions.values())
+      .map((managed) => managed.session)
+      .filter((session) => session.initialized && Boolean(session.accessToken?.trim()))
+      .map((session) => session.principal)
+  }
+
   activeCount() {
     return this.sessions.size
   }

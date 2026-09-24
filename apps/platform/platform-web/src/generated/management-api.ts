@@ -30332,6 +30332,1686 @@ export type DisableNotificationSubscription200 = {
   updated_at: number;
 };
 
+export type CreateTeamWorkspaceBody = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  organization_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  display_name: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  reader_access_group_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  contributor_access_group_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  maintainer_access_group_id: string;
+};
+
+export type CreateTeamWorkspace200 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  workspace_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  organization_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  display_name: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  reader_access_group_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  contributor_access_group_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  maintainer_access_group_id: string;
+  /** @minimum 0 */
+  created_at: number;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  created_by: string;
+};
+
+export type ListTeamWorkspaces200Item = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  workspace_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  organization_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  display_name: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  reader_access_group_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  contributor_access_group_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  maintainer_access_group_id: string;
+  /** @minimum 0 */
+  created_at: number;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  created_by: string;
+};
+
+export type GetTeamWorkspaceParams = {
+access?: GetTeamWorkspaceAccess;
+};
+
+export type GetTeamWorkspaceAccess = typeof GetTeamWorkspaceAccess[keyof typeof GetTeamWorkspaceAccess];
+
+
+export const GetTeamWorkspaceAccess = {
+  contributor: 'contributor',
+} as const;
+
+export type GetTeamWorkspace200 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  workspace_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  organization_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  display_name: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  reader_access_group_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  contributor_access_group_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  maintainer_access_group_id: string;
+  /** @minimum 0 */
+  created_at: number;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  created_by: string;
+};
+
+export const CreateDistillationMarkerBodyScopeHint = {  product: 'product',
+  department: 'department',
+  process: 'process',
+  shared: 'shared',
+  customer_project: 'customer_project',
+} as const
+export const CreateDistillationMarkerBodySensitivity = {  standard: 'standard',
+  restricted: 'restricted',
+} as const
+export const CreateDistillationMarkerBodyKnowledgeType = {  FACT: 'FACT',
+  PROCEDURE: 'PROCEDURE',
+  DECISION: 'DECISION',
+  SKILL: 'SKILL',
+} as const
+export const CreateDistillationMarkerBodyRepresentation = {  HUMAN: 'HUMAN',
+  MACHINE: 'MACHINE',
+  BOTH: 'BOTH',
+  EVIDENCE_ONLY: 'EVIDENCE_ONLY',
+} as const
+export type CreateDistillationMarkerBodyClassifierVersion = typeof CreateDistillationMarkerBodyClassifierVersion[keyof typeof CreateDistillationMarkerBodyClassifierVersion];
+
+
+export const CreateDistillationMarkerBodyClassifierVersion = {
+  'jev-distillation-1': 'jev-distillation-1',
+} as const;
+
+export const CreateDistillationMarkerBodyExtractorVersion = {  'timeline-body-1': 'timeline-body-1',
+  'timeline-visible-2': 'timeline-visible-2',
+} as const
+export type CreateDistillationMarkerBodyEvidenceItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  check_id: string;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  score: number;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  threshold: number;
+  matched: boolean;
+};
+
+export type CreateDistillationMarkerBody = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  bot_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  thread_id: string;
+  /**
+     * @minItems 1
+     * @maxItems 32
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  turn_ids: string[];
+  /**
+     * @minLength 64
+     * @maxLength 64
+     * @pattern ^[a-f0-9]{64}$
+     */
+  source_revision: string;
+  /**
+     * @minLength 64
+     * @maxLength 64
+     * @pattern ^[a-f0-9]{64}$
+     */
+  content_digest: string;
+  scope_hint: typeof CreateDistillationMarkerBodyScopeHint[keyof typeof CreateDistillationMarkerBodyScopeHint];
+  sensitivity: typeof CreateDistillationMarkerBodySensitivity[keyof typeof CreateDistillationMarkerBodySensitivity];
+  knowledge_type: typeof CreateDistillationMarkerBodyKnowledgeType[keyof typeof CreateDistillationMarkerBodyKnowledgeType];
+  representation: typeof CreateDistillationMarkerBodyRepresentation[keyof typeof CreateDistillationMarkerBodyRepresentation];
+  classifier_version: CreateDistillationMarkerBodyClassifierVersion;
+  extractor_version: typeof CreateDistillationMarkerBodyExtractorVersion[keyof typeof CreateDistillationMarkerBodyExtractorVersion];
+  /** @maxItems 16 */
+  evidence: CreateDistillationMarkerBodyEvidenceItem[];
+  excerpt_truncated: boolean;
+  workspace_id?: string | null;
+};
+
+export const CreateDistillationMarker200ScopeHint = {  product: 'product',
+  department: 'department',
+  process: 'process',
+  shared: 'shared',
+  customer_project: 'customer_project',
+} as const
+export const CreateDistillationMarker200Sensitivity = {  standard: 'standard',
+  restricted: 'restricted',
+} as const
+export const CreateDistillationMarker200KnowledgeType = {  FACT: 'FACT',
+  PROCEDURE: 'PROCEDURE',
+  DECISION: 'DECISION',
+  SKILL: 'SKILL',
+} as const
+export const CreateDistillationMarker200Representation = {  HUMAN: 'HUMAN',
+  MACHINE: 'MACHINE',
+  BOTH: 'BOTH',
+  EVIDENCE_ONLY: 'EVIDENCE_ONLY',
+} as const
+export type CreateDistillationMarker200ClassifierVersion = typeof CreateDistillationMarker200ClassifierVersion[keyof typeof CreateDistillationMarker200ClassifierVersion];
+
+
+export const CreateDistillationMarker200ClassifierVersion = {
+  'jev-distillation-1': 'jev-distillation-1',
+} as const;
+
+export const CreateDistillationMarker200ExtractorVersion = {  'timeline-body-1': 'timeline-body-1',
+  'timeline-visible-2': 'timeline-visible-2',
+} as const
+export type CreateDistillationMarker200EvidenceItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  check_id: string;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  score: number;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  threshold: number;
+  matched: boolean;
+};
+
+export const CreateDistillationMarker200HistoryState = {  READY: 'READY',
+  WAITING_FOR_HISTORY: 'WAITING_FOR_HISTORY',
+} as const
+export const CreateDistillationMarker200ProcessingState = {  PENDING: 'PENDING',
+  WAITING_FOR_HISTORY: 'WAITING_FOR_HISTORY',
+  PROCESSING: 'PROCESSING',
+  CANDIDATE_CREATED: 'CANDIDATE_CREATED',
+  FILTERED_OUT: 'FILTERED_OUT',
+  FAILED: 'FAILED',
+} as const
+export type CreateDistillationMarker200 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  marker_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  owner_subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  bot_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  thread_id: string;
+  /**
+     * @minItems 1
+     * @maxItems 32
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  turn_ids: string[];
+  /**
+     * @minLength 64
+     * @maxLength 64
+     * @pattern ^[a-f0-9]{64}$
+     */
+  source_revision: string;
+  /**
+     * @minLength 64
+     * @maxLength 64
+     * @pattern ^[a-f0-9]{64}$
+     */
+  content_digest: string;
+  scope_hint: typeof CreateDistillationMarker200ScopeHint[keyof typeof CreateDistillationMarker200ScopeHint];
+  sensitivity: typeof CreateDistillationMarker200Sensitivity[keyof typeof CreateDistillationMarker200Sensitivity];
+  knowledge_type: typeof CreateDistillationMarker200KnowledgeType[keyof typeof CreateDistillationMarker200KnowledgeType];
+  representation: typeof CreateDistillationMarker200Representation[keyof typeof CreateDistillationMarker200Representation];
+  classifier_version: CreateDistillationMarker200ClassifierVersion;
+  extractor_version: typeof CreateDistillationMarker200ExtractorVersion[keyof typeof CreateDistillationMarker200ExtractorVersion];
+  /** @maxItems 16 */
+  evidence: CreateDistillationMarker200EvidenceItem[];
+  excerpt_truncated: boolean;
+  history_state: typeof CreateDistillationMarker200HistoryState[keyof typeof CreateDistillationMarker200HistoryState];
+  processing_state: typeof CreateDistillationMarker200ProcessingState[keyof typeof CreateDistillationMarker200ProcessingState];
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  attempts: number;
+  /** @minimum 0 */
+  not_before: number;
+  workspace_id: string | null;
+  last_error: string | null;
+  /** @minimum 0 */
+  created_at: number;
+  /** @minimum 0 */
+  updated_at: number;
+};
+
+export type ListDistillationMarkersParams = {
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+/**
+ * @minLength 1
+ * @maxLength 512
+ */
+cursor?: string;
+};
+
+export const ListDistillationMarkers200MarkersItemScopeHint = {  product: 'product',
+  department: 'department',
+  process: 'process',
+  shared: 'shared',
+  customer_project: 'customer_project',
+} as const
+export const ListDistillationMarkers200MarkersItemSensitivity = {  standard: 'standard',
+  restricted: 'restricted',
+} as const
+export const ListDistillationMarkers200MarkersItemKnowledgeType = {  FACT: 'FACT',
+  PROCEDURE: 'PROCEDURE',
+  DECISION: 'DECISION',
+  SKILL: 'SKILL',
+} as const
+export const ListDistillationMarkers200MarkersItemRepresentation = {  HUMAN: 'HUMAN',
+  MACHINE: 'MACHINE',
+  BOTH: 'BOTH',
+  EVIDENCE_ONLY: 'EVIDENCE_ONLY',
+} as const
+export type ListDistillationMarkers200MarkersItemClassifierVersion = typeof ListDistillationMarkers200MarkersItemClassifierVersion[keyof typeof ListDistillationMarkers200MarkersItemClassifierVersion];
+
+
+export const ListDistillationMarkers200MarkersItemClassifierVersion = {
+  'jev-distillation-1': 'jev-distillation-1',
+} as const;
+
+export const ListDistillationMarkers200MarkersItemExtractorVersion = {  'timeline-body-1': 'timeline-body-1',
+  'timeline-visible-2': 'timeline-visible-2',
+} as const
+export type ListDistillationMarkers200MarkersItemEvidenceItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  check_id: string;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  score: number;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  threshold: number;
+  matched: boolean;
+};
+
+export const ListDistillationMarkers200MarkersItemHistoryState = {  READY: 'READY',
+  WAITING_FOR_HISTORY: 'WAITING_FOR_HISTORY',
+} as const
+export const ListDistillationMarkers200MarkersItemProcessingState = {  PENDING: 'PENDING',
+  WAITING_FOR_HISTORY: 'WAITING_FOR_HISTORY',
+  PROCESSING: 'PROCESSING',
+  CANDIDATE_CREATED: 'CANDIDATE_CREATED',
+  FILTERED_OUT: 'FILTERED_OUT',
+  FAILED: 'FAILED',
+} as const
+export type ListDistillationMarkers200MarkersItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  marker_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  owner_subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  bot_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  thread_id: string;
+  /**
+     * @minItems 1
+     * @maxItems 32
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  turn_ids: string[];
+  /**
+     * @minLength 64
+     * @maxLength 64
+     * @pattern ^[a-f0-9]{64}$
+     */
+  source_revision: string;
+  /**
+     * @minLength 64
+     * @maxLength 64
+     * @pattern ^[a-f0-9]{64}$
+     */
+  content_digest: string;
+  scope_hint: typeof ListDistillationMarkers200MarkersItemScopeHint[keyof typeof ListDistillationMarkers200MarkersItemScopeHint];
+  sensitivity: typeof ListDistillationMarkers200MarkersItemSensitivity[keyof typeof ListDistillationMarkers200MarkersItemSensitivity];
+  knowledge_type: typeof ListDistillationMarkers200MarkersItemKnowledgeType[keyof typeof ListDistillationMarkers200MarkersItemKnowledgeType];
+  representation: typeof ListDistillationMarkers200MarkersItemRepresentation[keyof typeof ListDistillationMarkers200MarkersItemRepresentation];
+  classifier_version: ListDistillationMarkers200MarkersItemClassifierVersion;
+  extractor_version: typeof ListDistillationMarkers200MarkersItemExtractorVersion[keyof typeof ListDistillationMarkers200MarkersItemExtractorVersion];
+  /** @maxItems 16 */
+  evidence: ListDistillationMarkers200MarkersItemEvidenceItem[];
+  excerpt_truncated: boolean;
+  history_state: typeof ListDistillationMarkers200MarkersItemHistoryState[keyof typeof ListDistillationMarkers200MarkersItemHistoryState];
+  processing_state: typeof ListDistillationMarkers200MarkersItemProcessingState[keyof typeof ListDistillationMarkers200MarkersItemProcessingState];
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  attempts: number;
+  /** @minimum 0 */
+  not_before: number;
+  workspace_id: string | null;
+  last_error: string | null;
+  /** @minimum 0 */
+  created_at: number;
+  /** @minimum 0 */
+  updated_at: number;
+};
+
+export type ListDistillationMarkers200 = {
+  /** @maxItems 100 */
+  markers: ListDistillationMarkers200MarkersItem[];
+  next_cursor: string | null;
+};
+
+export type CancelDistillationBot200 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  bot_id: string;
+  /** @minimum 0 */
+  cancelled_count: number;
+};
+
+export type ClaimDistillationMarkerBody = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  bot_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  lease_owner: string;
+};
+
+export const ClaimDistillationMarker200ScopeHint = {  product: 'product',
+  department: 'department',
+  process: 'process',
+  shared: 'shared',
+  customer_project: 'customer_project',
+} as const
+export const ClaimDistillationMarker200Sensitivity = {  standard: 'standard',
+  restricted: 'restricted',
+} as const
+export const ClaimDistillationMarker200KnowledgeType = {  FACT: 'FACT',
+  PROCEDURE: 'PROCEDURE',
+  DECISION: 'DECISION',
+  SKILL: 'SKILL',
+} as const
+export const ClaimDistillationMarker200Representation = {  HUMAN: 'HUMAN',
+  MACHINE: 'MACHINE',
+  BOTH: 'BOTH',
+  EVIDENCE_ONLY: 'EVIDENCE_ONLY',
+} as const
+export type ClaimDistillationMarker200ClassifierVersion = typeof ClaimDistillationMarker200ClassifierVersion[keyof typeof ClaimDistillationMarker200ClassifierVersion];
+
+
+export const ClaimDistillationMarker200ClassifierVersion = {
+  'jev-distillation-1': 'jev-distillation-1',
+} as const;
+
+export const ClaimDistillationMarker200ExtractorVersion = {  'timeline-body-1': 'timeline-body-1',
+  'timeline-visible-2': 'timeline-visible-2',
+} as const
+export type ClaimDistillationMarker200EvidenceItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  check_id: string;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  score: number;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  threshold: number;
+  matched: boolean;
+};
+
+export const ClaimDistillationMarker200HistoryState = {  READY: 'READY',
+  WAITING_FOR_HISTORY: 'WAITING_FOR_HISTORY',
+} as const
+export const ClaimDistillationMarker200ProcessingState = {  PENDING: 'PENDING',
+  WAITING_FOR_HISTORY: 'WAITING_FOR_HISTORY',
+  PROCESSING: 'PROCESSING',
+  CANDIDATE_CREATED: 'CANDIDATE_CREATED',
+  FILTERED_OUT: 'FILTERED_OUT',
+  FAILED: 'FAILED',
+} as const
+export type ClaimDistillationMarker200 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  marker_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  owner_subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  bot_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  thread_id: string;
+  /**
+     * @minItems 1
+     * @maxItems 32
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  turn_ids: string[];
+  /**
+     * @minLength 64
+     * @maxLength 64
+     * @pattern ^[a-f0-9]{64}$
+     */
+  source_revision: string;
+  /**
+     * @minLength 64
+     * @maxLength 64
+     * @pattern ^[a-f0-9]{64}$
+     */
+  content_digest: string;
+  scope_hint: typeof ClaimDistillationMarker200ScopeHint[keyof typeof ClaimDistillationMarker200ScopeHint];
+  sensitivity: typeof ClaimDistillationMarker200Sensitivity[keyof typeof ClaimDistillationMarker200Sensitivity];
+  knowledge_type: typeof ClaimDistillationMarker200KnowledgeType[keyof typeof ClaimDistillationMarker200KnowledgeType];
+  representation: typeof ClaimDistillationMarker200Representation[keyof typeof ClaimDistillationMarker200Representation];
+  classifier_version: ClaimDistillationMarker200ClassifierVersion;
+  extractor_version: typeof ClaimDistillationMarker200ExtractorVersion[keyof typeof ClaimDistillationMarker200ExtractorVersion];
+  /** @maxItems 16 */
+  evidence: ClaimDistillationMarker200EvidenceItem[];
+  excerpt_truncated: boolean;
+  history_state: typeof ClaimDistillationMarker200HistoryState[keyof typeof ClaimDistillationMarker200HistoryState];
+  processing_state: typeof ClaimDistillationMarker200ProcessingState[keyof typeof ClaimDistillationMarker200ProcessingState];
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  attempts: number;
+  /** @minimum 0 */
+  not_before: number;
+  workspace_id: string | null;
+  last_error: string | null;
+  /** @minimum 0 */
+  created_at: number;
+  /** @minimum 0 */
+  updated_at: number;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  lease_token: string;
+} | null;
+
+export const CompleteDistillationMarkerBodyOutcome = {  CANDIDATE_CREATED: 'CANDIDATE_CREATED',
+  WAITING_FOR_HISTORY: 'WAITING_FOR_HISTORY',
+  FAILED: 'FAILED',
+} as const
+export type CompleteDistillationMarkerBody = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  lease_token: string;
+  outcome: typeof CompleteDistillationMarkerBodyOutcome[keyof typeof CompleteDistillationMarkerBodyOutcome];
+  /**
+     * @minLength 64
+     * @maxLength 64
+     * @pattern ^[a-f0-9]{64}$
+     */
+  content_digest?: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  error?: string;
+};
+
+export const CompleteDistillationMarker200MarkerScopeHint = {  product: 'product',
+  department: 'department',
+  process: 'process',
+  shared: 'shared',
+  customer_project: 'customer_project',
+} as const
+export const CompleteDistillationMarker200MarkerSensitivity = {  standard: 'standard',
+  restricted: 'restricted',
+} as const
+export const CompleteDistillationMarker200MarkerKnowledgeType = {  FACT: 'FACT',
+  PROCEDURE: 'PROCEDURE',
+  DECISION: 'DECISION',
+  SKILL: 'SKILL',
+} as const
+export const CompleteDistillationMarker200MarkerRepresentation = {  HUMAN: 'HUMAN',
+  MACHINE: 'MACHINE',
+  BOTH: 'BOTH',
+  EVIDENCE_ONLY: 'EVIDENCE_ONLY',
+} as const
+export type CompleteDistillationMarker200MarkerClassifierVersion = typeof CompleteDistillationMarker200MarkerClassifierVersion[keyof typeof CompleteDistillationMarker200MarkerClassifierVersion];
+
+
+export const CompleteDistillationMarker200MarkerClassifierVersion = {
+  'jev-distillation-1': 'jev-distillation-1',
+} as const;
+
+export const CompleteDistillationMarker200MarkerExtractorVersion = {  'timeline-body-1': 'timeline-body-1',
+  'timeline-visible-2': 'timeline-visible-2',
+} as const
+export type CompleteDistillationMarker200MarkerEvidenceItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  check_id: string;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  score: number;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  threshold: number;
+  matched: boolean;
+};
+
+export const CompleteDistillationMarker200MarkerHistoryState = {  READY: 'READY',
+  WAITING_FOR_HISTORY: 'WAITING_FOR_HISTORY',
+} as const
+export const CompleteDistillationMarker200MarkerProcessingState = {  PENDING: 'PENDING',
+  WAITING_FOR_HISTORY: 'WAITING_FOR_HISTORY',
+  PROCESSING: 'PROCESSING',
+  CANDIDATE_CREATED: 'CANDIDATE_CREATED',
+  FILTERED_OUT: 'FILTERED_OUT',
+  FAILED: 'FAILED',
+} as const
+export type CompleteDistillationMarker200Marker = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  marker_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  owner_subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  bot_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  thread_id: string;
+  /**
+     * @minItems 1
+     * @maxItems 32
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  turn_ids: string[];
+  /**
+     * @minLength 64
+     * @maxLength 64
+     * @pattern ^[a-f0-9]{64}$
+     */
+  source_revision: string;
+  /**
+     * @minLength 64
+     * @maxLength 64
+     * @pattern ^[a-f0-9]{64}$
+     */
+  content_digest: string;
+  scope_hint: typeof CompleteDistillationMarker200MarkerScopeHint[keyof typeof CompleteDistillationMarker200MarkerScopeHint];
+  sensitivity: typeof CompleteDistillationMarker200MarkerSensitivity[keyof typeof CompleteDistillationMarker200MarkerSensitivity];
+  knowledge_type: typeof CompleteDistillationMarker200MarkerKnowledgeType[keyof typeof CompleteDistillationMarker200MarkerKnowledgeType];
+  representation: typeof CompleteDistillationMarker200MarkerRepresentation[keyof typeof CompleteDistillationMarker200MarkerRepresentation];
+  classifier_version: CompleteDistillationMarker200MarkerClassifierVersion;
+  extractor_version: typeof CompleteDistillationMarker200MarkerExtractorVersion[keyof typeof CompleteDistillationMarker200MarkerExtractorVersion];
+  /** @maxItems 16 */
+  evidence: CompleteDistillationMarker200MarkerEvidenceItem[];
+  excerpt_truncated: boolean;
+  history_state: typeof CompleteDistillationMarker200MarkerHistoryState[keyof typeof CompleteDistillationMarker200MarkerHistoryState];
+  processing_state: typeof CompleteDistillationMarker200MarkerProcessingState[keyof typeof CompleteDistillationMarker200MarkerProcessingState];
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  attempts: number;
+  /** @minimum 0 */
+  not_before: number;
+  workspace_id: string | null;
+  last_error: string | null;
+  /** @minimum 0 */
+  created_at: number;
+  /** @minimum 0 */
+  updated_at: number;
+};
+
+export const CompleteDistillationMarker200CandidateScope = {  product: 'product',
+  department: 'department',
+  process: 'process',
+  shared: 'shared',
+  customer_project: 'customer_project',
+} as const
+export const CompleteDistillationMarker200CandidateKnowledgeType = {  FACT: 'FACT',
+  PROCEDURE: 'PROCEDURE',
+  DECISION: 'DECISION',
+  SKILL: 'SKILL',
+} as const
+export const CompleteDistillationMarker200CandidateRepresentation = {  HUMAN: 'HUMAN',
+  MACHINE: 'MACHINE',
+  BOTH: 'BOTH',
+  EVIDENCE_ONLY: 'EVIDENCE_ONLY',
+} as const
+export const CompleteDistillationMarker200CandidateSensitivity = {  standard: 'standard',
+  restricted: 'restricted',
+} as const
+export const CompleteDistillationMarker200CandidateReviewState = {  PENDING_REVIEW: 'PENDING_REVIEW',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+} as const
+export type CompleteDistillationMarker200CandidateProvenanceClassifierVersion = typeof CompleteDistillationMarker200CandidateProvenanceClassifierVersion[keyof typeof CompleteDistillationMarker200CandidateProvenanceClassifierVersion];
+
+
+export const CompleteDistillationMarker200CandidateProvenanceClassifierVersion = {
+  'jev-distillation-1': 'jev-distillation-1',
+} as const;
+
+export const CompleteDistillationMarker200CandidateProvenanceExtractorVersion = {  'timeline-body-1': 'timeline-body-1',
+  'timeline-visible-2': 'timeline-visible-2',
+} as const
+export type CompleteDistillationMarker200CandidateProvenanceEvidenceItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  check_id: string;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  score: number;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  threshold: number;
+  matched: boolean;
+};
+
+export type CompleteDistillationMarker200CandidateProvenance = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  bot_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  thread_id: string;
+  /**
+     * @minItems 1
+     * @maxItems 32
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  turn_ids: string[];
+  /**
+     * @minLength 64
+     * @maxLength 64
+     * @pattern ^[a-f0-9]{64}$
+     */
+  source_revision: string;
+  classifier_version: CompleteDistillationMarker200CandidateProvenanceClassifierVersion;
+  extractor_version: typeof CompleteDistillationMarker200CandidateProvenanceExtractorVersion[keyof typeof CompleteDistillationMarker200CandidateProvenanceExtractorVersion];
+  /** @maxItems 16 */
+  evidence: CompleteDistillationMarker200CandidateProvenanceEvidenceItem[];
+  excerpt_truncated: boolean;
+};
+
+export type CompleteDistillationMarker200Candidate = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  knowledge_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  marker_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  owner_subject_id: string;
+  workspace_id: string | null;
+  scope: typeof CompleteDistillationMarker200CandidateScope[keyof typeof CompleteDistillationMarker200CandidateScope];
+  knowledge_type: typeof CompleteDistillationMarker200CandidateKnowledgeType[keyof typeof CompleteDistillationMarker200CandidateKnowledgeType];
+  representation: typeof CompleteDistillationMarker200CandidateRepresentation[keyof typeof CompleteDistillationMarker200CandidateRepresentation];
+  sensitivity: typeof CompleteDistillationMarker200CandidateSensitivity[keyof typeof CompleteDistillationMarker200CandidateSensitivity];
+  review_state: typeof CompleteDistillationMarker200CandidateReviewState[keyof typeof CompleteDistillationMarker200CandidateReviewState];
+  /**
+     * @minLength 64
+     * @maxLength 64
+     * @pattern ^[a-f0-9]{64}$
+     */
+  content_digest: string;
+  provenance: CompleteDistillationMarker200CandidateProvenance;
+  reviewed_by: string | null;
+  reviewed_at: number | null;
+  /** @minimum 0 */
+  created_at: number;
+  /** @minimum 0 */
+  updated_at: number;
+} | null;
+
+export type CompleteDistillationMarker200 = {
+  marker: CompleteDistillationMarker200Marker;
+  candidate: CompleteDistillationMarker200Candidate;
+};
+
+export const GetDistillationMarker200ScopeHint = {  product: 'product',
+  department: 'department',
+  process: 'process',
+  shared: 'shared',
+  customer_project: 'customer_project',
+} as const
+export const GetDistillationMarker200Sensitivity = {  standard: 'standard',
+  restricted: 'restricted',
+} as const
+export const GetDistillationMarker200KnowledgeType = {  FACT: 'FACT',
+  PROCEDURE: 'PROCEDURE',
+  DECISION: 'DECISION',
+  SKILL: 'SKILL',
+} as const
+export const GetDistillationMarker200Representation = {  HUMAN: 'HUMAN',
+  MACHINE: 'MACHINE',
+  BOTH: 'BOTH',
+  EVIDENCE_ONLY: 'EVIDENCE_ONLY',
+} as const
+export type GetDistillationMarker200ClassifierVersion = typeof GetDistillationMarker200ClassifierVersion[keyof typeof GetDistillationMarker200ClassifierVersion];
+
+
+export const GetDistillationMarker200ClassifierVersion = {
+  'jev-distillation-1': 'jev-distillation-1',
+} as const;
+
+export const GetDistillationMarker200ExtractorVersion = {  'timeline-body-1': 'timeline-body-1',
+  'timeline-visible-2': 'timeline-visible-2',
+} as const
+export type GetDistillationMarker200EvidenceItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  check_id: string;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  score: number;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  threshold: number;
+  matched: boolean;
+};
+
+export const GetDistillationMarker200HistoryState = {  READY: 'READY',
+  WAITING_FOR_HISTORY: 'WAITING_FOR_HISTORY',
+} as const
+export const GetDistillationMarker200ProcessingState = {  PENDING: 'PENDING',
+  WAITING_FOR_HISTORY: 'WAITING_FOR_HISTORY',
+  PROCESSING: 'PROCESSING',
+  CANDIDATE_CREATED: 'CANDIDATE_CREATED',
+  FILTERED_OUT: 'FILTERED_OUT',
+  FAILED: 'FAILED',
+} as const
+export type GetDistillationMarker200 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  marker_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  owner_subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  bot_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  thread_id: string;
+  /**
+     * @minItems 1
+     * @maxItems 32
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  turn_ids: string[];
+  /**
+     * @minLength 64
+     * @maxLength 64
+     * @pattern ^[a-f0-9]{64}$
+     */
+  source_revision: string;
+  /**
+     * @minLength 64
+     * @maxLength 64
+     * @pattern ^[a-f0-9]{64}$
+     */
+  content_digest: string;
+  scope_hint: typeof GetDistillationMarker200ScopeHint[keyof typeof GetDistillationMarker200ScopeHint];
+  sensitivity: typeof GetDistillationMarker200Sensitivity[keyof typeof GetDistillationMarker200Sensitivity];
+  knowledge_type: typeof GetDistillationMarker200KnowledgeType[keyof typeof GetDistillationMarker200KnowledgeType];
+  representation: typeof GetDistillationMarker200Representation[keyof typeof GetDistillationMarker200Representation];
+  classifier_version: GetDistillationMarker200ClassifierVersion;
+  extractor_version: typeof GetDistillationMarker200ExtractorVersion[keyof typeof GetDistillationMarker200ExtractorVersion];
+  /** @maxItems 16 */
+  evidence: GetDistillationMarker200EvidenceItem[];
+  excerpt_truncated: boolean;
+  history_state: typeof GetDistillationMarker200HistoryState[keyof typeof GetDistillationMarker200HistoryState];
+  processing_state: typeof GetDistillationMarker200ProcessingState[keyof typeof GetDistillationMarker200ProcessingState];
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  attempts: number;
+  /** @minimum 0 */
+  not_before: number;
+  workspace_id: string | null;
+  last_error: string | null;
+  /** @minimum 0 */
+  created_at: number;
+  /** @minimum 0 */
+  updated_at: number;
+};
+
+export type ListKnowledgeCandidatesParams = {
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+/**
+ * @minLength 1
+ * @maxLength 512
+ */
+cursor?: string;
+};
+
+export const ListKnowledgeCandidates200CandidatesItemScope = {  product: 'product',
+  department: 'department',
+  process: 'process',
+  shared: 'shared',
+  customer_project: 'customer_project',
+} as const
+export const ListKnowledgeCandidates200CandidatesItemKnowledgeType = {  FACT: 'FACT',
+  PROCEDURE: 'PROCEDURE',
+  DECISION: 'DECISION',
+  SKILL: 'SKILL',
+} as const
+export const ListKnowledgeCandidates200CandidatesItemRepresentation = {  HUMAN: 'HUMAN',
+  MACHINE: 'MACHINE',
+  BOTH: 'BOTH',
+  EVIDENCE_ONLY: 'EVIDENCE_ONLY',
+} as const
+export const ListKnowledgeCandidates200CandidatesItemSensitivity = {  standard: 'standard',
+  restricted: 'restricted',
+} as const
+export const ListKnowledgeCandidates200CandidatesItemReviewState = {  PENDING_REVIEW: 'PENDING_REVIEW',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+} as const
+export type ListKnowledgeCandidates200CandidatesItemProvenanceClassifierVersion = typeof ListKnowledgeCandidates200CandidatesItemProvenanceClassifierVersion[keyof typeof ListKnowledgeCandidates200CandidatesItemProvenanceClassifierVersion];
+
+
+export const ListKnowledgeCandidates200CandidatesItemProvenanceClassifierVersion = {
+  'jev-distillation-1': 'jev-distillation-1',
+} as const;
+
+export const ListKnowledgeCandidates200CandidatesItemProvenanceExtractorVersion = {  'timeline-body-1': 'timeline-body-1',
+  'timeline-visible-2': 'timeline-visible-2',
+} as const
+export type ListKnowledgeCandidates200CandidatesItemProvenanceEvidenceItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  check_id: string;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  score: number;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  threshold: number;
+  matched: boolean;
+};
+
+export type ListKnowledgeCandidates200CandidatesItemProvenance = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  bot_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  thread_id: string;
+  /**
+     * @minItems 1
+     * @maxItems 32
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  turn_ids: string[];
+  /**
+     * @minLength 64
+     * @maxLength 64
+     * @pattern ^[a-f0-9]{64}$
+     */
+  source_revision: string;
+  classifier_version: ListKnowledgeCandidates200CandidatesItemProvenanceClassifierVersion;
+  extractor_version: typeof ListKnowledgeCandidates200CandidatesItemProvenanceExtractorVersion[keyof typeof ListKnowledgeCandidates200CandidatesItemProvenanceExtractorVersion];
+  /** @maxItems 16 */
+  evidence: ListKnowledgeCandidates200CandidatesItemProvenanceEvidenceItem[];
+  excerpt_truncated: boolean;
+};
+
+export type ListKnowledgeCandidates200CandidatesItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  knowledge_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  marker_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  owner_subject_id: string;
+  workspace_id: string | null;
+  scope: typeof ListKnowledgeCandidates200CandidatesItemScope[keyof typeof ListKnowledgeCandidates200CandidatesItemScope];
+  knowledge_type: typeof ListKnowledgeCandidates200CandidatesItemKnowledgeType[keyof typeof ListKnowledgeCandidates200CandidatesItemKnowledgeType];
+  representation: typeof ListKnowledgeCandidates200CandidatesItemRepresentation[keyof typeof ListKnowledgeCandidates200CandidatesItemRepresentation];
+  sensitivity: typeof ListKnowledgeCandidates200CandidatesItemSensitivity[keyof typeof ListKnowledgeCandidates200CandidatesItemSensitivity];
+  review_state: typeof ListKnowledgeCandidates200CandidatesItemReviewState[keyof typeof ListKnowledgeCandidates200CandidatesItemReviewState];
+  /**
+     * @minLength 64
+     * @maxLength 64
+     * @pattern ^[a-f0-9]{64}$
+     */
+  content_digest: string;
+  provenance: ListKnowledgeCandidates200CandidatesItemProvenance;
+  reviewed_by: string | null;
+  reviewed_at: number | null;
+  /** @minimum 0 */
+  created_at: number;
+  /** @minimum 0 */
+  updated_at: number;
+};
+
+export type ListKnowledgeCandidates200 = {
+  /** @maxItems 100 */
+  candidates: ListKnowledgeCandidates200CandidatesItem[];
+  next_cursor: string | null;
+};
+
+export const GetKnowledgeCandidateReviewContext200Scope = {  product: 'product',
+  department: 'department',
+  process: 'process',
+  shared: 'shared',
+  customer_project: 'customer_project',
+} as const
+export const GetKnowledgeCandidateReviewContext200KnowledgeType = {  FACT: 'FACT',
+  PROCEDURE: 'PROCEDURE',
+  DECISION: 'DECISION',
+  SKILL: 'SKILL',
+} as const
+export const GetKnowledgeCandidateReviewContext200Representation = {  HUMAN: 'HUMAN',
+  MACHINE: 'MACHINE',
+  BOTH: 'BOTH',
+  EVIDENCE_ONLY: 'EVIDENCE_ONLY',
+} as const
+export const GetKnowledgeCandidateReviewContext200Sensitivity = {  standard: 'standard',
+  restricted: 'restricted',
+} as const
+export const GetKnowledgeCandidateReviewContext200ReviewState = {  PENDING_REVIEW: 'PENDING_REVIEW',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+} as const
+export type GetKnowledgeCandidateReviewContext200ProvenanceClassifierVersion = typeof GetKnowledgeCandidateReviewContext200ProvenanceClassifierVersion[keyof typeof GetKnowledgeCandidateReviewContext200ProvenanceClassifierVersion];
+
+
+export const GetKnowledgeCandidateReviewContext200ProvenanceClassifierVersion = {
+  'jev-distillation-1': 'jev-distillation-1',
+} as const;
+
+export const GetKnowledgeCandidateReviewContext200ProvenanceExtractorVersion = {  'timeline-body-1': 'timeline-body-1',
+  'timeline-visible-2': 'timeline-visible-2',
+} as const
+export type GetKnowledgeCandidateReviewContext200ProvenanceEvidenceItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  check_id: string;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  score: number;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  threshold: number;
+  matched: boolean;
+};
+
+export type GetKnowledgeCandidateReviewContext200Provenance = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  bot_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  thread_id: string;
+  /**
+     * @minItems 1
+     * @maxItems 32
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  turn_ids: string[];
+  /**
+     * @minLength 64
+     * @maxLength 64
+     * @pattern ^[a-f0-9]{64}$
+     */
+  source_revision: string;
+  classifier_version: GetKnowledgeCandidateReviewContext200ProvenanceClassifierVersion;
+  extractor_version: typeof GetKnowledgeCandidateReviewContext200ProvenanceExtractorVersion[keyof typeof GetKnowledgeCandidateReviewContext200ProvenanceExtractorVersion];
+  /** @maxItems 16 */
+  evidence: GetKnowledgeCandidateReviewContext200ProvenanceEvidenceItem[];
+  excerpt_truncated: boolean;
+};
+
+export type GetKnowledgeCandidateReviewContext200 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  knowledge_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  marker_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  owner_subject_id: string;
+  workspace_id: string | null;
+  scope: typeof GetKnowledgeCandidateReviewContext200Scope[keyof typeof GetKnowledgeCandidateReviewContext200Scope];
+  knowledge_type: typeof GetKnowledgeCandidateReviewContext200KnowledgeType[keyof typeof GetKnowledgeCandidateReviewContext200KnowledgeType];
+  representation: typeof GetKnowledgeCandidateReviewContext200Representation[keyof typeof GetKnowledgeCandidateReviewContext200Representation];
+  sensitivity: typeof GetKnowledgeCandidateReviewContext200Sensitivity[keyof typeof GetKnowledgeCandidateReviewContext200Sensitivity];
+  review_state: typeof GetKnowledgeCandidateReviewContext200ReviewState[keyof typeof GetKnowledgeCandidateReviewContext200ReviewState];
+  /**
+     * @minLength 64
+     * @maxLength 64
+     * @pattern ^[a-f0-9]{64}$
+     */
+  content_digest: string;
+  provenance: GetKnowledgeCandidateReviewContext200Provenance;
+  reviewed_by: string | null;
+  reviewed_at: number | null;
+  /** @minimum 0 */
+  created_at: number;
+  /** @minimum 0 */
+  updated_at: number;
+};
+
+export type GetKnowledgeCandidateEvidence200TurnsItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  turn_id: string;
+  /** @maxLength 96000 */
+  text: string;
+  truncated: boolean;
+};
+
+export type GetKnowledgeCandidateEvidence200 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  knowledge_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  workspace_id: string | null;
+  /**
+     * @minLength 64
+     * @maxLength 64
+     * @pattern ^[a-f0-9]{64}$
+     */
+  content_digest: string;
+  /**
+     * @minItems 1
+     * @maxItems 32
+     */
+  turns: GetKnowledgeCandidateEvidence200TurnsItem[];
+};
+
+export type AssignKnowledgeCandidateWorkspaceBody = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  workspace_id: string;
+};
+
+export const AssignKnowledgeCandidateWorkspace200Scope = {  product: 'product',
+  department: 'department',
+  process: 'process',
+  shared: 'shared',
+  customer_project: 'customer_project',
+} as const
+export const AssignKnowledgeCandidateWorkspace200KnowledgeType = {  FACT: 'FACT',
+  PROCEDURE: 'PROCEDURE',
+  DECISION: 'DECISION',
+  SKILL: 'SKILL',
+} as const
+export const AssignKnowledgeCandidateWorkspace200Representation = {  HUMAN: 'HUMAN',
+  MACHINE: 'MACHINE',
+  BOTH: 'BOTH',
+  EVIDENCE_ONLY: 'EVIDENCE_ONLY',
+} as const
+export const AssignKnowledgeCandidateWorkspace200Sensitivity = {  standard: 'standard',
+  restricted: 'restricted',
+} as const
+export const AssignKnowledgeCandidateWorkspace200ReviewState = {  PENDING_REVIEW: 'PENDING_REVIEW',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+} as const
+export type AssignKnowledgeCandidateWorkspace200ProvenanceClassifierVersion = typeof AssignKnowledgeCandidateWorkspace200ProvenanceClassifierVersion[keyof typeof AssignKnowledgeCandidateWorkspace200ProvenanceClassifierVersion];
+
+
+export const AssignKnowledgeCandidateWorkspace200ProvenanceClassifierVersion = {
+  'jev-distillation-1': 'jev-distillation-1',
+} as const;
+
+export const AssignKnowledgeCandidateWorkspace200ProvenanceExtractorVersion = {  'timeline-body-1': 'timeline-body-1',
+  'timeline-visible-2': 'timeline-visible-2',
+} as const
+export type AssignKnowledgeCandidateWorkspace200ProvenanceEvidenceItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  check_id: string;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  score: number;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  threshold: number;
+  matched: boolean;
+};
+
+export type AssignKnowledgeCandidateWorkspace200Provenance = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  bot_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  thread_id: string;
+  /**
+     * @minItems 1
+     * @maxItems 32
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  turn_ids: string[];
+  /**
+     * @minLength 64
+     * @maxLength 64
+     * @pattern ^[a-f0-9]{64}$
+     */
+  source_revision: string;
+  classifier_version: AssignKnowledgeCandidateWorkspace200ProvenanceClassifierVersion;
+  extractor_version: typeof AssignKnowledgeCandidateWorkspace200ProvenanceExtractorVersion[keyof typeof AssignKnowledgeCandidateWorkspace200ProvenanceExtractorVersion];
+  /** @maxItems 16 */
+  evidence: AssignKnowledgeCandidateWorkspace200ProvenanceEvidenceItem[];
+  excerpt_truncated: boolean;
+};
+
+export type AssignKnowledgeCandidateWorkspace200 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  knowledge_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  marker_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  owner_subject_id: string;
+  workspace_id: string | null;
+  scope: typeof AssignKnowledgeCandidateWorkspace200Scope[keyof typeof AssignKnowledgeCandidateWorkspace200Scope];
+  knowledge_type: typeof AssignKnowledgeCandidateWorkspace200KnowledgeType[keyof typeof AssignKnowledgeCandidateWorkspace200KnowledgeType];
+  representation: typeof AssignKnowledgeCandidateWorkspace200Representation[keyof typeof AssignKnowledgeCandidateWorkspace200Representation];
+  sensitivity: typeof AssignKnowledgeCandidateWorkspace200Sensitivity[keyof typeof AssignKnowledgeCandidateWorkspace200Sensitivity];
+  review_state: typeof AssignKnowledgeCandidateWorkspace200ReviewState[keyof typeof AssignKnowledgeCandidateWorkspace200ReviewState];
+  /**
+     * @minLength 64
+     * @maxLength 64
+     * @pattern ^[a-f0-9]{64}$
+     */
+  content_digest: string;
+  provenance: AssignKnowledgeCandidateWorkspace200Provenance;
+  reviewed_by: string | null;
+  reviewed_at: number | null;
+  /** @minimum 0 */
+  created_at: number;
+  /** @minimum 0 */
+  updated_at: number;
+};
+
+export const ReviewKnowledgeCandidateBodyDecision = {  APPROVE: 'APPROVE',
+  REJECT: 'REJECT',
+} as const
+export type ReviewKnowledgeCandidateBody = {
+  decision: typeof ReviewKnowledgeCandidateBodyDecision[keyof typeof ReviewKnowledgeCandidateBodyDecision];
+};
+
+export const ReviewKnowledgeCandidate200Scope = {  product: 'product',
+  department: 'department',
+  process: 'process',
+  shared: 'shared',
+  customer_project: 'customer_project',
+} as const
+export const ReviewKnowledgeCandidate200KnowledgeType = {  FACT: 'FACT',
+  PROCEDURE: 'PROCEDURE',
+  DECISION: 'DECISION',
+  SKILL: 'SKILL',
+} as const
+export const ReviewKnowledgeCandidate200Representation = {  HUMAN: 'HUMAN',
+  MACHINE: 'MACHINE',
+  BOTH: 'BOTH',
+  EVIDENCE_ONLY: 'EVIDENCE_ONLY',
+} as const
+export const ReviewKnowledgeCandidate200Sensitivity = {  standard: 'standard',
+  restricted: 'restricted',
+} as const
+export const ReviewKnowledgeCandidate200ReviewState = {  PENDING_REVIEW: 'PENDING_REVIEW',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+} as const
+export type ReviewKnowledgeCandidate200ProvenanceClassifierVersion = typeof ReviewKnowledgeCandidate200ProvenanceClassifierVersion[keyof typeof ReviewKnowledgeCandidate200ProvenanceClassifierVersion];
+
+
+export const ReviewKnowledgeCandidate200ProvenanceClassifierVersion = {
+  'jev-distillation-1': 'jev-distillation-1',
+} as const;
+
+export const ReviewKnowledgeCandidate200ProvenanceExtractorVersion = {  'timeline-body-1': 'timeline-body-1',
+  'timeline-visible-2': 'timeline-visible-2',
+} as const
+export type ReviewKnowledgeCandidate200ProvenanceEvidenceItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  check_id: string;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  score: number;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  threshold: number;
+  matched: boolean;
+};
+
+export type ReviewKnowledgeCandidate200Provenance = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  bot_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  thread_id: string;
+  /**
+     * @minItems 1
+     * @maxItems 32
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  turn_ids: string[];
+  /**
+     * @minLength 64
+     * @maxLength 64
+     * @pattern ^[a-f0-9]{64}$
+     */
+  source_revision: string;
+  classifier_version: ReviewKnowledgeCandidate200ProvenanceClassifierVersion;
+  extractor_version: typeof ReviewKnowledgeCandidate200ProvenanceExtractorVersion[keyof typeof ReviewKnowledgeCandidate200ProvenanceExtractorVersion];
+  /** @maxItems 16 */
+  evidence: ReviewKnowledgeCandidate200ProvenanceEvidenceItem[];
+  excerpt_truncated: boolean;
+};
+
+export type ReviewKnowledgeCandidate200 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  knowledge_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  marker_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  owner_subject_id: string;
+  workspace_id: string | null;
+  scope: typeof ReviewKnowledgeCandidate200Scope[keyof typeof ReviewKnowledgeCandidate200Scope];
+  knowledge_type: typeof ReviewKnowledgeCandidate200KnowledgeType[keyof typeof ReviewKnowledgeCandidate200KnowledgeType];
+  representation: typeof ReviewKnowledgeCandidate200Representation[keyof typeof ReviewKnowledgeCandidate200Representation];
+  sensitivity: typeof ReviewKnowledgeCandidate200Sensitivity[keyof typeof ReviewKnowledgeCandidate200Sensitivity];
+  review_state: typeof ReviewKnowledgeCandidate200ReviewState[keyof typeof ReviewKnowledgeCandidate200ReviewState];
+  /**
+     * @minLength 64
+     * @maxLength 64
+     * @pattern ^[a-f0-9]{64}$
+     */
+  content_digest: string;
+  provenance: ReviewKnowledgeCandidate200Provenance;
+  reviewed_by: string | null;
+  reviewed_at: number | null;
+  /** @minimum 0 */
+  created_at: number;
+  /** @minimum 0 */
+  updated_at: number;
+};
+
 export const ListTenantConfigurationRevisions200ItemState = {  DRAFT: 'DRAFT',
   VALIDATED: 'VALIDATED',
   REVIEWED: 'REVIEWED',
@@ -43242,6 +44922,601 @@ return managementApiFetch<disableNotificationSubscriptionResponse>(getDisableNot
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(disableNotificationSubscriptionBody)
+  }
+);}
+
+
+
+export type createTeamWorkspaceResponse200 = {
+  data: CreateTeamWorkspace200
+  status: 200
+}
+
+export type createTeamWorkspaceResponseSuccess = (createTeamWorkspaceResponse200) & {
+  headers: Headers;
+};
+;
+
+export type createTeamWorkspaceResponse = (createTeamWorkspaceResponseSuccess)
+
+export const getCreateTeamWorkspaceUrl = (tenantId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/team-workspaces`
+}
+
+export const createTeamWorkspace = async (tenantId: string,
+    createTeamWorkspaceBody: CreateTeamWorkspaceBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<createTeamWorkspaceResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return managementApiFetch<createTeamWorkspaceResponse>(getCreateTeamWorkspaceUrl(tenantId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createTeamWorkspaceBody)
+  }
+);}
+
+
+
+export type listTeamWorkspacesResponse200 = {
+  data: ListTeamWorkspaces200Item[]
+  status: 200
+}
+
+export type listTeamWorkspacesResponseSuccess = (listTeamWorkspacesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listTeamWorkspacesResponse = (listTeamWorkspacesResponseSuccess)
+
+export const getListTeamWorkspacesUrl = (tenantId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/team-workspaces`
+}
+
+export const listTeamWorkspaces = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listTeamWorkspacesResponse> => {
+
+  return managementApiFetch<listTeamWorkspacesResponse>(getListTeamWorkspacesUrl(tenantId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getTeamWorkspaceResponse200 = {
+  data: GetTeamWorkspace200
+  status: 200
+}
+
+export type getTeamWorkspaceResponseSuccess = (getTeamWorkspaceResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getTeamWorkspaceResponse = (getTeamWorkspaceResponseSuccess)
+
+export const getGetTeamWorkspaceUrl = (tenantId: string,
+    workspaceId: string,
+    params?: GetTeamWorkspaceParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/tenants/${encodeURIComponent(String(tenantId))}/team-workspaces/${encodeURIComponent(String(workspaceId))}?${stringifiedParams}` : `/v1/tenants/${encodeURIComponent(String(tenantId))}/team-workspaces/${encodeURIComponent(String(workspaceId))}`
+}
+
+export const getTeamWorkspace = async (tenantId: string,
+    workspaceId: string,
+    params?: GetTeamWorkspaceParams, options?: Parameters<typeof managementApiFetch>[1]): Promise<getTeamWorkspaceResponse> => {
+
+  return managementApiFetch<getTeamWorkspaceResponse>(getGetTeamWorkspaceUrl(tenantId,workspaceId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createDistillationMarkerResponse200 = {
+  data: CreateDistillationMarker200
+  status: 200
+}
+
+export type createDistillationMarkerResponseSuccess = (createDistillationMarkerResponse200) & {
+  headers: Headers;
+};
+;
+
+export type createDistillationMarkerResponse = (createDistillationMarkerResponseSuccess)
+
+export const getCreateDistillationMarkerUrl = (tenantId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/distillation-markers`
+}
+
+export const createDistillationMarker = async (tenantId: string,
+    createDistillationMarkerBody: CreateDistillationMarkerBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<createDistillationMarkerResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return managementApiFetch<createDistillationMarkerResponse>(getCreateDistillationMarkerUrl(tenantId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createDistillationMarkerBody)
+  }
+);}
+
+
+
+export type listDistillationMarkersResponse200 = {
+  data: ListDistillationMarkers200
+  status: 200
+}
+
+export type listDistillationMarkersResponseSuccess = (listDistillationMarkersResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listDistillationMarkersResponse = (listDistillationMarkersResponseSuccess)
+
+export const getListDistillationMarkersUrl = (tenantId: string,
+    params?: ListDistillationMarkersParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/tenants/${encodeURIComponent(String(tenantId))}/distillation-markers?${stringifiedParams}` : `/v1/tenants/${encodeURIComponent(String(tenantId))}/distillation-markers`
+}
+
+export const listDistillationMarkers = async (tenantId: string,
+    params?: ListDistillationMarkersParams, options?: Parameters<typeof managementApiFetch>[1]): Promise<listDistillationMarkersResponse> => {
+
+  return managementApiFetch<listDistillationMarkersResponse>(getListDistillationMarkersUrl(tenantId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type cancelDistillationBotResponse200 = {
+  data: CancelDistillationBot200
+  status: 200
+}
+
+export type cancelDistillationBotResponseSuccess = (cancelDistillationBotResponse200) & {
+  headers: Headers;
+};
+;
+
+export type cancelDistillationBotResponse = (cancelDistillationBotResponseSuccess)
+
+export const getCancelDistillationBotUrl = (tenantId: string,
+    botId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/distillation-markers/bots/${encodeURIComponent(String(botId))}`
+}
+
+export const cancelDistillationBot = async (tenantId: string,
+    botId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<cancelDistillationBotResponse> => {
+
+  return managementApiFetch<cancelDistillationBotResponse>(getCancelDistillationBotUrl(tenantId,botId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type claimDistillationMarkerResponse200 = {
+  data: ClaimDistillationMarker200
+  status: 200
+}
+
+export type claimDistillationMarkerResponseSuccess = (claimDistillationMarkerResponse200) & {
+  headers: Headers;
+};
+;
+
+export type claimDistillationMarkerResponse = (claimDistillationMarkerResponseSuccess)
+
+export const getClaimDistillationMarkerUrl = (tenantId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/distillation-markers/claim`
+}
+
+export const claimDistillationMarker = async (tenantId: string,
+    claimDistillationMarkerBody: ClaimDistillationMarkerBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<claimDistillationMarkerResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return managementApiFetch<claimDistillationMarkerResponse>(getClaimDistillationMarkerUrl(tenantId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(claimDistillationMarkerBody)
+  }
+);}
+
+
+
+export type completeDistillationMarkerResponse200 = {
+  data: CompleteDistillationMarker200
+  status: 200
+}
+
+export type completeDistillationMarkerResponseSuccess = (completeDistillationMarkerResponse200) & {
+  headers: Headers;
+};
+;
+
+export type completeDistillationMarkerResponse = (completeDistillationMarkerResponseSuccess)
+
+export const getCompleteDistillationMarkerUrl = (tenantId: string,
+    markerId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/distillation-markers/${encodeURIComponent(String(markerId))}/result`
+}
+
+export const completeDistillationMarker = async (tenantId: string,
+    markerId: string,
+    completeDistillationMarkerBody: CompleteDistillationMarkerBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<completeDistillationMarkerResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return managementApiFetch<completeDistillationMarkerResponse>(getCompleteDistillationMarkerUrl(tenantId,markerId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(completeDistillationMarkerBody)
+  }
+);}
+
+
+
+export type getDistillationMarkerResponse200 = {
+  data: GetDistillationMarker200
+  status: 200
+}
+
+export type getDistillationMarkerResponseSuccess = (getDistillationMarkerResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getDistillationMarkerResponse = (getDistillationMarkerResponseSuccess)
+
+export const getGetDistillationMarkerUrl = (tenantId: string,
+    markerId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/distillation-markers/${encodeURIComponent(String(markerId))}`
+}
+
+export const getDistillationMarker = async (tenantId: string,
+    markerId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getDistillationMarkerResponse> => {
+
+  return managementApiFetch<getDistillationMarkerResponse>(getGetDistillationMarkerUrl(tenantId,markerId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listKnowledgeCandidatesResponse200 = {
+  data: ListKnowledgeCandidates200
+  status: 200
+}
+
+export type listKnowledgeCandidatesResponseSuccess = (listKnowledgeCandidatesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listKnowledgeCandidatesResponse = (listKnowledgeCandidatesResponseSuccess)
+
+export const getListKnowledgeCandidatesUrl = (tenantId: string,
+    params?: ListKnowledgeCandidatesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/tenants/${encodeURIComponent(String(tenantId))}/knowledge-candidates?${stringifiedParams}` : `/v1/tenants/${encodeURIComponent(String(tenantId))}/knowledge-candidates`
+}
+
+export const listKnowledgeCandidates = async (tenantId: string,
+    params?: ListKnowledgeCandidatesParams, options?: Parameters<typeof managementApiFetch>[1]): Promise<listKnowledgeCandidatesResponse> => {
+
+  return managementApiFetch<listKnowledgeCandidatesResponse>(getListKnowledgeCandidatesUrl(tenantId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getKnowledgeCandidateReviewContextResponse200 = {
+  data: GetKnowledgeCandidateReviewContext200
+  status: 200
+}
+
+export type getKnowledgeCandidateReviewContextResponseSuccess = (getKnowledgeCandidateReviewContextResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getKnowledgeCandidateReviewContextResponse = (getKnowledgeCandidateReviewContextResponseSuccess)
+
+export const getGetKnowledgeCandidateReviewContextUrl = (tenantId: string,
+    knowledgeId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/knowledge-candidates/${encodeURIComponent(String(knowledgeId))}/review-context`
+}
+
+export const getKnowledgeCandidateReviewContext = async (tenantId: string,
+    knowledgeId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getKnowledgeCandidateReviewContextResponse> => {
+
+  return managementApiFetch<getKnowledgeCandidateReviewContextResponse>(getGetKnowledgeCandidateReviewContextUrl(tenantId,knowledgeId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getKnowledgeCandidateEvidenceResponse200 = {
+  data: GetKnowledgeCandidateEvidence200
+  status: 200
+}
+
+export type getKnowledgeCandidateEvidenceResponseSuccess = (getKnowledgeCandidateEvidenceResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getKnowledgeCandidateEvidenceResponse = (getKnowledgeCandidateEvidenceResponseSuccess)
+
+export const getGetKnowledgeCandidateEvidenceUrl = (tenantId: string,
+    knowledgeId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/knowledge-candidates/${encodeURIComponent(String(knowledgeId))}/evidence`
+}
+
+export const getKnowledgeCandidateEvidence = async (tenantId: string,
+    knowledgeId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getKnowledgeCandidateEvidenceResponse> => {
+
+  return managementApiFetch<getKnowledgeCandidateEvidenceResponse>(getGetKnowledgeCandidateEvidenceUrl(tenantId,knowledgeId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type assignKnowledgeCandidateWorkspaceResponse200 = {
+  data: AssignKnowledgeCandidateWorkspace200
+  status: 200
+}
+
+export type assignKnowledgeCandidateWorkspaceResponseSuccess = (assignKnowledgeCandidateWorkspaceResponse200) & {
+  headers: Headers;
+};
+;
+
+export type assignKnowledgeCandidateWorkspaceResponse = (assignKnowledgeCandidateWorkspaceResponseSuccess)
+
+export const getAssignKnowledgeCandidateWorkspaceUrl = (tenantId: string,
+    knowledgeId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/knowledge-candidates/${encodeURIComponent(String(knowledgeId))}/workspace`
+}
+
+export const assignKnowledgeCandidateWorkspace = async (tenantId: string,
+    knowledgeId: string,
+    assignKnowledgeCandidateWorkspaceBody: AssignKnowledgeCandidateWorkspaceBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<assignKnowledgeCandidateWorkspaceResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return managementApiFetch<assignKnowledgeCandidateWorkspaceResponse>(getAssignKnowledgeCandidateWorkspaceUrl(tenantId,knowledgeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(assignKnowledgeCandidateWorkspaceBody)
+  }
+);}
+
+
+
+export type reviewKnowledgeCandidateResponse200 = {
+  data: ReviewKnowledgeCandidate200
+  status: 200
+}
+
+export type reviewKnowledgeCandidateResponseSuccess = (reviewKnowledgeCandidateResponse200) & {
+  headers: Headers;
+};
+;
+
+export type reviewKnowledgeCandidateResponse = (reviewKnowledgeCandidateResponseSuccess)
+
+export const getReviewKnowledgeCandidateUrl = (tenantId: string,
+    knowledgeId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/knowledge-candidates/${encodeURIComponent(String(knowledgeId))}/review`
+}
+
+export const reviewKnowledgeCandidate = async (tenantId: string,
+    knowledgeId: string,
+    reviewKnowledgeCandidateBody: ReviewKnowledgeCandidateBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<reviewKnowledgeCandidateResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return managementApiFetch<reviewKnowledgeCandidateResponse>(getReviewKnowledgeCandidateUrl(tenantId,knowledgeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(reviewKnowledgeCandidateBody)
   }
 );}
 

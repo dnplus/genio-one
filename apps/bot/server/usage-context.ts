@@ -1,3 +1,4 @@
+import { platformOrigin } from "./platform-origin"
 import type { GenioPrincipal } from "./runtime-broker"
 import { CE_DEMO_USE_CASE_ID } from "@genioone/protocol/ce-demo"
 
@@ -24,10 +25,6 @@ interface PlatformUseCase {
 interface PlatformDemoProject {
   installation: "NOT_INSTALLED" | "SKIPPED" | "INSTALLED"
   organization_id: string | null
-}
-
-function platformOrigin() {
-  return process.env.GENIO_ONE_PLATFORM_ORIGIN?.trim() || "http://127.0.0.1:58082"
 }
 
 function isUseCase(value: unknown): value is PlatformUseCase {

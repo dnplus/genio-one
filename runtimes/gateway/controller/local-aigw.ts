@@ -1,10 +1,17 @@
 import { spawn, type ChildProcess } from "node:child_process"
 import { createHash } from "node:crypto"
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
-import { join } from "node:path"
+import { join, resolve } from "node:path"
 
 import { mergeGatewayNativeResources } from "./native-resources"
 import { withGatewayDetailCapture } from "./detail-capture"
+import {
+  releaseLocalDistillationTriageForProcessor,
+} from "./local-distillation-triage-port"
+import {
+  promoteDistillationTriageHandoff,
+  type DistillationTriageHandoff,
+} from "./local-distillation-triage-handoff.mjs"
 import {
   stopChild,
   stopProcessTree,
@@ -635,6 +642,10 @@ export function createLocalAigwApplier(options: LocalAigwOptions): GatewayReleas
   let aigwPreparation: Promise<Awaited<ReturnType<typeof prepareAigwRuntimeCache>>> | undefined
   let activeRuntimeDirectory: AigwEphemeralRuntimeDirectory | undefined
   let activeCleanup: Promise<void> | undefined
+  let processorHandoff: {
+    handoff: DistillationTriageHandoff
+    processor: ChildProcess | undefined
+  } | undefined
   let processorStdout = ""
   const routeLeaseByCorrelation = new Map<string, ModelRouteLeaseObservation>()
   const processorReceiptByCorrelation = new Map<string, {
@@ -658,6 +669,20 @@ export function createLocalAigwApplier(options: LocalAigwOptions): GatewayReleas
   function stopActiveProcessTree(): Promise<void> {
     if (activeCleanup) return activeCleanup
     return active ? reapProcessTree(active) : Promise.resolve()
+  }
+
+  async function bindReadyProcessorToTriageHandoff(child: ChildProcess): Promise<void> {
+    const handoff = processorHandoff
+    if (!handoff || child.exitCode !== null || child.signalCode !== null) return
+    const readyHandoff = promoteDistillationTriageHandoff(handoff.handoff, "ready")
+    if (!readyHandoff) {
+      if (processorHandoff === handoff) processorHandoff = undefined
+      return
+    }
+    if (processorHandoff === handoff) {
+      handoff.handoff = readyHandoff
+      handoff.processor = child
+    }
   }
 
   function activityForRelease(
@@ -1058,34 +1083,58 @@ export function createLocalAigwApplier(options: LocalAigwOptions): GatewayReleas
     policyRoot: string,
   ): Promise<void> {
     if (processor && processor.exitCode === null) return
-    processor = spawn(
+    const checkoutRoot = resolve(import.meta.dirname, "..", "..", "..")
+    const processorEnvironment: NodeJS.ProcessEnv = {
+      ...process.env,
+      ...options.environment,
+      GENIO_ONE_POLICY_ROOT: policyRoot,
+      GENIO_ONE_POLICY_RELEASE_ROOT_KEYRING: options.releaseRootKeyRingPath,
+      GENIO_ONE_RUNTIME_COMMAND_KEYRING: options.runtimeCommandKeyRingPath,
+      GENIO_ONE_TENANT_ID: input.command.tenant_id,
+      GENIO_ONE_RUNTIME_ID: input.command.runtime_id,
+      GENIO_ONE_GATEWAY_ID: input.command.desired_release.gateway_id,
+      GENIO_ONE_AI_PROCESSOR_LISTEN: "127.0.0.1:8082",
+      GENIO_ONE_AI_PROCESSOR_READINESS_LISTEN: "127.0.0.1:9082",
+      GENIO_ONE_AI_PROCESSOR_HTTP_LISTEN: "127.0.0.1:8182",
+      GENIO_ONE_DISTILLATION_TRIAGE_TOKEN: "local-distillation-triage",
+      GENIO_ONE_DETAIL_CAPTURE_LISTEN: "127.0.0.1:8083",
+      ...(options.telemetry
+        ? {
+            OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:
+              `http://127.0.0.1:${options.telemetry.httpPort}/v1/traces`,
+          }
+        : {}),
+    }
+    const configuredAdapterRegistry = processorEnvironment.GENIO_ONE_PROCESSOR_ADAPTERS_FILE?.trim()
+    if (configuredAdapterRegistry) {
+      processorEnvironment.GENIO_ONE_PROCESSOR_ADAPTERS_FILE = resolve(
+        import.meta.dirname,
+        "..",
+        configuredAdapterRegistry,
+      )
+    }
+    let triageHandoff: DistillationTriageHandoff
+    try {
+      triageHandoff = await releaseLocalDistillationTriageForProcessor(checkoutRoot)
+    } catch (error) {
+      throw error
+    }
+    processorHandoff = { handoff: triageHandoff, processor: undefined }
+    const launchedProcessor = spawn(
       process.execPath,
       [gatewayServiceEntrypoint("processor")],
       {
-        env: {
-          ...process.env,
-          ...options.environment,
-          GENIO_ONE_POLICY_ROOT: policyRoot,
-          GENIO_ONE_POLICY_RELEASE_ROOT_KEYRING: options.releaseRootKeyRingPath,
-          GENIO_ONE_RUNTIME_COMMAND_KEYRING: options.runtimeCommandKeyRingPath,
-          GENIO_ONE_TENANT_ID: input.command.tenant_id,
-          GENIO_ONE_RUNTIME_ID: input.command.runtime_id,
-          GENIO_ONE_GATEWAY_ID: input.command.desired_release.gateway_id,
-          GENIO_ONE_AI_PROCESSOR_LISTEN: "127.0.0.1:8082",
-          GENIO_ONE_AI_PROCESSOR_READINESS_LISTEN: "127.0.0.1:9082",
-          GENIO_ONE_AI_PROCESSOR_HTTP_LISTEN: "127.0.0.1:8182",
-          GENIO_ONE_DETAIL_CAPTURE_LISTEN: "127.0.0.1:8083",
-          ...(options.telemetry
-            ? {
-                OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:
-                  `http://127.0.0.1:${options.telemetry.httpPort}/v1/traces`,
-              }
-            : {}),
-        },
+        env: processorEnvironment,
         stdio: ["ignore", "pipe", "inherit"],
       },
     )
-    processor.stdout?.on("data", (chunk) => {
+    processor = launchedProcessor
+    launchedProcessor.once("exit", () => {
+      if (processorHandoff?.processor === launchedProcessor) {
+        processorHandoff.processor = undefined
+      }
+    })
+    launchedProcessor.stdout?.on("data", (chunk) => {
       processorStdout += chunk.toString("utf8")
       const lines = processorStdout.split("\n")
       processorStdout = lines.pop() ?? ""
@@ -1150,8 +1199,9 @@ export function createLocalAigwApplier(options: LocalAigwOptions): GatewayReleas
         process.stdout.write(`${line}\n`)
       }
     })
-    await waitForListener(8082, processor, options.readinessTimeoutMs ?? 120_000)
-    await waitForListener(8083, processor, options.readinessTimeoutMs ?? 120_000)
+    await waitForListener(8082, launchedProcessor, options.readinessTimeoutMs ?? 120_000)
+    await waitForListener(8083, launchedProcessor, options.readinessTimeoutMs ?? 120_000)
+    await bindReadyProcessorToTriageHandoff(launchedProcessor)
   }
 
   return {
@@ -1335,7 +1385,15 @@ export function createLocalAigwApplier(options: LocalAigwOptions): GatewayReleas
         await removeAigwEphemeralRuntimeDirectory(activeRuntimeDirectory).catch(() => undefined)
         activeRuntimeDirectory = undefined
       }
-      await Promise.all([authorizer, processor].map((child) => stopChild(child).catch((error) => {
+      const processorToStop = processor
+      try {
+        await stopChild(processorToStop)
+      } catch (error) {
+        writeOperationalEvent("gateway-runtime", "WARN", "genio.one.gateway-runtime.gateway-service-cleanup-failed", {
+          ...operationalError(error),
+        })
+      }
+      await Promise.all([authorizer].map((child) => stopChild(child).catch((error) => {
         writeOperationalEvent("gateway-runtime", "WARN", "genio.one.gateway-runtime.gateway-service-cleanup-failed", {
           ...operationalError(error),
         })

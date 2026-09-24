@@ -209,6 +209,7 @@ const ALLOW_RESPONSE_HEADERS = [
   BUNDLE_REVISION_HEADER,
   ALLOWED_PUBLIC_MODELS_HEADER,
   ALLOWED_MCP_TOOLS_HEADER,
+  REQUEST_ID_HEADER,
   CORRELATION_HEADER,
   USAGE_ADMISSION_ID_HEADER,
   USAGE_ACCOUNTING_KEYS_HEADER,
@@ -322,6 +323,33 @@ function optional(map: Map<string, string>, name: string): string | undefined {
     throw new Error(`invalid ${name}`)
   }
   return value
+}
+
+const BOT_CLIENT_ID = "genio-one-bot"
+
+function uuidTraceNibble(value: string): { prefix: string; nibble: string; suffix: string } | undefined {
+  const match = value.toLowerCase().match(/^([0-9a-f]{8}-[0-9a-f]{4}-)([0-9a-f])([0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12})$/)
+  return match
+    ? { prefix: match[1]!, nibble: match[2]!, suffix: match[3]! }
+    : undefined
+}
+
+function canonicalCorrelationId(headers: Map<string, string>): string {
+  const requestId = required(headers, REQUEST_ID_HEADER)
+  const callerCorrelationId = optional(headers, CORRELATION_HEADER)
+  if (!callerCorrelationId || callerCorrelationId === requestId) return requestId
+  if (headers.get(VERIFIED_CLIENT_HEADER) !== BOT_CLIENT_ID) return requestId
+  const canonical = uuidTraceNibble(callerCorrelationId)
+  const request = uuidTraceNibble(requestId)
+  if (
+    canonical &&
+    request &&
+    canonical.prefix === request.prefix &&
+    canonical.suffix === request.suffix &&
+    canonical.nibble === "4" &&
+    request.nibble === "9"
+  ) return callerCorrelationId
+  return requestId
 }
 
 function requiredContext(request: EnvoyCheckRequest, name: string): string {
@@ -473,7 +501,7 @@ function authorizationInputFromCheckRequest(
     principalSubjectId: optional(headers, ON_BEHALF_OF_SUBJECT_HEADER),
     executionGrantId: optional(headers, EXECUTION_GRANT_HEADER),
     actionDigest: executionActionDigest({ method: requestMethod, path: requestPath, body: rawRequestBody(request) }),
-    correlationId: required(headers, REQUEST_ID_HEADER),
+    correlationId: canonicalCorrelationId(headers),
     requestMethod,
     requestPath,
     now,
@@ -535,6 +563,7 @@ function allowResponse(
     )
   }
   headers.push(
+    headerOption(REQUEST_ID_HEADER, input.correlationId),
     headerOption(CORRELATION_HEADER, input.correlationId),
     // OVERWRITE_IF_EXISTS_OR_ADD is important here.  A caller can send a
     // lookalike trusted header before ext_authz; the allow response must

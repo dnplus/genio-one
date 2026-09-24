@@ -11,6 +11,9 @@ import {
 import { RuntimePolicyUnavailableError } from "../runtime-policy"
 import type { GenioPrincipal } from "../runtime-broker"
 import { BotUsageContextError, resolveBotUsageContext } from "../usage-context"
+import { PlatformDistillationCancellationError } from "../bot-deletion-reconciler"
+import { normalizeTeamWorkspaceId } from "../bot-registry"
+import { platformOrigin } from "../platform-origin"
 
 type PlatformPersonalConnection = {
   connection_id: string
@@ -25,8 +28,34 @@ class PlatformConnectionProxyError extends Error {
   }
 }
 
-function platformOrigin() {
-  return process.env.GENIO_ONE_PLATFORM_ORIGIN?.trim() || "http://127.0.0.1:58082"
+class TeamWorkspaceValidationError extends Error {
+  constructor(readonly code: string, readonly statusCode: number) {
+    super(code)
+  }
+}
+
+async function assertTeamWorkspaceContributor(accessToken: string, tenantId: string, workspaceId: string): Promise<void> {
+  let response: Response
+  try {
+    const workspaceUrl = new URL(`/v1/tenants/${encodeURIComponent(tenantId)}/team-workspaces/${encodeURIComponent(workspaceId)}`, platformOrigin())
+    workspaceUrl.searchParams.set("access", "contributor")
+    response = await fetch(workspaceUrl, {
+      headers: { accept: "application/json", authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(2_000),
+    })
+  } catch {
+    throw new TeamWorkspaceValidationError("TEAM_WORKSPACE_UNAVAILABLE", 503)
+  }
+  if (response.ok) {
+    const body = await response.json().catch(() => null) as { workspace_id?: unknown } | null
+    if (body?.workspace_id === workspaceId) return
+    throw new TeamWorkspaceValidationError("TEAM_WORKSPACE_UNAVAILABLE", 503)
+  }
+  if (response.status === 401) throw new TeamWorkspaceValidationError("TEAM_WORKSPACE_UNAUTHENTICATED", 401)
+  if (response.status === 403) throw new TeamWorkspaceValidationError("TEAM_WORKSPACE_CONTRIBUTOR_REQUIRED", 403)
+  if (response.status === 404) throw new TeamWorkspaceValidationError("TEAM_WORKSPACE_NOT_FOUND", 400)
+  if (response.status >= 500) throw new TeamWorkspaceValidationError("TEAM_WORKSPACE_UNAVAILABLE", 503)
+  throw new TeamWorkspaceValidationError("TEAM_WORKSPACE_INVALID", 400)
 }
 
 async function platformConnectionRequest<T>(accessToken: string, path: string, init: RequestInit = {}): Promise<T> {
@@ -216,6 +245,11 @@ export async function botRoutes(app: FastifyInstance, context: BotServerContext)
         if (typeof body.useCaseId !== "string" || !body.useCaseId.trim()) throw new BotUsageContextError("USE_CASE_INVALID", 400)
         requestedUseCaseId = body.useCaseId.trim()
       }
+      const teamWorkspaceId = body.teamWorkspaceId === null ? null : typeof body.teamWorkspaceId === "string" ? body.teamWorkspaceId : undefined
+      if (typeof teamWorkspaceId === "string") {
+        normalizeTeamWorkspaceId(teamWorkspaceId)
+        await assertTeamWorkspaceContributor(accessToken, principal.tenant_id, teamWorkspaceId)
+      }
       const usageContext = await resolveBotUsageContext({ principal, accessToken, useCaseId: requestedUseCaseId })
       if (modelRoute === "genio-gateway" && !usageContext && Array.isArray(principal.organization_ids) && principal.organization_ids.length > 0) {
         throw new BotUsageContextError("USE_CASE_REQUIRED", 409)
@@ -238,10 +272,11 @@ export async function botRoutes(app: FastifyInstance, context: BotServerContext)
         agentSubjectId: agent.subjectId,
         ownerOrganizationId: usageContext?.consumerOrganizationId ?? null,
         useCaseId: usageContext?.useCaseId ?? null,
+        teamWorkspaceId,
       })
       return reply.code(201).send(bot)
     } catch (error) {
-      const status = error instanceof BotUsageContextError ? error.statusCode : 400
+      const status = error instanceof BotUsageContextError || error instanceof TeamWorkspaceValidationError ? error.statusCode : 400
       return reply.code(status).send({ error: error instanceof Error ? error.message : "BOT_CREATE_FAILED" })
     }
   })
@@ -287,6 +322,11 @@ export async function botRoutes(app: FastifyInstance, context: BotServerContext)
     try {
       const principal = await requestPrincipal(request)
       const body = request.body as Record<string, unknown>
+      const teamWorkspaceId = body.teamWorkspaceId === null ? null : typeof body.teamWorkspaceId === "string" ? body.teamWorkspaceId : undefined
+      if (typeof teamWorkspaceId === "string") {
+        normalizeTeamWorkspaceId(teamWorkspaceId)
+        await assertTeamWorkspaceContributor(requestAccessToken(request), principal.tenant_id, teamWorkspaceId)
+      }
       if (body.expectedRevision !== undefined && (!Number.isSafeInteger(body.expectedRevision) || Number(body.expectedRevision) < 1)) throw new Error("BOT_PROFILE_REVISION_INVALID")
       const share = body.sharePolicy && typeof body.sharePolicy === "object" ? body.sharePolicy as Record<string, unknown> : undefined
       const wake = body.wake === "chat" || body.wake === "routine" || body.wake === "both" || body.wake === ""
@@ -306,6 +346,7 @@ export async function botRoutes(app: FastifyInstance, context: BotServerContext)
         allowedTools: Array.isArray(body.allowedTools) ? body.allowedTools.filter((value): value is string => typeof value === "string") : undefined,
         modelRoute: body.modelRoute === "genio-gateway" ? "genio-gateway" : body.modelRoute === "codex-subscription" ? "codex-subscription" : undefined,
         defaultRuntimeTier: body.defaultRuntimeTier === "headless" || body.defaultRuntimeTier === "desktop" || body.defaultRuntimeTier === "none" ? body.defaultRuntimeTier : undefined,
+        teamWorkspaceId,
         sharePolicy: share ? {
           visibility: share.visibility as never,
           discoverable: share.discoverable === true,
@@ -316,7 +357,8 @@ export async function botRoutes(app: FastifyInstance, context: BotServerContext)
       })
       return reply.send(bot)
     } catch (error) {
-      return reply.code(400).send({ error: error instanceof Error ? error.message : "BOT_UPDATE_FAILED" })
+      const status = error instanceof TeamWorkspaceValidationError ? error.statusCode : 400
+      return reply.code(status).send({ error: error instanceof Error ? error.message : "BOT_UPDATE_FAILED" })
     }
   })
 
@@ -326,25 +368,35 @@ export async function botRoutes(app: FastifyInstance, context: BotServerContext)
       const accessToken = requestAccessToken(request)
       const source = botRegistry.getOwned((request.params as { botId: string }).botId, principal)
       if (!source) return reply.code(404).send({ error: "BOT_NOT_FOUND" })
+      if (source.teamWorkspaceId) {
+        await assertTeamWorkspaceContributor(accessToken, principal.tenant_id, source.teamWorkspaceId)
+      }
       const agent = await ensureAgentSubject({ principal, accessToken, displayName: `${source.name} 副本` })
       const bot = botRegistry.duplicate(source.id, principal, agent.subjectId)
       return reply.code(201).send(bot)
     } catch (error) {
-      return reply.code(400).send({ error: error instanceof Error ? error.message : "BOT_DUPLICATE_FAILED" })
+      const status = error instanceof TeamWorkspaceValidationError ? error.statusCode : 400
+      return reply.code(status).send({ error: error instanceof Error ? error.message : "BOT_DUPLICATE_FAILED" })
     }
   })
 
   app.delete("/api/bots/:botId", async (request, reply) => {
+    let deletion: { created: boolean } | null = null
+    let principal: GenioPrincipal | null = null
+    let botId = ""
     try {
-      const principal = await requestPrincipal(request)
-      const botId = (request.params as { botId: string }).botId
-      botRegistry.db.transaction(() => {
-        botRegistry.delete(botId, principal)
-        context.botSchedules.cancelBot(principal, botId)
-      })()
+      principal = await requestPrincipal(request)
+      botId = (request.params as { botId: string }).botId
+      const accessToken = requestAccessToken(request)
+      const deletionReconciler = context.botDeletionReconciler
+      deletion = botRegistry.beginPendingDeletion(botId, principal)
+      if (!deletion) return reply.code(404).send({ error: "BOT_NOT_FOUND" })
+      await deletionReconciler.attempt(principal, botId, accessToken)
       return reply.code(200).send({ ok: true, botId })
     } catch (error) {
-      return reply.code(400).send({ error: error instanceof Error ? error.message : "BOT_DELETE_FAILED" })
+      if (error instanceof PlatformDistillationCancellationError) return reply.code(error.statusCode).send({ error: error.code })
+      const message = error instanceof Error ? error.message : "BOT_DELETE_FAILED"
+      return reply.code(message.startsWith("GENIO_ONE_SESSION_") ? 401 : message === "BOT_NOT_FOUND" ? 404 : 400).send({ error: message })
     }
   })
 

@@ -37,8 +37,14 @@ import { botMemoryRoutes } from "./routes/bot-memory"
 import { modelGatewayRelayRoutes } from "./model-gateway-relay"
 import { createRuntimePolicyClient } from "./runtime-policy"
 import { botDefaultToolRoutes } from "./routes/bot-default-tools"
+import { knowledgeEvidenceRoutes } from "./routes/knowledge-evidence"
 import { BotSchedules } from "./bot-schedules"
 import { runBotSchedules } from "./bot-schedule-runner"
+import { backfillDistillationTurn } from "./distillation/backfill"
+import { SQLiteDistillationBackfillProgressStore } from "./distillation/backfill-progress"
+import { turnReady } from "./distillation/history"
+import { attachDistillation } from "./distillation/worker"
+import { BotDeletionReconciler } from "./bot-deletion-reconciler"
 
 export async function createBotApp(
   contextOverrides?: Partial<BotServerContext>,
@@ -49,13 +55,52 @@ export async function createBotApp(
   await app.register(websocket)
 
   const botRegistry = contextOverrides?.botRegistry ?? new BotRegistry()
+  const distillationBackfillProgress = new SQLiteDistillationBackfillProgressStore(botRegistry.db)
   const capabilityGate = contextOverrides?.capabilityGate ?? createCapabilityGate()
   const modelDirectory = contextOverrides?.modelDirectory ?? createBotModelDirectory()
   const runtimeBroker = contextOverrides?.runtimeBroker ?? new RuntimeBroker({ provision: createManagedDesktop })
   const runtimePolicy = contextOverrides?.runtimePolicy ?? createRuntimePolicyClient()
-  const stopObserving = runtimeBroker.observe((principal, line, runtimeId) => botRegistry.recordRuntimeEvent(principal, line, runtimeId))
-  app.addHook("onClose", async () => { stopObserving() })
+  const distillation = attachDistillation({
+    registry: botRegistry,
+    sessions: {
+      tokenFor(principal, _botId) {
+        const session = runtimeBroker.findByPrincipal(principal)
+        if (!session?.initialized) return null
+        const token = session.accessToken?.trim()
+        return token || null
+      },
+      claimTargets() {
+        return runtimeBroker.activeSessionPrincipals().flatMap((principal) =>
+          botRegistry.ownedBotIds(principal).map((botId) => ({ principal, botId })),
+        )
+      },
+      backfill({ principal, botId, threadId, turnId, turnIds, progressKey }) {
+        const session = runtimeBroker.findByPrincipal(principal)
+        const progress = distillationBackfillProgress.forTurn(botId, threadId, progressKey ?? turnId)
+        const targetTurnIds = turnIds?.length ? turnIds : [turnId]
+        if (!session?.initialized) return Promise.resolve({ status: "TRANSIENT_FAILURE" as const, exhaustedScans: progress.exhaustedScans() })
+        return backfillDistillationTurn({
+          request: (method, params) => runtimeBroker.request(session.id, method, params),
+          importTurns: (turns, revision) => botRegistry.importRuntimeHistory(botId, threadId, turns, revision),
+          readRevision: () => botRegistry.timeline.revision(),
+          threadId,
+          turnId,
+          ready: () => targetTurnIds.every((targetTurnId) =>
+            turnReady(botRegistry.timeline.storedTurn(botId, threadId, targetTurnId)?.turn ?? null),
+          ),
+          progress,
+        }).catch(() => ({ status: "TRANSIENT_FAILURE" as const, exhaustedScans: progress.exhaustedScans() }))
+      },
+    },
+  })
+  const stopObserving = runtimeBroker.observe((principal, line, runtimeId) => {
+    botRegistry.recordRuntimeEvent(principal, line, runtimeId)
+    distillation.note(principal, line)
+  })
+  app.addHook("onClose", async () => { distillation.stop(); stopObserving() })
 
+  const botSchedules = contextOverrides?.botSchedules ?? new BotSchedules(botRegistry.db)
+  const botDeletionReconciler = new BotDeletionReconciler(botRegistry, botSchedules, runtimeBroker)
   const context: BotServerContext = {
     botToolSessions: contextOverrides?.botToolSessions ?? new BotToolSessions(),
     botRegistry,
@@ -64,10 +109,12 @@ export async function createBotApp(
     runtimeBroker,
     createCodexRuntime: contextOverrides?.createCodexRuntime,
     runtimePolicy,
-    botSchedules: contextOverrides?.botSchedules ?? new BotSchedules(botRegistry.db),
+    botSchedules,
+    botDeletionReconciler,
   }
   instrumentModuleGraph(context as unknown as Record<string, unknown>, "genio-one-bot")
   const scheduleRunner = runBotSchedules(context)
+  void botDeletionReconciler.reconcile()
   context.localHands = new LocalHands(context)
   app.addHook("preClose", async () => {
     scheduleRunner.stop()
@@ -82,6 +129,7 @@ export async function createBotApp(
     void continueCallers(context)
     void recoverApprovedInvocations(context)
     void recoverNativeInvocationResults(context)
+    void botDeletionReconciler.reconcile()
   }, 2000)
   continuationTimer.unref()
   app.addHook("onClose", async () => { clearInterval(continuationTimer) })
@@ -93,6 +141,7 @@ export async function createBotApp(
   await botQuestionRoutes(app, context)
   await botToolRoutes(app, context)
   await botDefaultToolRoutes(app, context)
+  await knowledgeEvidenceRoutes(app, context)
   await botMemoryRoutes(app, context)
   await proxyRoutes(app, context)
   await botRoutes(app, context)

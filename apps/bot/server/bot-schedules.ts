@@ -132,6 +132,8 @@ function mapRun(row: Record<string, unknown>): BotScheduleRun {
 }
 
 export class BotSchedules {
+  private readonly hasBotRegistry: boolean
+
   constructor(private readonly db: Database, private readonly now: () => number = () => Date.now()) {
     db.exec(`create table if not exists bot_schedules (
       id text primary key, tenant_id text not null, owner_subject_id text not null, acting_client_id text not null, bot_id text not null,
@@ -148,6 +150,7 @@ export class BotSchedules {
       payload_json text not null, schedule_id text not null, created_at integer not null,
       primary key (tenant_id, owner_subject_id, bot_id, client_request_id)
     )`)
+    this.hasBotRegistry = Boolean(db.query("select 1 from sqlite_master where type = 'table' and name = 'bots'").get())
   }
 
   create(principal: GenioPrincipal, botId: string, input: unknown) {
@@ -260,7 +263,10 @@ export class BotSchedules {
 
   claimDue(limit = 20) {
     const now = this.now()
-    const due = this.db.query("select * from bot_schedules where enabled = 1 and next_run_at is not null and next_run_at <= ? order by next_run_at limit ?").all(now, Math.max(1, Math.min(100, limit))) as Array<Record<string, unknown>>
+    const due = this.db.query(this.hasBotRegistry
+      ? "select schedules.* from bot_schedules schedules join bots on bots.id = schedules.bot_id and bots.tenant_id = schedules.tenant_id and bots.owner_subject_id = schedules.owner_subject_id where schedules.enabled = 1 and schedules.next_run_at is not null and schedules.next_run_at <= ? and bots.archived = 0 order by schedules.next_run_at limit ?"
+      : "select * from bot_schedules where enabled = 1 and next_run_at is not null and next_run_at <= ? order by next_run_at limit ?")
+      .all(now, Math.max(1, Math.min(100, limit))) as Array<Record<string, unknown>>
     const runs: BotScheduleRun[] = []
     this.db.transaction(() => {
       for (const row of due) {
@@ -286,7 +292,10 @@ export class BotSchedules {
     const claimed: BotScheduleRun[] = []
     this.db.transaction(() => {
       this.coalescePendingRuns(now)
-      const candidates = this.db.query("select * from bot_schedule_runs where state = 'QUEUED' order by updated_at, created_at, id limit ?").all(Math.max(1, Math.min(100, limit))) as Array<Record<string, unknown>>
+      const candidates = this.db.query(this.hasBotRegistry
+        ? "select runs.* from bot_schedule_runs runs join bots on bots.id = runs.bot_id and bots.tenant_id = runs.tenant_id and bots.owner_subject_id = runs.owner_subject_id where runs.state = 'QUEUED' and bots.archived = 0 order by runs.updated_at, runs.created_at, runs.id limit ?"
+        : "select * from bot_schedule_runs where state = 'QUEUED' order by updated_at, created_at, id limit ?")
+        .all(Math.max(1, Math.min(100, limit))) as Array<Record<string, unknown>>
       for (const candidate of candidates) {
         const updated = this.db.query("update bot_schedule_runs set state = 'CLAIMED', attempts = attempts + 1, error = null, updated_at = ? where id = ? and state = 'QUEUED'").run(now, String(candidate.id))
         if (updated.changes === 1) claimed.push(this.getRun(String(candidate.id))!)

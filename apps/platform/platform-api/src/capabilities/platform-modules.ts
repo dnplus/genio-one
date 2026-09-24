@@ -74,6 +74,8 @@ import type { SiemForwarder } from "./siem/module"
 import { createInMemorySiemForwarder } from "./siem/memory"
 import type { NotificationSubscriptionStore } from "./notifications/module"
 import { createInMemoryNotificationSubscriptionStore } from "./notifications/memory"
+import type { DistillationStore } from "./distillation/module"
+import { createInMemoryDistillationStore } from "./distillation/memory"
 import type { TenantConfigurationStore } from "./configuration/module"
 import { createInMemoryTenantConfigurationStore } from "./configuration/memory"
 import type { AccessGovernanceStore } from "./access/module"
@@ -164,6 +166,7 @@ export interface PlatformModuleGraph {
   auditEvents: GatewayAuthorizationAuditStore
   siem: SiemForwarder
   notifications: NotificationSubscriptionStore
+  distillation: DistillationStore
   configuration: TenantConfigurationStore
   access: AccessGovernanceStore
   mcpDiscovery: McpDiscoveryStore
@@ -353,6 +356,7 @@ export function createInMemoryPlatformModules(
   const metrics = createInMemoryGatewayMetricsStore()
   const siem = createInMemorySiemForwarder({ now: options.now })
   const notifications = createInMemoryNotificationSubscriptionStore({ now: options.now })
+  const distillation = createInMemoryDistillationStore({ now: options.now })
   const configuration = createInMemoryTenantConfigurationStore({ now: options.now })
   const access = createInMemoryAccessGovernanceStore({
     resources,
@@ -466,6 +470,7 @@ export function createInMemoryPlatformModules(
     auditEvents,
     siem,
     notifications,
+    distillation,
     configuration,
     access,
     mcpDiscovery,

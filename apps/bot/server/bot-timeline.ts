@@ -74,6 +74,7 @@ export class BotTimelineStore {
     )`)
     const columns = db.query("pragma table_info(bot_timeline_turns)").all() as Array<{ name: string }>
     if (!columns.some((column) => column.name === "revision")) db.exec("alter table bot_timeline_turns add column revision integer not null default 1")
+    db.exec("create index if not exists bot_timeline_turns_first_seen on bot_timeline_turns (bot_id, first_seen_at)")
     db.exec(`create table if not exists bot_legacy_history (
       bot_id text not null,
       source_key text not null,
@@ -136,6 +137,11 @@ export class BotTimelineStore {
       const projected = handoffId ? { ...message, handoffId, replyToMessageId: `handoff:${handoffId}` } : message
       return label ? { ...projected, messageType: "bot_exchange", role: "system", kind: "activity", text: label } : projected
     })
+  }
+
+  storedTurn(botId: string, threadId: string, turnId: string): { bodyJson: string; turn: StoredTurn; revision: number } | null {
+    const row = this.db.query("select body_json, revision from bot_timeline_turns where bot_id = ? and thread_id = ? and turn_id = ?").get(botId, threadId, turnId) as { body_json: string; revision: number } | null
+    return row ? { bodyJson: row.body_json, turn: JSON.parse(row.body_json) as StoredTurn, revision: Number(row.revision) } : null
   }
 
   private getTurn(botId: string, threadId: string, turnId: string): StoredTurn | null {

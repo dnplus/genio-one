@@ -57,6 +57,7 @@ import { createAccessGroupDirectory } from "./access-groups/module"
 import { createPostgresAccessGroupRepository } from "./access-groups/postgres"
 import { createPostgresSiemForwarder } from "./siem/postgres"
 import { createPostgresNotificationSubscriptionStore } from "./notifications/postgres"
+import { createPostgresDistillationStore } from "./distillation/postgres"
 import { createPostgresTenantConfigurationStore } from "./configuration/postgres"
 import { createPostgresAccessGovernanceStore } from "./access/postgres"
 import { createPostgresMcpDiscoveryStore } from "./mcp-discovery/postgres"
@@ -360,6 +361,10 @@ export function createPlatformModuleGraph(
   const notifications = createPostgresNotificationSubscriptionStore({
     sql: postgres.sql,
   })
+  const distillation = createPostgresDistillationStore({
+    sql: postgres.sql,
+    now: options.now,
+  })
   const configuration = createPostgresTenantConfigurationStore({
     sql: postgres.sql,
     now: options.now,
@@ -452,6 +457,7 @@ export function createPlatformModuleGraph(
     auditEvents,
     siem,
     notifications,
+    distillation,
     configuration,
     access,
     mcpDiscovery,

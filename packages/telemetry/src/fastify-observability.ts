@@ -2,6 +2,8 @@ import { observationContext, observationEvidence, observationReference } from ".
 import type { FastifyInstance } from "fastify"
 import { flushOtel, observabilityOrigin, recordHttpObservation, traceIdentity } from "./otlp-observability"
 
+const sensitiveResponseOmitted = JSON.stringify({ availability: "OMITTED_SENSITIVE_RESPONSE" })
+
 export function registerHttpObservability(app: FastifyInstance, service: string) {
   const origin = observabilityOrigin()
   if (!origin) return
@@ -16,7 +18,8 @@ export function registerHttpObservability(app: FastifyInstance, service: string)
   })
   app.addHook("onSend", async (request, _reply, payload) => {
     const state = requests.get(request)
-    if (state && /\/(traces|logs|traces\/[^/]+\/spans)$/.test(request.routeOptions.url ?? "")) state.responseBody = observationReference(payload)
+    if (state && (request.routeOptions.config as { sensitiveResponse?: boolean } | undefined)?.sensitiveResponse) state.responseBody = sensitiveResponseOmitted
+    else if (state && /\/(traces|logs|traces\/[^/]+\/spans)$/.test(request.routeOptions.url ?? "")) state.responseBody = observationReference(payload)
     else if (state) state.responseBody = typeof payload === "string" ? observationEvidence(payload) : payload === null ? observationEvidence(null) : observationEvidence({ availability: "STREAM_OR_BINARY_NOT_CAPTURED" })
     return payload
   })

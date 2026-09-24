@@ -8,6 +8,7 @@
     "bun": "1.4.2"
   },
   "scripts": {
+    "dev:distillation-triage": "bun services/processor/local-distillation-triage.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test ./controller ./services",
     "build": "bun build controller/server.ts --target=bun --outfile=controller/dist/server.js && bun ../../apps/platform/scripts/build-gateway-services.mjs"

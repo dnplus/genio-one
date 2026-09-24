@@ -290,7 +290,7 @@ const request = {
   publication_id: "publication-ai-1",
 } satisfies GatewayProjectionRequest
 
-test("transcription routes allow model inference beyond the default HTTP timeout", async () => {
+test("LLM public routes use bounded timeouts by model capability", async () => {
   for (const transcription of [false, true]) {
     const snapshot = publicationSnapshot({
       models: publicationSnapshot().models.map((model) => ({ ...model, capabilities: transcription ? ["TRANSCRIPTION"] : model.capabilities })),
@@ -298,7 +298,12 @@ test("transcription routes allow model inference beyond the default HTTP timeout
     const projection = await projector(snapshot).compile({ tenantId: "tenant-acme", value: request })
     const route = projection.resources.find((value) => value.kind === "HTTPRoute" && value.metadata.name === "resource-ai-chat")!
     const rule = (route.spec.rules as Array<Record<string, unknown>>)[0]!
-    assert.deepEqual(rule.timeouts, transcription ? { request: "120s", backendRequest: "120s" } : undefined)
+    assert.deepEqual(
+      rule.timeouts,
+      transcription
+        ? { request: "120s", backendRequest: "120s" }
+        : { request: "60s", backendRequest: "60s" },
+    )
   }
 })
 
@@ -484,6 +489,7 @@ test("projection emits native CRD shapes and a signed, secret-free policy bundle
     "x-genio-verified-subject",
     "x-genio-verified-client",
     "x-request-id",
+    "x-genio-correlation-id",
     "x-genio-organization-id",
     "x-genio-use-case-id",
     "x-genio-on-behalf-of-subject-id",

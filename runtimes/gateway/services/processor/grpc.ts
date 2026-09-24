@@ -467,6 +467,89 @@ function requestsStreamingResponse(body: Uint8Array): boolean {
   }
 }
 
+interface ProviderUsage {
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+}
+
+const MAX_SSE_USAGE_LINE_BYTES = 16 * 1024
+
+function providerUsage(value: unknown): ProviderUsage | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined
+  const usage = value as Record<string, unknown>
+  const promptTokens = usage.prompt_tokens
+  const completionTokens = usage.completion_tokens
+  const totalTokens = usage.total_tokens
+  if (
+    typeof promptTokens !== "number" || !Number.isSafeInteger(promptTokens) || promptTokens < 0 ||
+    typeof completionTokens !== "number" || !Number.isSafeInteger(completionTokens) || completionTokens < 0 ||
+    typeof totalTokens !== "number" || !Number.isSafeInteger(totalTokens) || totalTokens < 0
+  ) {
+    return undefined
+  }
+  return {
+    prompt_tokens: promptTokens,
+    completion_tokens: completionTokens,
+    total_tokens: totalTokens,
+  }
+}
+
+class OpenAiSseUsageParser {
+  private line: number[] = []
+  private lineOverflowed = false
+  private done = false
+  private latestUsage: ProviderUsage | undefined
+
+  push(chunk: Uint8Array, endOfStream: boolean): void {
+    for (const byte of chunk) {
+      if (byte === 0x0a) {
+        this.inspectLine()
+        this.line = []
+        this.lineOverflowed = false
+        continue
+      }
+      if (this.lineOverflowed) continue
+      if (this.line.length >= MAX_SSE_USAGE_LINE_BYTES) {
+        this.lineOverflowed = true
+        continue
+      }
+      this.line.push(byte)
+    }
+    if (endOfStream && (this.line.length > 0 || this.lineOverflowed)) {
+      this.inspectLine()
+      this.line = []
+      this.lineOverflowed = false
+    }
+  }
+
+  usage(): ProviderUsage | undefined {
+    return this.latestUsage
+  }
+
+  private inspectLine(): void {
+    if (this.lineOverflowed || this.done) return
+    let line = Buffer.from(this.line).toString("utf8")
+    if (line.endsWith("\r")) line = line.slice(0, -1)
+    if (!line.startsWith("data:")) return
+    const data = line.slice("data:".length).trim()
+    if (data === "[DONE]") {
+      this.done = true
+      return
+    }
+    if (!data) return
+    let payload: unknown
+    try {
+      payload = JSON.parse(data)
+    } catch {
+      return
+    }
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return
+    const usage = providerUsage((payload as Record<string, unknown>).usage)
+    if (usage) this.latestUsage = usage
+  }
+}
+
 function processingError(error: unknown): Error & { code: grpc.status } {
   return Object.assign(
     new Error("processor request rejected", {
@@ -538,6 +621,7 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
     const safetyBufferBytes = safetyBufferByteLimit(options.safetyBufferBytes)
     const requestSse = new SseLineBuffer()
     const responseSse = new SseLineBuffer()
+    const responseSseUsage = new OpenAiSseUsageParser()
     const requestJsonChunks: Buffer[] = []
     const responseJsonChunks: Buffer[] = []
     let requestJsonBytes = 0
@@ -1128,6 +1212,7 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
         const endOfStream = Boolean(message.response_body.end_of_stream)
         let result: DataProtectionResult
         if (responseContentType.includes("text/event-stream")) {
+          responseSseUsage.push(body, endOfStream)
           result = await responseSse.push(body, endOfStream, (line) =>
               processor!.restoreSseLine(context!, line),
             )
@@ -1196,9 +1281,11 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
               response = undefined
             }
           }
-          const usage = response?.usage && typeof response.usage === "object"
-            ? response.usage as Record<string, unknown>
-            : undefined
+          const usage = responseContentType.includes("text/event-stream")
+            ? responseSseUsage.usage()
+            : response?.usage && typeof response.usage === "object"
+              ? response.usage as Record<string, unknown>
+              : undefined
           const selectedCandidate = routingScope?.candidates.find(
             (candidate) => candidate.public_model_name === requestedPublicModel,
           )

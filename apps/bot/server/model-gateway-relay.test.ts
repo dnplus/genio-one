@@ -62,18 +62,22 @@ function decision(correlationId: string) {
 describe("model gateway relay governance context", () => {
   const originalFetch = globalThis.fetch
   const originalGateway = process.env.GENIO_ONE_MODEL_GATEWAY_BASE_URL
+  const originalGatewayPublicHost = process.env.GENIO_ONE_MODEL_GATEWAY_PUBLIC_HOST
   const originalPlatform = process.env.GENIO_ONE_PLATFORM_ORIGIN
 
   afterEach(() => {
     globalThis.fetch = originalFetch
     if (originalGateway === undefined) delete process.env.GENIO_ONE_MODEL_GATEWAY_BASE_URL
     else process.env.GENIO_ONE_MODEL_GATEWAY_BASE_URL = originalGateway
+    if (originalGatewayPublicHost === undefined) delete process.env.GENIO_ONE_MODEL_GATEWAY_PUBLIC_HOST
+    else process.env.GENIO_ONE_MODEL_GATEWAY_PUBLIC_HOST = originalGatewayPublicHost
     if (originalPlatform === undefined) delete process.env.GENIO_ONE_PLATFORM_ORIGIN
     else process.env.GENIO_ONE_PLATFORM_ORIGIN = originalPlatform
   })
 
   test("authorizes and reports with one server correlation and forwards only verified usage context", async () => {
     process.env.GENIO_ONE_MODEL_GATEWAY_BASE_URL = "https://gateway.example/v1"
+    delete process.env.GENIO_ONE_MODEL_GATEWAY_PUBLIC_HOST
     const upstream: Array<{ url: string; headers: Headers; body: string }> = []
     globalThis.fetch = (async (input, init) => {
       upstream.push({ url: String(input), headers: new Headers(init?.headers), body: String(init?.body) })
@@ -137,6 +141,9 @@ describe("model gateway relay governance context", () => {
     expect(authorizations).toHaveLength(1)
     expect(upstream).toHaveLength(1)
     expect(reports).toHaveLength(1)
+    const upstreamBody = JSON.parse(upstream[0]!.body) as Record<string, unknown>
+    expect(upstreamBody.stream_options).toEqual({ include_usage: true })
+    expect(upstreamBody).not.toHaveProperty("usage")
     const correlationId = String(authorizations[0]!.correlationId)
     expect(correlationId).not.toBe("forged-correlation")
     expect(upstream[0]!.headers.get("x-request-id")).toBe(correlationId)
@@ -144,10 +151,137 @@ describe("model gateway relay governance context", () => {
     expect(upstream[0]!.headers.get("x-genio-session-id")).toBe("runtime-session")
     expect(upstream[0]!.headers.get("x-genio-organization-id")).toBe("org-engineering")
     expect(upstream[0]!.headers.get("x-genio-use-case-id")).toBe("uat-purpose-dylan")
+    expect(upstream[0]!.headers.get("host")).toBeNull()
     expect(reports[0]!.correlationId).toBe(correlationId)
     expect(reports[0]!.outcome).toBe("COMPLETED")
     expect(reply.statusCode).toBe(200)
     expect(reply.headers.get("x-request-id")).toBe(correlationId)
+  })
+
+  test("connects through the gateway service while sending the configured public host", async () => {
+    process.env.GENIO_ONE_MODEL_GATEWAY_BASE_URL = "http://genio-one-aigw-internal:1975/v1"
+    process.env.GENIO_ONE_MODEL_GATEWAY_PUBLIC_HOST = "one.192.168.1.175.nip.io"
+    const upstream: Array<{ url: string; headers: Headers }> = []
+    globalThis.fetch = (async (input, init) => {
+      upstream.push({ url: String(input), headers: new Headers(init?.headers) })
+      return new Response("data: {\"choices\":[{\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\n", { status: 200 })
+    }) as typeof fetch
+    const authorizations: Array<Record<string, unknown>> = []
+    const reports: Array<Record<string, unknown>> = []
+    const session = {
+      id: "runtime-session",
+      relaySecret: "relay-secret",
+      principal: {
+        tenant_id: "tenant-uat",
+        subject_id: "person-dylan",
+        acting_client_id: "genio-one-bot",
+        organization_ids: ["org-engineering"],
+        scopes: ["genioone-invocation"],
+      },
+      selectedBotId: "bot-dylan",
+      usageContext: { consumerOrganizationId: "org-engineering", useCaseId: "uat-purpose-dylan" },
+      accessToken: "session-token",
+    }
+    let handler: ((request: unknown, reply: Reply) => Promise<unknown>) | null = null
+    await modelGatewayRelayRoutes({
+      post: (_path: string, route: (request: unknown, reply: Reply) => Promise<unknown>) => { handler = route },
+      all: () => {},
+    } as never, {
+      runtimeBroker: { get: () => session, accessTokenForBot: () => session.accessToken },
+      botRegistry: {
+        getOwned: () => ({
+          id: "bot-dylan",
+          modelRoute: "genio-gateway",
+          ownerOrganizationId: "org-engineering",
+          useCaseId: "uat-purpose-dylan",
+        }),
+      },
+      runtimePolicy: {
+        async authorize(input: Record<string, unknown>) {
+          authorizations.push(input)
+          return decision(String(input.correlationId))
+        },
+        async report(input: Record<string, unknown>) {
+          reports.push(input)
+        },
+      },
+    } as never)
+
+    const reply = new Reply()
+    await handler!({
+      params: { runtimeSessionId: "runtime-session" },
+      headers: { authorization: "Bearer relay-secret" },
+      body: { model: "uat-175-qwen", input: "hello" },
+    }, reply)
+    for await (const _chunk of reply.body as AsyncIterable<unknown>) {}
+
+    expect(upstream).toHaveLength(1)
+    expect(upstream[0]!.url).toBe("http://genio-one-aigw-internal:1975/v1/chat/completions")
+    expect(upstream[0]!.headers.get("host")).toBe("one.192.168.1.175.nip.io")
+    expect(upstream[0]!.headers.get("authorization")).toBe("Bearer session-token")
+    const correlationId = String(authorizations[0]!.correlationId)
+    expect(upstream[0]!.headers.get("x-request-id")).toBe(correlationId)
+    expect(upstream[0]!.headers.get("x-genio-correlation-id")).toBe(correlationId)
+    expect(upstream[0]!.headers.get("x-genio-session-id")).toBe("runtime-session")
+    expect(upstream[0]!.headers.get("x-genio-organization-id")).toBe("org-engineering")
+    expect(upstream[0]!.headers.get("x-genio-use-case-id")).toBe("uat-purpose-dylan")
+    expect(reports[0]!.outcome).toBe("COMPLETED")
+  })
+
+  test("rejects an unsafe public host before contacting the gateway", async () => {
+    process.env.GENIO_ONE_MODEL_GATEWAY_BASE_URL = "http://genio-one-aigw-internal:1975/v1"
+    process.env.GENIO_ONE_MODEL_GATEWAY_PUBLIC_HOST = "one.example\r\nx-forwarded-host: attacker.example"
+    let fetches = 0
+    globalThis.fetch = (async (_input, _init) => {
+      fetches++
+      return new Response("unexpected", { status: 200 })
+    }) as typeof fetch
+    const reports: Array<Record<string, unknown>> = []
+    const session = {
+      id: "runtime-session",
+      relaySecret: "relay-secret",
+      principal: {
+        tenant_id: "tenant-uat",
+        subject_id: "person-dylan",
+        acting_client_id: "genio-one-bot",
+        organization_ids: ["org-engineering"],
+        scopes: ["genioone-invocation"],
+      },
+      selectedBotId: "bot-dylan",
+      usageContext: { consumerOrganizationId: "org-engineering", useCaseId: "uat-purpose-dylan" },
+      accessToken: "session-token",
+    }
+    let handler: ((request: unknown, reply: Reply) => Promise<unknown>) | null = null
+    await modelGatewayRelayRoutes({
+      post: (_path: string, route: (request: unknown, reply: Reply) => Promise<unknown>) => { handler = route },
+      all: () => {},
+    } as never, {
+      runtimeBroker: { get: () => session, accessTokenForBot: () => session.accessToken },
+      botRegistry: {
+        getOwned: () => ({
+          id: "bot-dylan",
+          modelRoute: "genio-gateway",
+          ownerOrganizationId: "org-engineering",
+          useCaseId: "uat-purpose-dylan",
+        }),
+      },
+      runtimePolicy: {
+        async authorize(input: Record<string, unknown>) { return decision(String(input.correlationId)) },
+        async report(input: Record<string, unknown>) { reports.push(input) },
+      },
+    } as never)
+
+    const reply = new Reply()
+    await handler!({
+      params: { runtimeSessionId: "runtime-session" },
+      headers: { authorization: "Bearer relay-secret" },
+      body: { model: "uat-175-qwen", input: "hello" },
+    }, reply)
+
+    expect(reply.statusCode).toBe(503)
+    expect(reply.body).toEqual({ error: "MODEL_GATEWAY_PUBLIC_HOST_INVALID" })
+    expect(fetches).toBe(0)
+    expect(reports).toEqual([expect.objectContaining({ outcome: "FAILED", reasonCode: "MODEL_GATEWAY_PUBLIC_HOST_INVALID" })])
   })
 
   test("does not reuse a session usage context that does not match the server-owned Bot binding", async () => {
@@ -379,6 +513,7 @@ describe("model gateway relay", () => {
         { role: "assistant", content: "I will inspect it." },
       ],
       stream: true,
+      stream_options: { include_usage: true },
       tools: [{
         type: "function",
         function: {
@@ -452,6 +587,27 @@ describe("model gateway relay", () => {
       model: "company-model",
       messages: [{ role: "user", content: "hello" }],
       stream: true,
+      stream_options: { include_usage: true },
+    })
+  })
+
+  test("requests OpenAI-compatible usage without adding provider output to a tool request", () => {
+    expect(responsesToChatRequest({
+      model: "company-model",
+      input: "hello",
+      tools: [{ type: "function", name: "read_case", parameters: { type: "object" } }],
+    })).toEqual({
+      model: "company-model",
+      messages: [{ role: "user", content: "hello" }],
+      stream: true,
+      stream_options: { include_usage: true },
+      tools: [{
+        type: "function",
+        function: {
+          name: "read_case",
+          parameters: { type: "object" },
+        },
+      }],
     })
   })
 })

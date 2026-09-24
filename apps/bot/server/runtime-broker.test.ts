@@ -54,6 +54,20 @@ describe("RuntimeBroker", () => {
     await broker.stop(session.id)
   })
 
+  test("lists only initialized sessions that retain an access token", async () => {
+    const broker = new RuntimeBroker({ provision: async () => execDesktop("claim-targets") })
+    const ready = await broker.start(principal, { onMessage() {}, onExit() {} }, undefined, "owner-token")
+    ready.initialized = true
+    const initializingPrincipal = { ...principal, subject_id: "initializing-owner" }
+    await broker.start(initializingPrincipal, { onMessage() {}, onExit() {} }, undefined, "initializing-token")
+    const tokenlessPrincipal = { ...principal, subject_id: "tokenless-owner" }
+    const tokenless = await broker.start(tokenlessPrincipal, { onMessage() {}, onExit() {} })
+    tokenless.initialized = true
+
+    expect(broker.activeSessionPrincipals()).toEqual([principal])
+    await broker.close()
+  })
+
   test("keeps managed MCP mounts scoped to the Bot that created them", async () => {
     const broker = new RuntimeBroker({ provision: async () => execDesktop("bot-mounts") })
     const session = await broker.start(principal, { onMessage() {}, onExit() {} })

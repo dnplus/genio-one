@@ -241,7 +241,13 @@ spec:
               valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: valkey-password } }
             - name: GENIO_ONE_TOKEN_VAULT_KEY
               valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: token-vault-key } }
-            {{- if .Values.processorAdapters.configMap.name }}
+            {{- if and .Values.aiMcpGateway.enabled .Values.processorAdapters.configMap.name }}
+            - name: GENIO_ONE_DISTILLATION_TRIAGE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "genio-one.secretName" . }}
+                  key: distillation-triage-token
+                  optional: false
             - { name: GENIO_ONE_PROCESSOR_ADAPTERS_FILE, value: /var/run/genio-one/processor-adapters/registry.json }
             {{- end }}
             {{- $credentialEnvNames := list }}

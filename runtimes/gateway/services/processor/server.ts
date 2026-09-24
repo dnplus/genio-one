@@ -110,6 +110,7 @@ const httpBridge = startProcessorHttpBridge({
   tokenVault: vault,
   modelRouter,
   adapterRuntime,
+  distillationTriageToken: process.env.GENIO_ONE_DISTILLATION_TRIAGE_TOKEN,
   safetyBufferBytes,
   ...(observationOrigin ? { onActivity: deliverActivity } : {}),
 })

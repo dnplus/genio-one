@@ -9,6 +9,7 @@ import { RuntimeBroker } from "./runtime-broker"
 import { modelGatewayRelayRoutes } from "./model-gateway-relay"
 import { createRuntimePolicyClient } from "./runtime-policy"
 import type { BotServerContext } from "./context"
+import type { BotDeletionReconciler } from "./bot-deletion-reconciler"
 
 function allowRuntimePolicy() {
   return {
@@ -137,6 +138,7 @@ test("Bot-bound Discovery keeps an invocation credential with its owned Bot", as
       runtimeBroker: broker,
       botRegistry: registry,
       botSchedules: new BotSchedules(registry.db),
+      botDeletionReconciler: {} as BotDeletionReconciler,
       botToolSessions: new BotToolSessions(),
       capabilityGate: createCapabilityGate({ mode: "open" }),
       modelDirectory: createBotModelDirectory({}),

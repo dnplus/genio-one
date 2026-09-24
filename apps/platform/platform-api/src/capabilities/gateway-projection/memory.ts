@@ -1398,6 +1398,7 @@ function authorizationExtAuth(
       "x-genio-verified-subject",
       "x-genio-verified-client",
       "x-request-id",
+      "x-genio-correlation-id",
       "x-genio-organization-id",
       "x-genio-use-case-id",
       "x-genio-on-behalf-of-subject-id",
@@ -2142,9 +2143,9 @@ export function createInMemoryGatewayProjector(
               }],
               rules: [{
                 matches: [{ path: { type: "PathPrefix", value: publication.base_path } }],
-                ...(requestedModels.some((model) => model.capabilities.includes("TRANSCRIPTION"))
-                  ? { timeouts: { request: "120s", backendRequest: "120s" } }
-                  : {}),
+                timeouts: requestedModels.some((model) => model.capabilities.includes("TRANSCRIPTION"))
+                  ? { request: "120s", backendRequest: "120s" }
+                  : { request: "60s", backendRequest: "60s" },
                 filters: [
                   {
                     type: "URLRewrite",

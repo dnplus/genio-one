@@ -8,6 +8,7 @@ import { createBotModelDirectory } from "./model-directory"
 import { createRuntimePolicyClient } from "./runtime-policy"
 import { runApprovedBotInvocation } from "./routes/invocations"
 import type { BotServerContext } from "./context"
+import type { BotDeletionReconciler } from "./bot-deletion-reconciler"
 import type { Turn } from "./generated/v2/Turn"
 
 test("turn send rejection settles failure while broker retains its runtime", async () => {
@@ -65,6 +66,7 @@ test("handoff binds a company model thread to its target Bot relay URL", async (
   const context: BotServerContext = {
     botRegistry: registry,
     botSchedules: new BotSchedules(registry.db),
+    botDeletionReconciler: {} as BotDeletionReconciler,
     capabilityGate: createCapabilityGate({ mode: "open" }),
     runtimeBroker: broker,
     botToolSessions: new BotToolSessions(),

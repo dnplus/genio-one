@@ -189,10 +189,12 @@ function withoutRequestHeader(
   return message
 }
 
-async function runHeaderOnly(
+type ProcessorRunResult = { destroyed?: Error; responses: unknown[] }
+
+async function runProcessorMessages(
   options: Parameters<typeof createExternalProcessorHandler>[0],
-  message = requestHeaderMessage(),
-): Promise<{ destroyed?: Error; responses: unknown[] }> {
+  messages: readonly unknown[],
+): Promise<ProcessorRunResult> {
   const listeners = new Map<string, ((value?: unknown) => void)[]>()
   let destroyed: Error | undefined
   const responses: unknown[] = []
@@ -221,10 +223,55 @@ async function runHeaderOnly(
     },
   }
   createExternalProcessorHandler(options)(call as never)
-  call.emit("data", message)
+  for (const message of messages) call.emit("data", message)
   call.emit("end")
   await finished
   return { destroyed, responses }
+}
+
+async function runHeaderOnly(
+  options: Parameters<typeof createExternalProcessorHandler>[0],
+  message = requestHeaderMessage(),
+): Promise<ProcessorRunResult> {
+  return runProcessorMessages(options, [message])
+}
+
+async function runStreamingCompletion(
+  options: Parameters<typeof createExternalProcessorHandler>[0],
+  chunks: readonly string[],
+): Promise<ProcessorRunResult> {
+  const messages = [
+    requestHeaderMessage({
+      "x-genio-trusted-consumer-organization-id": "organization-consumer",
+      "x-genio-trusted-resource-owner-organization-id": "organization-owner",
+      "x-genio-trusted-use-case-id": "support-assistant",
+      "x-genio-usage-accounting-keys": '["accounting-shared"]',
+      "x-genio-usage-policy-revisions": '["usage-policy:3"]',
+    }),
+    {
+      request_body: {
+        body: Buffer.from(JSON.stringify({ model: "genio-chat", messages: [] })),
+        end_of_stream: true,
+      },
+    },
+    {
+      response_headers: {
+        headers: {
+          headers: [
+            { key: ":status", value: "200" },
+            { key: "content-type", value: "text/event-stream" },
+          ],
+        },
+      },
+    },
+    ...chunks.map((body, index) => ({
+      response_body: {
+        body: Buffer.from(body),
+        end_of_stream: index === chunks.length - 1,
+      },
+    })),
+  ]
+  return runProcessorMessages(options, messages)
 }
 
 function deterministicRoutingScope() {
@@ -932,6 +979,79 @@ test("deterministic authorization keeps a single trusted public-model alias for 
   assert.equal(accounting[0]?.valuations[0]?.pricing_source, "LITELLM")
   assert.equal(settlements[0]?.amount_micros, 10)
   assert.equal(settlements[0]?.allocation_id, "currency-september")
+})
+
+test("ext_proc records OpenAI-compatible SSE usage split across response chunks", async () => {
+  const activity: GatewayActivityIngest[] = []
+  const accounting: Array<Parameters<NonNullable<
+    Parameters<typeof createExternalProcessorHandler>[0]["onAccounting"]
+  >>[0]> = []
+  const chunks = [
+    'data: {"id":"chat-1","choices":[{"delta":{"content":"hello"}}]}\n\ndata: {"choices":[],"usage":{"prompt_tokens":37,"completion_tokens":',
+    '9,"total_tokens":46}}\n\ndata: [DONE]\n',
+  ]
+  const result = await runStreamingCompletion({
+    ...externalProcessorOptions(new MemoryVault()),
+    onActivity(event) {
+      activity.push(event)
+    },
+    onAccounting(event) {
+      accounting.push(event)
+    },
+  }, chunks)
+
+  assert.equal(result.destroyed, undefined)
+  assert.equal(result.responses.filter((value: any) => value?.response_body).length, 2)
+  assert.deepEqual(
+    Buffer.concat(result.responses
+      .filter((value: any) => value?.response_body)
+      .map((value: any) => value.response_body.response.body_mutation.body)),
+    Buffer.from(chunks.join("")),
+  )
+  assert.equal(activity.length, 1)
+  assert.deepEqual([
+    activity[0]?.input_tokens,
+    activity[0]?.output_tokens,
+    activity[0]?.total_tokens,
+  ], [37, 9, 46])
+  assert.equal(accounting.length, 1)
+  assert.deepEqual(accounting[0]?.quantities.map((value) => [value.unit, value.quantity]), [
+    ["INPUT_TOKENS", 37],
+    ["OUTPUT_TOKENS", 9],
+    ["TOTAL_TOKENS", 46],
+  ])
+  assert.ok(accounting[0]?.quantities.every((value) => value.trusted_source === "PROVIDER_RESPONSE"))
+})
+
+test("ext_proc does not invent usage for missing or malformed SSE usage", async () => {
+  for (const body of [
+    'data: {"choices":[]}\n\ndata: [DONE]\n',
+    'data: {"choices":[],"usage":{"prompt_tokens":"37","completion_tokens":9,"total_tokens":46}}\n\ndata: [DONE]\n',
+  ]) {
+    const activity: GatewayActivityIngest[] = []
+    const accounting: Array<Parameters<NonNullable<
+      Parameters<typeof createExternalProcessorHandler>[0]["onAccounting"]
+    >>[0]> = []
+    const result = await runStreamingCompletion({
+      ...externalProcessorOptions(new MemoryVault()),
+      onActivity(event) {
+        activity.push(event)
+      },
+      onAccounting(event) {
+        accounting.push(event)
+      },
+    }, [body])
+
+    assert.equal(result.destroyed, undefined)
+    assert.equal(activity.length, 1)
+    assert.deepEqual([
+      activity[0]?.input_tokens,
+      activity[0]?.output_tokens,
+      activity[0]?.total_tokens,
+    ], [null, null, null])
+    assert.equal(accounting.length, 1)
+    assert.deepEqual(accounting[0]?.quantities, [])
+  }
 })
 
 test("ext_proc keeps reversible processing fail closed without a caller session", async () => {

@@ -214,6 +214,7 @@ export function responsesToChatRequest(input: JsonRecord): JsonRecord {
     model: input.model,
     messages: responseInputToMessages(input.input, input.instructions),
     stream: true,
+    stream_options: { include_usage: true },
   }
   const tools = responsesToolsToChatTools(input.tools)
   if (tools) request.tools = tools
@@ -230,6 +231,25 @@ function upstreamUrl(): URL {
   if (!configured) throw new Error("GENIO_ONE_MODEL_GATEWAY_BASE_URL_REQUIRED")
   const base = configured.endsWith("/") ? configured : `${configured}/`
   return new URL("chat/completions", base)
+}
+
+const modelGatewayPublicHostPattern = /^(?:\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*)(?::[0-9]{1,5})?$/
+
+function modelGatewayPublicHost(): string | null {
+  const configured = process.env.GENIO_ONE_MODEL_GATEWAY_PUBLIC_HOST?.trim()
+  if (!configured) return null
+  if (configured.length > 255 || !modelGatewayPublicHostPattern.test(configured)) {
+    throw new Error("MODEL_GATEWAY_PUBLIC_HOST_INVALID")
+  }
+  try {
+    const parsed = new URL(`http://${configured}`)
+    if (parsed.pathname !== "/" || parsed.search || parsed.hash || parsed.username || parsed.password) {
+      throw new Error("MODEL_GATEWAY_PUBLIC_HOST_INVALID")
+    }
+  } catch {
+    throw new Error("MODEL_GATEWAY_PUBLIC_HOST_INVALID")
+  }
+  return configured.toLowerCase()
 }
 
 function loopbackTarget(target: URL): { url: URL; host: string | null } {
@@ -468,8 +488,10 @@ export async function modelGatewayRelayRoutes(app: FastifyInstance, context: Bot
       return reply.code(503).send({ error: "RUNTIME_POLICY_UNAVAILABLE" })
     }
     let target: URL
+    let publicHost: string | null
     try {
       target = upstreamUrl()
+      publicHost = modelGatewayPublicHost()
     } catch (error) {
       try {
         await report("FAILED", error instanceof Error ? error.message : "MODEL_GATEWAY_NOT_CONFIGURED")
@@ -479,6 +501,7 @@ export async function modelGatewayRelayRoutes(app: FastifyInstance, context: Bot
       return reply.code(503).send({ error: error instanceof Error ? error.message : "MODEL_GATEWAY_NOT_CONFIGURED" })
     }
     const resolvedTarget = loopbackTarget(target)
+    const requestHost = publicHost ?? resolvedTarget.host
     let upstream: Response
     try {
       upstream = await observedFetch("genio-one-bot", resolvedTarget.url, {
@@ -491,7 +514,7 @@ export async function modelGatewayRelayRoutes(app: FastifyInstance, context: Bot
           [SESSION_ID_HEADER]: session.id,
           [CONSUMER_ORGANIZATION_HEADER]: usageContext.consumerOrganizationId,
           [USE_CASE_HEADER]: usageContext.useCaseId,
-          ...(resolvedTarget.host ? { host: resolvedTarget.host } : {}),
+          ...(requestHost ? { host: requestHost } : {}),
         },
         body: JSON.stringify(chatRequest),
       })

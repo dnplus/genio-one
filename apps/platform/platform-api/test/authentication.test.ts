@@ -651,3 +651,14 @@ test("management reads do not expose tenant-wide Resource inventory to a User", 
   assert.equal(tenant.json()[0]?.resource_id, "resource-private")
   await app.close()
 })
+
+test("Management API returns security response headers", async () => {
+  const app = await createManagementApi(dependencies())
+  const response = await app.inject({ method: "GET", url: "/healthz" })
+  assert.equal(response.statusCode, 200)
+  assert.equal(response.headers["x-content-type-options"], "nosniff")
+  assert.equal(response.headers["x-frame-options"], "DENY")
+  assert.equal(response.headers["referrer-policy"], "strict-origin-when-cross-origin")
+  assert.equal(response.headers["x-xss-protection"], "0")
+  await app.close()
+})

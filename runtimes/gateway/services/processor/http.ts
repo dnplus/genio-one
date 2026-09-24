@@ -46,9 +46,11 @@ import {
   ROUTE_PROVIDER_CREDENTIAL_STRATEGY_DIGEST_HEADER,
 } from "../shared/model-route-handoff"
 import { operationalError, writeOperationalEvent } from "@genioone/telemetry/operational-log"
+import { DISTILLATION_TRIAGE_REQUEST_BYTE_LIMIT } from "@genioone/protocol/distillation-triage"
 import { gatewayDetailActivityReference } from "@genioone/telemetry/otlp-detail-capture"
 import type { GatewayActivityIngest } from "../shared/gateway-activity"
 import { narrowGatewayRoutingScopeByObligations } from "../shared/gateway-routing-artifact"
+import { handleDistillationTriageRequest } from "../shared/distillation-triage"
 import type { ProcessorAdapterRuntime } from "../shared/processor-adapters"
 import {
   PROCESSOR_SAFETY_DECISIONS_HEADER,
@@ -95,6 +97,7 @@ interface ProcessorHttpBridgeOptions {
   modelRouter?: GatewayModelRouteResolver
   processorFactory?: (policy: ProcessorPolicy, tokenVault: TokenVault) => PayloadProcessor
   adapterRuntime?: ProcessorAdapterRuntime
+  distillationTriageToken?: string
   safetyBufferBytes?: number
   onActivity?: (event: GatewayActivityIngest) => Promise<void> | void
 }
@@ -175,6 +178,22 @@ export function startProcessorHttpBridge(
     readBody: DeferredBodyReader,
   ): Promise<Response> => {
       const url = new URL(request.url)
+      const triageToken = options.distillationTriageToken?.trim()
+      if (request.method === "POST" && triageToken && url.pathname.endsWith("/v1/distillation-triage")) {
+        if (!options.adapterRuntime) return errorResponse(503, "DISTILLATION_TRIAGE_UNAVAILABLE")
+        try {
+          const bytes = await readBody(DISTILLATION_TRIAGE_REQUEST_BYTE_LIMIT)
+          return await handleDistillationTriageRequest({
+            authorization: request.headers.get("authorization"),
+            body: bytes,
+            token: triageToken,
+            runtime: options.adapterRuntime,
+          })
+        } catch (error) {
+          if (error instanceof SafetyBufferLimitExceededError) return errorResponse(413, "DISTILLATION_EXCERPT_TOO_LARGE")
+          return errorResponse(400, "DISTILLATION_TRIAGE_REJECTED")
+        }
+      }
       // Envoy Gateway prefixes direct cluster calls with the generated
       // HTTPRoute backend path. The bridge contract is the final path segment;
       // accept only that exact suffix and keep every other route fail-closed.

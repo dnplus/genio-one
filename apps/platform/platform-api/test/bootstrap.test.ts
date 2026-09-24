@@ -2,6 +2,8 @@ import assert from "node:assert/strict"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import test from "node:test"
+
+import { DISTILLATION_EXTRACTOR_VERSION } from "@genioone/protocol/distillation-triage"
 import { tmpdir } from "node:os"
 
 import {
@@ -108,6 +110,170 @@ test("memory development mode is explicit and never allowed in production", asyn
       }),
     /memory-dev mode is forbidden/,
   )
+})
+
+test("configured memory API uses its Bot service endpoint without reading the process environment", async () => {
+  const tenantId = "tenant-configured-evidence"
+  const digest = "a".repeat(64)
+  const principals = {
+    admin: {
+      tenant_id: tenantId,
+      subject_id: "admin",
+      client_id: "management-ui",
+      role: "TENANT_ADMINISTRATOR",
+      organization_ids: [],
+      scopes: ["genioone-management"],
+    },
+    owner: {
+      tenant_id: tenantId,
+      subject_id: "owner",
+      client_id: "management-ui",
+      role: "USER",
+      organization_ids: [],
+      scopes: ["genioone-management", "genioone-invocation"],
+    },
+    maintainer: {
+      tenant_id: tenantId,
+      subject_id: "maintainer",
+      client_id: "management-ui",
+      role: "USER",
+      organization_ids: [],
+      scopes: ["genioone-management"],
+    },
+  }
+  const previousBotEndpoint = process.env.GENIO_BOT_SERVICE_ENDPOINT
+  const originalFetch = globalThis.fetch
+  let app: Awaited<ReturnType<typeof createConfiguredManagementApi>> | null = null
+  let candidate: { knowledge_id: string; tenant_id: string; workspace_id: string | null; content_digest: string } | null = null
+  let requestedUrl = ""
+  try {
+    delete process.env.GENIO_BOT_SERVICE_ENDPOINT
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      requestedUrl = String(input)
+      assert.equal(new Headers(init?.headers).get("authorization"), "Bearer maintainer")
+      assert.ok(candidate)
+      return Response.json({
+        knowledge_id: candidate.knowledge_id,
+        tenant_id: candidate.tenant_id,
+        workspace_id: candidate.workspace_id,
+        content_digest: candidate.content_digest,
+        turns: [{ turn_id: "turn-1", text: "configured evidence", truncated: false }],
+      })
+    }) as typeof fetch
+    const configured = await createConfiguredManagementApi({
+      logger: false,
+      environment: {
+        NODE_ENV: "development",
+        GENIO_ONE_PLATFORM_API_MODE: "memory-dev",
+        GENIO_ONE_MANAGEMENT_API_AUTH_MODE: "static-dev",
+        GENIO_ONE_MANAGEMENT_API_PRINCIPALS_JSON: JSON.stringify(principals),
+        GENIO_ONE_TYPESCRIPT_PILOT_TENANT_ID: tenantId,
+        GENIO_BOT_SERVICE_ENDPOINT: "https://configured-bot.example/service",
+      },
+    })
+    app = configured
+    const adminHeaders = { authorization: "Bearer admin" }
+    for (const subjectId of ["owner", "maintainer"]) {
+      const subject = await configured.inject({
+        method: "POST",
+        url: `/v1/tenants/${tenantId}/identity/subjects`,
+        headers: adminHeaders,
+        payload: { subject_id: subjectId, kind: "AGENT", display_name: subjectId },
+      })
+      assert.equal(subject.statusCode, 201)
+    }
+    const organization = await configured.inject({
+      method: "POST",
+      url: `/v1/tenants/${tenantId}/organizations`,
+      headers: adminHeaders,
+      payload: { display_name: "Evidence" },
+    })
+    assert.equal(organization.statusCode, 201)
+    for (const [id, name] of [["readers", "Readers"], ["contributors", "Contributors"], ["maintainers", "Maintainers"]] as const) {
+      const group = await configured.inject({
+        method: "PUT",
+        url: `/v1/tenants/${tenantId}/access-groups/${id}`,
+        headers: adminHeaders,
+        payload: { expected_revision: 0, display_name: name, description: "", enabled: true },
+      })
+      assert.equal(group.statusCode, 200)
+    }
+    for (const [id, subjectIds] of [["readers", []], ["contributors", ["owner"]], ["maintainers", ["maintainer"]]] as const) {
+      const members = await configured.inject({
+        method: "PUT",
+        url: `/v1/tenants/${tenantId}/access-groups/${id}/members`,
+        headers: adminHeaders,
+        payload: { expected_group_revision: 1, expected_source_revision: 0, subject_ids: subjectIds },
+      })
+      assert.equal(members.statusCode, 200)
+    }
+    const workspace = await configured.inject({
+      method: "POST",
+      url: `/v1/tenants/${tenantId}/team-workspaces`,
+      headers: adminHeaders,
+      payload: {
+        organization_id: (organization.json() as { organization_id: string }).organization_id,
+        display_name: "Evidence workspace",
+        reader_access_group_id: "readers",
+        contributor_access_group_id: "contributors",
+        maintainer_access_group_id: "maintainers",
+      },
+    })
+    assert.equal(workspace.statusCode, 200)
+    const marker = await configured.inject({
+      method: "POST",
+      url: `/v1/tenants/${tenantId}/distillation-markers`,
+      headers: { authorization: "Bearer owner" },
+      payload: {
+        bot_id: "bot-1",
+        thread_id: "thread-1",
+        turn_ids: ["turn-1"],
+        source_revision: digest,
+        content_digest: digest,
+        scope_hint: "process",
+        sensitivity: "standard",
+        knowledge_type: "PROCEDURE",
+        representation: "BOTH",
+        classifier_version: "jev-distillation-1",
+        extractor_version: DISTILLATION_EXTRACTOR_VERSION,
+        evidence: [],
+        excerpt_truncated: false,
+        workspace_id: (workspace.json() as { workspace_id: string }).workspace_id,
+      },
+    })
+    assert.equal(marker.statusCode, 200)
+    const claim = await configured.inject({
+      method: "POST",
+      url: `/v1/tenants/${tenantId}/distillation-markers/claim`,
+      headers: { authorization: "Bearer owner" },
+      payload: { bot_id: "bot-1", lease_owner: "configured-test" },
+    })
+    assert.equal(claim.statusCode, 200)
+    const complete = await configured.inject({
+      method: "POST",
+      url: `/v1/tenants/${tenantId}/distillation-markers/${(marker.json() as { marker_id: string }).marker_id}/result`,
+      headers: { authorization: "Bearer owner" },
+      payload: {
+        lease_token: (claim.json() as { lease_token: string }).lease_token,
+        outcome: "CANDIDATE_CREATED",
+        content_digest: digest,
+      },
+    })
+    assert.equal(complete.statusCode, 200)
+    candidate = (complete.json() as { candidate: { knowledge_id: string; tenant_id: string; workspace_id: string | null; content_digest: string } }).candidate
+    const evidence = await configured.inject({
+      method: "GET",
+      url: `/v1/tenants/${tenantId}/knowledge-candidates/${candidate!.knowledge_id}/evidence`,
+      headers: { authorization: "Bearer maintainer" },
+    })
+    assert.equal(evidence.statusCode, 200)
+    assert.equal(requestedUrl, `https://configured-bot.example/api/knowledge-candidates/${candidate!.knowledge_id}/evidence`)
+  } finally {
+    globalThis.fetch = originalFetch
+    if (previousBotEndpoint === undefined) delete process.env.GENIO_BOT_SERVICE_ENDPOINT
+    else process.env.GENIO_BOT_SERVICE_ENDPOINT = previousBotEndpoint
+    await app?.close()
+  }
 })
 
 test("configured processor adapter registry is validated during memory API bootstrap", async () => {

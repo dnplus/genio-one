@@ -68,6 +68,18 @@ spec:
               value: "/var/lib/genio-one-bot/bot-packages"
             - name: GENIO_ONE_PLATFORM_ORIGIN
               value: {{ printf "http://%s-platform:%d" (include "genio-one.fullname" .) (int .Values.platform.service.port) | quote }}
+            {{- if and .Values.aiMcpGateway.enabled .Values.processorAdapters.configMap.name }}
+            - name: GENIO_ONE_DISTILLATION_TRIAGE_URL
+              value: "http://genio-one-processor-http:8182/v1/distillation-triage"
+            - name: GENIO_ONE_DISTILLATION_ADAPTER_ID
+              value: {{ .Values.bot.distillationAdapterId | default "jev-production" | quote }}
+            - name: GENIO_ONE_DISTILLATION_TRIAGE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "genio-one.secretName" . }}
+                  key: distillation-triage-token
+                  optional: false
+            {{- end }}
             - name: GENIO_ONE_AGENT_SUBJECT_SERVICE_TOKEN
               valueFrom:
                 secretKeyRef:

@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test"
 
 import { BotRegistry, toBotProfile } from "./bot-registry"
+import { SQLiteDistillationBackfillProgressStore } from "./distillation/backfill-progress"
+import { createDistillationWorker } from "./distillation/worker"
 import type { GenioPrincipal } from "./runtime-broker"
 
 const owner: GenioPrincipal = {
@@ -65,6 +67,16 @@ describe("BotRegistry", () => {
     expect(approved.state).toBe("APPROVED")
     expect(store.beginInvocation(request.requestId)?.state).toBe("RUNNING")
     expect(store.beginInvocation(request.requestId)).toBeNull()
+  })
+
+  test("lists only active Bots owned by the current principal", () => {
+    registry = new BotRegistry(":memory:")
+    const first = registry.create(owner, { name: "Owner A" })
+    const second = registry.create(owner, { name: "Owner B" })
+    registry.create(caller, { name: "Caller" })
+
+    expect(registry.ownedBotIds(owner)).toEqual([first.id, second.id])
+    expect(registry.ownedBotIds(caller)).toHaveLength(1)
   })
 
   test("installation is idempotent for the same package revision", () => {
@@ -286,6 +298,77 @@ describe("BotRegistry", () => {
     expect(registry.getSession(bot.id)).toBeNull()
     expect(registry.list(owner).find((b) => b.id === bot.id)).toBeUndefined()
     expect(() => registry!.delete(bot.id, owner)).toThrow("BOT_NOT_FOUND")
+  })
+
+  test("deleting a bot purges its distillation state while preserving Timeline retention", () => {
+    registry = new BotRegistry(":memory:")
+    const deleted = registry.create(owner, { name: "Deleted" })
+    const retained = registry.create(owner, { name: "Retained" })
+    const record = (botId: string, threadId: string, turnId: string) => {
+      registry!.rememberThread(botId, threadId)
+      registry!.recordRuntimeEvent(owner, JSON.stringify({
+        method: "turn/completed",
+        params: {
+          threadId,
+          turn: {
+            id: turnId,
+            status: "completed",
+            items: [{ type: "userMessage", id: `${turnId}-message`, content: [{ type: "text", text: turnId }] }],
+          },
+        },
+      }))
+    }
+    record(deleted.id, "deleted-thread", "deleted-turn")
+    record(retained.id, "retained-thread", "retained-turn")
+    const worker = createDistillationWorker({
+      registry,
+      sessions: { tokenFor: () => "token" },
+      classifier: { async classify() { throw new Error("not used") } },
+      platform: { async submit() { throw new Error("not used") }, async claim() { return null }, async complete() {} },
+    })
+    worker.note(owner, JSON.stringify({ method: "turn/completed", params: { threadId: "deleted-thread", turn: { id: "deleted-turn" } } }))
+    worker.note(owner, JSON.stringify({ method: "turn/completed", params: { threadId: "retained-thread", turn: { id: "retained-turn" } } }))
+    const progress = new SQLiteDistillationBackfillProgressStore(registry.db)
+    progress.forTurn(deleted.id, "deleted-thread", "deleted-turn").save("deleted-cursor", ["deleted-cursor"])
+    progress.forTurn(retained.id, "retained-thread", "retained-turn").save("retained-cursor", ["retained-cursor"])
+
+    registry.delete(deleted.id, owner)
+
+    expect(registry.db.query("select count(*) as count from bot_distillation_inbox where bot_id = ?").get(deleted.id)).toEqual({ count: 0 })
+    expect(registry.db.query("select count(*) as count from bot_distillation_inbox where bot_id = ?").get(retained.id)).toEqual({ count: 1 })
+    expect(progress.forTurn(deleted.id, "deleted-thread", "deleted-turn").cursor()).toBeNull()
+    expect(progress.forTurn(retained.id, "retained-thread", "retained-turn").cursor()).toBe("retained-cursor")
+    expect(registry!.timeline.storedTurn(deleted.id, "deleted-thread", "deleted-turn")).not.toBeNull()
+    registry.importRuntimeHistory(deleted.id, "deleted-thread", [{ id: "after-delete", status: "completed", items: [] } as any], registry.timeline.revision())
+    expect(registry.timeline.storedTurn(deleted.id, "deleted-thread", "after-delete")).toBeNull()
+  })
+
+  test("keeps imported history and reports an observer failure without its message", () => {
+    registry = new BotRegistry(":memory:")
+    const bot = registry.create(owner, { name: "Imported" })
+    const errors: unknown[] = []
+    const originalError = console.error
+    console.error = (...args: unknown[]) => { errors.push(args[0]) }
+    try {
+      registry.observeHistoryImport(() => { throw new Error("private imported history") })
+      registry.importRuntimeHistory(bot.id, "thread", [{
+        id: "turn-1",
+        status: "completed",
+        items: [{ type: "userMessage", id: "user", content: [{ type: "text", text: "已匯入" }] }],
+      }] as any, registry.timeline.revision())
+    } finally {
+      console.error = originalError
+    }
+
+    expect(registry.timeline.storedTurn(bot.id, "thread", "turn-1")).not.toBeNull()
+    expect(errors).toEqual([JSON.stringify({
+      event: "bot.history_import.observer_failed",
+      bot_id: bot.id,
+      thread_id: "thread",
+      turn_count: 1,
+      error_code: "DISTILLATION_HISTORY_REQUEUE_FAILED",
+    })])
+    expect(JSON.stringify(errors)).not.toContain("private imported history")
   })
 
 })

@@ -285,13 +285,19 @@ async function run(
   return { destroyed, responses, activity }
 }
 
-function httpHeaders(tenantId = context.tenantId): Record<string, string> {
-  return Object.fromEntries(
-    requestHeaders().request_headers.headers.headers.map((header) => [
-      header.key,
-      header.key === "x-genio-trusted-tenant-id" ? tenantId : header.value,
-    ]),
-  )
+function httpHeaders(
+  tenantId = context.tenantId,
+  additionalHeaders: Record<string, string> = {},
+): Record<string, string> {
+  return {
+    ...Object.fromEntries(
+      requestHeaders().request_headers.headers.headers.map((header) => [
+        header.key,
+        header.key === "x-genio-trusted-tenant-id" ? tenantId : header.value,
+      ]),
+    ),
+    ...additionalHeaders,
+  }
 }
 
 function immediateCode(value: Record<string, any>): string | undefined {
@@ -600,6 +606,57 @@ test("HTTP bridge rejects a trusted tenant that differs from the verified releas
       port,
       [Buffer.from(JSON.stringify({ messages: [{ role: "user", content: "hello" }] }))],
       httpHeaders(),
+    )
+    assert.equal(response.statusCode, 503)
+    assert.deepEqual(JSON.parse(response.body), { code: "PROCESSOR_REQUEST_REJECTED" })
+    assert.equal(resolutions, 0)
+  } finally {
+    await new Promise<void>((resolve, reject) => bridge.close((error) => error ? reject(error) : resolve()))
+  }
+})
+
+test("HTTP processor bridge rejects an Envoy request ID that differs from trusted correlation", async () => {
+  let resolutions = 0
+  const port = await unusedPort()
+  const bridge = startProcessorHttpBridge({
+    listen: `127.0.0.1:${port}`,
+    policySource: {
+      async current() {
+        return snapshot([{
+          step_id: "request-safety",
+          hooks: { request: { action: "SAFETY_CHECK", config: safetyConfig } },
+        }])
+      },
+    },
+    tokenVault: new MemoryVault(),
+    safetyBufferBytes: 8,
+    adapterRuntime: {
+      resolveSafetyAdapter() {
+        resolutions += 1
+        return {
+          adapterId: safetyConfig.adapter_id,
+          provider: "HTTP",
+          endpoint: "https://adapter.example.test/systemone",
+          model: "gateway-safety-model",
+          async evaluate() {
+            return safetyAnswer(0.1)
+          },
+        }
+      },
+      resolvePresidioAdapter() {
+        throw new Error("unexpected Presidio adapter resolution")
+      },
+    },
+  })
+  await new Promise<void>((resolve, reject) => {
+    bridge.once("listening", resolve)
+    bridge.once("error", reject)
+  })
+  try {
+    const response = await postChunks(
+      port,
+      [Buffer.from(JSON.stringify({ messages: [{ role: "user", content: "hello" }] }))],
+      httpHeaders(context.tenantId, { "x-request-id": "envoy-request-id" }),
     )
     assert.equal(response.statusCode, 503)
     assert.deepEqual(JSON.parse(response.body), { code: "PROCESSOR_REQUEST_REJECTED" })

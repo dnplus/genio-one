@@ -72,6 +72,9 @@ secrets:
   tenantAdministratorPassword: ""
   productApiClientSecret: ""
   # Optional bearer used by bot→platform AGENT subject registration fallback.
+  # Shared by the Bot and the processor HTTP triage route. Chart-managed Secrets
+  # generate it. An existingSecret must contain distillation-triage-token.
+  distillationTriageToken: ""
   # Prefer Bot OIDC with genioone-management; set this when a stable service token is available.
   agentSubjectServiceToken: ""
   projectionSigningPrivateKeyPem: ""
@@ -163,6 +166,7 @@ bot:
   modelGatewayRelayOrigin: ""
   mcpUrl: ""
   mcpRelayOrigin: ""
+  distillationAdapterId: jev-production
 
 demo:
   archify:
