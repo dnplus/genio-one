@@ -1,6 +1,7 @@
 export * from "./ApprovalCard"
 export * from "./UserInputQuestionCard"
 export * from "./InstallElicitationCard"
+export * from "./PersonalConnectionElicitationCard"
 export * from "./ChatComposer"
 export * from "./ChatMessageList"
 export * from "./Workspace"

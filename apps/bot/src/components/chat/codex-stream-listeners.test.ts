@@ -4,6 +4,8 @@ import { CodexClient } from "../../lib/codex-client"
 import type { BotInstance } from "../../bots-storage"
 import { GOOGLE_GEMINI_PREPAYMENT_DEPLETED_MESSAGE, MODEL_PROVIDER_RATE_LIMITED_MESSAGE } from "../../lib/model-route"
 import { registerCodexStreamListeners, type PendingExecution } from "./codex-stream-listeners"
+import type { InstallElicitationRequest } from "./InstallElicitationCard"
+import type { PersonalConnectionRequest } from "./PersonalConnectionElicitationCard"
 
 function harness(options: { deferTimeout?: boolean; isPendingExecutionCurrent?: () => boolean } = {}) {
   const client = new CodexClient()
@@ -19,6 +21,8 @@ function harness(options: { deferTimeout?: boolean; isPendingExecutionCurrent?: 
     channelReady: true,
     turnRunning: true,
     signedOut: false,
+    elicitationRequest: null as InstallElicitationRequest | null,
+    personalConnectionRequests: [] as PersonalConnectionRequest[],
   }
   const bot = {
     id: "bot-dylan",
@@ -76,7 +80,8 @@ function harness(options: { deferTimeout?: boolean; isPendingExecutionCurrent?: 
     setChannelReady: set("channelReady"),
     setApproval: () => {},
     setUserInputRequest: () => {},
-    setElicitationRequest: () => {},
+    setElicitationRequest: set("elicitationRequest"),
+    setPersonalConnectionRequests: set("personalConnectionRequests"),
     setMcpStatus: () => {},
     setDynamicSkills: () => {},
     setTurnRunning: (running: boolean) => { state.turnRunning = running },
@@ -282,5 +287,98 @@ describe("Codex stream runtime errors", () => {
     expect(value.pendingExecutionRef.current).toBeNull()
     expect(value.restoredTasks).toEqual(["建立報表"])
     expect(value.messages).toEqual([])
+  })
+})
+
+describe("Codex stream personal connection elicitation", () => {
+  const cleanups: Array<() => void> = []
+
+  afterEach(() => {
+    for (const cleanup of cleanups.splice(0)) cleanup()
+  })
+
+  test("keeps the resource and task reason when the runtime requests an account connection", () => {
+    const value = harness()
+    cleanups.push(value.unsubscribe)
+
+    value.receive({
+      id: 44,
+      method: "genio/personalConnection/request",
+      params: {
+        requestToken: "connection-request-44",
+        threadId: "thread-dylan",
+        botId: "bot-dylan",
+        serverName: "genio_bot",
+        mode: "genio/personal-connection",
+        resourceId: "notion",
+        resourceName: "Notion",
+        reason: "整理本週 brief 並寫回週會頁",
+      },
+    })
+
+    expect(value.state.personalConnectionRequests).toEqual([{
+      requestToken: "connection-request-44",
+      threadId: "thread-dylan",
+      botId: "bot-dylan",
+      resourceId: "notion",
+      resourceName: "Notion",
+      reason: "整理本週 brief 並寫回週會頁",
+      message: "整理本週 brief 並寫回週會頁",
+    }])
+    expect(value.state.agentState).toBe("alert")
+  })
+
+  test("ignores a connection request for another Bot or conversation", () => {
+    const value = harness()
+    cleanups.push(value.unsubscribe)
+
+    value.receive({
+      method: "genio/personalConnection/request",
+      params: {
+        requestToken: "connection-request-other",
+        threadId: "thread-other",
+        botId: "bot-other",
+        resourceId: "notion",
+        resourceName: "Notion",
+      },
+    })
+
+    expect(value.state.personalConnectionRequests).toEqual([])
+    expect(value.state.agentState).toBe("idle")
+  })
+
+  const connectionRequest = {
+    method: "genio/personalConnection/request",
+    params: { requestToken: "connection-request-55", threadId: "thread-dylan", botId: "bot-dylan", resourceId: "notion", resourceName: "Notion", reason: "整理週報" },
+  }
+  const secondConnectionRequest = {
+    method: "genio/personalConnection/request",
+    params: { requestToken: "connection-request-56", threadId: "thread-dylan", botId: "bot-dylan", resourceId: "mail", resourceName: "Mail", reason: "整理郵件" },
+  }
+
+  test("keeps parallel connection requests available when one expires", () => {
+    const value = harness()
+    cleanups.push(value.unsubscribe)
+    value.receive(connectionRequest)
+    value.receive(secondConnectionRequest)
+    value.receive({ method: "genio/personalConnection/expired", params: { requestToken: "connection-request-other", threadId: "thread-dylan", botId: "bot-dylan" } })
+    expect(value.state.personalConnectionRequests.map((request) => request.requestToken)).toEqual(["connection-request-55", "connection-request-56"])
+
+    value.receive({ method: "genio/personalConnection/expired", params: { requestToken: "connection-request-55", threadId: "thread-dylan", botId: "bot-dylan" } })
+    expect(value.state.personalConnectionRequests.map((request) => request.requestToken)).toEqual(["connection-request-56"])
+  })
+
+  test("recreates the connection card after a pending reload resets every interaction card", async () => {
+    const value = harness()
+    cleanups.push(value.unsubscribe)
+    value.receive(connectionRequest)
+    ;(value.client as unknown as { requestRaw: (method: string) => Promise<unknown> }).requestRaw = async (method) => {
+      expect(method).toBe("genio/thread/pending")
+      return [connectionRequest, secondConnectionRequest]
+    }
+
+    await value.client.restorePending("thread-dylan")
+
+    expect(value.state.personalConnectionRequests.map((request) => request.requestToken)).toEqual(["connection-request-55", "connection-request-56"])
   })
 })

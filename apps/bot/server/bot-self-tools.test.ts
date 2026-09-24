@@ -117,6 +117,69 @@ describe("Bot self tools", () => {
     expect(registry.getOwned(bot.id, owner)?.title).toBe("Operations")
   })
 
+  test("adds a discovered enterprise capability only for an owned Bot and returns resumable catalog states", async () => {
+    registry = new BotRegistry(":memory:")
+    const source = registry.create(owner, { name: "Source" })
+    const target = registry.create(owner, { name: "Weekly brief" })
+    const foreign = registry.create(other, { name: "Private" })
+    const execution = { context: { botRegistry: registry }, botId: source.id, principal: owner, accessToken: "owner-token" } as BotToolExecution
+    const originalOrigin = process.env.GENIO_ONE_PLATFORM_ORIGIN
+    process.env.GENIO_ONE_PLATFORM_ORIGIN = "http://platform.test"
+    const connectionRequests: string[] = []
+    globalThis.fetch = mock(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/catalog")) return Response.json({ capabilities: [
+        { resource_id: "notion", resource_display_name: "Notion", capability_id: "notion.write", access: "AUTO_GRANT", hub_status: "AVAILABLE", connection_status: "IDLE" },
+        { resource_id: "service-fixture", resource_display_name: "Fixture service", capability_id: "fixture.read", access: "AUTO_GRANT", hub_status: "CONNECTED", connection_status: "READY" },
+        { resource_id: "oauth-notion", resource_display_name: "Notion personal", capability_id: "notion.search", access: "AUTO_GRANT", hub_status: "CONNECTED", connection_status: "READY" },
+        { resource_id: "mail", resource_display_name: "Mail", capability_id: "mail.search", access: "ENTITLED", hub_status: "AVAILABLE", connection_status: "UNAVAILABLE" },
+        { resource_id: "case", resource_display_name: "Case", capability_id: "case.read", access: "REQUEST", hub_status: "AVAILABLE", connection_status: "READY" },
+      ] })
+      connectionRequests.push(String(input))
+      if (String(input).includes("/me/resource-connections/oauth-notion")) return Response.json([
+        { connection_id: "oauth-notion-user", display_name: "Notion", authentication: "OAUTH", status: "NEEDS_CONNECTION" },
+      ])
+      if (String(input).includes("/me/resource-connections/")) return Response.json([])
+      return new Response("not found", { status: 404 })
+    }) as unknown as typeof fetch
+    try {
+      const installArgs = { botId: target.id, resourceId: "notion", capabilityId: "notion.write" }
+      const installed = response(await executeSelfTool("add_enterprise_resource", installArgs, execution))
+      expect(installed).toMatchObject({ addState: "AUTO_GRANT", binding: { state: "INSTALLED", resourceId: "notion", capabilityId: "notion.write" }, pendingApply: true, applyState: "PENDING_RUNTIME_REFRESH" })
+      const repeated = response(await executeSelfTool("add_enterprise_resource", installArgs, execution))
+      expect(repeated.binding).toMatchObject({ id: (installed.binding as Record<string, unknown>).id, state: "INSTALLED" })
+      expect(registry.getOwned(target.id, owner)?.bindings).toHaveLength(1)
+
+      const service = response(await executeSelfTool("add_enterprise_resource", { botId: target.id, resourceId: "service-fixture", capabilityId: "fixture.read" }, execution))
+      expect(service).toMatchObject({ addState: "CONNECTED", binding: { state: "INSTALLED", resourceId: "service-fixture" } })
+
+      const personalConnection = response(await executeSelfTool("add_enterprise_resource", { botId: target.id, resourceId: "oauth-notion", capabilityId: "notion.search" }, execution))
+      expect(personalConnection).toMatchObject({ addState: "NEEDS_CONNECTION", connection: { resourceId: "oauth-notion", resourceName: "Notion personal" } })
+
+      connectionRequests.splice(0)
+      const needsConnection = response(await executeSelfTool("add_enterprise_resource", { botId: target.id, resourceId: "mail", capabilityId: "mail.search" }, execution))
+      expect(needsConnection).toMatchObject({
+        addState: "NEEDS_CONNECTION",
+        connection: { required: true, resourceId: "mail", resourceName: "Mail", scope: "account", reusableAcrossBots: true },
+        resume: { tool: "add_enterprise_resource", arguments: { botId: target.id, resourceId: "mail", capabilityId: "mail.search" } },
+      })
+      expect(connectionRequests).toEqual(["http://platform.test/v1/tenants/tenant-self-tools/me/resource-connections/mail"])
+      expect(registry.getOwned(target.id, owner)?.bindings).toHaveLength(2)
+
+      const requested = response(await executeSelfTool("add_enterprise_resource", { botId: target.id, resourceId: "case", capabilityId: "case.read" }, execution))
+      expect(requested).toMatchObject({ addState: "REQUEST", binding: { state: "PENDING", reason: "access_request_required" }, pendingApply: true })
+
+      const denied = response(await executeSelfTool("add_enterprise_resource", { botId: target.id, resourceId: "missing", capabilityId: "missing.read" }, execution))
+      expect(denied).toMatchObject({ addState: "DENIED", error: "BOT_ACCESS_DENIED", reason: "capability_not_in_catalog" })
+      expect(registry.getOwned(target.id, owner)?.bindings).toHaveLength(4)
+
+      const foreignResult = response(await executeSelfTool("add_enterprise_resource", { botId: foreign.id, resourceId: "notion", capabilityId: "notion.write" }, execution))
+      expect(foreignResult).toMatchObject({ error: "BOT_NOT_FOUND" })
+    } finally {
+      if (originalOrigin === undefined) delete process.env.GENIO_ONE_PLATFORM_ORIGIN
+      else process.env.GENIO_ONE_PLATFORM_ORIGIN = originalOrigin
+    }
+  })
+
   test("parses quoted and multiline YAML Skill frontmatter while rejecting invalid descriptors", () => {
     registry = new BotRegistry(":memory:")
     const bot = registry.create(owner, { name: "YAML Bot" })

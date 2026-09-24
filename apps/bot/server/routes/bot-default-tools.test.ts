@@ -32,7 +32,7 @@ test("model MCP manages only its own persistent profile, Skills and schedules", 
   try {
     const listing = await app.inject({ method: "POST", url: "/api/bot-tools", headers: config.http_headers, payload: { id: ++sequence, method: "tools/list" } })
     const names = listing.json().result.tools.map((tool: { name: string }) => tool.name)
-    expect(names).toEqual(expect.arrayContaining(["read_self", "update_self", "create_bot", "write_owned_skill", "create_schedule", "send_to_bot"]))
+    expect(names).toEqual(expect.arrayContaining(["read_self", "update_self", "create_bot", "add_enterprise_resource", "write_owned_skill", "create_schedule", "send_to_bot"]))
     expect(names).not.toContain("computer_use")
     expect(new Set(names).size).toBe(names.length)
 

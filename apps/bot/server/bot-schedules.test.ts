@@ -16,7 +16,7 @@ function localTime(epoch: number, timezone: string) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: timezone, hour: "2-digit", minute: "2-digit", hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(epoch))
 }
 
-async function executeNativeTerminal(status: "completed" | "failed" | "interrupted", auditFails = false, pauseBeforeDispatch = false, packageCapability: "roots" | "binding" | false = false, existingThreadId?: string, initialTurnStatus: string | null = status, completeAfterDispatch = false) {
+async function executeNativeTerminal(status: "completed" | "failed" | "interrupted", auditFails = false, pauseBeforeDispatch = false, packageCapability: "roots" | "binding" | false = false, existingThreadId?: string, initialTurnStatus: string | null = status, completeAfterDispatch = false, mcpAccess: "ENTITLED" | "REQUEST" = "ENTITLED", denyMcpExposure = false) {
   let now = Date.parse("2026-01-01T00:00:00.000Z")
   const schedules = new BotSchedules(new Database(":memory:"), () => now)
   const schedule = schedules.create(principal, "bot", { clientRequestId: `terminal-${status}-${auditFails}-${pauseBeforeDispatch}`, prompt: "執行一次", schedule: { kind: "once", at: "2026-01-01T00:01:00.000Z" } }).schedule!
@@ -24,8 +24,22 @@ async function executeNativeTerminal(status: "completed" | "failed" | "interrupt
   schedules.claimDue()
   const [run] = schedules.claimRunnable()
   const originalFetch = globalThis.fetch
-  globalThis.fetch = (async () => Response.json(principal)) as unknown as typeof fetch
-  const bot = { id: "bot", name: "排程 Bot", title: "例行工作", description: "執行排程", antiJobs: "", voice: "", updatedAt: now, modelRoute: "codex-subscription", bindings: packageCapability === "binding" ? [{ state: "INSTALLED", kind: "MCP" }] : [] }
+  const originalMcpUrl = process.env.GENIO_ONE_MCP_URL
+  const originalRelayOrigin = process.env.GENIO_ONE_MCP_RELAY_ORIGIN
+  process.env.GENIO_ONE_MCP_URL = "http://one.localhost:1975/mcp"
+  process.env.GENIO_ONE_MCP_RELAY_ORIGIN = "https://bot.example.test"
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = new URL(String(input))
+    if (url.pathname.endsWith("/catalog")) return Response.json({ capabilities: [{
+      resource_id: "resource-notion",
+      capability_id: "notion.search",
+      access: mcpAccess,
+      publication_endpoint: { hostname: "notion.stellar-freight.localhost", base_path: "/mcp" },
+    }] })
+    return Response.json(principal)
+  }) as unknown as typeof fetch
+  const binding = { resourceId: "resource-notion", capabilityId: "notion.search", state: "INSTALLED", kind: "MCP" }
+  const bot = { id: "bot", name: "排程 Bot", title: "例行工作", description: "執行排程", antiJobs: "", voice: "", updatedAt: now, modelRoute: "codex-subscription", bindings: packageCapability === "binding" ? [binding] : [] }
   const session = { id: "runtime", principal, initialized: true, accessToken: "live", details: { cwd: "/tmp" }, runtimeDetails: {} }
   let turnRequests = 0
   const runtimeListener: { current: { onMessage(line: string): void } | null } = { current: null }
@@ -49,7 +63,7 @@ async function executeNativeTerminal(status: "completed" | "failed" | "interrupt
         return { turn: { id: "turn" } }
       } },
       runtimePolicy: {
-        authorize: async (input: any) => allowedPolicyDecision(input.botId, input.capabilityId, input.action, session.id, now),
+        authorize: async (input: any) => ({ ...allowedPolicyDecision(input.botId, input.capabilityId, input.action, session.id, now), ...(denyMcpExposure && input.capabilityId === "mcp.invoke" ? { decision: "DENY" as const } : {}) }),
         report: async () => { if (auditFails) { schedules.markRun(run!.id, "COMPLETED", { threadId: "thread", turnId: "turn" }); throw new Error("audit unavailable") } },
         read: async (input: any) => ({ ...allowedPolicyDecision(input.botId, "shell.exec", "expose", session.id, now), decisions: input.capabilityIds.map((capabilityId: string) => allowedPolicyDecision(input.botId, capabilityId, "expose", session.id, now)) }),
       },
@@ -59,7 +73,13 @@ async function executeNativeTerminal(status: "completed" | "failed" | "interrupt
     await (runner as any).execute(run)
     if (completeAfterDispatch) runtimeListener.current?.onMessage(JSON.stringify({ method: "turn/completed", params: { threadId: "thread", turn: { id: "turn", status: "completed" } } }))
     return { activeSchedules: schedules.listActive(), run: schedules.getRun(run!.id)!, turnRequests, requests }
-  } finally { globalThis.fetch = originalFetch }
+  } finally {
+    globalThis.fetch = originalFetch
+    if (originalMcpUrl === undefined) delete process.env.GENIO_ONE_MCP_URL
+    else process.env.GENIO_ONE_MCP_URL = originalMcpUrl
+    if (originalRelayOrigin === undefined) delete process.env.GENIO_ONE_MCP_RELAY_ORIGIN
+    else process.env.GENIO_ONE_MCP_RELAY_ORIGIN = originalRelayOrigin
+  }
 }
 
 describe("BotSchedules", () => {
@@ -440,8 +460,23 @@ describe("BotSchedules", () => {
     await expect(executeNativeTerminal("completed", false, true)).resolves.toMatchObject({ run: { state: "BLOCKED", error: "SCHEDULE_PAUSED" }, turnRequests: 0 })
   })
 
-  test("blocks package-dependent schedules before native dispatch", async () => {
+  test("blocks Skills and Plugins before native dispatch", async () => {
     await expect(executeNativeTerminal("completed", false, false, "roots")).resolves.toMatchObject({ run: { state: "BLOCKED", error: "SCHEDULE_PACKAGE_CAPABILITIES_UNAVAILABLE" }, turnRequests: 0 })
-    await expect(executeNativeTerminal("completed", false, false, "binding")).resolves.toMatchObject({ run: { state: "BLOCKED", error: "SCHEDULE_PACKAGE_CAPABILITIES_UNAVAILABLE" }, turnRequests: 0 })
+  })
+
+  test("mounts an entitled installed MCP binding before one scheduled dispatch", async () => {
+    const result = await executeNativeTerminal("completed", false, false, "binding")
+    expect(result).toMatchObject({ run: { state: "COMPLETED", turnId: "turn" }, turnRequests: 1 })
+    expect(result.requests.find((request) => request.method === "thread/start")?.params.config).toMatchObject({
+      "mcp_servers.genio_mcp_notion": {
+        url: "https://bot.example.test/api/mcp-gateway/runtime/bots/bot/resource-notion/mcp",
+      },
+    })
+    expect(result.requests.filter((request) => request.method === "turn/start")).toHaveLength(1)
+  })
+
+  test("does not dispatch an installed MCP schedule after access is revoked or policy denies exposure", async () => {
+    await expect(executeNativeTerminal("completed", false, false, "binding", undefined, "completed", false, "REQUEST")).resolves.toMatchObject({ run: { state: "AUTH_REQUIRED", error: "SCHEDULE_MCP_AUTH_REQUIRED" }, turnRequests: 0 })
+    await expect(executeNativeTerminal("completed", false, false, "binding", undefined, "completed", false, "ENTITLED", true)).resolves.toMatchObject({ run: { state: "BLOCKED", error: "SCHEDULE_MCP_POLICY_DENIED" }, turnRequests: 0 })
   })
 })

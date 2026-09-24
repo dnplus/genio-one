@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 
 import { codexRoutes } from "./codex"
+import { BotConnectionInteractions } from "../bot-connection-interactions"
+import { botToolText } from "../bot-tool-contract"
 
 const principal = {
   tenant_id: "tenant-local",
@@ -1338,6 +1340,107 @@ describe("Codex runtime policy route", () => {
       await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "thread/realtime/sdp"))
       const sdpMessage = socket.sent.map((line) => JSON.parse(line)).find((m) => m.method === "thread/realtime/sdp")
       expect(sdpMessage.params.sdp).toContain("o=server")
+    } finally {
+      globalThis.fetch = originalFetch
+      socket.close()
+    }
+  })
+
+  test("resumes a personal connection request only after the account is connected", async () => {
+    const calls: Array<Record<string, unknown>> = []
+    const reports: Array<Record<string, unknown>> = []
+    const context = createContext(calls, reports)
+    const interactions = new BotConnectionInteractions()
+    ;(context as { connectionInteractions?: BotConnectionInteractions }).connectionInteractions = interactions
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => Response.json(principal)) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: "bot-dylan" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
+      let retries = 0
+      const pending = interactions.begin({
+        principal,
+        runtimeSessionId: "runtime-session",
+        botId: "bot-dylan",
+        targetBotId: "new-bot",
+        threadId: "thread-connection",
+        resourceId: "notion",
+        resourceName: "Notion",
+        capabilityId: "notion.write",
+        reason: "connection_required",
+        resume: { tool: "add_enterprise_resource", arguments: { botId: "new-bot", resourceId: "notion", capabilityId: "notion.write" } },
+        retry: async () => {
+          retries += 1
+          return botToolText({ addState: "INSTALLED" })
+        },
+      })
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/personalConnection/request"))
+      const request = socket.sent.map((line) => JSON.parse(line)).find((message) => message.method === "genio/personalConnection/request")
+      expect(request.params).toMatchObject({ botId: "bot-dylan", targetBotId: "new-bot", threadId: "thread-connection", resourceId: "notion" })
+      globalThis.fetch = (async () => Response.json([{ connection_id: "connection", status: "CONNECTED" }])) as unknown as typeof fetch
+      socket.emit("message", JSON.stringify({
+        id: 3,
+        method: "genio/personalConnection/complete",
+        params: { requestToken: request.params.requestToken, botId: "bot-dylan", threadId: "thread-connection", resourceId: "notion", connectionId: "connection", status: "CONNECTED" },
+      }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 3))
+      expect(socket.sent.map((line) => JSON.parse(line)).find((message) => message.id === 3).result).toEqual({ completed: true })
+      expect(await pending.wait).toEqual(botToolText({ addState: "INSTALLED" }))
+      expect(retries).toBe(1)
+    } finally {
+      globalThis.fetch = originalFetch
+      socket.close()
+    }
+  })
+
+  test("restores a waiting personal connection on pending reload and notifies the browser when it expires", async () => {
+    const calls: Array<Record<string, unknown>> = []
+    const reports: Array<Record<string, unknown>> = []
+    const context = createContext(calls, reports)
+    const interactions = new BotConnectionInteractions(200)
+    ;(context as { connectionInteractions?: BotConnectionInteractions }).connectionInteractions = interactions
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => Response.json(principal)) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: "bot-dylan" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
+      const pending = interactions.begin({
+        principal,
+        runtimeSessionId: "runtime-session",
+        botId: "bot-dylan",
+        targetBotId: "new-bot",
+        threadId: "thread-connection",
+        resourceId: "notion",
+        resourceName: "Notion",
+        capabilityId: "notion.write",
+        reason: "connection_required",
+        resume: { tool: "add_enterprise_resource", arguments: { botId: "new-bot", resourceId: "notion", capabilityId: "notion.write" } },
+        retry: async () => botToolText({ addState: "INSTALLED" }),
+      })
+      socket.emit("message", JSON.stringify({ id: 3, method: "genio/thread/pending", params: { threadId: "thread-connection" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 3))
+      expect(socket.sent.map((line) => JSON.parse(line)).find((message) => message.id === 3).result).toEqual([
+        { method: "genio/personalConnection/request", params: expect.objectContaining({ requestToken: pending.request.requestToken, threadId: "thread-connection", resourceId: "notion" }) },
+      ])
+
+      await expect(pending.wait).rejects.toThrow("BOT_CONNECTION_REQUEST_EXPIRED")
+      const expired = socket.sent.map((line) => JSON.parse(line)).find((message) => message.method === "genio/personalConnection/expired")
+      expect(expired.params).toEqual({ requestToken: pending.request.requestToken, botId: "bot-dylan", threadId: "thread-connection" })
+      socket.emit("message", JSON.stringify({ id: 4, method: "genio/thread/pending", params: { threadId: "thread-connection" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 4))
+      expect(socket.sent.map((line) => JSON.parse(line)).find((message) => message.id === 4).result).toEqual([])
     } finally {
       globalThis.fetch = originalFetch
       socket.close()

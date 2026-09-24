@@ -18,6 +18,7 @@ import type { ActivityEntry } from "../panel/RightPanel"
 import type { ApprovalRequest } from "./ApprovalCard"
 import type { UserInputQuestionRequest } from "./UserInputQuestionCard"
 import type { InstallElicitationRequest } from "./InstallElicitationCard"
+import type { PersonalConnectionRequest } from "./PersonalConnectionElicitationCard"
 import type { CodexLogin } from "./ChatMessageList"
 import { modelRouteRequiresCodexLogin, runtimeFailureMessage, type ModelRoute } from "../../lib/model-route"
 import { belongsToThread } from "./codex-event-scope"
@@ -55,6 +56,7 @@ export interface StreamListenerContext {
   setApproval: Dispatch<SetStateAction<ApprovalRequest | null>>
   setUserInputRequest: Dispatch<SetStateAction<UserInputQuestionRequest | null>>
   setElicitationRequest: Dispatch<SetStateAction<InstallElicitationRequest | null>>
+  setPersonalConnectionRequests: Dispatch<SetStateAction<PersonalConnectionRequest[]>>
   setMcpStatus: Dispatch<SetStateAction<string>>
   setDynamicSkills: Dispatch<SetStateAction<Array<{ id: string; name: string; description: string; path?: string }>>>
   setTurnRunning: (running: boolean) => void
@@ -109,6 +111,7 @@ export function registerCodexStreamListeners(ctx: StreamListenerContext): () => 
     setApproval,
     setUserInputRequest,
     setElicitationRequest,
+    setPersonalConnectionRequests,
     setMcpStatus,
     setDynamicSkills,
     setTurnRunning,
@@ -131,6 +134,7 @@ export function registerCodexStreamListeners(ctx: StreamListenerContext): () => 
       setApproval(null)
       setUserInputRequest(null)
       setElicitationRequest(null)
+      setPersonalConnectionRequests([])
     }
     if (message.method === "serverRequest/resolved") {
       const requestId = (message.params as { requestId?: number }).requestId
@@ -473,6 +477,31 @@ export function registerCodexStreamListeners(ctx: StreamListenerContext): () => 
         })
         setAgentState("alert")
       }
+    }
+
+    if (message.method === "genio/personalConnection/request") {
+      const params = message.params as Partial<PersonalConnectionRequest>
+      const threadId = ctx.threadRef.current
+      if (!params.requestToken || !params.botId || !params.threadId || !params.resourceId || !params.resourceName ||
+        params.botId !== activeBotRef.current.id || params.threadId !== threadId) return
+      const request = {
+        requestToken: params.requestToken,
+        botId: params.botId,
+        threadId: params.threadId,
+        resourceId: params.resourceId,
+        resourceName: params.resourceName,
+        reason: params.reason,
+        message: params.reason || `需要連接 ${params.resourceName}`,
+      }
+      setPersonalConnectionRequests((current) => current.some((entry) => entry.requestToken === request.requestToken)
+        ? current.map((entry) => entry.requestToken === request.requestToken ? request : entry)
+        : [...current, request])
+      setAgentState("alert")
+    }
+
+    if (message.method === "genio/personalConnection/expired") {
+      const requestToken = (message.params as { requestToken?: string } | undefined)?.requestToken
+      setPersonalConnectionRequests((current) => current.filter((request) => request.requestToken !== requestToken))
     }
 
     if (message.method === "mcpServer/startupStatus/updated") {

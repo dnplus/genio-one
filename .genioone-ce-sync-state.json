@@ -370,6 +370,14 @@
       "sha256": "b09a7396aef41db7897489374dc4d458b8318fd8d1a41bf055f34ff1c7ec2350",
       "mode": 420
     },
+    "apps/bot/server/bot-connection-interactions.test.ts": {
+      "sha256": "b2e7015ae66fa2078fd58d64bfec1f41a3f3f203751f6ba09d528775c67612ad",
+      "mode": 420
+    },
+    "apps/bot/server/bot-connection-interactions.ts": {
+      "sha256": "07b8462c6c387b4f401d0ed3fadd39cede27f293a1027996e89ce1b136e64abe",
+      "mode": 420
+    },
     "apps/bot/server/bot-context.test.ts": {
       "sha256": "a8386686594d34a11c6b9f7152ede516a977deb47207ef2a5ba1da6977415988",
       "mode": 420
@@ -487,7 +495,7 @@
       "mode": 420
     },
     "apps/bot/server/bot-schedule-runner.ts": {
-      "sha256": "d4b2241aed376ad33cb41a6cb01b13e97adbad3b2daa435b7ab810468a1df461",
+      "sha256": "122d5c675538c6c0eb141ea58bcdc3ae7ff932a92fec8ab8273181bb458febd1",
       "mode": 420
     },
     "apps/bot/server/bot-schedule-tools.ts": {
@@ -495,7 +503,7 @@
       "mode": 420
     },
     "apps/bot/server/bot-schedules.test.ts": {
-      "sha256": "8119bee22748e0c421cb612964f2df1e9a29d3fabed4fbae7b241d31a28f75bc",
+      "sha256": "d7861b57b8ece80eca4253c3da599b24c3a0baa5056e4a047900afa537724ef0",
       "mode": 420
     },
     "apps/bot/server/bot-schedules.ts": {
@@ -503,11 +511,11 @@
       "mode": 420
     },
     "apps/bot/server/bot-self-tools.test.ts": {
-      "sha256": "6ef046137294e1590dcf43f2f4247108a31ce646970a586db7dbb7bc8baa1774",
+      "sha256": "74659ca042500ab463777935e555cf644f61cb721d2247c00c09e22f35c5a404",
       "mode": 420
     },
     "apps/bot/server/bot-self-tools.ts": {
-      "sha256": "111dcd25322e43b317a87e2660c25372395ce382c83f60d84de8b4b6ee9461dc",
+      "sha256": "dd9480bb49d1b0376b27b1141ddf56a67b0cb150b4a34e26f6c6c6283a4b52f2",
       "mode": 420
     },
     "apps/bot/server/bot-timeline.test.ts": {
@@ -575,7 +583,7 @@
       "mode": 420
     },
     "apps/bot/server/context.ts": {
-      "sha256": "b92697634634ffbe2afb1a850fa3d607c335c2ed4c25488eec6398a3f9c96e27",
+      "sha256": "aede83067ded25e16aa16cd0e2f6b04feacb92797c2ec62d5936ddbaa36209ab",
       "mode": 420
     },
     "apps/bot/server/desktop-driver.test.ts": {
@@ -4263,7 +4271,7 @@
       "mode": 420
     },
     "apps/bot/server/routes/bot-default-tools.test.ts": {
-      "sha256": "aaf2446dcb2fedb469338ef7f8b7d4f0975e0ad208e15880f05842251f2bc436",
+      "sha256": "cb8486d40d578f372cd71b40de58ef7bea6556a747d6a12a854412697eb82d94",
       "mode": 420
     },
     "apps/bot/server/routes/bot-default-tools.ts": {
@@ -4287,7 +4295,7 @@
       "mode": 420
     },
     "apps/bot/server/routes/bot-tools.ts": {
-      "sha256": "12d87898cb233998ffee5bc828b85d4998afcdda91364d0a623e0b27c63169eb",
+      "sha256": "a7a859b4478e7eb53b12cec8a93734b446b09ff5b4b10a11f58bf174fbe9a8d5",
       "mode": 420
     },
     "apps/bot/server/routes/bots-bindings.test.ts": {
@@ -4359,11 +4367,11 @@
       "mode": 420
     },
     "apps/bot/server/routes/codex-runtime-policy.test.ts": {
-      "sha256": "8216b860967906ed1b1f2a884b782d5c9640a9decfbaa45055205831df92c54b",
+      "sha256": "de958c5b64c158a0925c7f052ade74461e6d6d1b7d81f725b0103991e0f58608",
       "mode": 420
     },
     "apps/bot/server/routes/codex.ts": {
-      "sha256": "68db1e0236afbdf37aea6ed3212d9636c8c1265ba33267777b5500867c681243",
+      "sha256": "dfc16edc770e15d0f0a433dc8b7fb78d7c8d0d6af59024d9bd3c20e273586308",
       "mode": 420
     },
     "apps/bot/server/routes/cross-owner-handoff.test.ts": {
@@ -4591,7 +4599,7 @@
       "mode": 420
     },
     "apps/bot/src/components/chat/ChatComposer.tsx": {
-      "sha256": "5861ce3f9b9519f88cc93023fb04014e17482605de5a809d415f28f280cd4f2d",
+      "sha256": "f5ecb4b5b00196645e7d97a7dff136729575133f03054465607833a5d0489e70",
       "mode": 420
     },
     "apps/bot/src/components/chat/ChatMessageList.test.tsx": {
@@ -4627,11 +4635,11 @@
       "mode": 420
     },
     "apps/bot/src/components/chat/codex-stream-listeners.test.ts": {
-      "sha256": "1293618e122285f3bcfbfe6220c37ecedc18c44691ec7a22d19cd4d6e6a2996d",
+      "sha256": "ffde6a3a1fe36dbdb21edf9806565787de3a578e1e039ee8401cadc2e1390ab1",
       "mode": 420
     },
     "apps/bot/src/components/chat/codex-stream-listeners.ts": {
-      "sha256": "b8dd0eb6d73dd2b6e88d7dccf3952a284a5a0a3d810f50bd6cd9fb00a2b97fd3",
+      "sha256": "c4a447230eb90779169676c83a41f8a88314945aba9b5233ca5ef110d5eb5e8f",
       "mode": 420
     },
     "apps/bot/src/components/chat/composer-mentions.test.ts": {
@@ -4679,7 +4687,7 @@
       "mode": 420
     },
     "apps/bot/src/components/chat/index.ts": {
-      "sha256": "fb7dbfa4fa360e849e1dfeb168970a7f68350737cab044c05c1a00332157cac6",
+      "sha256": "34570b462c5a96a18e302b2f062fb3327448f5577fb7a999d0e782e481278a02",
       "mode": 420
     },
     "apps/bot/src/components/chat/InstallElicitationCard.test.ts": {
@@ -4704,6 +4712,14 @@
     },
     "apps/bot/src/components/chat/MessageMedia.tsx": {
       "sha256": "6886bf4d9c0070c8a94a099b947ffc6581589ce54592d5ac59360c0235b75889",
+      "mode": 420
+    },
+    "apps/bot/src/components/chat/PersonalConnectionElicitationCard.test.ts": {
+      "sha256": "9200e6361b8b61544a63f0861eac562a6a5ff445219832d275e5aad978b2b656",
+      "mode": 420
+    },
+    "apps/bot/src/components/chat/PersonalConnectionElicitationCard.tsx": {
+      "sha256": "da8a6c0093aee62a645c2470e98be6ab71d0e429db271b3482c1dc3ce8b5bbfa",
       "mode": 420
     },
     "apps/bot/src/components/chat/RealtimeVoiceModal.css": {
@@ -4731,7 +4747,7 @@
       "mode": 420
     },
     "apps/bot/src/components/chat/useCodexSession.ts": {
-      "sha256": "c8ab0f498cf454ff703e295bb48627be0b0a68819241f64714687f61c9c45fd4",
+      "sha256": "3521e6c62cf047b0c4d33151d0535fae1972ad9c7575eca8834b515f7abd3112",
       "mode": 420
     },
     "apps/bot/src/components/chat/UserInputQuestionCard.test.ts": {
@@ -4759,7 +4775,7 @@
       "mode": 420
     },
     "apps/bot/src/components/chat/Workspace.tsx": {
-      "sha256": "af44cf60c9b4985a61f7e32e9563aba2070d003bf59459562c8bc3647b950c38",
+      "sha256": "bd593a219f8df8f061d3c0b1ccb505110129c4f198e2049f5861cb42c95cd34b",
       "mode": 420
     },
     "apps/bot/src/components/chat/WorkspaceHeader.test.ts": {
@@ -4903,7 +4919,7 @@
       "mode": 420
     },
     "apps/bot/src/components/modals/PersonalConnectionCard.tsx": {
-      "sha256": "9fee5b68c21831811c9ddd855b564a6a25f0d6cd2ec40719668adbb7965c89d2",
+      "sha256": "c9f1d4ff9a148a3986a8c7ea6ade38d87518f242de53e965a39be90909f26120",
       "mode": 420
     },
     "apps/bot/src/components/modals/SearchModal.tsx": {

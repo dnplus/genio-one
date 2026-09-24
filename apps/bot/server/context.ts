@@ -7,6 +7,7 @@ import type { RuntimeBroker } from "./runtime-broker"
 import type { CodexRuntimeFactory } from "./runtime"
 import type { BotToolSessions } from "./bot-tool-sessions"
 import type { RuntimePolicyResolver } from "./runtime-policy-contract"
+import type { BotConnectionInteractions } from "./bot-connection-interactions"
 
 export interface BotServerContext {
   botSchedules: import("./bot-schedules").BotSchedules
@@ -21,4 +22,5 @@ export interface BotServerContext {
   handsPlacement: HandsPlacementGate
   createCodexRuntime?: CodexRuntimeFactory
   runtimePolicy: RuntimePolicyResolver
+  connectionInteractions?: BotConnectionInteractions
 }

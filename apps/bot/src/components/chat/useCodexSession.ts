@@ -27,6 +27,7 @@ import type { ActivityEntry } from "../panel/RightPanel"
 import type { ApprovalRequest } from "./ApprovalCard"
 import type { UserInputQuestionRequest } from "./UserInputQuestionCard"
 import type { InstallElicitationRequest } from "./InstallElicitationCard"
+import type { PersonalConnectionRequest } from "./PersonalConnectionElicitationCard"
 import type { CodexLogin } from "./ChatMessageList"
 import { registerCodexStreamListeners, type PendingExecution } from "./codex-stream-listeners"
 import { readCodexTurns, readEarlierCodexTurns } from "./codex-history"
@@ -77,6 +78,9 @@ export interface CodexSession {
   dismissUserInput: () => void
   elicitationRequest: InstallElicitationRequest | null
   decideElicitation: (decision: "accept" | "decline", content?: Record<string, any>) => void
+  personalConnectionRequests: PersonalConnectionRequest[]
+  completePersonalConnection: (requestToken: string, connectionId: string, status: "CONNECTED" | "SAVED") => Promise<void>
+  cancelPersonalConnection: (requestToken: string) => Promise<void>
   dynamicSkills: Array<{ id: string; name: string; description: string; path?: string }>
   isTurnRunning: boolean
   startThread: (details?: RuntimeDetails | null) => Promise<boolean>
@@ -200,6 +204,7 @@ export function useCodexSession({
   const [approval, setApproval] = useState<ApprovalRequest | null>(null)
   const [userInputRequest, setUserInputRequest] = useState<UserInputQuestionRequest | null>(null)
   const [elicitationRequest, setElicitationRequest] = useState<InstallElicitationRequest | null>(null)
+  const [personalConnectionRequests, setPersonalConnectionRequests] = useState<PersonalConnectionRequest[]>([])
   const [dynamicSkills, setDynamicSkills] = useState<Array<{ id: string; name: string; description: string; path?: string }>>([])
 
   const setTurnRunning = useCallback((running: boolean) => {
@@ -637,6 +642,7 @@ export function useCodexSession({
       setApproval,
       setUserInputRequest,
       setElicitationRequest,
+      setPersonalConnectionRequests,
       setMcpStatus,
       setDynamicSkills,
       setTurnRunning,
@@ -683,6 +689,7 @@ export function useCodexSession({
     setApproval(null)
     setUserInputRequest(null)
     setElicitationRequest(null)
+    setPersonalConnectionRequests([])
     setTurnRunning(false)
     void prepareBotRef.current()
       .catch((error) => {
@@ -713,6 +720,7 @@ export function useCodexSession({
     setApproval(null)
     setUserInputRequest(null)
     setElicitationRequest(null)
+    setPersonalConnectionRequests([])
     setTurnRunning(false)
     setAgentState("idle")
     setRuntimeState(modelRoutePresentation(botModelRoute).waitingState)
@@ -832,6 +840,35 @@ export function useCodexSession({
   const decideElicitation = useCallback((decision: "accept" | "decline", content?: Record<string, any>) => {
     if (elicitationRequest) submitInteraction(elicitationRequest.id, decision === "accept" ? { action: "accept", content: content || {} } : { action: "decline" })
   }, [elicitationRequest, submitInteraction])
+
+  const completePersonalConnection = useCallback(async (requestToken: string, connectionId: string, status: "CONNECTED" | "SAVED") => {
+    const request = personalConnectionRequests.find((candidate) => candidate.requestToken === requestToken)
+    const client = clientRef.current
+    if (!request || !client) throw new Error("連線要求已失效，請重新載入待處理事項。")
+    if (request.botId !== activeBotRef.current.id || request.threadId !== threadRef.current) throw new Error("目前已切換到另一個 Bot 或對話，請重新載入待處理事項。")
+    await client.requestRaw("genio/personalConnection/complete", {
+      requestToken: request.requestToken,
+      botId: request.botId,
+      threadId: request.threadId,
+      resourceId: request.resourceId,
+      connectionId,
+      status,
+    })
+    if (isMountedRef.current) setPersonalConnectionRequests((current) => current.filter((candidate) => candidate.requestToken !== request.requestToken))
+  }, [personalConnectionRequests])
+
+  const cancelPersonalConnection = useCallback(async (requestToken: string) => {
+    const request = personalConnectionRequests.find((candidate) => candidate.requestToken === requestToken)
+    const client = clientRef.current
+    if (!request || !client) return
+    await client.requestRaw("genio/personalConnection/cancel", {
+      requestToken: request.requestToken,
+      botId: request.botId,
+      threadId: request.threadId,
+      resourceId: request.resourceId,
+    })
+    if (isMountedRef.current) setPersonalConnectionRequests((current) => current.filter((candidate) => candidate.requestToken !== request.requestToken))
+  }, [personalConnectionRequests])
 
   const interruptRunningTurn = useCallback(async () => {
     const client = clientRef.current
@@ -1010,6 +1047,9 @@ export function useCodexSession({
     dismissUserInput,
     elicitationRequest,
     decideElicitation,
+    personalConnectionRequests,
+    completePersonalConnection,
+    cancelPersonalConnection,
     dynamicSkills,
     isTurnRunning: isTurnRunningState,
     startThread,

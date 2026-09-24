@@ -20,14 +20,15 @@ function PasswordConnectionForm({ busy, onSave }: { busy: boolean; onSave: (user
   </form>
 }
 
-export function PersonalConnectionCard({ tenantId, resourceId, resourceName, accessToken, onClose, onConnected, onSaved }: {
+export function PersonalConnectionCard({ tenantId, resourceId, resourceName, reason, accessToken, onClose, onConnected, onSaved }: {
   tenantId: string
   resourceId: string
   resourceName: string
+  reason?: string
   accessToken: string
-  onClose: () => void
-  onConnected: (connectionId: string) => void
-  onSaved?: (connectionId: string) => void
+  onClose: () => void | Promise<void>
+  onConnected: (connectionId: string) => void | Promise<void>
+  onSaved?: (connectionId: string) => void | Promise<void>
 }) {
   const [connections, setConnections] = useState<PersonalConnection[]>([])
   const [busy, setBusy] = useState(false)
@@ -77,7 +78,7 @@ export function PersonalConnectionCard({ tenantId, resourceId, resourceName, acc
       const response = await fetch(`${base}/${encodeURIComponent(connectionId)}/password`, { method: "POST", headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" }, body: JSON.stringify({ username, password }) })
       if (!response.ok) throw new Error("帳密未保存，請確認資料後重試。")
       await refresh()
-      onSaved?.(connectionId)
+      await onSaved?.(connectionId)
       setMessage("帳密已加密保存，將在使用工具時驗證連線。")
     } catch (error) { setMessage(error instanceof Error ? error.message : "帳密未保存。") }
     finally { setBusy(false) }
@@ -89,13 +90,27 @@ export function PersonalConnectionCard({ tenantId, resourceId, resourceName, acc
       if (rows.some((connection) => connection.status === "CONNECTED")) {
         setMessage("連線完成，可以使用工具。")
         const connected = rows.find((connection) => connection.status === "CONNECTED")
-        if (connected) onConnected(connected.connection_id)
-      } else if (rows.some((connection) => connection.status === "SAVED")) setMessage("帳密已保存，尚未驗證外部服務連線。")
+        if (connected) await onConnected(connected.connection_id)
+      } else if (rows.some((connection) => connection.status === "SAVED")) {
+        const saved = rows.find((connection) => connection.status === "SAVED")
+        if (saved) await onSaved?.(saved.connection_id)
+        setMessage("帳密已保存，將在使用工具時驗證連線。")
+      }
       else setMessage("尚未完成連線設定，請完成後再確認。")
     } catch (error) { setMessage(error instanceof Error ? error.message : "無法讀取連線狀態。") }
     finally { setBusy(false) }
   }
-  return <InteractionCard tone="connect" icon={<Link2 size={18} />} title={`連接 ${resourceName}`} subtitle="授權保存在你的帳號，可供其他 Bot 使用。" testId="personal-connection-card" onDismiss={onClose} actions={
+  const close = async () => {
+    setBusy(true)
+    try {
+      await onClose()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "無法取消連線設定。")
+    } finally {
+      setBusy(false)
+    }
+  }
+  return <InteractionCard tone="connect" icon={<Link2 size={18} />} title={`連接 ${resourceName}`} subtitle={reason || "授權保存在你的帳號，可供其他 Bot 使用。"} testId="personal-connection-card" onDismiss={() => { if (!busy) void close() }} actions={
     <button type="button" className="secondary-button" disabled={busy} onClick={() => void check()}>確認連線狀態</button>
   }>
     {!loaded && !message ? <p>正在讀取連線設定…</p> : null}

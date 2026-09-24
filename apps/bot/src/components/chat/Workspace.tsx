@@ -349,6 +349,9 @@ export function Workspace({
     dismissUserInput,
     elicitationRequest,
     decideElicitation,
+    personalConnectionRequests,
+    completePersonalConnection,
+    cancelPersonalConnection,
     dynamicSkills,
     isTurnRunning,
     requestRuntimeTier,
@@ -1034,7 +1037,7 @@ ${availableSkillsList}`,
     if (runtimeBlock) return { text: runtimeBlock.title, state: "alert" as StateId, isReady: false }
     if (demo) return { text: botCopy("Ready", "就緒"), state: "idle" as StateId, isReady: true }
     if (userInputRequest && userInputRequest.isBlocking !== false) return { text: botCopy("Waiting for answer", "等待回答"), state: "alert" as StateId, isReady: false }
-    if (elicitationRequest) return { text: botCopy("Waiting for confirmation", "等待確認"), state: "alert" as StateId, isReady: false }
+    if (elicitationRequest || personalConnectionRequests.length > 0) return { text: botCopy("Waiting for confirmation", "等待確認"), state: "alert" as StateId, isReady: false }
     if (approval) return { text: botCopy("Waiting for confirmation", "等待確認"), state: "alert" as StateId, isReady: false }
     if (agentState === "orbit") return { text: botCopy("Running tools", "執行工具中"), state: "orbit" as StateId, isReady: false }
     if (runtimeState === "執行中" || agentState === "thinking") return { text: botCopy("Thinking", "思考中"), state: "thinking" as StateId, isReady: false }
@@ -1043,7 +1046,7 @@ ${availableSkillsList}`,
     if (!demo && !threadReady && channelReady) return { text: botCopy("Loading Bot", "載入 Bot"), state: "idle" as StateId, isReady: false }
     if (!demo && !threadReady) return { text: botCopy("Connecting", "連線中"), state: "orbit" as StateId, isReady: false }
     return { text: botCopy("Ready", "就緒"), state: "idle" as StateId, isReady: true }
-  }, [demo, approval, runtimeState, agentState, showCodexLogin, threadReady, channelReady, runtimeBlock, userInputRequest, elicitationRequest])
+  }, [demo, approval, runtimeState, agentState, showCodexLogin, threadReady, channelReady, runtimeBlock, userInputRequest, elicitationRequest, personalConnectionRequests])
 
   const isAgentBusy = (runtimeState === "執行中" || agentState === "thinking" || agentState === "orbit") && messages.at(-1)?.role === "user"
   const isInputDisabled = !demo && (showCodexLogin || (!threadReady && !channelReady))
@@ -1209,6 +1212,11 @@ ${availableSkillsList}`,
           elicitationRequest={elicitationRequest}
           onAcceptElicitation={(content) => decideElicitation("accept", content)}
           onDeclineElicitation={() => decideElicitation("decline")}
+          personalConnectionTenantId={identity?.tenant_id ?? activeBot.tenantId}
+          personalConnectionAccessToken={demo ? undefined : token}
+          personalConnectionRequests={personalConnectionRequests}
+          onCompletePersonalConnection={completePersonalConnection}
+          onCancelPersonalConnection={cancelPersonalConnection}
           loginWall={loginWall}
           onLoginWallTakeover={() => {
             if (!loginWall) return
@@ -1262,7 +1270,7 @@ ${availableSkillsList}`,
           artifacts={artifacts}
           botInvocations={botInvocations}
           botNames={Object.fromEntries(bots.map((bot) => [bot.id, bot.name]))}
-          pendingAttention={userInputRequest ? "等待你回答問題" : approval || elicitationRequest ? "等待你確認操作" : messages.some((message) => message.question?.state === "pending") ? "有問題待回答，可繼續其他工作" : undefined}
+          pendingAttention={userInputRequest ? "等待你回答問題" : approval || elicitationRequest || personalConnectionRequests.length > 0 ? "等待你確認操作" : messages.some((message) => message.question?.state === "pending") ? "有問題待回答，可繼續其他工作" : undefined}
           viewerSubjectId={identity?.subject_id}
           onClose={() => setRightPanelOpen(false)}
           onRetryMcp={() => void retryGenioMcp()}

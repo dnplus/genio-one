@@ -6,6 +6,7 @@ import { deliverHandoff } from "../handoff-delivery"
 import { readBotHistory, searchBotHistory } from "../bot-history-reader"
 import { BOT_WORK_SUMMARY_STATUS_GUIDANCE } from "../../shared/bot-work-summary"
 import { listBotDefaultTools, executeBotDefaultTool, isBotDefaultTool } from "../bot-default-tools"
+import { BotConnectionInteractions } from "../bot-connection-interactions"
 
 const tools = [
   { name: "request_user_input_async", description: "Ask the user 1-3 clarification questions while continuing independent work. Each question uses title (string) and optional options (array of plain strings). Do not use the blocking tool fields id, header, question, or option objects. This returns saved question IDs immediately; it does not wait for answers. Answers will be delivered later. Use for missing information or preferences, never as a substitute for tool approval. Do not repeat a pending question. To explicitly replace a pending question, pass its saved ID in replaceQuestionIds. Continue work that does not depend on the answer; do not assume an unanswered question is permission.", inputSchema: { type: "object", properties: { replaceQuestionIds: { type: "array", maxItems: 3, items: { type: "string" } }, questions: { type: "array", minItems: 1, maxItems: 3, items: { type: "object", properties: { title: { type: "string", maxLength: 1000 }, options: { type: "array", maxItems: 6, items: { type: "string", maxLength: 300 } } }, required: ["title"], additionalProperties: false } } }, required: ["questions"], additionalProperties: false }, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false } },
@@ -26,6 +27,36 @@ const tools = [
 
 function samePrincipal(left: { tenant_id: string; subject_id: string; acting_client_id: string }, right: { tenant_id: string; subject_id: string; acting_client_id: string }) {
   return left.tenant_id === right.tenant_id && left.subject_id === right.subject_id && left.acting_client_id === right.acting_client_id
+}
+
+function connectionRequest(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+  const result = value as Record<string, unknown>
+  const connection = result.connection
+  const resume = result.resume
+  if (result.addState !== "NEEDS_CONNECTION" || !connection || typeof connection !== "object" || (connection as Record<string, unknown>).required !== true || !resume || typeof resume !== "object") return null
+  const argumentsValue = (resume as Record<string, unknown>).arguments
+  if ((resume as Record<string, unknown>).tool !== "add_enterprise_resource" || !argumentsValue || typeof argumentsValue !== "object" || Array.isArray(argumentsValue)) return null
+  const args = argumentsValue as Record<string, unknown>
+  const resourceId = typeof result.resourceId === "string" ? result.resourceId : ""
+  const resourceName = typeof result.resourceName === "string" ? result.resourceName : ""
+  const capabilityId = typeof result.capabilityId === "string" ? result.capabilityId : ""
+  const botId = typeof args.botId === "string" ? args.botId : ""
+  if (!resourceId || !resourceName || !capabilityId || !botId || args.resourceId !== resourceId || args.capabilityId !== capabilityId) return null
+  return {
+    targetBotId: botId,
+    resourceId,
+    resourceName,
+    capabilityId,
+    reason: typeof result.reason === "string" && result.reason ? result.reason : "connection_required",
+    resume: { tool: "add_enterprise_resource" as const, arguments: { botId, resourceId, capabilityId } },
+  }
+}
+
+function responseValue(response: { content: Array<{ type: string; text?: string }> }) {
+  const text = response.content.find((entry) => entry.type === "text")?.text
+  if (!text) return null
+  try { return JSON.parse(text) } catch { return null }
 }
 
 export async function botToolRoutes(app: FastifyInstance, context: BotServerContext) {
@@ -50,7 +81,27 @@ export async function botToolRoutes(app: FastifyInstance, context: BotServerCont
       if (body.method === "ping") return send({})
       if (body.method === "tools/list") return send({ tools: [...tools, ...await listBotDefaultTools({ context, botId: session.botId, principal: session.principal, accessToken })] })
       if (body.method !== "tools/call") return reply.send({ jsonrpc: "2.0", id: body.id, error: { code: -32601, message: "Method not found" } })
-      if (isBotDefaultTool(body.params?.name)) return send(await executeBotDefaultTool(body.params.name, body.params.arguments ?? {}, { context, botId: session.botId, principal: session.principal, accessToken }))
+      if (isBotDefaultTool(body.params?.name)) {
+        const name = body.params.name
+        const args = body.params.arguments ?? {}
+        const execution = { context, botId: session.botId, principal: session.principal, accessToken }
+        const defaultResponse = await executeBotDefaultTool(name, args, execution)
+        if (name !== "add_enterprise_resource" || defaultResponse.isError) return send(defaultResponse)
+        const requested = connectionRequest(responseValue(defaultResponse))
+        if (!requested) return send(defaultResponse)
+        const active = context.botRegistry.timeline.activeTurns(session.botId)
+        if (active.length !== 1) throw new Error("BOT_CONNECTION_ACTIVE_TURN_REQUIRED")
+        const interactions = context.connectionInteractions ??= new BotConnectionInteractions()
+        const pending = interactions.begin({
+          principal: session.principal,
+          runtimeSessionId: session.runtimeSessionId,
+          botId: session.botId,
+          threadId: active[0]!.threadId,
+          ...requested,
+          retry: () => executeBotDefaultTool(name, requested.resume.arguments, execution),
+        })
+        return send(await pending.wait)
+      }
       let result: unknown
       if (body.params?.name === "request_user_input_async") {
         const active = context.botRegistry.timeline.activeTurns(session.botId)

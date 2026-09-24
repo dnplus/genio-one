@@ -22,6 +22,7 @@ import {
   type RuntimePolicyExecutableAction,
 } from "../runtime-policy-contract"
 import { isManagedMcpServerName, managedMcpConfig, resolveManagedMcpMounts, type ManagedMcpMounts } from "../managed-mcp"
+import { BotConnectionInteractions } from "../bot-connection-interactions"
 import {
   readNativeRuntimeExposure,
   type NativeRuntimeEnvironment,
@@ -74,6 +75,8 @@ const SUPPORTED_CLIENT_METHODS = new Set([
   "genio/bot/select",
   "genio/thread/pending",
   "genio/request/respond",
+  "genio/personalConnection/complete",
+  "genio/personalConnection/cancel",
   "model/list",
   "account/read",
   "account/login/start",
@@ -169,6 +172,29 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
     const turnClaims = new Map<number | string, () => void>()
     const pendingInbound: string[] = []
     let bootstrapTimer: ReturnType<typeof setTimeout> | null = null
+    let connectionUnsubscribe: (() => void) | null = null
+
+    const subscribeConnectionInteractions = () => {
+      connectionUnsubscribe?.()
+      connectionUnsubscribe = null
+      const session = runtimeSession
+      const botId = selectedBotId
+      if (!session || !botId) return
+      const interactions = context.connectionInteractions ??= new BotConnectionInteractions()
+      connectionUnsubscribe = interactions.subscribe({
+        principal: session.principal,
+        botId,
+        runtimeSessionId: session.id,
+        send: (request) => {
+          if (closed || runtimeSession !== session || selectedBotId !== request.botId || socket.readyState !== socket.OPEN) return
+          socket.send(JSON.stringify({ method: "genio/personalConnection/request", params: request }))
+        },
+        expire: (request) => {
+          if (closed || runtimeSession !== session || socket.readyState !== socket.OPEN) return
+          socket.send(JSON.stringify({ method: "genio/personalConnection/expired", params: { requestToken: request.requestToken, botId: request.botId, threadId: request.threadId } }))
+        },
+      })
+    }
 
     const showRuntimeReportFailure = () => {
       if (socket.readyState !== socket.OPEN) return
@@ -398,13 +424,51 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
             }
             try {
               if (message.method === "genio/thread/pending") {
-                socket.send(JSON.stringify({ id: message.id, result: runtimeBroker.pendingInteractions(runtimeSession.id, threadId) }))
+                const connectionRequests = context.connectionInteractions?.pendingRequests({ principal: runtimeSession.principal, botId, runtimeSessionId: runtimeSession.id, threadId }) ?? []
+                socket.send(JSON.stringify({ id: message.id, result: [
+                  ...runtimeBroker.pendingInteractions(runtimeSession.id, threadId),
+                  ...connectionRequests.map((request) => ({ method: "genio/personalConnection/request", params: request })),
+                ] }))
               } else {
                 await runtimeBroker.respondToInteraction(runtimeSession.id, threadId, message.params?.requestToken, message.params?.result)
                 socket.send(JSON.stringify({ id: message.id, result: { accepted: true } }))
               }
             } catch (error) {
               socket.send(JSON.stringify({ id: message.id, error: { code: error instanceof Error ? error.message : "BOT_INTERACTION_FAILED" } }))
+            }
+            return
+          }
+          if (message.method === "genio/personalConnection/complete" || message.method === "genio/personalConnection/cancel") {
+            const session = runtimeSession
+            const botId = selectedBotId
+            if (!session || !botId || !botRegistry.getOwned(botId, session.principal)) {
+              socket.send(JSON.stringify({ id: message.id, error: { code: "BOT_CONNECTION_REQUEST_FORBIDDEN" } }))
+              return
+            }
+            const interactions = context.connectionInteractions ??= new BotConnectionInteractions()
+            try {
+              const base = {
+                principal: session.principal,
+                runtimeSessionId: session.id,
+                requestToken: message.params?.requestToken,
+                botId: message.params?.botId,
+                threadId: message.params?.threadId,
+              }
+              if (message.method === "genio/personalConnection/cancel") {
+                interactions.cancel(base)
+                socket.send(JSON.stringify({ id: message.id, result: { cancelled: true } }))
+              } else {
+                await interactions.complete({
+                  ...base,
+                  resourceId: message.params?.resourceId,
+                  connectionId: message.params?.connectionId,
+                  status: message.params?.status,
+                  accessToken: sessionAccessToken ?? session.accessToken ?? "",
+                })
+                socket.send(JSON.stringify({ id: message.id, result: { completed: true } }))
+              }
+            } catch (error) {
+              socket.send(JSON.stringify({ id: message.id, error: { code: error instanceof Error ? error.message : "BOT_CONNECTION_INTERACTION_FAILED" } }))
             }
             return
           }
@@ -461,6 +525,7 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
             if (selectedBotId !== botId) {
               selectedBotId = null
               if (session) { setBotSelection(session, null); runtimeBroker.refreshWorkspaceDetails(session.id) }
+              subscribeConnectionInteractions()
             }
             if (!session || !botId) {
               if (socket.readyState === socket.OPEN) socket.send(JSON.stringify({ id: message.id, error: { code: "BOT_REQUIRED", message: "A Bot must be selected" } }))
@@ -559,6 +624,7 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
               selectedBotId = selectedBot.id
               setBotSelection(session, { botId: selectedBot.id, usageContext, mcpMounts })
               runtimeBroker.refreshWorkspaceDetails(session.id)
+              subscribeConnectionInteractions()
               if (socket.readyState === socket.OPEN) socket.send(JSON.stringify({ id: message.id, result: {
                 botId: selectedBot.id,
                 modelDirectory: selectedBot.modelRoute,
@@ -572,6 +638,7 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
                 selectedBotId = null
                 setBotSelection(session, null)
                 runtimeBroker.refreshWorkspaceDetails(session.id)
+                subscribeConnectionInteractions()
                 sendRuntimePolicyError(error instanceof Error ? error.message : "BOT_SELECT_FAILED", undefined, message.id)
               } else if (socket.readyState === socket.OPEN) {
                 socket.send(JSON.stringify({ id: message.id, error: { code: "BOT_SELECTION_SUPERSEDED", message: "BOT_SELECTION_SUPERSEDED" } }))
@@ -996,6 +1063,8 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
       }
       pendingHostAuthorizations.clear()
       if (runtimeSession) runtimeBroker.detach(runtimeSession.id, runtimeCallbacks)
+      connectionUnsubscribe?.()
+      connectionUnsubscribe = null
     })
   })
 }

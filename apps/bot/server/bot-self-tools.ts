@@ -1,4 +1,5 @@
 import { ensureAgentSubject } from "./agent-subject"
+import { bindingStateForAdd, resolveCatalogAddState, type CatalogCapabilityView } from "./bot-binding-add"
 import { botToolText, type BotToolDefinition, type BotToolExecution, type BotToolResponse } from "./bot-tool-contract"
 import { resolveBotUsageContext } from "./usage-context"
 
@@ -40,6 +41,21 @@ export const selfToolDefinitions: BotToolDefinition[] = [
         useCaseId: { type: "string", minLength: 1, maxLength: 128 },
       },
       required: ["clientRequestId", "name"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+  },
+  {
+    name: "add_enterprise_resource",
+    description: "Add one discovered enterprise resource capability to a private Bot owned by the same person. Use the exact resourceId and capabilityId returned by Discovery. The operation is idempotent. It returns NEEDS_CONNECTION with a resumable target when the person must connect an account, REQUEST when access approval is pending, and INSTALLED only when the current catalog permits the binding. Gateway and One Policy still decide every later call.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        botId: { type: "string", minLength: 1, maxLength: 128 },
+        resourceId: { type: "string", minLength: 1, maxLength: 256 },
+        capabilityId: { type: "string", minLength: 1, maxLength: 256 },
+      },
+      required: ["botId", "resourceId", "capabilityId"],
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
@@ -171,6 +187,108 @@ async function createBot(args: Record<string, unknown>, execution: BotToolExecut
   return pending({ bot: publicBot(completed.bot), created: completed.created })
 }
 
+async function enterpriseCapability(accessToken: string, tenantId: string, resourceId: string, capabilityId: string) {
+  const origin = process.env.GENIO_ONE_PLATFORM_ORIGIN?.trim() || "http://127.0.0.1:58082"
+  let response: Response
+  try {
+    response = await fetch(new URL(`/v1/tenants/${encodeURIComponent(tenantId)}/catalog`, origin), {
+      headers: { authorization: `Bearer ${accessToken}`, accept: "application/json" },
+      signal: AbortSignal.timeout(2_000),
+    })
+  } catch {
+    throw new Error("BOT_CATALOG_UNAVAILABLE")
+  }
+  if (!response.ok) throw new Error("BOT_CATALOG_UNAVAILABLE")
+  let catalog: { capabilities?: unknown }
+  try {
+    catalog = await response.json() as { capabilities?: unknown }
+  } catch {
+    throw new Error("BOT_CATALOG_INVALID_RESPONSE")
+  }
+  if (!Array.isArray(catalog.capabilities)) throw new Error("BOT_CATALOG_INVALID_RESPONSE")
+  const capability = catalog.capabilities.find((candidate): candidate is CatalogCapabilityView & Record<string, unknown> =>
+    Boolean(candidate) && typeof candidate === "object" && !Array.isArray(candidate) &&
+    candidate.resource_id === resourceId && candidate.capability_id === capabilityId,
+  )
+  if (!capability || (capability.access !== "ENTITLED" && capability.access !== "AUTO_GRANT")) return capability
+  let connection: "CONNECTED" | "SAVED" | "NEEDS_CONNECTION" | "EMPTY" | null
+  try {
+    const connectionResponse = await fetch(new URL(`/v1/tenants/${encodeURIComponent(tenantId)}/me/resource-connections/${encodeURIComponent(resourceId)}`, origin), {
+      headers: { authorization: `Bearer ${accessToken}`, accept: "application/json" },
+      signal: AbortSignal.timeout(2_000),
+    })
+    if (!connectionResponse.ok) throw new Error("CONNECTION_UNAVAILABLE")
+    const value = await connectionResponse.json()
+    if (!Array.isArray(value)) throw new Error("CONNECTION_INVALID")
+    const states = value.flatMap((candidate) => {
+      if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return []
+      const status = (candidate as Record<string, unknown>).status
+      const authentication = (candidate as Record<string, unknown>).authentication
+      if (status === "CONNECTED") return ["CONNECTED" as const]
+      if (status === "SAVED" && authentication === "PASSWORD") return ["SAVED" as const]
+      if (status === "NEEDS_CONNECTION" && (authentication === "OAUTH" || authentication === "PASSWORD")) return ["NEEDS_CONNECTION" as const]
+      return []
+    })
+    connection = states.includes("CONNECTED") ? "CONNECTED" : states.includes("SAVED") ? "SAVED" : states.includes("NEEDS_CONNECTION") ? "NEEDS_CONNECTION" : "EMPTY"
+  } catch {
+    connection = null
+  }
+  if (connection === "EMPTY") return capability
+  if (connection === null) return { ...capability, connection_status: "UNAVAILABLE", hub_status: "AVAILABLE" }
+  if (connection === "CONNECTED") return { ...capability, connection_status: "READY", hub_status: "CONNECTED" }
+  if (connection === "NEEDS_CONNECTION") return { ...capability, connection_status: "UNAVAILABLE", hub_status: "AVAILABLE" }
+  return { ...capability, connection_status: "SAVED", hub_status: "AVAILABLE" }
+}
+
+async function addEnterpriseResource(args: Record<string, unknown>, execution: BotToolExecution) {
+  only(args, ["botId", "resourceId", "capabilityId"])
+  const botId = text(args.botId, "bot_id", 128, true)!
+  const resourceId = text(args.resourceId, "resource_id", 256, true)!
+  const capabilityId = text(args.capabilityId, "capability_id", 256, true)!
+  const bot = execution.context.botRegistry.getOwned(botId, execution.principal)
+  if (!bot) throw new Error("BOT_NOT_FOUND")
+  const capability = await enterpriseCapability(execution.accessToken, execution.principal.tenant_id, resourceId, capabilityId)
+  const view: CatalogCapabilityView & Record<string, unknown> = capability ?? {
+    resource_id: resourceId,
+    capability_id: capabilityId,
+    access: "DENIED",
+    denial_reason: "capability_not_in_catalog",
+  }
+  const decision = resolveCatalogAddState(view)
+  const resourceName = typeof view.resource_display_name === "string" && view.resource_display_name.trim()
+    ? view.resource_display_name.trim()
+    : resourceId
+  const base = {
+    botId,
+    resourceId,
+    capabilityId,
+    resourceName,
+    addState: decision.state,
+    reason: decision.reason,
+    decision,
+  }
+  if (decision.state === "NEEDS_CONNECTION") {
+    return {
+      ...base,
+      connection: { required: true, resourceId, resourceName, scope: "account", reusableAcrossBots: true },
+      resume: { tool: "add_enterprise_resource", arguments: { botId, resourceId, capabilityId } },
+    }
+  }
+  const state = bindingStateForAdd(decision)
+  if (!state) return { ...base, error: "BOT_ACCESS_DENIED" }
+  const binding = execution.context.botRegistry.upsertBinding(botId, execution.principal, {
+    resourceId,
+    capabilityId,
+    state,
+    kind: "MCP",
+    skillId: decision.skillId,
+    approvalPolicyRef: decision.approvalPolicyRef,
+    reason: decision.reason,
+  })
+  if (state === "DENIED") return { ...base, error: "BOT_ACCESS_DENIED", binding }
+  return pending({ ...base, binding })
+}
+
 export async function executeSelfTool(name: string, args: unknown, execution: BotToolExecution): Promise<BotToolResponse> {
   try {
     const input = record(args)
@@ -196,6 +314,7 @@ export async function executeSelfTool(name: string, args: unknown, execution: Bo
       return botToolText(pending(result))
     }
     if (name === "create_bot") return botToolText(await createBot(input, execution))
+    if (name === "add_enterprise_resource") return botToolText(await addEnterpriseResource(input, execution))
     if (name === "list_owned_skills") {
       only(input, [])
       return botToolText({ skills: registry.ownedSkills.list(execution.principal, execution.botId) })

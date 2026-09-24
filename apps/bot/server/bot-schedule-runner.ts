@@ -9,7 +9,8 @@ import { canonicalizeNativeParams } from "./native-runtime-params"
 import { readNativeRuntimeExposure } from "./native-runtime-policy"
 import { createRuntimePolicyLifecycle } from "./runtime-policy-lifecycle"
 import type { RuntimeCallbacks } from "./runtime"
-import type { GenioPrincipal, RuntimeSession } from "./runtime-broker"
+import { managedMcpConfig, resolveManagedMcpMounts, type ManagedMcpMounts } from "./managed-mcp"
+import { setManagedMcpMounts, type GenioPrincipal, type RuntimeSession } from "./runtime-broker"
 
 function schedulePrincipal(run: BotScheduleRun): GenioPrincipal {
   return { tenant_id: run.tenantId, subject_id: run.ownerSubjectId, acting_client_id: run.actingClientId, scopes: [] }
@@ -50,6 +51,14 @@ function logSchedule(run: BotScheduleRun, event: string, input: { phase?: string
     ...(run.turnId ? { turn_id: run.turnId } : {}),
     state: run.state,
   }))
+}
+
+function hasInstalledMcpBinding(bindings: ReadonlyArray<{ state?: string; kind?: string }>) {
+  return bindings.some((binding) => binding.state === "INSTALLED" && binding.kind === "MCP")
+}
+
+function hasUnsupportedSchedulePackage(bindings: ReadonlyArray<{ state?: string; kind?: string }>) {
+  return bindings.some((binding) => binding.state === "INSTALLED" && (binding.kind === "SKILL" || binding.kind === "PLUGIN"))
 }
 
 export class BotScheduleRunner {
@@ -244,11 +253,7 @@ export class BotScheduleRunner {
     const bot = botRegistry.getOwned(run.botId, principal)
     if (!bot || !session.accessToken) throw new Error("SCHEDULE_LOGIN_REQUIRED")
     const materialized = botRegistry.materialize(bot.id, principal)
-    if (
-      materialized.skillRoots.length > 0 ||
-      materialized.plugins.length > 0 ||
-      bot.bindings.some((binding) => binding.state === "INSTALLED" && ["SKILL", "PLUGIN", "MCP"].includes(binding.kind))
-    ) {
+    if (materialized.skillRoots.length > 0 || materialized.plugins.length > 0 || hasUnsupportedSchedulePackage(bot.bindings)) {
       botSchedules.markRun(run.id, "BLOCKED", { error: "SCHEDULE_PACKAGE_CAPABILITIES_UNAVAILABLE" })
       return
     }
@@ -260,13 +265,71 @@ export class BotScheduleRunner {
     let sent = false
     let threadId = botRegistry.getSession(bot.id)?.appServerThreadId ?? undefined
     try {
+      let mcpMounts: ManagedMcpMounts = {}
+      let mcpConfig: Record<string, unknown> = {}
+      if (hasInstalledMcpBinding(bot.bindings)) {
+        let degradation: string | null = null
+        mcpMounts = await resolveManagedMcpMounts({
+          bindings: bot.bindings,
+          tenantId: principal.tenant_id,
+          accessToken: session.accessToken,
+          onDegraded: (reason) => { degradation = reason },
+        })
+        if (Object.keys(mcpMounts).length === 0) {
+          const error = degradation === "MANAGED_MCP_CATALOG_STATUS_401" || degradation === "MANAGED_MCP_CATALOG_STATUS_403" || degradation === null
+            ? "SCHEDULE_MCP_AUTH_REQUIRED"
+            : "SCHEDULE_MCP_CATALOG_UNAVAILABLE"
+          const state = error === "SCHEDULE_MCP_AUTH_REQUIRED" ? "AUTH_REQUIRED" : "BLOCKED"
+          logSchedule(botSchedules.markRun(run.id, state, { error }), "bot.schedule.mcp_unavailable", {
+            phase: "catalog",
+            reason: error,
+            runtimeSessionId: session.id,
+          })
+          await lifecycle.report(session, bot.id, modelDecision, "FAILED", error)
+          return
+        }
+        if (Object.keys(managedMcpConfig(session.id, bot.id, mcpMounts)).length === 0) {
+          botSchedules.markRun(run.id, "BLOCKED", { error: "SCHEDULE_MCP_ENDPOINT_UNAVAILABLE" })
+          await lifecycle.report(session, bot.id, modelDecision, "FAILED", "SCHEDULE_MCP_ENDPOINT_UNAVAILABLE")
+          return
+        }
+        const allowed: ManagedMcpMounts = {}
+        for (const [resourceId, mount] of Object.entries(mcpMounts)) {
+          try {
+            const decision = await lifecycle.authorize(session, bot.id, "mcp.invoke", "expose")
+            if (!await lifecycle.report(session, bot.id, decision, "COMPLETED", "MANAGED_MCP_CONFIG_INJECTED")) throw new Error("RUNTIME_POLICY_REPORT_UNAVAILABLE")
+            allowed[resourceId] = mount
+          } catch (error) {
+            logSchedule(botSchedules.markRun(run.id, "BLOCKED", { error: "SCHEDULE_MCP_POLICY_DENIED" }), "bot.schedule.mcp_denied", {
+              phase: "policy",
+              reason: error instanceof Error ? error.message : "SCHEDULE_MCP_POLICY_DENIED",
+              runtimeSessionId: session.id,
+            })
+            await lifecycle.report(session, bot.id, modelDecision, "FAILED", "SCHEDULE_MCP_POLICY_DENIED")
+            return
+          }
+        }
+        mcpMounts = allowed
+        if (Object.keys(mcpMounts).length === 0) {
+          botSchedules.markRun(run.id, "BLOCKED", { error: "SCHEDULE_MCP_POLICY_DENIED" })
+          await lifecycle.report(session, bot.id, modelDecision, "FAILED", "SCHEDULE_MCP_POLICY_DENIED")
+          return
+        }
+        mcpConfig = managedMcpConfig(session.id, bot.id, mcpMounts)
+        setManagedMcpMounts(session, bot.id, mcpMounts)
+      }
       const route = bot.modelRoute === "genio-gateway" ? { kind: "genio-gateway" as const, modelProvider: "genio_one" } : { kind: "codex-subscription" as const }
       const model = await selectBackgroundModel({ route, modelDirectory: this.context.modelDirectory, principal, botId: bot.id, accessToken: session.accessToken, request: (method, params) => this.context.runtimeBroker.request(session.id, method, params) })
       const exposure = await readNativeRuntimeExposure({ runtimePolicy: this.context.runtimePolicy, session, botId: bot.id, accessToken: session.accessToken })
       const canonical = async (method: "thread/start" | "thread/resume" | "turn/start", params: Record<string, unknown>) => canonicalizeNativeParams({ method, params, session, botId: bot.id, exposure, environment: { hasRuntimeEnvironment: false, hasDesktopRuntime: false }, botRegistry, modelDirectory: this.context.modelDirectory, accessToken: session.accessToken })
       const applyConfig = (params: Record<string, unknown>) => ({
         ...params,
-        config: { ...(params.config as Record<string, unknown>), "features.memories": false, "mcp_servers.genio_bot": this.context.botToolSessions.config(bot.id, principal, session.id) },
+        config: {
+          ...(params.config as Record<string, unknown>),
+          "features.memories": false,
+          "mcp_servers.genio_bot": this.context.botToolSessions.config(bot.id, principal, session.id),
+          ...mcpConfig,
+        },
         baseInstructions: botRuntimeInstructions(bot),
       })
       if (threadId) {

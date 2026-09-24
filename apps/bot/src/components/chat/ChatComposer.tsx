@@ -29,6 +29,7 @@ import { botCopy } from "../../lib/ui-copy"
 import { ApprovalCard, type ApprovalRequest } from "./ApprovalCard"
 import { UserInputQuestionCard, type UserInputQuestionRequest } from "./UserInputQuestionCard"
 import { InstallElicitationCard, type InstallElicitationRequest } from "./InstallElicitationCard"
+import { PersonalConnectionElicitationCards, type PersonalConnectionRequest } from "./PersonalConnectionElicitationCard"
 import { LoginWallCard } from "../modals/LoginWallCard"
 import type { LoginWallView } from "./hands-ui"
 import {
@@ -243,6 +244,11 @@ export function ChatComposer({
   elicitationRequest = null,
   onAcceptElicitation,
   onDeclineElicitation,
+  personalConnectionTenantId,
+  personalConnectionAccessToken,
+  personalConnectionRequests = [],
+  onCompletePersonalConnection,
+  onCancelPersonalConnection,
   loginWall = null,
   onLoginWallTakeover,
   onLoginWallCompleted,
@@ -294,6 +300,11 @@ export function ChatComposer({
   elicitationRequest?: InstallElicitationRequest | null
   onAcceptElicitation?: (content: Record<string, any>) => void
   onDeclineElicitation?: () => void
+  personalConnectionTenantId?: string
+  personalConnectionAccessToken?: string
+  personalConnectionRequests?: PersonalConnectionRequest[]
+  onCompletePersonalConnection?: (requestToken: string, connectionId: string, status: "CONNECTED" | "SAVED") => Promise<void>
+  onCancelPersonalConnection?: (requestToken: string) => Promise<void>
   loginWall?: LoginWallView | null
   onLoginWallTakeover?: () => void
   onLoginWallCompleted?: () => void
@@ -443,7 +454,7 @@ export function ChatComposer({
 
   return (
     <div className="composer-wrap">
-      {(approval || userInputRequest || elicitationRequest) && onRefreshPending && <button type="button" className="secondary-button" onClick={onRefreshPending}>{botCopy("Reload pending items", "重新載入待處理事項")}</button>}
+      {(approval || userInputRequest || elicitationRequest || personalConnectionRequests.length > 0) && onRefreshPending && <button type="button" className="secondary-button" onClick={onRefreshPending}>{botCopy("Reload pending items", "重新載入待處理事項")}</button>}
       {runtimeError && <div className="runtime-error-card" role="alert">
         <div>
           <strong>{runtimeErrorView.title}</strong>
@@ -466,6 +477,16 @@ export function ChatComposer({
           request={elicitationRequest}
           onAccept={onAcceptElicitation}
           onDecline={onDeclineElicitation}
+        />
+      )}
+      {personalConnectionRequests.length > 0 && onCompletePersonalConnection && onCancelPersonalConnection && (
+        <PersonalConnectionElicitationCards
+          requests={personalConnectionRequests}
+          tenantId={personalConnectionTenantId}
+          accessToken={personalConnectionAccessToken}
+          onConnected={(requestToken, connectionId) => onCompletePersonalConnection(requestToken, connectionId, "CONNECTED")}
+          onSaved={(requestToken, connectionId) => onCompletePersonalConnection(requestToken, connectionId, "SAVED")}
+          onDecline={onCancelPersonalConnection}
         />
       )}
       {loginWall && onLoginWallTakeover && onLoginWallCompleted && onLoginWallDismiss && (
