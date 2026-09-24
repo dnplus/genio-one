@@ -6,6 +6,8 @@ import { selfHostedE2BConfiguration } from "./e2b-self-host"
 import { isHandsRelativePath, type HandsWorkspace } from "@genioone/protocol/hands"
 import type { BotWorkspaceStore } from "./bot-workspace-store"
 import type { ManagedDesktop, RuntimeCallbacks, RuntimeDetails, RuntimeProvisionRequest } from "./runtime-contract"
+import { HANDS_PLUGIN_ROOT } from "./hands-assets"
+import { HANDS_MCP_MANIFEST_PATH, handsMcpManifest, handsMcpNetwork } from "./hands-mcp-grant"
 
 const REMOTE_NODE_ROOT = "/home/user/.local/node"
 const REMOTE_CODEX_ROOT = "/home/user/.local"
@@ -126,6 +128,7 @@ export class SelfHostedE2BDesktop implements ManagedDesktop {
       ...configuration.connection,
       ...(tier === "desktop" ? { resolution: [1440, 900] as [number, number] } : {}),
       timeoutMs: 60 * 60 * 1000,
+      ...(request.handsMcp ? { network: handsMcpNetwork(request.handsMcp) } : {}),
       metadata: {
         app: "genio-one-bot",
         tier,
@@ -141,6 +144,14 @@ export class SelfHostedE2BDesktop implements ManagedDesktop {
       : await CoreSandbox.create(template, sandboxOptions)
     const desktopSandbox = tier === "desktop" ? sandbox as DesktopSandbox : null
     try {
+      if (request.handsMcp) {
+        try {
+          await sandbox.files.write(HANDS_MCP_MANIFEST_PATH, JSON.stringify(handsMcpManifest(request.runtimeSessionId, request.handsMcp), null, 2))
+          for (const asset of request.handsAssets ?? []) await sandbox.files.write(`${HANDS_PLUGIN_ROOT}/${asset.path}`, asset.content)
+        } catch (error) {
+          console.warn(JSON.stringify({ event: "runtime.e2b.hands.write_failed", runtime_session_id: request.runtimeSessionId, sandbox_id: sandbox.sandboxId, ...e2bProvisioningError(error) }))
+        }
+      }
       const workspaceRoot = request.workspace ? E2B_WORKSPACE_ROOT : "/home/user"
       if (request.workspace && workspaces) {
         const prepared = await sandbox.commands.run(`mkdir -p ${E2B_WORKSPACE_ROOT} /home/user/.cache/genio-checkpoints`, { timeoutMs: 10_000 })

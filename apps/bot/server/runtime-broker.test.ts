@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 
 import { managedMcpMountsForBot, RuntimeBroker, setBotSelection, type GenioPrincipal, type RuntimeProvider } from "./runtime-broker"
+import { handsMcpGrantFor } from "./hands-mcp-grant"
 import type { ManagedDesktop, RuntimeProvisionRequest, RuntimeCallbacks } from "./runtime"
 import { BotRegistry } from "./bot-registry"
 import { BotWorkspaceStore } from "./bot-workspace-store"
@@ -556,5 +557,139 @@ describe("RuntimeBroker", () => {
     expect(newSession.id).not.toBe(session.id)
     expect(codexClosed).toBeDefined()
     await broker.stop(newSession.id)
+  })
+})
+
+describe("hands MCP grant lifecycle", () => {
+  const mounts = { "resource-mail2000": { resourceId: "resource-mail2000", capabilityId: "mail2000", serverName: "genio_mcp_mail2000", hostname: "mail2000.example", basePath: "/mcp" } }
+
+  async function provisioned(relayOrigin: string | undefined) {
+    const original = process.env.GENIO_BOT_HANDS_RELAY_ORIGIN
+    if (relayOrigin) process.env.GENIO_BOT_HANDS_RELAY_ORIGIN = relayOrigin
+    else delete process.env.GENIO_BOT_HANDS_RELAY_ORIGIN
+    try {
+      const requests: RuntimeProvisionRequest[] = []
+      const assetLookups: string[] = []
+      const broker = new RuntimeBroker({ async provision(request) { requests.push(request); return execDesktop("hands") } }, undefined, undefined, undefined, {
+        handsAssets: (_principal, botId) => { assetLookups.push(botId); return [{ path: "mail2000/bin/m2k.mjs", content: new TextEncoder().encode("cli").buffer }] },
+      })
+      const session = await broker.start(principal, { onMessage() {}, onExit() {} }, undefined, "owner-token")
+      setBotSelection(session, { botId: "bot-mail", usageContext: null, mcpMounts: mounts })
+      await broker.ensureExec(session.id, "bot-mail")
+      return { broker, session, request: requests[0]!, assetLookups }
+    } finally {
+      if (original === undefined) delete process.env.GENIO_BOT_HANDS_RELAY_ORIGIN
+      else process.env.GENIO_BOT_HANDS_RELAY_ORIGIN = original
+    }
+  }
+
+  test("issues no sandbox grant unless a sandbox-reachable relay origin is configured", async () => {
+    const { broker, session, request, assetLookups } = await provisioned(undefined)
+
+    expect(request.handsMcp).toBeUndefined()
+    expect(assetLookups).toEqual([])
+    expect(request.handsAssets).toBeUndefined()
+    expect(session.handsMcpGrants?.size ?? 0).toBe(0)
+    await broker.stop(session.id)
+  })
+
+  test("hands the provider a grant for the Bot's mounts and revokes it when the lease stops", async () => {
+    const { broker, session, request } = await provisioned("https://bot.internal:5181")
+
+    expect(request.handsMcp).toMatchObject({ relayOrigin: "https://bot.internal:5181", botId: "bot-mail", mounts })
+    expect(request.handsAssets?.map((asset) => ({ ...asset, content: Buffer.from(asset.content).toString() }))).toEqual([{ path: "mail2000/bin/m2k.mjs", content: "cli" }])
+    expect(session.handsMcpGrants?.size).toBe(1)
+    await broker.stop(session.id, "headless")
+    expect(session.handsMcpGrants?.size).toBe(0)
+    await broker.stop(session.id)
+  })
+
+  test("reprovisions a hands lease when the selected Bot changes", async () => {
+    const original = process.env.GENIO_BOT_HANDS_RELAY_ORIGIN
+    process.env.GENIO_BOT_HANDS_RELAY_ORIGIN = "https://bot.internal:5181"
+    const requests: RuntimeProvisionRequest[] = []
+    const closed: string[] = []
+    const exits: Array<(reason: string) => void> = []
+    const broker = new RuntimeBroker({
+      async provision(request, callbacks) {
+        requests.push(request)
+        exits.push(callbacks.onExit)
+        const desktop = execDesktop(`hands-${request.botId}`)
+        desktop.details.botId = request.botId ?? null
+        return { ...desktop, async close() { closed.push(request.botId ?? "") } }
+      },
+    })
+    try {
+      const session = await broker.start(principal, { onMessage() {}, onExit() {} }, undefined, "owner-token")
+      setBotSelection(session, { botId: "bot-a", usageContext: null, mcpMounts: mounts })
+      await broker.ensureExec(session.id, "bot-a")
+      const firstGrant = requests[0]!.handsMcp!.token
+
+      setBotSelection(session, { botId: "bot-b", usageContext: null, mcpMounts: mounts })
+      await broker.ensureExec(session.id, "bot-b")
+
+      expect(requests.map((request) => request.botId)).toEqual(["bot-a", "bot-b"])
+      expect(closed).toEqual(["bot-a"])
+      expect(requests[1]!.handsMcp).toMatchObject({ botId: "bot-b", mounts })
+      expect(handsMcpGrantFor(session, `Bearer ${firstGrant}`)).toBeNull()
+      exits[0]!("old lease exited")
+      expect(session.leases.headless?.details.sandboxId).toBe("hands-bot-b")
+      expect(handsMcpGrantFor(session, `Bearer ${requests[1]!.handsMcp!.token}`)?.botId).toBe("bot-b")
+      await broker.stop(session.id)
+    } finally {
+      if (original === undefined) delete process.env.GENIO_BOT_HANDS_RELAY_ORIGIN
+      else process.env.GENIO_BOT_HANDS_RELAY_ORIGIN = original
+    }
+  })
+
+  test("coalesces concurrent Bot switches around one old lease close", async () => {
+    const original = process.env.GENIO_BOT_HANDS_RELAY_ORIGIN
+    process.env.GENIO_BOT_HANDS_RELAY_ORIGIN = "https://bot.internal:5181"
+    const requests: RuntimeProvisionRequest[] = []
+    const closed: string[] = []
+    let releaseClose!: () => void
+    let closeStarted!: () => void
+    const closeGate = new Promise<void>((resolve) => { releaseClose = resolve })
+    const closing = new Promise<void>((resolve) => { closeStarted = resolve })
+    const broker = new RuntimeBroker({
+      async provision(request) {
+        requests.push(request)
+        const desktop = execDesktop(`hands-${request.botId}`)
+        desktop.details.botId = request.botId ?? null
+        return {
+          ...desktop,
+          async close() {
+            closed.push(request.botId ?? "")
+            if (request.botId === "bot-a") {
+              closeStarted()
+              await closeGate
+            }
+          },
+        }
+      },
+    })
+    try {
+      const session = await broker.start(principal, { onMessage() {}, onExit() {} }, undefined, "owner-token")
+      setBotSelection(session, { botId: "bot-a", usageContext: null, mcpMounts: mounts })
+      await broker.ensureExec(session.id, "bot-a")
+      setBotSelection(session, { botId: "bot-b", usageContext: null, mcpMounts: mounts })
+
+      const first = broker.ensureExec(session.id, "bot-b")
+      await closing
+      const second = broker.ensureExec(session.id, "bot-b")
+      await Promise.resolve()
+      expect(requests.map((request) => request.botId)).toEqual(["bot-a"])
+      releaseClose()
+      await Promise.all([first, second])
+
+      expect(closed).toEqual(["bot-a"])
+      expect(requests.map((request) => request.botId)).toEqual(["bot-a", "bot-b"])
+      expect(session.leases.headless?.details.botId).toBe("bot-b")
+      await broker.stop(session.id)
+    } finally {
+      releaseClose?.()
+      if (original === undefined) delete process.env.GENIO_BOT_HANDS_RELAY_ORIGIN
+      else process.env.GENIO_BOT_HANDS_RELAY_ORIGIN = original
+    }
   })
 })

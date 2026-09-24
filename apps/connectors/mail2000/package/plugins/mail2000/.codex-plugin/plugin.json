@@ -1,0 +1,18 @@
+{
+  "name": "mail2000",
+  "version": "0.1.0",
+  "description": "Search recent Mail2000 mail from a local cache in the runtime workspace, using the Bot's governed Mail2000 connector.",
+  "author": {
+    "name": "GenioOne"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Mail2000",
+    "shortDescription": "Fast local search over recent Mail2000 mail.",
+    "longDescription": "Syncs recent Mail2000 envelopes into the runtime workspace through the Bot's Mail2000 MCP connection and searches them locally with the m2k CLI. Reading full mail stays a read-only connector call; sending and changing mail stay with the connector tools.",
+    "developerName": "GenioOne",
+    "category": "Productivity",
+    "capabilities": ["Read"],
+    "defaultPrompt": ["找出最近兩週跟國泰有關的信"]
+  }
+}

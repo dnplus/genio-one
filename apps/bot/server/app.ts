@@ -48,6 +48,7 @@ import { SQLiteDistillationBackfillProgressStore } from "./distillation/backfill
 import { turnReady } from "./distillation/history"
 import { attachDistillation } from "./distillation/worker"
 import { BotDeletionReconciler } from "./bot-deletion-reconciler"
+import { collectHandsAssets } from "./hands-assets"
 
 export async function createBotApp(
   contextOverrides?: Partial<BotServerContext>,
@@ -64,7 +65,13 @@ export async function createBotApp(
   const modelDirectory = contextOverrides?.modelDirectory ?? createBotModelDirectory()
   const runtimePolicy = contextOverrides?.runtimePolicy ?? createRuntimePolicyClient()
   const handsPlacement = contextOverrides?.handsPlacement ?? new HandsPlacementGate(runtimePolicy, workspaces)
-  const runtimeBroker = contextOverrides?.runtimeBroker ?? new RuntimeBroker({ provision: (request, callbacks) => createManagedDesktop(request, callbacks, workspaces) }, 600_000, workspaces, handsPlacement)
+  const runtimeBroker = contextOverrides?.runtimeBroker ?? new RuntimeBroker(
+    { provision: (request, callbacks) => createManagedDesktop(request, callbacks, workspaces) },
+    600_000,
+    workspaces,
+    handsPlacement,
+    { handsAssets: (principal, botId) => collectHandsAssets(botRegistry.materialize(botId, principal)) },
+  )
   const distillation = attachDistillation({
     registry: botRegistry,
     sessions: {

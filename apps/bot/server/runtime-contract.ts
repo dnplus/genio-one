@@ -1,6 +1,8 @@
 import { tmpdir } from "node:os"
 import type { HandsArtifactCaptureResult, HandsWorkspace } from "@genioone/protocol/hands"
 import type { DesktopComputerDriver } from "./desktop-driver"
+import type { HandsAsset } from "./hands-assets"
+import type { HandsMcpProvision } from "./hands-mcp-grant"
 
 export type RuntimeKind = "e2b-self-hosted" | "cloudflare-hands" | "local" | "endpoint"
 export type RuntimeTier = "none" | "headless" | "desktop"
@@ -56,6 +58,8 @@ export interface RuntimeProvisionRequest {
   botId?: string
   workspace?: HandsWorkspace
   tier: Exclude<RuntimeTier, "none">
+  handsMcp?: HandsMcpProvision
+  handsAssets?: HandsAsset[]
 }
 
 export interface CodexHomeNamespace {
@@ -76,6 +80,17 @@ export function configuredRuntimeKind(environment: NodeJS.ProcessEnv = process.e
   const runtime = environment.GENIO_BOT_RUNTIME?.trim() || "e2b-self-hosted"
   if (runtime === "local" || runtime === "e2b-self-hosted" || runtime === "cloudflare-hands") return runtime
   throw new Error("GENIO_BOT_RUNTIME_INVALID")
+}
+
+export function resolveHandsRelayOrigin(environment: NodeJS.ProcessEnv = process.env) {
+  const relayOrigin = environment.GENIO_BOT_HANDS_RELAY_ORIGIN?.trim().replace(/\/$/, "")
+  if (!relayOrigin) return null
+  try {
+    const url = new URL(relayOrigin)
+    return url.protocol === "http:" || url.protocol === "https:" ? relayOrigin : null
+  } catch {
+    return null
+  }
 }
 
 export function pendingRuntimeDetails(

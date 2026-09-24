@@ -53,3 +53,9 @@ GENIO_CONNECTOR_HTTP_TEST=1 pnpm --filter genio-connectors test
 ```
 
 ServiceNow 提供 5 個 CSM CRUD 工具，Mail2000 提供 21 個郵件與 DAV 工具。測試使用專用 fixture，驗證無設定時探索、設定簽章、跨站台與憑證隔離；不寄信或修改真實企業資料。正式站台登入與真實資料操作須另外驗證。
+
+## Mail2000 plugin
+
+`mail2000/package/` 是可納入 Bot package 的 Codex plugin（marketplace 在 `.agents/plugins/`）：`mail2000-local` skill 與 `hands/bin/m2k.mjs`。`m2k` 在 runtime workspace 內經 Bot relay 呼叫本 connector 的唯讀工具，把近期信件 envelope 快取在 sandbox 並在本機搜尋；它不持有任何憑證。存取模型與限制見 [`apps/bot/docs/hands-mcp-access.md`](../bot/docs/hands-mcp-access.md)。
+
+`search_mail` 只以日期與未讀條件請伺服器 SEARCH，關鍵字在 envelope 上比對（Mail2000 SEARCH 對中文無結果，且大資料夾需 20 秒以上），envelope 以每批 200 個 UID 取回（一次列出數千個 UID 會被回 BAD）。`folders` 可一次搜多個資料夾，`limit` 最大 500。

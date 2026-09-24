@@ -5,6 +5,8 @@ import type { ManagedMcpMounts } from "./managed-mcp"
 import type { HandsWorkspace } from "@genioone/protocol/hands"
 import type { BotWorkspaceStore } from "./bot-workspace-store"
 import type { HandsPlacementGate } from "./hands-placement-gate"
+import type { HandsAsset } from "./hands-assets"
+import { issueHandsMcpGrant, revokeHandsMcpGrants, type HandsMcpGrantHolder, type HandsMcpProvision } from "./hands-mcp-grant"
 
 import {
   PendingRuntime,
@@ -16,6 +18,7 @@ import {
   type RuntimeDetails,
   type RuntimeProvisionRequest,
   type RuntimeTier,
+  resolveHandsRelayOrigin,
 } from "./runtime"
 
 export interface GenioPrincipal {
@@ -36,7 +39,7 @@ export interface RuntimeProvider {
   provision(request: RuntimeProvisionRequest, callbacks: Pick<RuntimeCallbacks, "onExit">): Promise<ManagedDesktop>
 }
 
-export interface RuntimeSession {
+export interface RuntimeSession extends HandsMcpGrantHolder {
   id: string
   relaySecret: string
   principal: GenioPrincipal
@@ -154,6 +157,7 @@ export class RuntimeBroker {
     private readonly disconnectGraceMs = 600_000,
     private readonly workspaces?: BotWorkspaceStore,
     private readonly handsPlacement?: HandsPlacementGate,
+    private readonly options: { handsAssets?: (principal: GenioPrincipal, botId: string) => HandsAsset[] } = {},
   ) {}
 
   refreshWorkspaceDetails(id: string) {
@@ -247,7 +251,7 @@ export class RuntimeBroker {
     if (this.stoppingSessions.has(id)) throw new Error("RUNTIME_BROKER_STOPPING")
     const managed = this.sessions.get(id)
     if (!managed) throw new Error("RUNTIME_SESSION_NOT_FOUND")
-    let current = managed.session.leases[tier]
+    const current = managed.session.leases[tier]
     if (current) {
       if (current.details.kind === "endpoint" && (!current.details.execReady || current.details.endpoint?.botId !== botId)) throw new Error("LOCAL_HANDS_DISCONNECTED")
       if (current.details.kind === "endpoint") {
@@ -262,11 +266,14 @@ export class RuntimeBroker {
     if (pending) { await pending; return this.ensure(id, tier, botId) }
     const retry = this.workspaces?.unresolvedLeaseAttempt(managed.session.principal, id)
     if (retry && (retry.tier !== tier || retry.botId !== botId)) throw new Error("WORKSPACE_BUSY")
-    if (current && current.details.kind !== "endpoint" && (current.details.botId ?? null) !== (botId ?? null)) throw new Error("WORKSPACE_BUSY")
     if (Object.entries(managed.session.leases).some(([otherTier, lease]) => otherTier !== tier && lease && lease.details.kind !== "endpoint")) throw new Error("WORKSPACE_BUSY")
+    const replaceCurrent = Boolean(current && current.details.kind !== "endpoint" && (current.details.botId ?? null) !== (botId ?? null))
     const activeWorkspaceId = botId && this.workspaces ? this.workspaces.active(managed.session.principal, botId)?.workspaceId ?? null : null
     this.tierProvisioningTargets.set(key, { botId: botId ?? null, workspaceId: activeWorkspaceId })
-    const provisioning = this.acquireTier(managed, tier, botId)
+    const provisioning = Promise.resolve().then(async () => {
+      if (replaceCurrent) await this.stopTier(id, managed, tier)
+      return this.acquireTier(managed, tier, botId)
+    })
     this.tierProvisioning.set(key, provisioning)
     try {
       return await provisioning
@@ -299,6 +306,7 @@ export class RuntimeBroker {
     if (workspace && this.workspaces?.active(session.principal, botId!)?.workspaceId !== workspace.workspaceId) {
       const lease = session.leases[tier]
       if (lease) {
+        revokeHandsMcpGrants(session, tier)
         lease.details.execReady = false
         await lease.close()
         delete session.leases[tier]
@@ -453,6 +461,24 @@ export class RuntimeBroker {
     return managed
   }
 
+  private handsAssets(session: RuntimeSession, botId?: string): HandsAsset[] {
+    if (!botId || !this.options.handsAssets) return []
+    try {
+      return this.options.handsAssets(session.principal, botId)
+    } catch (error) {
+      console.warn(JSON.stringify({ event: "runtime.broker.hands_assets.skipped", runtime_session_id: session.id, bot_id: botId, reason: error instanceof Error ? error.message : "HANDS_ASSET_UNAVAILABLE" }))
+      return []
+    }
+  }
+
+  private handsMcpProvision(session: RuntimeSession, tier: string, botId?: string): HandsMcpProvision | undefined {
+    const relayOrigin = resolveHandsRelayOrigin()
+    if (!relayOrigin || !botId) return undefined
+    const mounts = managedMcpMountsForBot(session, botId)
+    if (Object.keys(mounts).length === 0) return undefined
+    return { token: issueHandsMcpGrant(session, { botId, tier }), relayOrigin, botId, mounts }
+  }
+
   private async provisionTier(
     managed: ManagedRuntimeSession,
     tier: Exclude<RuntimeTier, "none">,
@@ -460,6 +486,8 @@ export class RuntimeBroker {
     workspace?: HandsWorkspace,
   ) {
     const session = managed.session
+    const handsMcp = this.handsMcpProvision(session, tier, botId)
+    const handsAssets = handsMcp ? this.handsAssets(session, botId) : []
     let provisionedLease: ManagedDesktop | null = null
     let earlyExitReason: string | null = null
     const cloudflare = workspace?.provider === "cloudflare-hands"
@@ -477,6 +505,8 @@ export class RuntimeBroker {
       ...(botId ? { botId } : {}),
       ...(workspace ? { workspace } : {}),
       tier,
+      ...(handsMcp ? { handsMcp } : {}),
+      ...(handsAssets.length > 0 ? { handsAssets } : {}),
     }, {
       onExit: (reason) => {
         if (!provisionedLease) { earlyExitReason = reason; return }
@@ -493,15 +523,18 @@ export class RuntimeBroker {
       },
     })
     } catch (error) {
+      revokeHandsMcpGrants(session, tier)
       if (cloudflare && workspace && this.workspaces && error instanceof Error && error.message === "HANDS_LEASE_LOST") this.workspaces.rotateLostLeaseAttempt(workspace.workspaceId, tier, leaseRequestId)
       throw error
     }
     provisionedLease = desktop
     if (earlyExitReason) {
+      revokeHandsMcpGrants(session, tier)
       await desktop.close().catch(() => undefined)
       throw new Error(`RUNTIME_LEASE_EXITED_BEFORE_READY:${earlyExitReason}`)
     }
     if (!this.sessions.has(session.id)) {
+      revokeHandsMcpGrants(session, tier)
       console.warn(JSON.stringify({ event: "runtime.broker.provision.aborted", runtime_session_id: session.id, tier }))
       await desktop.close().catch(() => undefined)
       throw new Error("RUNTIME_SESSION_ABORTED")
@@ -598,12 +631,17 @@ export class RuntimeBroker {
     const provisioning = this.tierProvisioning.get(id)
     if (provisioning) await provisioning.catch(() => undefined)
     if (expectedBotId && this.tierProvisioningTargets.get(id)?.botId && this.tierProvisioningTargets.get(id)?.botId !== expectedBotId) throw new Error("RUNTIME_WORKSPACE_NOT_OWNED")
+    return this.stopTier(id, managed, tier, expectedBotId)
+  }
+
+  private async stopTier(id: string, managed: ManagedRuntimeSession, tier: Exclude<RuntimeTier, "none">, expectedBotId?: string) {
     const lease = managed.session.leases[tier]
     if (!lease) {
       if (this.workspaces?.unresolvedLeaseAttempt(managed.session.principal, id)?.tier === tier) throw new Error("HANDS_PROVISION_UNCONFIRMED")
       return
     }
     if (expectedBotId && (lease.details.botId ?? lease.details.endpoint?.botId) !== expectedBotId) throw new Error("RUNTIME_WORKSPACE_NOT_OWNED")
+    revokeHandsMcpGrants(managed.session, tier)
     lease.details.execReady = false
     try { await lease.close() }
     catch (error) { lease.details.execReady = true; throw error }
@@ -622,6 +660,7 @@ export class RuntimeBroker {
     if (this.workspaces?.unresolvedLeaseAttempt(managed.session.principal, id)) throw new Error("HANDS_PROVISION_UNCONFIRMED")
     if (expectedBotId && (this.hasOtherBotTurn(id, expectedBotId) || Object.values(managed.session.leases).some((lease) => lease && (lease.details.botId ?? lease.details.endpoint?.botId) !== expectedBotId))) throw new Error("RUNTIME_WORKSPACE_NOT_OWNED")
     const session = managed.session
+    revokeHandsMcpGrants(session)
     if (session.codex) {
       try {
         await session.codex.close()

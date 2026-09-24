@@ -6,6 +6,7 @@ import type { FastifyInstance } from "fastify"
 
 import type { BotServerContext } from "./context"
 import type { BotRecord } from "./bot-registry"
+import { checkHandsMcpRequest, filterHandsToolList, handsMcpGrantFor, type HandsMcpRequestCheck } from "./hands-mcp-grant"
 import { authorizedManagedMcpMount, managedMcpTarget, resolveManagedMcpMounts } from "./managed-mcp"
 import { managedMcpMountsForBot, type RuntimeSession } from "./runtime-broker"
 import { requireRuntimePolicyDecision } from "./runtime-policy"
@@ -550,9 +551,17 @@ export async function modelGatewayRelayRoutes(app: FastifyInstance, context: Bot
     const { runtimeSessionId, botId, resourceId } = request.params as { runtimeSessionId: string; botId: string; resourceId: string }
     const session = context.runtimeBroker.get(runtimeSessionId)
     if (!session) return reply.code(404).send({ error: "MCP_RUNTIME_SESSION_NOT_FOUND" })
-    if (!relayAuthorized(request, session)) return reply.code(401).send({ error: "RELAY_AUTHORIZATION_REQUIRED" })
+    const appServer = relayAuthorized(request, session)
+    const handsGrant = appServer ? null : handsMcpGrantFor(session, request.headers?.authorization)
+    if (!appServer && !handsGrant) return reply.code(401).send({ error: "RELAY_AUTHORIZATION_REQUIRED" })
     const bot = context.botRegistry.getOwned(botId, session.principal)
     if (!bot) return reply.code(403).send({ error: "MCP_RESOURCE_NOT_ALLOWED" })
+    let handsCheck: HandsMcpRequestCheck | undefined
+    if (handsGrant) {
+      if (handsGrant.botId !== botId || session.selectedBotId !== botId) return reply.code(403).send({ error: "HANDS_MCP_BOT_MISMATCH" })
+      handsCheck = checkHandsMcpRequest(handsGrant, resourceId, request.method, request.body)
+      if (!handsCheck.allowed) return reply.code(403).send({ error: handsCheck.error })
+    }
     const accessToken = accessTokenForBot(context, session, botId)
     if (!accessToken) return reply.code(404).send({ error: "MCP_RUNTIME_SESSION_NOT_FOUND" })
     let usageContext: BotUsageContext | undefined
@@ -624,6 +633,17 @@ export async function modelGatewayRelayRoutes(app: FastifyInstance, context: Bot
       }
       return reply.code(503).send({ error: "RUNTIME_POLICY_UNAVAILABLE" })
     }
+    if (handsCheck?.allowed) {
+      console.info(JSON.stringify({
+        event: "mcp.relay.hands",
+        runtime_session_id: session.id,
+        bot_id: botId,
+        resource_id: resourceId,
+        method: handsCheck.method,
+        ...(handsCheck.tool ? { tool: handsCheck.tool } : {}),
+        correlation_id: correlationId,
+      }))
+    }
     let upstream: Response
     try {
       upstream = await fetchMcpResponse(request, session, configured, { accessToken, correlationId, usageContext })
@@ -643,6 +663,25 @@ export async function modelGatewayRelayRoutes(app: FastifyInstance, context: Bot
         return reply.code(503).send({ error: "RUNTIME_POLICY_REPORT_UNAVAILABLE" })
       }
       return sendMcpResponse(reply, upstream)
+    }
+    if (handsGrant && handsCheck?.allowed && handsCheck.method === "tools/list" && upstream.body) {
+      let filtered: string
+      try {
+        filtered = filterHandsToolList(handsGrant, resourceId, upstream.headers.get("content-type"), await upstream.text())
+      } catch {
+        try {
+          await report("FAILED", "HANDS_MCP_TOOL_LIST_INVALID")
+        } catch {
+          return reply.code(503).send({ error: "RUNTIME_POLICY_REPORT_UNAVAILABLE" })
+        }
+        return reply.code(502).send({ error: "HANDS_MCP_TOOL_LIST_INVALID" })
+      }
+      try {
+        await report("COMPLETED")
+      } catch {
+        return reply.code(503).send({ error: "RUNTIME_POLICY_REPORT_UNAVAILABLE" })
+      }
+      return sendMcpResponse(reply, upstream, Readable.from([Buffer.from(filtered)]))
     }
     if (!upstream.body) {
       try {

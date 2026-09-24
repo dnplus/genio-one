@@ -18,6 +18,7 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test ./src ./server",
     "test:local-hands": "cargo build -p genio-one-endpoint --bin genio-endpoint-hands && bun test tests/local-hands/native.test.ts",
+    "test:hands-mcp": "bun test tests/hands-mcp",
     "test:e2b:desktop": "bun server/e2b-desktop-live.ts",
     "test:e2b:live": "bun server/e2b-runtime-live.ts",
     "test:runtime-bridge:live": "bun scripts/runtime-bridge-live.ts",

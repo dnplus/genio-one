@@ -19,7 +19,7 @@
       "mode": 420
     },
     "apps/bot/.env.example": {
-      "sha256": "bcae372c6f8b846c5f6f8a10f37603c225f5007ceca547a545c412d387214575",
+      "sha256": "596057ffc25fea304e27dbdef029e3ed11a7ad09d6d95fc0fa466f95725dc6b4",
       "mode": 420
     },
     "apps/bot/.walking-skeleton-continuity.json": {
@@ -202,6 +202,10 @@
       "sha256": "fc20eaeb851b9c79b75f11b43457de0fc09f7e447f18f09ede74c3e1750c9ad9",
       "mode": 420
     },
+    "apps/bot/docs/hands-mcp-access.md": {
+      "sha256": "648c14f3b7ffaa6d9898cb818e45de50b0f5ed26c951256f7a460dbd8ee6a0d5",
+      "mode": 420
+    },
     "apps/bot/docs/hands-providers.md": {
       "sha256": "cc0b13b7b80257aef3339459f2e76c887380d23baeb8f98e01df253107a653c9",
       "mode": 420
@@ -223,7 +227,7 @@
       "mode": 420
     },
     "apps/bot/package.json": {
-      "sha256": "a9bcf3062cb79bed07ddbf97e1ebacf95c8fd36be1a33fccebfc981a4f2d3db9",
+      "sha256": "9ed3f716bd8744b65e35d61d44ecd5d16c04b1aed26fff09ac5c27534f3b9e5d",
       "mode": 420
     },
     "apps/bot/README.md": {
@@ -319,7 +323,7 @@
       "mode": 420
     },
     "apps/bot/server/app.ts": {
-      "sha256": "7af45c77604e6139f7c473c7867dff831f3fe3cbc909e217602a30b791817c8b",
+      "sha256": "4731b05600dc241ff78f26a74b9be58410eda35fd3fb60b875c7ffae4ab05b26",
       "mode": 420
     },
     "apps/bot/server/auth.test.ts": {
@@ -363,7 +367,7 @@
       "mode": 420
     },
     "apps/bot/server/bot-computer-tools.test.ts": {
-      "sha256": "628c0ae10992f2181d066f1daca502183bef290008d21922f2448ca55308463e",
+      "sha256": "f6355017664db9c6bd0e356f0967a38ee9d0df9c21235a0e2675c32ccdb937f5",
       "mode": 420
     },
     "apps/bot/server/bot-computer-tools.ts": {
@@ -651,7 +655,7 @@
       "mode": 420
     },
     "apps/bot/server/e2b-hands.ts": {
-      "sha256": "975f1ad7e59dbc504a642494df2a9ac6a2c167dd7ffd5a9fa97e7cc967bd0d57",
+      "sha256": "8a1135fe8c0fef5870744045619a3dd9e50116e2066a46381e9b1d85d4fbe5bd",
       "mode": 420
     },
     "apps/bot/server/e2b-runtime-live.ts": {
@@ -4118,12 +4122,28 @@
       "sha256": "d96ecf8a7282c7f7771f549aaa24da6ef2dea633b70509a0502f855068bf3b2b",
       "mode": 420
     },
+    "apps/bot/server/hands-assets.test.ts": {
+      "sha256": "bdd84a767aeb4e06c1518e99463f3eed1e757c72576bb8306715ffbc7047549c",
+      "mode": 420
+    },
+    "apps/bot/server/hands-assets.ts": {
+      "sha256": "cf06a3f52c894ce741ad017d005caf2821ee97c6d8896a3bf4b63442240d390a",
+      "mode": 420
+    },
     "apps/bot/server/hands-isolate-one-policy.test.ts": {
       "sha256": "3cee8eabd8b47a566bd67b5d271ff20253d6af48a967ef8297fb2d61adf2b6d3",
       "mode": 420
     },
     "apps/bot/server/hands-isolate.ts": {
       "sha256": "d7445f5f5142466c5e417836e651b9dc526ff876ee145aee5895f2d68fbdf06c",
+      "mode": 420
+    },
+    "apps/bot/server/hands-mcp-grant.test.ts": {
+      "sha256": "32dc3669cbd31d0a1cb6be6e293aa64fea229a8524e0d751b12187b94649fc90",
+      "mode": 420
+    },
+    "apps/bot/server/hands-mcp-grant.ts": {
+      "sha256": "d11659e729e7dd3f3ad320ea442d2580b712202f870b8191cfdb7b4979c6ce56",
       "mode": 420
     },
     "apps/bot/server/hands-placement-gate.ts": {
@@ -4199,7 +4219,7 @@
       "mode": 420
     },
     "apps/bot/server/model-gateway-relay.ts": {
-      "sha256": "e8eff8326fb606cbdbfda978acf88beae3786d175685045c3e34bb40473e0303",
+      "sha256": "e6852c5f43f120dca88b24e6da125ea6d4678e26f946853db6c0076545dca68b",
       "mode": 420
     },
     "apps/bot/server/model-response-stream.test.ts": {
@@ -4427,11 +4447,11 @@
       "mode": 420
     },
     "apps/bot/server/runtime-broker.test.ts": {
-      "sha256": "3a382fbbe42c120a7374d2f3692616c9a20cd2b60a34c87f910ee3cb2f552f37",
+      "sha256": "4b8d85323e55adeccd12f5bc74f7e486d1f2cec2db2a60b49c4da4101b749bf2",
       "mode": 420
     },
     "apps/bot/server/runtime-broker.ts": {
-      "sha256": "6d3b8669086c1195c654d2da0c4b02924a268ad524d28ee1364f84d3efe4afd4",
+      "sha256": "2929a2ef46b0be3aec12c88f0692e9a3fd4ca739c358497201b48ddc1ea48a8d",
       "mode": 420
     },
     "apps/bot/server/runtime-capability.test.ts": {
@@ -4443,7 +4463,7 @@
       "mode": 420
     },
     "apps/bot/server/runtime-contract.ts": {
-      "sha256": "540001e59eb5cdd977fd7dbc311c76c89fe5e9020eacd48e5046edeb0c0f16a6",
+      "sha256": "e5f2bc6cd0ccf2e8a8073f49e75f1e89b548bbd22c821854393bc9c05048726f",
       "mode": 420
     },
     "apps/bot/server/runtime-policy-contract.ts": {
@@ -5126,6 +5146,10 @@
       "sha256": "ab4669fe12f81bc4fcfe3c5f38b8aba0c9ce22dd9c5d1538f8283015a77228e8",
       "mode": 420
     },
+    "apps/bot/tests/hands-mcp/m2k.e2e.test.ts": {
+      "sha256": "e487dd2367201d34678057536de12f0116a7804780f1d42ec49a71108a11b74f",
+      "mode": 420
+    },
     "apps/bot/tests/local-hands/native.test.ts": {
       "sha256": "bcfa1e3c1f9c009c22293b673305323eaba64a1c7b3d7356f1c300d38bc5b2d6",
       "mode": 420
@@ -5443,7 +5467,7 @@
       "mode": 420
     },
     "apps/connectors/mail2000/imap.ts": {
-      "sha256": "350465a2c897b7ac18f86508a5cbe23706e66a2c2c8f38b8946ce88439896c3d",
+      "sha256": "ae672d2916147c0afa55dac49ee2739134e73da349b0fe68b94f7e7916362389",
       "mode": 420
     },
     "apps/connectors/mail2000/install.test.ts": {
@@ -5466,12 +5490,32 @@
       "sha256": "878ed83e6abebc237998761973b99310e4a7c7f36b142333d41045ff305fea60",
       "mode": 420
     },
+    "apps/connectors/mail2000/package/.agents/plugins/marketplace.json": {
+      "sha256": "76bb61394d2d8f4eb0ef1b0250247a14e569920794fe7e8ac372f5091d3ed1e3",
+      "mode": 420
+    },
+    "apps/connectors/mail2000/package/plugins/mail2000/.codex-plugin/plugin.json": {
+      "sha256": "c7730b67bf4a7373351784ecdc564f54b7e1cae7c3f5866d984cdf68ea332781",
+      "mode": 420
+    },
+    "apps/connectors/mail2000/package/plugins/mail2000/hands/bin/m2k.mjs": {
+      "sha256": "64c06fd85c85ae4d261f2240aa1e53d63b95f927bdb0a50b33e928f14ad89ecc",
+      "mode": 420
+    },
+    "apps/connectors/mail2000/package/plugins/mail2000/skills/mail2000-local/SKILL.md": {
+      "sha256": "33e7b5e0d6361f9034a034eacfa784c9991e7e5b5b3830a9345fd9e168310f19",
+      "mode": 420
+    },
+    "apps/connectors/mail2000/search.test.ts": {
+      "sha256": "ade4968d7153244b6ce34fa20f54ed8fa5e227ae40d6daa8911b72368abb459d",
+      "mode": 420
+    },
     "apps/connectors/mail2000/server.test.ts": {
       "sha256": "dc4bcb93a2b0f3c93430379a62196ab9609dafa8a933805d8e4dc4430fbadcea",
       "mode": 420
     },
     "apps/connectors/mail2000/server.ts": {
-      "sha256": "08f16008625102fa93d2c05e8b09557364107ec8204cf72fcc3788ee79608ffc",
+      "sha256": "2c8570873251ea8cdc5686c4d96b8a545d77601c60f1c4e463d59f62e6554a7d",
       "mode": 420
     },
     "apps/connectors/mail2000/site.test.ts": {
@@ -5503,7 +5547,7 @@
       "mode": 420
     },
     "apps/connectors/README.md": {
-      "sha256": "d9776cc9f47df7f4e6576d72d4108b9968302678acae2e218be8a14a287e89a8",
+      "sha256": "4a9dd34d765caa0345737695bd4d6871bf56b1dd57327d6697726d8c609a7a81",
       "mode": 420
     },
     "apps/connectors/servicenow-csm/client.ts": {

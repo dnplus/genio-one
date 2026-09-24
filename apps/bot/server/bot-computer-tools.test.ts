@@ -187,16 +187,33 @@ test("computer tool terminates exposure when invoke authorization throws without
   } finally { await cleanup(value) }
 })
 
-test("computer tool binds shared desktop observations to the Bot that captured them", async () => {
+test("computer tool requires fresh Bot-scoped observations after desktop switches", async () => {
   const value = await fixture()
   try {
-    await executeComputerTool("computer_use", { operation: "screenshot" }, { context: value.context, botId: value.bot.id, principal, accessToken: "access-token" })
+    const ownerExecution = { context: value.context, botId: value.bot.id, principal, accessToken: "access-token" }
+    await executeComputerTool("computer_use", { operation: "screenshot" }, ownerExecution)
+    const ownerComputer = value.session.leases.desktop!.computer!
+    expect(value.provisions()).toBe(1)
     const other = value.registry.create(principal, { name: "Other", description: "Other Bot" })
-    await expect(executeComputerTool("computer_use", { operation: "click", x: 1, y: 1, expectedRevision: 1 }, { context: value.context, botId: other.id, principal, accessToken: "access-token" })).rejects.toThrow("WORKSPACE_BUSY")
-    await value.broker.stop(value.session.id, "desktop")
-    await executeComputerTool("computer_use", { operation: "screenshot" }, { context: value.context, botId: other.id, principal, accessToken: "access-token" })
-    await expect(executeComputerTool("computer_use", { operation: "click", x: 1, y: 1, expectedRevision: 1 }, { context: value.context, botId: other.id, principal, accessToken: "access-token" })).resolves.toBeDefined()
-    await expect(executeComputerTool("computer_use", { operation: "click", x: 1, y: 1, expectedRevision: 1 }, { context: value.context, botId: value.bot.id, principal, accessToken: "access-token" })).rejects.toThrow("WORKSPACE_BUSY")
+    const otherExecution = { context: value.context, botId: other.id, principal, accessToken: "access-token" }
+    await expect(executeComputerTool("computer_use", { operation: "click", x: 1, y: 1, expectedRevision: 1 }, otherExecution)).rejects.toThrow("COMPUTER_OBSERVATION_STALE")
+    expect(value.provisions()).toBe(2)
+    expect(value.session.leases.desktop?.details.botId).toBe(other.id)
+    await expect(ownerComputer.execute({ operation: "screenshot" }, { actorBotId: value.bot.id })).rejects.toThrow("COMPUTER_DRIVER_CLOSED")
+
+    await executeComputerTool("computer_use", { operation: "screenshot" }, otherExecution)
+    const otherComputer = value.session.leases.desktop!.computer!
+    await expect(executeComputerTool("computer_use", { operation: "click", x: 1, y: 1, expectedRevision: 1 }, otherExecution)).resolves.toBeDefined()
+    expect(value.provisions()).toBe(2)
+
+    await expect(executeComputerTool("computer_use", { operation: "click", x: 1, y: 1, expectedRevision: 1 }, ownerExecution)).rejects.toThrow("COMPUTER_OBSERVATION_STALE")
+    expect(value.provisions()).toBe(3)
+    expect(value.session.leases.desktop?.details.botId).toBe(value.bot.id)
+    await expect(otherComputer.execute({ operation: "screenshot" }, { actorBotId: other.id })).rejects.toThrow("COMPUTER_DRIVER_CLOSED")
+    await executeComputerTool("computer_use", { operation: "screenshot" }, ownerExecution)
+    await expect(executeComputerTool("computer_use", { operation: "click", x: 1, y: 1, expectedRevision: 1 }, ownerExecution)).resolves.toBeDefined()
+    expect(value.provisions()).toBe(3)
+
     const computer = value.session.leases.desktop!.computer!
     await value.broker.stop(value.session.id)
     await expect(computer.execute({ operation: "screenshot" }, { actorBotId: value.bot.id })).rejects.toThrow("COMPUTER_DRIVER_CLOSED")

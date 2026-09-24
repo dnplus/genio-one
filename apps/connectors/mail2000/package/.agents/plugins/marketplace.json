@@ -1,0 +1,20 @@
+{
+  "name": "genio-mail2000",
+  "interface": {
+    "displayName": "GenioOne Mail2000"
+  },
+  "plugins": [
+    {
+      "name": "mail2000",
+      "source": {
+        "source": "local",
+        "path": "./plugins/mail2000"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
