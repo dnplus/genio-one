@@ -475,7 +475,7 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
                 ...(selectedBot.useCaseId ? { useCaseId: selectedBot.useCaseId } : {}),
               })
               assertCurrentSelection()
-              if (selectedBot.modelRoute === "genio-gateway" && !usageContext && Array.isArray(session.principal.organization_ids) && session.principal.organization_ids.length > 0) {
+              if (selectedBot.modelRoute === "genio-gateway" && !usageContext) {
                 throw new BotUsageContextError("USE_CASE_REQUIRED", 409)
               }
               if ((selectedBot.ownerOrganizationId || selectedBot.useCaseId) &&

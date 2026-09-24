@@ -4,7 +4,7 @@ import type { GenioIdentity } from "../../lib/genio-one"
 import type { BotProfileDto } from "../../lib/bot-api"
 import type { BotDesignerDraft } from "../../../server/bot-designer"
 import { AppMark } from "../common/AppMark"
-import { BotDesignerForm } from "../common/BotDesignerForm"
+import { botDesignerErrorCopy, BotDesignerForm, type BotDesignerErrorCopy } from "../common/BotDesignerForm"
 import { Sidebar } from "./Sidebar"
 
 export function Onboarding({
@@ -19,7 +19,7 @@ export function Onboarding({
   onSignOut?: () => void
 }) {
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState("")
+  const [error, setError] = useState<BotDesignerErrorCopy | null>(null)
 
   return (
     <div className="product-shell onboarding-shell">
@@ -52,14 +52,14 @@ export function Onboarding({
             busy={busy}
             onComplete={(draft) => {
               setBusy(true)
-              setError("")
+              setError(null)
               void createAndVerify(draft)
                 .then((result) => onReady(result.bot))
-                .catch((err) => setError(err instanceof Error ? err.message : "CREATE_FAILED"))
+                .catch((err) => setError(botDesignerErrorCopy(err)))
                 .finally(() => setBusy(false))
             }}
+            error={error}
           />
-          {error ? <p className="designer-error" role="alert">{error}</p> : null}
         </div>
       </main>
     </div>

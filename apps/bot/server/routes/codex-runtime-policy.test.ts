@@ -9,6 +9,22 @@ const principal = {
   scopes: ["genioone-invocation"],
 }
 
+const gatewayPrincipal = { ...principal, organization_ids: ["org-engineering"] }
+const activeGatewayUseCase = {
+  tenant_id: gatewayPrincipal.tenant_id,
+  organization_id: "org-engineering",
+  use_case_id: "use-case-engineering",
+  display_name: "Engineering",
+  state: "ACTIVE" as const,
+}
+const inactiveGatewayUseCase = { ...activeGatewayUseCase, state: "DISABLED" as const }
+
+function gatewayFetch(input: RequestInfo | URL) {
+  return String(input).includes("/use-cases")
+    ? Response.json([activeGatewayUseCase])
+    : Response.json(gatewayPrincipal)
+}
+
 class FakeSocket {
   readonly OPEN = 1
   readyState = this.OPEN
@@ -83,6 +99,7 @@ function createContext(
 ) {
   let callbacks: { onMessage(line: string): void; onExit(reason: string): void } | null = null
   const runtimeMessages: Record<string, unknown>[] = []
+  const runtimeEnsureCalls: Array<{ sessionId: string; tier: string; botId?: string }> = []
   const runtime = {
     async send(message: string) { runtimeMessages.push(JSON.parse(message)) },
     async close() {},
@@ -110,6 +127,7 @@ function createContext(
     rememberThread(_botId?: string, _threadId?: string) {},
     importRuntimeHistory() {},
     setThreadHistoryStatus() {},
+    setUsageContext() {},
   }
   const runtimeBroker = {
     get: (id: string) => id === session.id ? session : undefined,
@@ -122,6 +140,10 @@ function createContext(
     async request(_sessionId: string, method: string, params: unknown) {
       runtimeMessages.push({ method, params: params as Record<string, unknown> })
       return {}
+    },
+    async ensure(sessionId: string, tier: string, botId?: string) {
+      runtimeEnsureCalls.push({ sessionId, tier, botId })
+      return session
     },
     detach() {},
     pendingInteractions: () => [],
@@ -180,6 +202,7 @@ function createContext(
   }
   return {
     runtimeMessages,
+    runtimeEnsureCalls,
     getCallbacks: () => callbacks,
     botRegistry,
     runtimeBroker,
@@ -671,6 +694,86 @@ describe("Codex runtime policy route", () => {
     }
   })
 
+  test.each([
+    ["missing organization claim", principal, []],
+    ["empty organization claims", { ...principal, organization_ids: [] }, []],
+    ["no active Use Case authority", gatewayPrincipal, [inactiveGatewayUseCase]],
+  ] as const)("fails closed before an existing Gateway Bot selection can proceed: %s", async (_label, identity, useCases) => {
+    const modelLookups: string[] = []
+    const reports: Array<Record<string, unknown>> = []
+    const context = createContext([], reports)
+    const bot = context.botRegistry.getOwned()
+    bot.modelRoute = "genio-gateway"
+    context.modelDirectory.resolve = async () => {
+      modelLookups.push("resolved")
+      return [{ publicModelId: "company-model", displayName: "Company model", route: { kind: "genio-gateway" } }]
+    }
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (String(input).includes("/organizations/org-engineering/use-cases")) return Response.json(useCases)
+      return Response.json(identity)
+    }) as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      const runtimeMessagesBeforeSelection = context.runtimeMessages.length
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: bot.id } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2 && JSON.parse(line).error?.code))
+      const selection = socket.sent.map((line) => JSON.parse(line)).find((message) => message.id === 2)
+      expect(selection.error.code).toBe("USE_CASE_REQUIRED")
+      expect(selection.result).toBeUndefined()
+      expect(modelLookups).toEqual([])
+      expect(context.runtimeMessages.length).toBe(runtimeMessagesBeforeSelection)
+      expect(context.session.selectedBotId).toBeNull()
+      expect(reports.some((report) => report.outcome === "ALLOW" || report.outcome === "COMPLETED")).toBe(false)
+
+      socket.emit("message", JSON.stringify({ id: 3, method: "genio/runtime/ensure", params: { tier: "headless", botId: bot.id } }))
+      await waitFor(() => socket.sent.some((line) => {
+        const message = JSON.parse(line)
+        return message.method === "genio/runtime/error" && message.params?.message === "BOT_NOT_SELECTED"
+      }))
+      expect(context.runtimeEnsureCalls).toHaveLength(0)
+    } finally {
+      globalThis.fetch = originalFetch
+      socket.close()
+    }
+  })
+
+  test("allows an existing Gateway Bot with one active Use Case", async () => {
+    const modelLookups: Array<{ botId: string | undefined; route: string | undefined }> = []
+    const context = createContext([], [])
+    const bot = context.botRegistry.getOwned()
+    bot.modelRoute = "genio-gateway"
+    context.modelDirectory.resolve = async (_principal, botId, route) => {
+      modelLookups.push({ botId, route: route?.kind })
+      return [{ publicModelId: "company-model", displayName: "Company model", route: { kind: "genio-gateway" } }]
+    }
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = gatewayFetch as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: bot.id } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
+      const selection = socket.sent.map((line) => JSON.parse(line)).find((message) => message.id === 2)
+      expect(selection.error).toBeUndefined()
+      expect(selection.result).toMatchObject({ botId: bot.id, modelDirectory: "genio-gateway", models: [{ publicModelId: "company-model" }] })
+      expect(modelLookups).toEqual([{ botId: bot.id, route: "genio-gateway" }])
+      expect(context.session.selectedBotId).toBe(bot.id)
+    } finally {
+      globalThis.fetch = originalFetch
+      socket.close()
+    }
+  })
+
   test("refreshes the selected Bot company model catalog after subscription bootstrap", async () => {
     const context = createContext([], [], false)
     const bot = context.botRegistry.getOwned()
@@ -684,7 +787,7 @@ describe("Codex runtime policy route", () => {
     const socket = new FakeSocket()
     handler!(socket)
     const originalFetch = globalThis.fetch
-    globalThis.fetch = (async () => Response.json(principal)) as unknown as typeof fetch
+    globalThis.fetch = gatewayFetch as unknown as typeof fetch
     try {
       socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
       await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
@@ -720,7 +823,7 @@ describe("Codex runtime policy route", () => {
     const socket = new FakeSocket()
     handler!(socket)
     const originalFetch = globalThis.fetch
-    globalThis.fetch = (async () => Response.json(principal)) as unknown as typeof fetch
+    globalThis.fetch = gatewayFetch as unknown as typeof fetch
     try {
       socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
       await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
@@ -764,7 +867,7 @@ describe("Codex runtime policy route", () => {
     const socket = new FakeSocket()
     handler!(socket)
     const originalFetch = globalThis.fetch
-    globalThis.fetch = (async () => Response.json(principal)) as unknown as typeof fetch
+    globalThis.fetch = gatewayFetch as unknown as typeof fetch
     try {
       socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
       await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
@@ -804,7 +907,7 @@ describe("Codex runtime policy route", () => {
     const socket = new FakeSocket()
     handler!(socket)
     const originalFetch = globalThis.fetch
-    globalThis.fetch = (async () => Response.json(principal)) as unknown as typeof fetch
+    globalThis.fetch = gatewayFetch as unknown as typeof fetch
     try {
       socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
       await waitFor(() => socket.sent.some(line => JSON.parse(line).method === "genio/codexReady"))

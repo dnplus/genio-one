@@ -88,6 +88,35 @@ describe("Bot creation usage context", () => {
     expect(registry.list(principal as never)).toHaveLength(0)
   })
 
+  test("fails closed before creating a Bot when Gateway usage context is unavailable", async () => {
+    cleanupDir = mkdtempSync(join(tmpdir(), "bot-usage-context-required-"))
+    const registry = new BotRegistry(join(cleanupDir, "registry.sqlite"), join(cleanupDir, "artifacts"))
+    const noOrganizationPrincipal = { ...principal, organization_ids: [] }
+    let agentCalls = 0
+    globalThis.fetch = (async (input) => {
+      const url = String(input)
+      if (url.includes("/v1/identity/session")) return Response.json(noOrganizationPrincipal, { status: 200 })
+      if (url.includes("/v1/tenants/tenant-uat/me/agents")) {
+        agentCalls += 1
+        return Response.json({ subject_id: "agent-kevin", kind: "AGENT" }, { status: 201 })
+      }
+      return new Response("not found", { status: 404 })
+    }) as typeof fetch
+    app = await createBotApp({ botRegistry: registry })
+
+    const denied = await app.inject({
+      method: "POST",
+      url: "/api/bots",
+      headers: { authorization: "Bearer user-token", "content-type": "application/json" },
+      payload: { name: "Kevin Gateway Bot", modelRoute: "genio-gateway" },
+    })
+
+    expect(denied.statusCode).toBe(409)
+    expect(denied.json().error).toBe("USE_CASE_REQUIRED")
+    expect(agentCalls).toBe(0)
+    expect(registry.list(noOrganizationPrincipal as never)).toHaveLength(0)
+  })
+
   test("installs the Gemini demo with its verified use case and preserves the installed Bot", async () => {
     cleanupDir = mkdtempSync(join(tmpdir(), "bot-demo-install-"))
     const registry = new BotRegistry(join(cleanupDir, "registry.sqlite"), join(cleanupDir, "artifacts"))

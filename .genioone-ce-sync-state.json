@@ -4283,11 +4283,11 @@
       "mode": 420
     },
     "apps/bot/server/routes/bots-usage-context.test.ts": {
-      "sha256": "72ed4a4f829d63f53e60a878fd61efcdd7b48d7035a2d183ccb57592ad464aa5",
+      "sha256": "a0c9a9e74ae67bebfc66bd9a9fe12e9afd23a9edc6905f7702dad85bcb2e40d0",
       "mode": 420
     },
     "apps/bot/server/routes/bots.ts": {
-      "sha256": "fd9cec903ca21ccde4e607deaae02e29b4ba54fb6a4718b514453b5d1102ffca",
+      "sha256": "bee0aa43f9d209c7d0ca1e22603ebefcc234d5e526cbea568c447aa226c849c0",
       "mode": 420
     },
     "apps/bot/server/routes/catalog.test.ts": {
@@ -4303,11 +4303,11 @@
       "mode": 420
     },
     "apps/bot/server/routes/codex-runtime-policy.test.ts": {
-      "sha256": "e3fc3110e38065ca42d145bc814a35bcd93dfa3c73d89344a52b712b6a7aac7a",
+      "sha256": "5a1008cc8c33bcbafb965c1e01c9e68d0eaa48297a79ca0e3e6901af62583156",
       "mode": 420
     },
     "apps/bot/server/routes/codex.ts": {
-      "sha256": "8332d6eae677a15cb2a0b4ef5c7e143d4c68ebc69c71ad8376d0bd448c4b4b9a",
+      "sha256": "ae0e26cf5b7236eda01c3aaacf716836c0d6015fd6eb7beb029489cddb0cbd8b",
       "mode": 420
     },
     "apps/bot/server/routes/cross-owner-handoff.test.ts": {
@@ -4714,8 +4714,12 @@
       "sha256": "e5dd93fcaed870ed7feaef50f15641e9f6be6fac849befdeb928bacd5c04096c",
       "mode": 420
     },
+    "apps/bot/src/components/common/BotDesignerForm.test.tsx": {
+      "sha256": "d4b494f133a0f1a8053dbe4384bad0e668d16e9a6788e52559bfc28a928773f1",
+      "mode": 420
+    },
     "apps/bot/src/components/common/BotDesignerForm.tsx": {
-      "sha256": "01a950866bc9a9a6cfc2a227a96fba8e6f439a3f4db0cd645ca5b0b586127cc4",
+      "sha256": "1d496b981d391ad920672cf14011e6663a87e02651bcda059534ee19ae7d7175",
       "mode": 420
     },
     "apps/bot/src/components/common/helpers.ts": {
@@ -4803,7 +4807,7 @@
       "mode": 420
     },
     "apps/bot/src/components/modals/CreateBotModal.tsx": {
-      "sha256": "45256344ce14cb469d7b9919c246d3fe0c06804f3149611af1ff58299b63c8be",
+      "sha256": "0fe2f299680c73822a44702730b038f1439ae2cc5a3448582029191a438d67be",
       "mode": 420
     },
     "apps/bot/src/components/modals/CreateGroupModal.tsx": {
@@ -4879,7 +4883,7 @@
       "mode": 420
     },
     "apps/bot/src/components/sidebar/Onboarding.tsx": {
-      "sha256": "090b4358135bbb4177948e46c2a03f93c13b7c81d00cc3473d02feb826d5c763",
+      "sha256": "5ad53769efeffed2449a0ad17ceb7cbba04bb1d06f4163b3ab62bab53795041d",
       "mode": 420
     },
     "apps/bot/src/components/sidebar/Sidebar.test.tsx": {

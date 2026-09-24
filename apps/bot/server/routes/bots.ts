@@ -251,7 +251,7 @@ export async function botRoutes(app: FastifyInstance, context: BotServerContext)
         await assertTeamWorkspaceContributor(accessToken, principal.tenant_id, teamWorkspaceId)
       }
       const usageContext = await resolveBotUsageContext({ principal, accessToken, useCaseId: requestedUseCaseId })
-      if (modelRoute === "genio-gateway" && !usageContext && Array.isArray(principal.organization_ids) && principal.organization_ids.length > 0) {
+      if (modelRoute === "genio-gateway" && !usageContext) {
         throw new BotUsageContextError("USE_CASE_REQUIRED", 409)
       }
       const agent = await ensureAgentSubject({ principal, accessToken, displayName })

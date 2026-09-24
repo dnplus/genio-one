@@ -4,7 +4,7 @@ import { X } from "lucide-react"
 import type { BotInstance } from "../../bots-storage"
 import type { BotProfileDto } from "../../lib/bot-api"
 import type { BotDesignerDraft } from "../../../server/bot-designer"
-import { BotDesignerForm } from "../common/BotDesignerForm"
+import { botDesignerErrorCopy, BotDesignerForm, type BotDesignerErrorCopy } from "../common/BotDesignerForm"
 
 export function CreateBotModal({
   onClose,
@@ -16,7 +16,7 @@ export function CreateBotModal({
   onReady(bot: BotInstance): void
 }) {
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState("")
+  const [error, setError] = useState<BotDesignerErrorCopy | null>(null)
 
   return (
     <div
@@ -37,14 +37,14 @@ export function CreateBotModal({
           busy={busy}
           onComplete={(draft) => {
             setBusy(true)
-            setError("")
+            setError(null)
             void createAndVerify(draft)
               .then((result) => onReady(result.bot))
-              .catch((err) => setError(err instanceof Error ? err.message : "CREATE_FAILED"))
+              .catch((err) => setError(botDesignerErrorCopy(err)))
               .finally(() => setBusy(false))
           }}
+          error={error}
         />
-        {error ? <p className="designer-error" role="alert">{error}</p> : null}
       </section>
     </div>
   )
