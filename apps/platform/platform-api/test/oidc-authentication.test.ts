@@ -148,3 +148,39 @@ test("OIDC configuration rejects symmetric algorithms and insecure trust roots",
     /Invalid OIDC jwks_uri/,
   )
 })
+
+test("OIDC claim resolution treats inherited prototype members as absent claims", async () => {
+  // Claim paths may only resolve properties the verified token actually
+  // carries. `genio.toString` exists on every object via Object.prototype; it
+  // must read as a missing role claim (default USER), not as a present value.
+  const authenticator = createOidcPrincipalAuthenticator({
+    tenants: [{
+      ...configuration,
+      claims: { ...configuration.claims, role: "genio.toString", organizations: "genio.__proto__" },
+    }],
+    async verifyToken() {
+      return { sub: "person-1", azp: "management-ui", genio: {} }
+    },
+  })
+
+  const principal = await authenticator.authenticate({ token: "signed-token", tenantId: "tenant-acme" })
+  assert.equal(principal?.subject_id, "person-1")
+  assert.equal(principal?.role, "USER")
+  assert.deepEqual(principal?.organization_ids, [])
+})
+
+test("OIDC claim resolution still follows nested own claims", async () => {
+  const authenticator = createOidcPrincipalAuthenticator({
+    tenants: [{
+      ...configuration,
+      claims: { ...configuration.claims, subject: "ext.ids.sub", role: "ext.genio.role" },
+    }],
+    async verifyToken() {
+      return { azp: "management-ui", ext: { ids: { sub: "person-9" }, genio: { role: "ORGANIZATION_ADMINISTRATOR" } } }
+    },
+  })
+
+  const principal = await authenticator.authenticate({ token: "signed-token", tenantId: "tenant-acme" })
+  assert.equal(principal?.subject_id, "person-9")
+  assert.equal(principal?.role, "ORGANIZATION_ADMINISTRATOR")
+})

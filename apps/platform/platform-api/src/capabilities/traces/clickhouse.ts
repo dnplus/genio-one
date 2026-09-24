@@ -20,6 +20,18 @@ function quote(value: string): string {
   return `'${value.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`
 }
 
+// Numeric query parameters are interpolated into SQL text, so the store accepts
+// only non-negative safe integers here even though the HTTP schemas already
+// enforce this: internal callers bypass those schemas, and a silently dropped
+// bound would widen the query instead of failing.
+function integerParam<T extends number | undefined>(value: T, name: string): T {
+  if (value === undefined) return value
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw Object.assign(new Error(`INVALID_TRACE_QUERY_PARAMETER:${name}`), { statusCode: 400 })
+  }
+  return value
+}
+
 function status(value: string): "OK" | "ERROR" | "UNSET" {
   if (value === "Ok") return "OK"
   if (value === "Error") return "ERROR"
@@ -51,6 +63,7 @@ export function createClickHouseTraceStore(options: {
   const authorization = `Basic ${Buffer.from(`${options.username}:${options.password}`).toString("base64")}`
   return {
     async spans({ tenantId, traceId, after, limit = 200 }) {
+      limit = integerParam(limit, "limit")
       const query = `select distinct TraceId as trace_id, SpanId as span_id, ParentSpanId as parent_span_id, SpanName as span_name, ServiceName as service_name,
         toUnixTimestamp64Milli(Timestamp) as started_at_millis, Duration as duration_nanos, StatusCode as status_code,
         SpanAttributes['genio.correlation.id'] as correlation_id, SpanAttributes as attributes, ResourceAttributes as resource_attributes
@@ -64,6 +77,9 @@ export function createClickHouseTraceStore(options: {
       return { spans, next_cursor: rows.length > limit ? spans.at(-1)!.span_id : null }
     },
     async logs({ tenantId, limit = 50, from, until, search, cursor, record_id, timestamp_nanos, event }) {
+      limit = integerParam(limit, "limit")
+      from = integerParam(from, "from")
+      until = integerParam(until, "until")
       const conditions = [`(ResourceAttributes['genio.tenant.id'] = ${quote(tenantId)} or LogAttributes['genio.tenant.id'] = ${quote(tenantId)})`]
       if (event) conditions.push(`Body = ${quote(event)}`)
       if (from !== undefined) conditions.push(`Timestamp >= fromUnixTimestamp64Milli(${from})`)
@@ -71,6 +87,7 @@ export function createClickHouseTraceStore(options: {
       if (search) conditions.push(`(positionCaseInsensitiveUTF8(concat(ServiceName, Body, TraceId, SpanId), ${quote(search)}) > 0 or arrayExists(value -> positionCaseInsensitiveUTF8(value, ${quote(search)}) > 0, mapValues(LogAttributes)))`)
       if (record_id) {
         if (!timestamp_nanos) throw Object.assign(new Error("LOG_TIMESTAMP_REQUIRED"), { statusCode: 400 })
+        if (!/^\d{1,20}$/.test(timestamp_nanos)) throw Object.assign(new Error("INVALID_LOG_TIMESTAMP"), { statusCode: 400 })
         conditions.push(`record_id = ${quote(record_id)} and Timestamp = fromUnixTimestamp64Nano(${timestamp_nanos})`)
         limit = 1
       }
@@ -93,6 +110,10 @@ export function createClickHouseTraceStore(options: {
       return { records, next_cursor: rows.length > limit && last ? Buffer.from(JSON.stringify({ timestamp: last.timestamp_nanos, id: last.record_id })).toString("base64url") : null }
     },
     async list({ tenantId, limit, before, beforeTraceId, correlationId, search, from, until }) {
+      limit = integerParam(limit, "limit")
+      before = integerParam(before, "before")
+      from = integerParam(from, "from")
+      until = integerParam(until, "until")
       const conditions = [`(ResourceAttributes['genio.tenant.id'] = ${quote(tenantId)} or SpanAttributes['genio.tenant.id'] = ${quote(tenantId)})`]
       const having: string[] = []
       if (from !== undefined) having.push(`min(toUnixTimestamp64Milli(Timestamp)) >= ${from}`)

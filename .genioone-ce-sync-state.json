@@ -6759,7 +6759,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/tenancy-auth/oidc.ts": {
-      "sha256": "b1e4a4355eef901abcea04d69fab2d13bde778e265d69496e363b4cae8490c21",
+      "sha256": "0a57a19851aec5f5fb235c54bf42ea2de2252a3a568e8a9e5bab7b0792e69cb5",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/tenancy-auth/README.md": {
@@ -6771,7 +6771,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/traces/clickhouse.ts": {
-      "sha256": "63c606bcb3cdf27ed19c6803b82c35f7beb7b517ace3f0a7588792b2d9a9e486",
+      "sha256": "ea0dc066ba5d308a255ad922f8dc2f4cc944776a16dde4f378a385f753323269",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/traces/contract.ts": {
@@ -7267,11 +7267,11 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/observability-clickhouse.test.ts": {
-      "sha256": "d0cc850d2b02c445367d540e2534c1eb8506029955c9f45bd3cd268177800db1",
+      "sha256": "ef8cea5dd15b599f2d120011e800cf6704250c94afde271790c4a2570bfacb4e",
       "mode": 420
     },
     "apps/platform/platform-api/test/oidc-authentication.test.ts": {
-      "sha256": "5d308a2eec1195cc41738512a27c70329a0275ded1f68d728b089692a6e92bae",
+      "sha256": "25568b9d44afb6e18be070808049606c5a199a15017bbf13a4d21993344a92f4",
       "mode": 420
     },
     "apps/platform/platform-api/test/one-policy.test.ts": {
@@ -7439,7 +7439,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/components/data-table/data-table.tsx": {
-      "sha256": "ab6e95da671fdc97d6a6957393fce36ed30a85d941b3ef7ec1ad740833c9840f",
+      "sha256": "bd65a1c093cd7d122615eec5c23909739b492f05b1b8ecb096173541457ad252",
       "mode": 420
     },
     "apps/platform/platform-web/src/components/data-table/record-filter-bar.tsx": {
@@ -8190,6 +8190,10 @@
       "sha256": "228c068e374463bdf06870a8dc6df244e4c9db2be514a38989561c04f29843e0",
       "mode": 420
     },
+    "apps/platform/platform-web/test/data-table.dom.test.tsx": {
+      "sha256": "7f14f4b04f4089d501ea40182b0c2146ce38f74612208121b5f324d76e6e7e93",
+      "mode": 420
+    },
     "apps/platform/platform-web/test/dialog.dom.test.tsx": {
       "sha256": "39f4bcecfa574b468200bdacf452e01c58a0f0b29e9b2c9d32085e64cdf89deb",
       "mode": 420
@@ -8423,7 +8427,7 @@
       "mode": 420
     },
     "deploy/helm/genio-one/templates/ai-gateway-foundation.yaml": {
-      "sha256": "7b80365c9b8eddbac941faff1669744167cd801fa8445362786710322a077314",
+      "sha256": "ba6f1765dacddadde4fa9a7c6e1c86cb401d132f8aca48aafcca2f9eb7ed30a1",
       "mode": 420
     },
     "deploy/helm/genio-one/templates/analytics.yaml": {
@@ -8491,11 +8495,11 @@
       "mode": 420
     },
     "deploy/helm/genio-one/values-ce.yaml": {
-      "sha256": "0e7554413df7a22c3cc39dd545162dd9d9a672fa09bb23bfd06473ff2585f171",
+      "sha256": "c0eabe7f57e018747e8f3cd9dfb0ebe1fdd5a115b040838cd1b76b06ad48b770",
       "mode": 420
     },
     "deploy/helm/genio-one/values-local.yaml": {
-      "sha256": "a480a580f6fb47936ef8c408ae4c3b971e303eb09d4d4b6e670f6eaac455093c",
+      "sha256": "e87dd9f4996763ee9c1bc753f691f3a9c52f49a010a487a8ffb98647aaabab1f",
       "mode": 420
     },
     "deploy/helm/genio-one/values.yaml": {
@@ -8515,7 +8519,7 @@
       "mode": 420
     },
     "docs/public/ce/helm.md": {
-      "sha256": "9f0f1971b39e25a175bc8141886b8d29acbb4db1b14132eafbfc1fe14e4c5b4a",
+      "sha256": "9fa2097f4f51729caa4931d15f94b0d090a9ccd036fac5d12b17758b15e501f1",
       "mode": 420
     },
     "docs/public/ce/known-issues.md": {
@@ -8743,11 +8747,11 @@
       "mode": 420
     },
     "packages/protocol/src/canonical.test.ts": {
-      "sha256": "f4f5e142017d30434d4a5c6b939b66fc753c99c5de8cb24ab1b00a8f8f7f3a22",
+      "sha256": "6c70ad94b2b97d27fda3dcde491149ba757c5d570ff0fe69d2cf4f9b8c4371f9",
       "mode": 420
     },
     "packages/protocol/src/canonical.ts": {
-      "sha256": "293c27d6f36fe791503b38f3504ffeb8a3e6c9a6a29df5bb4b3496a9aaccdd0d",
+      "sha256": "c1cee68904c146fc007fb33656ef7352155461508c62d2e67c94f4f15bd5f376",
       "mode": 420
     },
     "packages/protocol/src/ce-demo-package.json": {

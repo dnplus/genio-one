@@ -167,7 +167,8 @@ function validateConfiguration(
 function claim(payload: JWTPayload, path: string): unknown {
   let value: unknown = payload
   for (const segment of path.split(".")) {
-    if (!isRecord(value)) return undefined
+    // Check Object.hasOwn to prevent prototype chain traversal (e.g. __proto__, constructor)
+    if (!isRecord(value) || !Object.hasOwn(value, segment)) return undefined
     value = value[segment]
   }
   return value

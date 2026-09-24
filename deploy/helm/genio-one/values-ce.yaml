@@ -14,7 +14,7 @@ analytics:
 
 bot:
   replicas: 1
-  modelGatewayBaseUrl: "http://genio-one-aigw-internal:1976/v1"
+  modelGatewayBaseUrl: "http://genio-one-aigw-internal:1975/v1"
   modelGatewayModels:
     - publicModelId: gemini-3.8-flash
       displayName: Gemini 3.8 Flash

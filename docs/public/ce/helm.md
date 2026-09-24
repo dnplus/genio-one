@@ -59,7 +59,11 @@ images:
   gateway: { repository: registry.example.com/your-namespace/genio-one-gateway, tag: ce-0.1.0 }
   gatewayServices: { repository: registry.example.com/your-namespace/genio-one-gateway-policy, tag: ce-0.1.0 }
   installer: { repository: registry.example.com/your-namespace/genio-one-installer, tag: ce-0.1.0 }
+bot:
+  modelGatewayPublicHost: "llm.one.example.com"
 ```
+
+`bot.modelGatewayPublicHost` is required by the CE profile. Set it to the exact hostname of the published LLM route; the Bot sends it as the `Host` header on the public AI Gateway listener, and it is not derived from `global.publicOrigin`.
 
 `global.imagePullSecrets` is applied to every GenioOne-authored Pod template. The CE profile also starts the private Archify renderer service for the demo path. Envoy dependency images are owned by their dependency charts; use `helm show values` for the bundled dependency when that registry also needs mirroring or credentials.
 

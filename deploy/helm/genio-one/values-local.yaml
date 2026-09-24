@@ -61,7 +61,9 @@ gateway:
     limits: { cpu: 500m, memory: 512Mi }
 
 bot:
-  modelGatewayBaseUrl: "http://genio-one-aigw-internal:1976/v1"
+  modelGatewayBaseUrl: "http://genio-one-aigw-internal:1975/v1"
+  # Must equal the hostname of the published LLM route; local publications use localhost.
+  modelGatewayPublicHost: localhost
   modelGatewayModels:
     - publicModelId: gemini-3.8-flash
       displayName: Gemini 3.8 Flash

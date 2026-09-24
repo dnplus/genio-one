@@ -135,22 +135,27 @@ export function TableView<TData extends RowData>({
         <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow key={headerGroup.id}>
-              {headerGroup.headers.map((header) => (
-                <TableHead key={header.id}>
-                  {header.isPlaceholder ? null : header.column.getCanSort() ? (
-                    <Button
-                      onClick={header.column.getToggleSortingHandler()}
-                      size="sm"
-                      variant="ghost"
-                    >
-                      <span className="max-w-80 truncate"><table.FlexRender header={header} /></span>
-                      {header.column.getIsSorted() === "asc" ? <ArrowUpIcon data-icon="inline-end" />
-                        : header.column.getIsSorted() === "desc" ? <ArrowDownIcon data-icon="inline-end" />
-                          : <ArrowUpDownIcon data-icon="inline-end" />}
-                    </Button>
-                  ) : <div className="max-w-80 truncate"><table.FlexRender header={header} /></div>}
-                </TableHead>
-              ))}
+              {headerGroup.headers.map((header) => {
+                const isSorted = header.column.getIsSorted()
+                // WAI-ARIA sortable tables: only the actively sorted header carries aria-sort.
+                const sortState = isSorted === "asc" ? "ascending" : isSorted === "desc" ? "descending" : undefined
+                return (
+                  <TableHead key={header.id} aria-sort={header.isPlaceholder ? undefined : sortState}>
+                    {header.isPlaceholder ? null : header.column.getCanSort() ? (
+                      <Button
+                        onClick={header.column.getToggleSortingHandler()}
+                        size="sm"
+                        variant="ghost"
+                      >
+                        <span className="max-w-80 truncate"><table.FlexRender header={header} /></span>
+                        {isSorted === "asc" ? <ArrowUpIcon data-icon="inline-end" />
+                          : isSorted === "desc" ? <ArrowDownIcon data-icon="inline-end" />
+                            : <ArrowUpDownIcon data-icon="inline-end" />}
+                      </Button>
+                    ) : <div className="max-w-80 truncate"><table.FlexRender header={header} /></div>}
+                  </TableHead>
+                )
+              })}
             </TableRow>
           ))}
         </TableHeader>

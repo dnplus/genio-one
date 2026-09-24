@@ -129,3 +129,47 @@ test("trace span pages retain full metadata and advance within the authorized te
   assert.match(queries[1]!, /SpanId > 'bbbbbbbbbbbbbbbb'/)
   assert.match(queries[1]!, /ResourceAttributes\['genio.tenant.id'\] = 'tenant-1'/)
 })
+
+test("ClickHouse trace store rejects non-integer numeric parameters instead of interpolating or dropping them", async () => {
+  // The store builds SQL text, so it must not trust that every caller went
+  // through the HTTP schema. A malformed bound must fail rather than vanish:
+  // silently dropping `from` or `before` would widen or rewind the query.
+  const queries: string[] = []
+  const store = createClickHouseTraceStore({
+    ...clickhouse,
+    fetch: async (_input, init) => {
+      queries.push(String(init?.body))
+      return new Response("", { status: 200 })
+    },
+  })
+  const injected = "100) OR 1=1 --" as unknown as number
+
+  await store.logs({ tenantId: "tenant-1", from: 1700000000000, until: 1700000090000 })
+  assert.match(queries[0]!, /Timestamp >= fromUnixTimestamp64Milli\(1700000000000\)/)
+  assert.match(queries[0]!, /Timestamp <= fromUnixTimestamp64Milli\(1700000090000\)/)
+
+  await store.list({ tenantId: "tenant-1", from: 1000, until: 2000, before: 1500, limit: 10 })
+  assert.match(queries[1]!, /min\(toUnixTimestamp64Milli\(Timestamp\)\) >= 1000/)
+  assert.match(queries[1]!, /min\(toUnixTimestamp64Milli\(Timestamp\)\) <= 2000/)
+  assert.match(queries[1]!, /< \(1500, 'ffffffffffffffffffffffffffffffff'\)/)
+  assert.match(queries[1]!, /limit 10\n/)
+
+  for (const call of [
+    () => store.logs({ tenantId: "tenant-1", from: injected }),
+    () => store.logs({ tenantId: "tenant-1", until: 1.5 }),
+    () => store.logs({ tenantId: "tenant-1", limit: injected }),
+    () => store.list({ tenantId: "tenant-1", limit: 10, before: injected }),
+    () => store.list({ tenantId: "tenant-1", limit: 10, from: -1 }),
+    () => store.list({ tenantId: "tenant-1", limit: Number.NaN }),
+    () => store.spans({ tenantId: "tenant-1", traceId: "1".repeat(32), limit: injected }),
+  ]) {
+    await assert.rejects(call, (error: Error & { statusCode?: number }) =>
+      error.message.startsWith("INVALID_TRACE_QUERY_PARAMETER:") && error.statusCode === 400)
+  }
+
+  await assert.rejects(
+    store.logs({ tenantId: "tenant-1", record_id: "A".repeat(32), timestamp_nanos: "100) OR 1=1--" }),
+    (error: Error & { statusCode?: number }) => error.message === "INVALID_LOG_TIMESTAMP" && error.statusCode === 400,
+  )
+  assert.equal(queries.length, 2)
+})

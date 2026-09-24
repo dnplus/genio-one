@@ -122,12 +122,13 @@ spec:
     gateway.envoyproxy.io/owning-gateway-name: {{ .Values.aiMcpGateway.enforcementPointId }}
     gateway.envoyproxy.io/owning-gateway-namespace: {{ .Release.Namespace }}
   ports:
-    # Public company AI/MCP listener (bot GENIO_ONE_MCP_URL → Ingress /mcp).
+    # Public company AI/MCP listener (bot GENIO_ONE_MCP_URL → Ingress /mcp, and
+    # bot GENIO_ONE_MODEL_GATEWAY_BASE_URL with GENIO_ONE_MODEL_GATEWAY_PUBLIC_HOST).
     - name: aigw-http
       protocol: TCP
       port: 1975
       targetPort: 1975
-    # Internal model / sidecar listener (bot GENIO_ONE_MODEL_GATEWAY_BASE_URL).
+    # Internal sidecar listener; the Bot model route must not target it.
     - name: aigw-internal
       protocol: TCP
       port: 1976

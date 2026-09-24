@@ -15,6 +15,29 @@ describe("compareUtf8", () => {
     expect([supplementary, wide].sort().at(0)).toBe(supplementary)
   })
 
+  test("matches UTF-8 byte order for mixed ASCII, CJK and BMP boundary strings", () => {
+    // The non-surrogate fast path must agree with Buffer.compare; these samples
+    // straddle every UTF-8 encoding-length boundary inside the BMP.
+    const samples = [
+      "", "a", "Z", "_", "context7", "context_", "\u007F", "\u0080", "é", "߿", "ࠀ",
+      "中", "中文", "中a", "a中", "文", "Ａ", "ｱ", "퟿", "", "�", "￿",
+    ]
+    const sign = (value: number) => Math.sign(value)
+    for (const left of samples) {
+      for (const right of samples) {
+        const expected = sign(Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8")))
+        expect(sign(compareUtf8(left, right))).toBe(expected)
+      }
+    }
+  })
+
+  test("uses UTF-8 order when only one side contains a surrogate pair", () => {
+    // UTF-16 code units put U+FFFF after U+10000 (0xFFFF > 0xD800); UTF-8 bytes do not.
+    expect(compareUtf8("￿", "\u{10000}")).toBeLessThan(0)
+    expect(compareUtf8("\u{10000}", "￿")).toBeGreaterThan(0)
+    expect(compareUtf8("中￿", "中\u{1F600}")).toBeLessThan(0)
+  })
+
   test("is a total order consistent with equality", () => {
     expect(compareUtf8("a", "a")).toBe(0)
     expect(compareUtf8("a", "b")).toBeLessThan(0)
