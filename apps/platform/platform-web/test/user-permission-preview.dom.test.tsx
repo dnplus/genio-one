@@ -29,6 +29,7 @@ const data = {
     tenant_id: "tenant-acme",
     groups: [{
       tenant_id: "tenant-acme",
+      organization_id: null,
       access_group_id: "engineering",
       display_name: "Engineering",
       description: "Engineering team",

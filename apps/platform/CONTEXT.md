@@ -141,11 +141,11 @@ Application Entitlement.
 _Avoid_: provider credential, Credential Lease, Entitlement, reusable secret response
 
 **Local Access Group**:
-A Tenant-owned set of canonical Subjects used as explicit One Policy input.
-V1 membership can be assigned manually or by `subject_id` CSV with durable
-provenance; a future directory adapter may reconcile the same product model.
-It is not an Identity Provider role and membership alone never creates an
-Entitlement.
+A set of canonical Subjects used as explicit One Policy input, owned globally or
+by one Organization; Tenant Administrators manage all groups, while
+Organization Administrators manage only groups in their canonical scope.
+Organization-owned groups include only current members of that Organization,
+and membership alone never creates an Entitlement.
 _Avoid_: Keycloak group, directory group as policy authority, entitlement group
 
 **Access Package**:

@@ -149,6 +149,54 @@ test("Management authorization permits only lifecycle toggles for installed buil
   )
 })
 
+test("Organization Administrators can update only scoped Organizations and Access Groups", async () => {
+  const module = authorization()
+  const ownOrganization = request({
+    url: "/v1/tenants/tenant-acme/organizations/organization-owner",
+    method: "PUT",
+    token: "accepted",
+    body: {},
+  })
+  await module.authenticate(ownOrganization)
+  await module.normalize(ownOrganization)
+  await module.authorize(ownOrganization)
+
+  const otherOrganization = request({
+    url: "/v1/tenants/tenant-acme/organizations/organization-other",
+    method: "PUT",
+    token: "accepted",
+    body: {},
+  })
+  await module.authenticate(otherOrganization)
+  await module.normalize(otherOrganization)
+  await assert.rejects(
+    module.authorize(otherOrganization),
+    (error: unknown) => error instanceof PlatformApiError && error.code === "RESOURCE_OWNER_OR_TENANT_ADMIN_REQUIRED",
+  )
+
+  const accessGroups = request({
+    url: "/v1/tenants/tenant-acme/access-groups",
+    method: "GET",
+    token: "accepted",
+  })
+  await module.authenticate(accessGroups)
+  await module.normalize(accessGroups)
+  await module.authorize(accessGroups)
+
+  const userModule = authorization({ ...organizationPrincipal, role: "USER" })
+  const userAccessGroups = request({
+    url: "/v1/tenants/tenant-acme/access-groups",
+    method: "GET",
+    token: "accepted",
+  })
+  await userModule.authenticate(userAccessGroups)
+  await userModule.normalize(userAccessGroups)
+  await assert.rejects(
+    userModule.authorize(userAccessGroups),
+    (error: unknown) => error instanceof PlatformApiError && error.code === "TENANT_ADMINISTRATOR_REQUIRED",
+  )
+})
+
 test("raw tenant telemetry requires tenant administration rather than organization access", async () => {
   for (const path of ["logs", "traces", `traces/${"a".repeat(32)}/spans`]) {
     for (const role of ["USER", "ORGANIZATION_ADMINISTRATOR", "TENANT_ADMINISTRATOR"] as const) {
@@ -157,6 +205,26 @@ test("raw tenant telemetry requires tenant administration rather than organizati
       await module.authenticate(input)
       if (role === "TENANT_ADMINISTRATOR") await module.authorize(input)
       else await assert.rejects(module.authorize(input), error => error instanceof PlatformApiError && error.statusCode === 403)
+    }
+  }
+})
+
+test("audit export read requires Tenant Administrator authorization", async () => {
+  for (const role of ["USER", "ORGANIZATION_ADMINISTRATOR", "TENANT_ADMINISTRATOR"] as const) {
+    const module = authorization({ ...organizationPrincipal, role })
+    const input = request({
+      url: "/v1/tenants/tenant-acme/audit-export",
+      method: "GET",
+      token: "accepted",
+    })
+    await module.authenticate(input)
+    if (role === "TENANT_ADMINISTRATOR") {
+      await module.authorize(input)
+    } else {
+      await assert.rejects(
+        module.authorize(input),
+        (error: unknown) => error instanceof PlatformApiError && error.code === "TENANT_ADMINISTRATOR_REQUIRED",
+      )
     }
   }
 })

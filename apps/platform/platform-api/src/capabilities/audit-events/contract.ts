@@ -5,6 +5,8 @@ import { AccessGroupAuditEventSchema, type AccessGroupAuditEvent } from "../acce
 const Identifier = Type.String({ minLength: 1, maxLength: 256 })
 const NullableIdentifier = Type.Union([Identifier, Type.Null()])
 
+export const AUDIT_EXPORT_MAX_RECORDS = 10_000
+
 const EvidenceSchema = Type.Object({
   subject_id: Identifier,
   evidence_level: Type.Literal("VERIFIED"),
@@ -151,6 +153,31 @@ export const GatewayAuthorizationAuditListQuerySchema = Type.Object({
   metadata: Type.Optional(Type.Boolean({ default: false })),
 })
 
+export const AuditExportQuerySchema = Type.Object({
+  from: Type.Integer({ minimum: 0 }),
+  to: Type.Integer({ minimum: 0 }),
+  resource_id: Identifier,
+})
+
+export const AuditExportRecordSchema = Type.Object({
+  policy_version: NullableIdentifier,
+  decision_correlation_id: Identifier,
+  audit_event_id: Identifier,
+  correlation_id: Identifier,
+  resource_id: NullableIdentifier,
+  occurred_at: Type.Integer({ minimum: 0 }),
+}, { additionalProperties: false })
+
+export const AuditExportArtifactSchema = Type.Object({
+  schema_version: Type.Literal("genioone.audit-export.v1"),
+  tenant_id: Identifier,
+  from: Type.Integer({ minimum: 0 }),
+  to: Type.Integer({ minimum: 0 }),
+  resource_id: Identifier,
+  record_count: Type.Integer({ minimum: 0, maximum: AUDIT_EXPORT_MAX_RECORDS }),
+  records: Type.Array(AuditExportRecordSchema, { maxItems: AUDIT_EXPORT_MAX_RECORDS }),
+}, { additionalProperties: false })
+
 export const GatewayAuthorizationAuditQueryResponseSchema = Type.Object({
   events: Type.Array(AuthorizationAuditEventSchema),
   source_revision: Type.Integer({ minimum: 0 }),
@@ -177,4 +204,7 @@ export type PolicyChangeAuditEvent = Static<typeof PolicyChangeAuditEventSchema>
 export type { AccessGroupAuditEvent }
 export type AuthorizationAuditEvent = Static<typeof AuthorizationAuditEventSchema>
 export type GatewayAuthorizationAuditQueryResponse = Static<typeof GatewayAuthorizationAuditQueryResponseSchema>
+export type AuditExportQuery = Static<typeof AuditExportQuerySchema>
+export type AuditExportRecord = Static<typeof AuditExportRecordSchema>
+export type AuditExportArtifact = Static<typeof AuditExportArtifactSchema>
 export type { RuntimePolicyAuditEvent }

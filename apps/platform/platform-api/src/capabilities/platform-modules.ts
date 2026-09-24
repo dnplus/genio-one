@@ -203,6 +203,7 @@ export function createInMemoryPlatformModules(
   const accessGroups = createAccessGroupDirectory({
     repository: createInMemoryAccessGroupRepository({ audit: auditEvents }),
     identity,
+    organizations,
     now: options.now,
   })
   const applications = createInMemoryApplicationRegistry({

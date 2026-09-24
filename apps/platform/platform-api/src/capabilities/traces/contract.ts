@@ -43,6 +43,7 @@ export const TraceListQuerySchema = Type.Object({
   before: Type.Optional(Type.Integer({ minimum: 0 })),
   from: Type.Optional(Type.Integer({ minimum: 0 })),
   until: Type.Optional(Type.Integer({ minimum: 0 })),
+  correlation_id: Type.Optional(Type.String({ minLength: 1, maxLength: 512 })),
   search: Type.Optional(Type.String({ maxLength: 512 })),
   limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
 }, { additionalProperties: false })

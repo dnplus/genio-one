@@ -333,6 +333,7 @@ export function createPlatformModuleGraph(
   const accessGroups = createAccessGroupDirectory({
     repository: createPostgresAccessGroupRepository({ sql: postgres.sql, audit: auditEvents }),
     identity,
+    organizations: postgres.organizations,
     now: options.now,
   })
   const agentDelegations = createAgentDelegationDirectory({

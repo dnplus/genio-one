@@ -181,6 +181,13 @@ function normalizeAuditEvent(value: AuditEvent): AuditEvent {
   }
 }
 
+export async function loadAuditEvents(tenantId: string): Promise<AuditEvent[]> {
+  const events = await requestJson<AuditEvent[]>(
+    `/v1/tenants/${encodeURIComponent(tenantId)}/audit-events?limit=100`,
+  )
+  return events.map(normalizeAuditEvent)
+}
+
 async function settled<T>(label: string, promise: Promise<T>, fallback: T) {
   try {
     return { value: await promise, failure: null as OverviewFailure | null }
@@ -262,7 +269,7 @@ export async function loadOverview(tenantId: string, role?: IdentitySession["rol
         null,
       ),
       settled("Gateway metrics", getGatewayMetrics(tenantId, defaultGatewayMetricsWindowSeconds), null),
-      settled("Audit", requestJson<AuditEvent[]>(`${base}/audit-events?limit=100`), []),
+      settled("Audit", loadAuditEvents(tenantId), []),
       settled(
         "Endpoint enrolled audit",
         requestJson<AuditEvent[]>(`${base}/audit-events?kind=ENDPOINT_ENROLLED&limit=50`),
@@ -293,7 +300,7 @@ export async function loadOverview(tenantId: string, role?: IdentitySession["rol
       settled("Agent Delegations", requestJson<AgentDelegation[]>(`${base}/agent-delegations`), []),
       settled("Execution Grant Requests", requestJson<ExecutionGrantRequest[]>(`${base}/execution-grant-requests`), []),
       notInstalled([] as AgentExtensionVersion[]),
-      role === "TENANT_ADMINISTRATOR"
+      role === "TENANT_ADMINISTRATOR" || role === "ORGANIZATION_ADMINISTRATOR"
         ? settled("Access groups", listAccessGroups(tenantId), [] as LocalAccessGroup[])
         : Promise.resolve({ value: [] as LocalAccessGroup[], failure: null as OverviewFailure | null }),
       settled(
@@ -1183,8 +1190,12 @@ export async function setResourceLifecycle(
   )
 }
 
-export async function listTraces(tenantId: string, limit = 20, filters: { before?: number; before_trace_id?: string; search?: string; from?: number; until?: number } = {}) {
-  if (isMockMode) return { traces: createMockTraces().slice(0, limit) }
+export async function listTraces(tenantId: string, limit = 20, filters: { before?: number; before_trace_id?: string; correlation_id?: string; search?: string; from?: number; until?: number } = {}) {
+  if (isMockMode) {
+    const correlationId = filters.correlation_id?.trim()
+    const traces = createMockTraces().filter((trace) => !correlationId || trace.spans.some((span) => span.correlation_id === correlationId))
+    return { traces: traces.slice(0, limit) }
+  }
   return requestJson<{ traces: import("@/domain/contracts").TraceSummary[] }>(
     `/v1/tenants/${encodeURIComponent(tenantId)}/traces?${new URLSearchParams(Object.entries({ limit, ...filters }).filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)]))}`,
   )

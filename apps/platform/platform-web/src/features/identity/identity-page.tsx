@@ -208,7 +208,9 @@ export function IdentityPage({
       <PageHeader title={t("People")} description={t("Canonical Person identities synchronized from the configured identity provider.")} />
       <Card><CardContent className="py-5 text-sm">{t("Create or update People in your identity provider, then have them sign in to synchronize their verified identity. Assign organization membership and roles on the Organizations page.")} <a className="underline" href="/management?view=organization">{t("Organizations")}</a></CardContent></Card>
       <IdentityProvidersCard tenantId={tenantId} />
-      <AccessGroupsPanel tenantId={tenantId} data={data} canManage={identity?.role === "TENANT_ADMINISTRATOR"} onChanged={onRefresh} />
+      {identity?.role === "TENANT_ADMINISTRATOR" || identity?.role === "ORGANIZATION_ADMINISTRATOR"
+        ? <AccessGroupsPanel tenantId={tenantId} data={data} identity={identity} canManage onChanged={onRefresh} />
+        : null}
       <Card>
         <CardHeader className="border-b"><CardTitle>{t("People")}</CardTitle></CardHeader>
         <CardContent className="px-0">

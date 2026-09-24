@@ -53,12 +53,12 @@ export function createPostgresAccessGroupRepository(options: { sql: SqlAdapter; 
           throw new PlatformApiError("ACCESS_GROUP_REVISION_CONFLICT", 409)
         }
         await transaction.query(
-          "insert into genio_one_access_groups (tenant_id, access_group_id, revision, value) values ($1,$2,$3,$4::text::jsonb) on conflict (tenant_id, access_group_id) do update set revision = excluded.revision, value = excluded.value",
-          [value.tenant_id, value.access_group_id, value.revision, JSON.stringify(value)],
+          "insert into genio_one_access_groups (tenant_id, access_group_id, organization_id, revision, value) values ($1,$2,$3,$4,$5::text::jsonb) on conflict (tenant_id, access_group_id) do update set organization_id = excluded.organization_id, revision = excluded.revision, value = excluded.value",
+          [value.tenant_id, value.access_group_id, value.organization_id, value.revision, JSON.stringify(value)],
         )
         await transaction.query(
-          "insert into genio_one_access_group_revisions (tenant_id, access_group_id, revision, value) values ($1,$2,$3,$4::text::jsonb)",
-          [value.tenant_id, value.access_group_id, value.revision, JSON.stringify(value)],
+          "insert into genio_one_access_group_revisions (tenant_id, access_group_id, organization_id, revision, value) values ($1,$2,$3,$4,$5::text::jsonb)",
+          [value.tenant_id, value.access_group_id, value.organization_id, value.revision, JSON.stringify(value)],
         )
         if (!options.audit.recordInTransaction) {
           throw new PlatformApiError("ACCESS_GROUP_AUDIT_TRANSACTION_REQUIRED", 503)

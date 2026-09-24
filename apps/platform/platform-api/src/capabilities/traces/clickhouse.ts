@@ -92,11 +92,12 @@ export function createClickHouseTraceStore(options: {
       const last = records.at(-1)
       return { records, next_cursor: rows.length > limit && last ? Buffer.from(JSON.stringify({ timestamp: last.timestamp_nanos, id: last.record_id })).toString("base64url") : null }
     },
-    async list({ tenantId, limit, before, beforeTraceId, search, from, until }) {
+    async list({ tenantId, limit, before, beforeTraceId, correlationId, search, from, until }) {
       const conditions = [`(ResourceAttributes['genio.tenant.id'] = ${quote(tenantId)} or SpanAttributes['genio.tenant.id'] = ${quote(tenantId)})`]
       const having: string[] = []
       if (from !== undefined) having.push(`min(toUnixTimestamp64Milli(Timestamp)) >= ${from}`)
       if (until !== undefined) having.push(`min(toUnixTimestamp64Milli(Timestamp)) <= ${until}`)
+      if (correlationId) having.push(`countIf(SpanAttributes['genio.correlation.id'] = ${quote(correlationId)}) > 0`)
       if (search) having.push(`countIf(positionCaseInsensitiveUTF8(concat(TraceId, ServiceName, SpanName, toJSONString(SpanAttributes)), ${quote(search)}) > 0) > 0`)
       if (before !== undefined) having.push(`(min(toUnixTimestamp64Milli(Timestamp)), TraceId) < (${before}, ${quote(beforeTraceId ?? "ffffffffffffffffffffffffffffffff")})`)
       const query = `
@@ -146,7 +147,7 @@ export function createClickHouseTraceStore(options: {
         const root = spans.find((span) => span.parent_span_id === null) ?? spans[0]!
         return {
           trace_id: traceId,
-          correlation_id: spans.find((span) => span.correlation_id)?.correlation_id ?? null,
+          correlation_id: correlationId ?? spans.find((span) => span.correlation_id)?.correlation_id ?? null,
           started_at: startedAt,
           duration_millis: Math.max(0, finishedAt - startedAt),
           status: traceStatus(spans),

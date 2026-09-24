@@ -9,6 +9,7 @@ import { createInMemoryAccessGroupRepository } from "../src/capabilities/access-
 import { normalizeStoredAccessGroup } from "../src/capabilities/access-groups/postgres"
 import { createInMemoryGatewayAuthorizationAuditStore } from "../src/capabilities/audit-events/memory"
 import { createInMemoryIdentityDirectory } from "../src/capabilities/identity/memory"
+import { createInMemoryOrganizationDirectory } from "../src/capabilities/organizations/memory"
 import { createInMemoryPlatformModules } from "../src/capabilities/platform-modules"
 import { createStaticPrincipalAuthenticator } from "../src/capabilities/tenancy-auth/memory"
 import type { Principal } from "../src/capabilities/tenancy-auth/contract"
@@ -19,6 +20,7 @@ const tenantId = "tenant-access-groups"
 test("Access Group persistence rejects legacy and malformed JSONB", () => {
   const valid = {
     tenant_id: tenantId,
+    organization_id: null,
     access_group_id: "engineering",
     display_name: "Engineering",
     description: "Manual access",
@@ -64,8 +66,8 @@ function principal(subjectId: string, tenant = tenantId): Principal {
     tenant_id: tenant,
     subject_id: subjectId,
     client_id: "genio-one-bot",
-    role: subjectId === "admin" ? "TENANT_ADMINISTRATOR" : "USER",
-    organization_ids: [],
+    role: subjectId === "admin" ? "TENANT_ADMINISTRATOR" : subjectId === "org-admin" ? "ORGANIZATION_ADMINISTRATOR" : "USER",
+    organization_ids: subjectId === "org-admin" ? ["org-1"] : [],
     scopes: ["genioone-management", "genioone-invocation"],
   }
 }
@@ -81,6 +83,7 @@ function definition(): RuntimePolicyDefinition {
 function inMemoryAccessGroup(accessGroupId: string, revision: number, displayName: string): AccessGroup {
   return {
     tenant_id: tenantId,
+    organization_id: null,
     access_group_id: accessGroupId,
     display_name: displayName,
     description: "Manual access",
@@ -111,6 +114,7 @@ async function fixture() {
   const modules = createInMemoryPlatformModules({ now: () => 1_000, connectionEnabled: () => true })
   await modules.identity.bootstrap({ tenantId, subjects: [
     { subject_id: "admin", kind: "PERSON", role: "TENANT_ADMINISTRATOR" },
+    { subject_id: "org-admin", kind: "PERSON", role: "USER" },
     { subject_id: "kevin", kind: "PERSON", role: "USER" },
     { subject_id: "nina", kind: "PERSON", role: "USER" },
   ] })
@@ -126,6 +130,7 @@ async function fixture() {
     resourceCatalog: modules.resources,
     principalAuthenticator: createStaticPrincipalAuthenticator({
       admin: principal("admin"),
+      "org-admin": principal("org-admin"),
       kevin: { ...principal("kevin"), access_group_ids: ["engineering"] } as Principal,
       nina: principal("nina"),
     }),
@@ -327,6 +332,168 @@ test("Access Group memory persistence serializes concurrent same-revision saves"
   assert.deepEqual(recorded.map((event) => [event.before_revision, event.after_revision, event.correlation_id]), [[0, 1, "concurrent-first"]])
 })
 
+test("Access Group organization scope protects management and effective membership", async () => {
+  const f = await fixture()
+  try {
+    const organization = await f.modules.organizations.create({
+      tenantId,
+      display_name: "AI Platform",
+      member_subject_ids: ["org-admin", "kevin"],
+    })
+    await f.modules.organizations.update({
+      tenantId,
+      organizationId: organization.organization_id,
+      value: {
+        display_name: organization.display_name,
+        member_subject_ids: organization.member_subject_ids,
+        organization_administrator_subject_ids: ["org-admin"],
+        membership_sources: organization.membership_sources,
+      },
+    })
+    const otherOrganization = await f.modules.organizations.create({
+      tenantId,
+      display_name: "Security",
+      member_subject_ids: ["nina"],
+    })
+
+    const created = await f.app.inject({
+      method: "PUT",
+      url: `/v1/tenants/${tenantId}/access-groups/engineering-org`,
+      headers: f.headers("org-admin"),
+      payload: {
+        expected_revision: 0,
+        organization_id: organization.organization_id,
+        display_name: "Engineering Organization",
+        description: "Organization-scoped access",
+        enabled: true,
+      },
+    })
+    assert.equal(created.statusCode, 200, created.body)
+    assert.equal(created.json().organization_id, organization.organization_id)
+
+    const ownMembers = await f.app.inject({
+      method: "PUT",
+      url: `/v1/tenants/${tenantId}/access-groups/engineering-org/members`,
+      headers: f.headers("org-admin"),
+      payload: { expected_group_revision: 1, expected_source_revision: 0, subject_ids: ["kevin"] },
+    })
+    assert.equal(ownMembers.statusCode, 200, ownMembers.body)
+    assert.deepEqual((await f.modules.accessGroups.groupsForSubject({ tenantId, subjectId: "kevin" })).map((group) => group.access_group_id), ["engineering-org"])
+
+    const crossOrganizationMember = await f.app.inject({
+      method: "PUT",
+      url: `/v1/tenants/${tenantId}/access-groups/engineering-org/members`,
+      headers: f.headers("org-admin"),
+      payload: { expected_group_revision: 2, expected_source_revision: 1, subject_ids: ["nina"] },
+    })
+    assert.equal(crossOrganizationMember.statusCode, 422, crossOrganizationMember.body)
+
+    const global = await f.app.inject({
+      method: "PUT",
+      url: `/v1/tenants/${tenantId}/access-groups/global`,
+      headers: f.headers("admin"),
+      payload: { expected_revision: 0, display_name: "Global", description: "Tenant-wide", enabled: true },
+    })
+    assert.equal(global.statusCode, 200, global.body)
+    assert.equal(global.json().organization_id, null)
+
+    const scopedList = await f.app.inject({ method: "GET", url: `/v1/tenants/${tenantId}/access-groups`, headers: f.headers("org-admin") })
+    assert.equal(scopedList.statusCode, 200, scopedList.body)
+    assert.deepEqual(scopedList.json().map((group: { access_group_id: string }) => group.access_group_id), ["engineering-org"])
+    const globalRead = await f.app.inject({ method: "GET", url: `/v1/tenants/${tenantId}/access-groups/global`, headers: f.headers("org-admin") })
+    assert.equal(globalRead.statusCode, 403, globalRead.body)
+    const userRead = await f.app.inject({ method: "GET", url: `/v1/tenants/${tenantId}/access-groups`, headers: f.headers("kevin") })
+    assert.equal(userRead.statusCode, 403, userRead.body)
+
+    const organizationUpdate = await f.app.inject({
+      method: "PUT",
+      url: `/v1/tenants/${tenantId}/organizations/${organization.organization_id}`,
+      headers: f.headers("org-admin"),
+      payload: {
+        display_name: organization.display_name,
+        member_subject_ids: ["org-admin", "kevin"],
+        organization_administrator_subject_ids: ["org-admin"],
+        membership_sources: organization.membership_sources,
+      },
+    })
+    assert.equal(organizationUpdate.statusCode, 200, organizationUpdate.body)
+
+    const injectedSubject = await f.app.inject({
+      method: "PUT",
+      url: `/v1/tenants/${tenantId}/organizations/${organization.organization_id}`,
+      headers: f.headers("org-admin"),
+      payload: {
+        display_name: organization.display_name,
+        member_subject_ids: ["nina"],
+        organization_administrator_subject_ids: [],
+        membership_sources: organization.membership_sources,
+      },
+    })
+    assert.equal(injectedSubject.statusCode, 422, injectedSubject.body)
+
+    const otherOrganizationUpdate = await f.app.inject({
+      method: "PUT",
+      url: `/v1/tenants/${tenantId}/organizations/${otherOrganization.organization_id}`,
+      headers: f.headers("org-admin"),
+      payload: {
+        display_name: otherOrganization.display_name,
+        member_subject_ids: otherOrganization.member_subject_ids,
+        organization_administrator_subject_ids: [],
+        membership_sources: otherOrganization.membership_sources,
+      },
+    })
+    assert.equal(otherOrganizationUpdate.statusCode, 403, otherOrganizationUpdate.body)
+
+    const removed = await f.app.inject({
+      method: "PUT",
+      url: `/v1/tenants/${tenantId}/organizations/${organization.organization_id}`,
+      headers: f.headers("org-admin"),
+      payload: {
+        display_name: organization.display_name,
+        member_subject_ids: ["org-admin"],
+        organization_administrator_subject_ids: ["org-admin"],
+        membership_sources: organization.membership_sources,
+      },
+    })
+    assert.equal(removed.statusCode, 409, removed.body)
+    assert.equal(removed.json().code, "ACCESS_GROUP_ORGANIZATION_MEMBERSHIP_CONFLICT")
+
+    const removeFromGroup = await f.app.inject({
+      method: "PUT",
+      url: `/v1/tenants/${tenantId}/access-groups/engineering-org/members`,
+      headers: f.headers("org-admin"),
+      payload: { expected_group_revision: 2, expected_source_revision: 1, subject_ids: [] },
+    })
+    assert.equal(removeFromGroup.statusCode, 200, removeFromGroup.body)
+
+    const removedAfterGroup = await f.app.inject({
+      method: "PUT",
+      url: `/v1/tenants/${tenantId}/organizations/${organization.organization_id}`,
+      headers: f.headers("org-admin"),
+      payload: {
+        display_name: organization.display_name,
+        member_subject_ids: ["org-admin"],
+        organization_administrator_subject_ids: ["org-admin"],
+        membership_sources: organization.membership_sources,
+      },
+    })
+    assert.equal(removedAfterGroup.statusCode, 200, removedAfterGroup.body)
+    assert.deepEqual(await f.modules.accessGroups.groupsForSubject({ tenantId, subjectId: "kevin" }), [])
+    const scopedListAfterRemoval = await f.app.inject({
+      method: "GET",
+      url: `/v1/tenants/${tenantId}/access-groups`,
+      headers: f.headers("org-admin"),
+    })
+    assert.equal(scopedListAfterRemoval.statusCode, 200, scopedListAfterRemoval.body)
+    assert.deepEqual(scopedListAfterRemoval.json().map((group: { access_group_id: string; membership_sources: Array<{ subject_ids: string[] }> }) => ({
+      access_group_id: group.access_group_id,
+      subject_ids: group.membership_sources.flatMap((source) => source.subject_ids),
+    })), [{ access_group_id: "engineering-org", subject_ids: [] }])
+  } finally {
+    await f.app.close()
+  }
+})
+
 test("Access Group memory persistence retries after audit failure without committing", async () => {
   let attempts = 0
   const recorded: AccessGroupAuditEvent[] = []
@@ -354,6 +521,7 @@ test("Access Group memory persistence retries after audit failure without commit
 
 test("Access Group audit failure prevents the memory mutation and durable state restarts cleanly", async () => {
   const identity = createInMemoryIdentityDirectory()
+  const organizations = createInMemoryOrganizationDirectory()
   await identity.bootstrap({ tenantId, subjects: [
     { subject_id: "admin", kind: "PERSON", role: "TENANT_ADMINISTRATOR" },
     { subject_id: "kevin", kind: "PERSON", role: "USER" },
@@ -366,6 +534,7 @@ test("Access Group audit failure prevents the memory mutation and durable state 
   const failedDirectory = createAccessGroupDirectory({
     repository: createInMemoryAccessGroupRepository({ audit: failingAudit }),
     identity,
+    organizations,
     now: () => 1_000,
   })
   await assert.rejects(
@@ -381,7 +550,7 @@ test("Access Group audit failure prevents the memory mutation and durable state 
 
   const audit = createInMemoryGatewayAuthorizationAuditStore()
   const repository = createInMemoryAccessGroupRepository({ audit })
-  const first = createAccessGroupDirectory({ repository, identity, now: () => 1_000 })
+  const first = createAccessGroupDirectory({ repository, identity, organizations, now: () => 1_000 })
   const created = await first.save(principal("admin"), "restart", {
     expected_revision: 0,
     display_name: "Restart",
@@ -393,7 +562,7 @@ test("Access Group audit failure prevents the memory mutation and durable state 
     expected_source_revision: 0,
     subject_ids: ["kevin"],
   })
-  const restarted = createAccessGroupDirectory({ repository, identity, now: () => 1_000 })
+  const restarted = createAccessGroupDirectory({ repository, identity, organizations, now: () => 1_000 })
   const group = (await restarted.groupsForSubject({ tenantId, subjectId: "kevin" }))[0]
   assert.equal(group?.access_group_id, "restart")
   assert.equal(group?.membership_sources[0]?.revision, 1)

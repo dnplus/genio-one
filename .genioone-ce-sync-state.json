@@ -5599,7 +5599,7 @@
       "mode": 420
     },
     "apps/platform/CONTEXT.md": {
-      "sha256": "a61215f4c3887de5467764346951ed7af9cc37247a0517940cacc3c37eac5858",
+      "sha256": "141c0dbde7c44b9517523bfa6d753f20f7118fbd16c96d693850ea06d40f8217",
       "mode": 420
     },
     "apps/platform/design-qa.md": {
@@ -5670,12 +5670,16 @@
       "sha256": "dc47a8dc40cb5a1447ddb497df75a98ea41c44efb969c84a1e95a6cea261575c",
       "mode": 420
     },
+    "apps/platform/platform-api/migrations/012_access_group_organization_scope.sql": {
+      "sha256": "b7dd7e968dafa1f313729f2348632ed648d994bfa3969f32500c6f90d2f432d2",
+      "mode": 420
+    },
     "apps/platform/platform-api/migrations/README.md": {
       "sha256": "f1fb0db514e78c51e220ed0728c1aa2d54a2af2dd10d24e95ca6a7d0c51c8679",
       "mode": 420
     },
     "apps/platform/platform-api/src/app.ts": {
-      "sha256": "739c9f77e15fd669f76642279b4f1e58fc33f5e5b4c5b4c2885da7320f8ff163",
+      "sha256": "68ae24e3aa38c44d3874d41cc5abda1b506307dbab8f0f07452a462425094e71",
       "mode": 420
     },
     "apps/platform/platform-api/src/bootstrap.ts": {
@@ -5687,7 +5691,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/access-groups/contract.ts": {
-      "sha256": "748037c861d185d2af4d7401a6332cd003bc54587e513a052e676825427aafda",
+      "sha256": "3a076cef52d012fcea90c587ec4d65d00f69e9eb07847ede40caa77004dce08a",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/access-groups/http.ts": {
@@ -5699,11 +5703,11 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/access-groups/module.ts": {
-      "sha256": "0089c46c97375262656980785b2957c3dab43c37b546e67ad558033fcd0a8a83",
+      "sha256": "2e9396fffb332855b8c57a195a2da1f0e4d3cebdf783db637bfb7f39694aade9",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/access-groups/postgres.ts": {
-      "sha256": "d2e65ca4aef96720d9a37e26c2a3e65aff73ce6115aba20cd08d72c8b2023e31",
+      "sha256": "1f28af04f794bfda08b95f0ca9c39f2f609409535eace832979f94665e3bbc83",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/access/contract.ts": {
@@ -5811,11 +5815,11 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/audit-events/contract.ts": {
-      "sha256": "49ee75a0d7820e40d7f07936db986c49ba02324e1edae2b7d5c4ec5cb15334b9",
+      "sha256": "08e056b4d7bf340de40e939d9c25755d0ea04c9c6640839622b6df5afdeaf93d",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/audit-events/http.ts": {
-      "sha256": "173705c6863e74b73fac4cdd6ba7fe1ce0e2210b5c68eb45ea8f2e5053f8201b",
+      "sha256": "6fc172328e82881da70a32193948b4f661d48dc96d95cb462e87d713d6f9826f",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/audit-events/memory.ts": {
@@ -6299,7 +6303,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/management-authorization/module.ts": {
-      "sha256": "2540e573272868fc633c29b8067404e4b62c7ed1c356f5102e1bb17f91d3d367",
+      "sha256": "18e012efe0f8782bf69853bdfdee25ff4b1056315ae83e69a1abbe9df0da93e8",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/mcp-discovery/candidates.ts": {
@@ -6519,7 +6523,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/organizations/http.ts": {
-      "sha256": "a02fdceaed68188c5873f51757ea993575f32dfba70195a2277115e489afddc3",
+      "sha256": "6637280f50b6463d0984cab62aad5d6d4e3af0e586f1223df17f8e331c58bf28",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/organizations/memory.ts": {
@@ -6539,7 +6543,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/platform-modules-live.ts": {
-      "sha256": "67e953f580133ed5cc178d503ab67bc6dfa38d1a65cbff61a1d9b9eafddd8e34",
+      "sha256": "b4e2467b58825a335cd7a2e99c3f613cdc4a6a95bbb8764af2bccc87bd1633a8",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/platform-modules-postgres.ts": {
@@ -6547,7 +6551,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/platform-modules.ts": {
-      "sha256": "2ec19b7f72cc8e6261e2b4b99847f876fab98b303780eef2efb6fd02b58f335f",
+      "sha256": "df4fa5e279b0a8c29de41bbb6a5e2f97dd420a1fa0860a3d832884c6d5ee11c9",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/pricing-catalog/litellm.ts": {
@@ -6759,15 +6763,15 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/traces/clickhouse.ts": {
-      "sha256": "564ee6de43041433f441281ba635b198708f4655e7b70dc1f601a93c238547a9",
+      "sha256": "63c606bcb3cdf27ed19c6803b82c35f7beb7b517ace3f0a7588792b2d9a9e486",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/traces/contract.ts": {
-      "sha256": "9edeb3b7bd59a2b858918f4703a2e324ecead7e242fb1f795d35256cc7cac2a4",
+      "sha256": "aa26c10bd55dab83f5e8f8fcaed6e16e94e3449a7046cad5daf4859633195dc7",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/traces/http.ts": {
-      "sha256": "77459e1c2f48c1e2fda9098c71c01128d9cfad5f2ad90ffb1740ebb5bb711b29",
+      "sha256": "16f714b77df1e275738cbaf7e8dc6089ae2fa2bf2032e73bb7fa4eaac1a92540",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/traces/memory.ts": {
@@ -6775,7 +6779,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/traces/module.ts": {
-      "sha256": "727ff1a26311c6bd6dce2613b7168c865a2def1d06b03ce16c23aa3ebb868b03",
+      "sha256": "2b1d8f08ba04e03ce033ef8549e54523eb20cd38f43caff4f93b2f6233322ae6",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/usage-governance/accounting-postgres.ts": {
@@ -6851,7 +6855,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/access-groups.test.ts": {
-      "sha256": "e7392235c1cf9d4186955cc3109415308530a474968d8c53ccbe8af818181f64",
+      "sha256": "0b8fc87ee5ebd333f5b14fa54f8fb5754753ebe1bb65c77ed8526cb793c351dd",
       "mode": 420
     },
     "apps/platform/platform-api/test/access-postgres.test.ts": {
@@ -6916,6 +6920,10 @@
     },
     "apps/platform/platform-api/test/applications.test.ts": {
       "sha256": "3254723ac31e5f92062aac1dafe5f33efdb2eba56ac2d1ab2a6e6a36eac93b3d",
+      "mode": 420
+    },
+    "apps/platform/platform-api/test/audit-export-http.test.ts": {
+      "sha256": "28fe46cad3b12e7928100d65336b8895918050790b7199d03ba62dcc258ea1d9",
       "mode": 420
     },
     "apps/platform/platform-api/test/authentication.test.ts": {
@@ -7191,7 +7199,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/management-authorization.test.ts": {
-      "sha256": "fac5dc9f014ef2ac5f607507d29fae445f3afb6d308d3ef9f6567c3fbd21ea66",
+      "sha256": "072ae588a3966c45d7ef36eb9427f9b6cfb1208a7c1b2298a15ad568af2fff3b",
       "mode": 420
     },
     "apps/platform/platform-api/test/mcp-discovery-candidates.test.ts": {
@@ -7251,7 +7259,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/observability-clickhouse.test.ts": {
-      "sha256": "35251b74bc492657a063e7c5f770439c63c7205f6e9215cccd50cd264966d29c",
+      "sha256": "d0cc850d2b02c445367d540e2534c1eb8506029955c9f45bd3cd268177800db1",
       "mode": 420
     },
     "apps/platform/platform-api/test/oidc-authentication.test.ts": {
@@ -7271,7 +7279,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/persistence.test.ts": {
-      "sha256": "5a764d4410971052e148681270787a3697786315e6e1dce763517fab6b7e0d77",
+      "sha256": "4cc3074fbf8ade375ee1e25241d4cb086d17893ff536688c377a9aee53d20764",
       "mode": 420
     },
     "apps/platform/platform-api/test/personal-connections.test.ts": {
@@ -7691,7 +7699,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/features/activity/activity-page.tsx": {
-      "sha256": "e8f8b449af15487558ae10df097cf6d6a96955ff313a816b15dc8e029423516a",
+      "sha256": "1676e05ebf77ca1ff1f92377940de65b0e122fb58d8fbe7bb584671f1245e5cb",
       "mode": 420
     },
     "apps/platform/platform-web/src/features/activity/ai-usage-dashboard.tsx": {
@@ -7699,7 +7707,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/features/activity/api-gateway-transaction-sheet.tsx": {
-      "sha256": "03cae7bb4200c5aeeb477bc1be1887f6a345bafc40b71582d0fea63c6cf2146e",
+      "sha256": "c16bdbfdf7f38a4190e9ae760427538e20c0fa047b384bbea68e010f95298e7b",
       "mode": 420
     },
     "apps/platform/platform-web/src/features/activity/audit-decision-sheet.tsx": {
@@ -7719,7 +7727,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/features/activity/observability-pages.tsx": {
-      "sha256": "8818eb406474ea3d1496b22d73f98701dc2a1e1620ed8bbe08dd73ec35c33106",
+      "sha256": "fe01e1b8fb242ea409b573361afcac36662b5022b7064bdab7125131d3881ce1",
       "mode": 420
     },
     "apps/platform/platform-web/src/features/activity/telemetry-logs.tsx": {
@@ -7783,7 +7791,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/features/identity/access-groups-panel.tsx": {
-      "sha256": "d78602669716eedbc15ab46ddd9a7e1ab22aed0e1522e0aa4a1b73ff7ccb5c80",
+      "sha256": "954512e6b8a80d57be29af2e40f1dcab1822878a2df9a69fd4940af311932a35",
       "mode": 420
     },
     "apps/platform/platform-web/src/features/identity/agent-delegations-card.tsx": {
@@ -7795,7 +7803,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/features/identity/identity-page.tsx": {
-      "sha256": "4b6d9aa4fe9bb2d2cf04213f46b324ba6c9c22daed94d71c931f4e9c2bb22e9a",
+      "sha256": "cb99cd1b5d0f0bf6b41343ea636c31df125fff2e7a7087dcad1ca5322b2f4ae7",
       "mode": 420
     },
     "apps/platform/platform-web/src/features/identity/identity-providers-card.tsx": {
@@ -7803,11 +7811,11 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/features/identity/manage-organization-sheet.tsx": {
-      "sha256": "e3e3d52f4fa0713840d7320a9bad73f0af61df3c6ecbcacd15c51da9f566fb48",
+      "sha256": "73f3bb6ab1e51e7aa1badffc0d5e78d6ea63c8248e47bce902083e7c44a9bfdb",
       "mode": 420
     },
     "apps/platform/platform-web/src/features/identity/organization-page.tsx": {
-      "sha256": "386c30a42ca4ace704f5383601776b9b557f37424cde16e434ebd45983e160a0",
+      "sha256": "22eb0faba2ac70e5db360b9bfcdb510b1cf6b74da3ae0e98074dda9a7ea8dd94",
       "mode": 420
     },
     "apps/platform/platform-web/src/features/identity/register-agent-sheet.tsx": {
@@ -8027,7 +8035,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/generated/management-api.ts": {
-      "sha256": "f43be5737206e188db01d9c2167448906e93831df8057e2e2aa6190772fabb93",
+      "sha256": "8d44dd955af9b58e1ea4ba9e8320635a15cd81bf9dca584476e309d642c3a119",
       "mode": 420
     },
     "apps/platform/platform-web/src/hooks/use-demo-mode.ts": {
@@ -8043,15 +8051,19 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/hooks/use-overview.ts": {
-      "sha256": "3bd24d0ad8b81969c9f456c5bb8a21e7196e74158c1103eb1c4bca3a7f7cd825",
+      "sha256": "86b86e6dd835fc5a9d622b90b146ece4f9f9c56ec1b9d9976c11cabfaf7b02e2",
       "mode": 420
     },
     "apps/platform/platform-web/src/hooks/use-record-selection.ts": {
       "sha256": "82bc17db5a2cfacd22a05db3ebe10e17b1c937daa98f6b6a2e03d377cdf4ae5c",
       "mode": 420
     },
+    "apps/platform/platform-web/src/i18n.test.ts": {
+      "sha256": "b237d840facc7f862c8b3dee8afa250474a2b0e7f990f40a5969ecf31bd4c30d",
+      "mode": 420
+    },
     "apps/platform/platform-web/src/i18n.ts": {
-      "sha256": "46016739dc96e53738ae3698612353beef2e7f809358533f6b7feb39ec0aa722",
+      "sha256": "02c565a533025a11db4f965e43d1b173468c6c5f4feafb1c883d21b545f75868",
       "mode": 420
     },
     "apps/platform/platform-web/src/i18n/admin-governance.ts": {
@@ -8099,11 +8111,11 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/lib/product-api.test.ts": {
-      "sha256": "4c25e0e24e00d63a72e562eb3fa04a375e0b65cc58efc26b7d8d126b905b0b08",
+      "sha256": "288302d0668b2daf42962ffdd2f311249b0f88833d6254ca256e513a91c559dc",
       "mode": 420
     },
     "apps/platform/platform-web/src/lib/product-api.ts": {
-      "sha256": "59594470211b9f933aaf42ae41fa1c75f10994afe8a1a962b15edb20041bd7ac",
+      "sha256": "c3c0a7178ebcf07a49734985441809bff32526ff24cb0ede97f724493aad5f49",
       "mode": 420
     },
     "apps/platform/platform-web/src/lib/runtime-health.ts": {
@@ -8143,7 +8155,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/mocks/overview.ts": {
-      "sha256": "1342bcdda4cc010e4f15496b1d1b4d382adeb482cae2d04e656b0821df392966",
+      "sha256": "43b37db5b6fe12fa25d655e0b782705b6d431d8d06b506e748b799a80ade9e31",
       "mode": 420
     },
     "apps/platform/platform-web/src/styles/globals.css": {
@@ -8154,8 +8166,12 @@
       "sha256": "65996936fbb042915f7b74a200fcdde7e410f32a669b1ab9597cfaa4b0faddb5",
       "mode": 420
     },
+    "apps/platform/platform-web/test/activity-page.dom.test.tsx": {
+      "sha256": "2770ab353c566717aaf8197699ad272e5a904d01307986bc952fe666e75e14ad",
+      "mode": 420
+    },
     "apps/platform/platform-web/test/api-gateway-transaction-sheet.dom.test.tsx": {
-      "sha256": "7babdf03f056741843a95e29b582ab7a88124d1c260d32c05ae144a6adea9751",
+      "sha256": "e50200e970482b7c57d9e24e1ef40d1eeaf3dc96a2bb4b48f352cfc69bb9f7c4",
       "mode": 420
     },
     "apps/platform/platform-web/test/bot-policy-draft-lifecycle.dom.test.tsx": {
@@ -8180,6 +8196,14 @@
     },
     "apps/platform/platform-web/test/grant-entitlement-sheet.dom.test.tsx": {
       "sha256": "5b91abd443ec8699e38eddec880404558baa0c2ea96c8d3797e80e9170496262",
+      "mode": 420
+    },
+    "apps/platform/platform-web/test/identity-access-scoping.dom.test.tsx": {
+      "sha256": "9862f2ed71a7711d1595eb9fc206daa93562c018a26c52430c735750bd0269af",
+      "mode": 420
+    },
+    "apps/platform/platform-web/test/observability-pages.dom.test.tsx": {
+      "sha256": "023b789d657d285eede19437e530846f0cd103a9e81c65b339bdbf76e06d3109",
       "mode": 420
     },
     "apps/platform/platform-web/test/one-policy-drawer.dom.test.tsx": {
@@ -8215,7 +8239,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/test/user-permission-preview.dom.test.tsx": {
-      "sha256": "c818867e3d73eaac5c1701e6081ea2a969dcfe20ff0520a2c292b47cfcc605f7",
+      "sha256": "d8a54186625129fa713066d12ca7bf5e2ebba76fbda7873fd4098e689afb0660",
       "mode": 420
     },
     "apps/platform/platform-web/test/utils.test.ts": {

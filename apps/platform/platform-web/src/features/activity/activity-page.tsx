@@ -20,6 +20,7 @@ import { DataTable } from "@/components/data-table/data-table"
 import type { DataTableFeatures } from "@/components/data-table/data-table-features"
 import { RecordFilterBar } from "@/components/data-table/record-filter-bar"
 import { DataEmpty } from "@/components/data-empty"
+import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { SearchableSelect } from "@/components/ui/searchable-select"
 import { RouteBadge } from "@/components/route-badge"
 import { TitleHelp } from "@/components/title-help"
@@ -91,12 +92,14 @@ import { } from "@/lib/personal-preferences"
 import {
   exportAuditEvents,
   queryAuditEvents,
+  type AuditEventQuery,
   type AuditQueryResponse,
 } from "@/lib/product-api"
 
 const apiActivityColumnHelper = createColumnHelper<DataTableFeatures, ApiGatewayActivityEvent>()
 const governedActivityColumnHelper = createColumnHelper<DataTableFeatures, DecisionAuditEvent>()
 const endpointActivityColumnHelper = createColumnHelper<DataTableFeatures, EndpointActivityEvent>()
+type AuditQuerySnapshot = Readonly<AuditEventQuery>
 
 function isRuntimeAuditEvent(event: DecisionAuditEvent): boolean {
   return event.kind === "RUNTIME_POLICY_DECISION"
@@ -270,7 +273,7 @@ export function ActivityPage({
   tenantId: string
   data: OverviewSnapshot
   search: string
-  onRefresh: () => Promise<void>
+  onRefresh: (scope?: "all" | "audit") => Promise<void>
   mode?: "activity" | "audit" | "metrics" | "usage"
   accessTier?: "T1" | "T2"
 }) {
@@ -314,6 +317,8 @@ export function ActivityPage({
   const [auditQueryLimit, setAuditQueryLimit] = useState(50)
   const [auditQueryBusy, setAuditQueryBusy] = useState(false)
   const [auditQueryError, setAuditQueryError] = useState("")
+  const [failedAuditQuery, setFailedAuditQuery] = useState<AuditQuerySnapshot | null>(null)
+  const [retryingRuntimeAudit, setRetryingRuntimeAudit] = useState(false)
   const activityDisplay = useMemo(
     () => createActivityDisplayDirectory(data),
     [data.applications, data.connections, data.identity, data.resources],
@@ -626,7 +631,80 @@ export function ActivityPage({
   const accessGatewayActivities = executionAuditEvents.filter((event) =>
     matchesEnforcementPoint(event.enforcement_point_id, "ACCESS_GATEWAY") && governedActivityMatchesSearch(event),
   )
-  const decisions = (serverAuditEvents ?? executionAuditEvents).filter(isDecisionAuditEvent).filter((event) => {
+  const runtimeAuditFailure = data.failures.find((failure) => failure.source === "Audit")
+  const runtimeActivities = executionAuditEvents.filter((event) => {
+    if (!isRuntimeAuditEvent(event) || !matchesEnforcementPoint(event.enforcement_point_id, "AGENT_RUNTIME")) return false
+    const actorSubjectId = event.actor_subject?.subject_id ?? event.subject.subject_id
+    return [
+      actorSubjectId,
+      event.subject.subject_id,
+      event.acting_client.acting_client_id ?? "",
+      event.bot_id ?? "",
+      event.runtime_id ?? "",
+      event.capability_id ?? "",
+      event.action ?? "",
+      event.target ?? "",
+      event.policy_id ?? "",
+      event.policy_display_name ?? "",
+      event.policy_revision == null ? "" : String(event.policy_revision),
+      event.outcome,
+      event.report_outcome ?? "",
+      event.correlation_id,
+    ].some((value) => value.toLowerCase().includes(query))
+  })
+  const runtimeActivityColumns = useMemo(() => governedActivityColumnHelper.columns([
+    governedActivityColumnHelper.accessor(
+      (event) => `${event.actor_subject?.subject_id ?? event.subject.subject_id} ${event.acting_client.acting_client_id ?? ""}`,
+      {
+        id: "actor",
+        header: t("Actor"),
+        cell: ({ row }) => {
+          const actorSubjectId = row.original.actor_subject?.subject_id ?? row.original.subject.subject_id
+          const actor = activityDisplay.subject(actorSubjectId)
+          return <>
+            <div className="font-medium">{actor.label}</div>
+            <div className="font-mono text-xs text-muted-foreground">{actorSubjectId}</div>
+          </>
+        },
+      },
+    ),
+    governedActivityColumnHelper.accessor((event) => `${event.target ?? ""} ${event.capability_id ?? ""} ${event.action ?? ""}`, {
+      id: "target",
+      header: t("Target"),
+      cell: ({ row }) => <>
+        <div className="font-medium">{row.original.target ?? "—"}</div>
+        <div className="text-xs text-muted-foreground">{row.original.capability_id ?? "—"} · {row.original.action ?? "—"}</div>
+      </>,
+    }),
+    governedActivityColumnHelper.accessor("outcome", {
+      id: "decision",
+      header: t("Decision"),
+      cell: ({ getValue }) => <Badge variant={getValue() === "DENY" ? "destructive" : "outline"}>{t(getValue())}</Badge>,
+      filterFn: "includesString",
+    }),
+    governedActivityColumnHelper.accessor((event) => runtimeAuditActualOutcome(event) || "NOT_REPORTED", {
+      id: "actual-outcome",
+      header: t("Execution result"),
+      cell: ({ getValue }) => getValue() === "NOT_REPORTED"
+        ? <span className="text-muted-foreground">{t("Not reported")}</span>
+        : <Badge variant={getValue() === "FAILED" || getValue() === "DENY" ? "destructive" : "outline"}>{t(getValue())}</Badge>,
+      filterFn: "includesString",
+    }),
+    governedActivityColumnHelper.accessor((event) => runtimeAuditPolicyLabel(event), {
+      id: "policy-version",
+      header: t("Policy version"),
+      cell: ({ getValue }) => <span className="text-xs">{getValue() || "—"}</span>,
+    }),
+    governedActivityColumnHelper.accessor("correlation_id", {
+      header: t("Correlation"),
+      cell: ({ getValue }) => <span className="font-mono text-xs">{getValue()}</span>,
+    }),
+    governedActivityColumnHelper.accessor("occurred_at", {
+      header: t("Occurred"),
+      cell: ({ getValue }) => <span className="text-muted-foreground">{relativeTime(getValue())}</span>,
+    }),
+  ]), [activityDisplay, t])
+  const decisions = (failedAuditQuery ? [] : serverAuditEvents ?? executionAuditEvents).filter(isDecisionAuditEvent).filter((event) => {
     const runtime = isRuntimeAuditEvent(event)
     if ((!event.decision && !runtime) || !matchesEnforcementPoint(event.enforcement_point_id, auditEnforcementPoint)) return false
     return [
@@ -744,6 +822,16 @@ export function ActivityPage({
       setSelectedAuditAccounting(null)
     }
   }
+
+  async function retryRuntimeAudit() {
+    setRetryingRuntimeAudit(true)
+    try {
+      await onRefresh("audit")
+    } finally {
+      setRetryingRuntimeAudit(false)
+    }
+  }
+
   async function downloadAuditExport() {
     setAuditExportBusy(true)
     setAuditExportError("")
@@ -770,34 +858,41 @@ export function ActivityPage({
     }
   }
 
-  async function runAuditQuery(offset = auditQueryOffset) {
+  function buildAuditQuery(offset: number): AuditQuerySnapshot {
+    const from = auditQueryFrom
+      ? Math.floor(new Date(`${auditQueryFrom}T00:00:00`).getTime() / 1000)
+      : undefined
+    const to = auditQueryTo
+      ? Math.floor(new Date(`${auditQueryTo}T23:59:59`).getTime() / 1000)
+      : undefined
+    return {
+      correlationId: auditQueryCorrelationId.trim() || undefined,
+      enforcementPointId: auditEnforcementPoint === "ALL" ? undefined : auditEnforcementPoint,
+      outcome: auditQueryOutcome || undefined,
+      resourceId: auditQueryResourceId || undefined,
+      subjectId: auditQuerySubjectId.trim() || undefined,
+      from,
+      to,
+      limit: auditQueryLimit,
+      offset,
+    }
+  }
+
+  async function runAuditQuery(request = buildAuditQuery(auditQueryOffset)) {
     setAuditQueryBusy(true)
     setAuditQueryError("")
     try {
-      const from = auditQueryFrom
-        ? Math.floor(new Date(`${auditQueryFrom}T00:00:00`).getTime() / 1000)
-        : undefined
-      const to = auditQueryTo
-        ? Math.floor(new Date(`${auditQueryTo}T23:59:59`).getTime() / 1000)
-        : undefined
-      if (from !== undefined && to !== undefined && from > to) {
+      if (request.from !== undefined && request.to !== undefined && request.from > request.to) {
         throw new Error("Choose a valid time range.")
       }
-      const result = await queryAuditEvents(tenantId, {
-        correlationId: auditQueryCorrelationId.trim() || undefined,
-        from,
-        to,
-        limit: auditQueryLimit,
-        offset,
-        outcome: auditQueryOutcome || undefined,
-        resourceId: auditQueryResourceId || undefined,
-        subjectId: auditQuerySubjectId.trim() || undefined,
-        enforcementPointId: auditEnforcementPoint === "ALL" ? undefined : auditEnforcementPoint,
-      })
-      setAuditQueryOffset(offset)
+      const result = await queryAuditEvents(tenantId, request)
+      setAuditQueryOffset(request.offset ?? 0)
       setServerAuditQuery(result)
+      setFailedAuditQuery(null)
     } catch (error) {
+      setServerAuditQuery(null)
       setAuditQueryError(error instanceof Error ? error.message : "AUDIT_QUERY_FAILED")
+      setFailedAuditQuery(request)
     } finally {
       setAuditQueryBusy(false)
     }
@@ -807,6 +902,7 @@ export function ActivityPage({
     setServerAuditQuery(null)
     setAuditQueryError("")
     setAuditQueryOffset(0)
+    setFailedAuditQuery(null)
   }
   function useLoadedAuditRange() {
     const timestamps = [
@@ -944,7 +1040,7 @@ export function ActivityPage({
                 {(() => {
                   const provenance = auditExportResult.records.find((record) => record.policy_version && record.decision_correlation_id)
                   return provenance
-                    ? ` ${t("Verified Policy Version {{policy}} and Decision Correlation ID {{correlation}}.", { policy: provenance.policy_version, correlation: provenance.decision_correlation_id })}`
+                    ? ` ${t("Includes Policy Version {{policy}} and Decision Correlation ID {{correlation}}.", { policy: provenance.policy_version, correlation: provenance.decision_correlation_id })}`
                     : ""
                 })()}
               </p>
@@ -1005,14 +1101,14 @@ export function ActivityPage({
             </FieldGroup>
           </details>
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <Button disabled={auditQueryBusy} onClick={() => void runAuditQuery(0)}>
+            <Button disabled={auditQueryBusy} onClick={() => void runAuditQuery(buildAuditQuery(0))}>
               {auditQueryBusy ? <LoaderCircleIcon data-icon="inline-start" className="animate-spin" /> : null}
               {t("Query Audit Events")}
             </Button>
-            <Button variant="outline" disabled={auditQueryBusy || serverAuditEvents === null || auditQueryOffset === 0} onClick={() => void runAuditQuery(Math.max(0, auditQueryOffset - auditQueryLimit))}>
+            <Button variant="outline" disabled={auditQueryBusy || serverAuditEvents === null || auditQueryOffset === 0} onClick={() => void runAuditQuery(buildAuditQuery(Math.max(0, auditQueryOffset - auditQueryLimit)))}>
               {t("Previous page")}
             </Button>
-            <Button variant="outline" disabled={auditQueryBusy || serverAuditQuery === null || !serverAuditQuery.coverage.has_more} onClick={() => void runAuditQuery(auditQueryOffset + auditQueryLimit)}>
+            <Button variant="outline" disabled={auditQueryBusy || serverAuditQuery === null || !serverAuditQuery.coverage.has_more} onClick={() => void runAuditQuery(buildAuditQuery(auditQueryOffset + auditQueryLimit))}>
               {t("Next page")}
             </Button>
             <Button variant="ghost" disabled={auditQueryBusy || serverAuditEvents === null} onClick={clearAuditQuery}>{t("Clear query")}</Button>
@@ -1024,17 +1120,32 @@ export function ActivityPage({
                 <p>{t("Coverage returned {{returned}} records; requested range {{from}} to {{to}}; more pages {{hasMore}}.", { returned: serverAuditQuery.coverage.returned_count, from: serverAuditQuery.coverage.requested_from ?? "—", to: serverAuditQuery.coverage.requested_to ?? "—", hasMore: t(serverAuditQuery.coverage.has_more ? "Yes" : "No") })}</p>
               </div>
             ) : null}
-            {auditQueryError ? <p className="text-sm text-destructive" role="alert">{t(auditQueryError)}</p> : null}
+            {auditQueryError ? (
+              <>
+                <p className="text-sm text-destructive" role="alert">{t(auditQueryError)}</p>
+                <Button
+                  data-testid="audit-query-retry"
+                  disabled={auditQueryBusy}
+                  onClick={() => void runAuditQuery(failedAuditQuery ?? buildAuditQuery(auditQueryOffset))}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                >
+                  {auditQueryBusy ? <LoaderCircleIcon data-icon="inline-start" className="animate-spin" /> : null}
+                  {t("Retry")}
+                </Button>
+              </>
+            ) : null}
             {serverAuditEvents?.length ? <AuditQueryTable events={serverAuditEvents} onOpen={(event) => void openAuditEvent(event)} /> : null}
           </div>
         </CardContent>
       </Card>
-      <Card>
+      <Card data-testid="audit-policy-decisions">
         <CardHeader className="border-b">
           <CardTitle><TitleHelp help={t("Open a correlated decision to inspect identity evidence, policy version, winning rule, route, obligations, and enforcement outcome.")}>{t("Policy Decisions")}</TitleHelp></CardTitle>
         </CardHeader>
         <CardContent className="px-0">
-          {decisions.length ? (
+          {failedAuditQuery ? null : decisions.length ? (
             <DataTable
               columns={policyDecisionColumns}
               data={decisions}
@@ -1057,6 +1168,55 @@ export function ActivityPage({
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+        <TabsContent value="AGENT_RUNTIME" className="flex flex-col gap-5">
+          {runtimeAuditFailure ? (
+            <Alert data-testid="agent-runtime-load-failure" variant="destructive">
+              <AlertTitle>{t("Agent Runtime activity could not be loaded")}</AlertTitle>
+              <AlertDescription>{t("Audit source {{source}} could not be loaded: {{code}}", { source: runtimeAuditFailure.source, code: runtimeAuditFailure.code })}</AlertDescription>
+              <AlertAction>
+                <Button type="button" variant="outline" size="sm" disabled={retryingRuntimeAudit} onClick={() => void retryRuntimeAudit()}>
+                  {retryingRuntimeAudit ? <LoaderCircleIcon data-icon="inline-start" className="animate-spin" /> : null}
+                  {t("Refresh latest Audit source")}
+                </Button>
+              </AlertAction>
+            </Alert>
+          ) : null}
+          <Card data-testid="agent-runtime-activity">
+            <CardHeader className="border-b">
+              <CardTitle><TitleHelp help={t("Runtime authorization and reported execution outcomes are shown separately from Gateway activity.")}>{t("Agent Runtime activity")}</TitleHelp></CardTitle>
+            </CardHeader>
+            <CardContent className="px-0">
+              {runtimeActivities.length ? (
+                <DataTable
+                  columns={runtimeActivityColumns}
+                  data={runtimeActivities}
+                  filters={[{
+                    allLabel: t("All outcomes"),
+                    columnId: "actual-outcome",
+                    label: t("Execution result"),
+                    options: [...new Set(runtimeActivities.map((event) => event.report_outcome ?? "NOT_REPORTED"))]
+                      .map((outcome) => ({ label: outcome === "NOT_REPORTED" ? t("Not reported") : t(outcome), value: outcome })),
+                  }]}
+                  getRowId={(event) => event.audit_event_id}
+                  getRowLabel={(event) => t("Open runtime activity {{id}}", { id: event.correlation_id })}
+                  getRowTestId={(event) => `agent-runtime-activity-row-${event.audit_event_id}`}
+                  noResults={<DataEmpty icon={BotIcon} title={t("No matching Agent Runtime activity")} description={t("Try another execution result or search term.")} />}
+                  onRowClick={(event) => { void openAuditEvent(event) }}
+                  pageSize={10}
+                  searchPlaceholder={t("Search Agent Runtime activity")}
+                />
+              ) : runtimeAuditFailure ? null : (
+                <div data-testid="agent-runtime-empty-state">
+                  <DataEmpty
+                    icon={BotIcon}
+                    title={search ? t("No matching Agent Runtime activity") : t("No Agent Runtime activity")}
+                    description={t("Runtime authorization and execution reports will appear here after Agent Runtime reporting.")}
+                  />
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
         <TabsContent value="API_GATEWAY">
       <Card>

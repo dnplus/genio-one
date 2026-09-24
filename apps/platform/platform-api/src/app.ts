@@ -434,6 +434,8 @@ export async function createManagementApi(dependencies: ManagementApiDependencie
   await app.register(demoProjectHttp, { service: demoProject })
   await app.register(organizationHttp, {
     directory: dependencies.modules.organizations,
+    identity: dependencies.modules.identity,
+    accessGroups: dependencies.modules.accessGroups,
   })
   await app.register(identityHttp, {
     directory: dependencies.modules.identity,

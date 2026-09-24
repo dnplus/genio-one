@@ -1,6 +1,7 @@
 import { Type, type Static } from "typebox"
 
 const Identifier = Type.String({ minLength: 1, maxLength: 256, pattern: "^(?!\\s)(?!.*\\s$)[^\\u0000\\r\\n]+$" })
+const OrganizationIdentifier = Type.Union([Identifier, Type.Null()])
 const Timestamp = Type.Integer({ minimum: 0 })
 
 export const AccessGroupMembershipSourceKindSchema = Type.Literal("MANUAL")
@@ -18,6 +19,7 @@ export const AccessGroupMembershipSourceSchema = Type.Object({
 
 export const AccessGroupSchema = Type.Object({
   tenant_id: Identifier,
+  organization_id: OrganizationIdentifier,
   access_group_id: Identifier,
   display_name: Type.String({ minLength: 1, maxLength: 256 }),
   description: Type.String({ maxLength: 2_000 }),
@@ -32,6 +34,7 @@ export const AccessGroupSchema = Type.Object({
 
 export const SaveAccessGroupSchema = Type.Object({
   expected_revision: Type.Integer({ minimum: 0 }),
+  organization_id: Type.Optional(OrganizationIdentifier),
   display_name: Type.String({ minLength: 1, maxLength: 256 }),
   description: Type.String({ maxLength: 2_000 }),
   enabled: Type.Boolean(),

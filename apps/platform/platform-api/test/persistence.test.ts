@@ -273,7 +273,7 @@ class FakeCrossVersionMarkerAdapter implements SqlAdapter {
 
 test("the clean-install baseline and ordered migrations encode the current Platform schema", async () => {
   const migrations = await loadMigrations()
-  assert.deepEqual(migrations.map((migration) => migration.id), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+  assert.deepEqual(migrations.map((migration) => migration.id), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
   assert.equal(migrations[1].name, "gateway_activity_safety_decisions")
   assert.equal(migrations[2].name, "distillation_markers")
   assert.match(migrations[2].sql, /create table genio_one_distillation_markers/i)
@@ -347,6 +347,14 @@ test("the clean-install baseline and ordered migrations encode the current Platf
     /add constraint genio_one_distillation_markers_workspace_acl_check\s+check \(workspace_id is null or workspace_acl_version = 1\)/i,
   )
   assert.doesNotMatch(workspaceAclFence, /genio_one_knowledge_candidates|genio_one_team_workspaces/i)
+  const accessGroupMigration = migrations.find(
+    (migration) => migration.name === "access_group_organization_scope",
+  )
+  assert.ok(accessGroupMigration)
+  assert.equal(accessGroupMigration.id, 12)
+  assert.equal(accessGroupMigration.name, "access_group_organization_scope")
+  assert.match(accessGroupMigration.sql, /organization_id text/i)
+  assert.match(accessGroupMigration.sql, /value \? 'organization_id'/i)
   assert.equal(migrations[0].id, 1)
   assert.equal(migrations[0].name, "platform_baseline")
   assert.match(migrations[0].checksum, /^[a-f0-9]{64}$/)

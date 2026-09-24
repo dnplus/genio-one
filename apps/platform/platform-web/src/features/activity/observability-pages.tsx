@@ -39,6 +39,7 @@ export function TracesPage({ tenantId }: { tenantId: string }) {
   const [traces, setTraces] = useState<TraceSummary[]>([])
   const [selectedId, setSelectedId] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [correlationId, setCorrelationId] = useState(() => new URLSearchParams(window.location.search).get("correlation_id")?.trim() ?? "")
   const [enforcementPoint, setEnforcementPoint] = useState<EnforcementPointFilterValue>(() =>
     readEnforcementPointFilter(new URLSearchParams(window.location.search).get(enforcementPointQueryKey), "ALL"),
   )
@@ -51,7 +52,7 @@ export function TracesPage({ tenantId }: { tenantId: string }) {
     let active = true
     setError(null)
     setLoading(true)
-    const timer = setTimeout(() => { void listTraces(tenantId, 20, { ...before, search: query, from: from ? new Date(from).getTime() : undefined, until }).then(({ traces: next }) => {
+    const timer = setTimeout(() => { void listTraces(tenantId, 20, { ...before, correlation_id: correlationId || undefined, search: query || undefined, from: from ? new Date(from).getTime() : undefined, until }).then(({ traces: next }) => {
       if (!active) return
       setTraces(next)
       setSelectedId((current) => next.some((trace) => trace.trace_id === current)
@@ -62,7 +63,7 @@ export function TracesPage({ tenantId }: { tenantId: string }) {
     })
     .finally(() => { if (active) setLoading(false) }) }, 250)
     return () => { active = false; clearTimeout(timer) }
-  }, [tenantId, before, query, from, until])
+  }, [tenantId, before, correlationId, query, from, until])
   const filteredTraces = traces.filter((trace) => {
     const tracePoint = traceEnforcementPoint(trace)
     if (enforcementPoint !== "ALL" && !matchesEnforcementPoint(tracePoint, enforcementPoint)) return false
@@ -71,6 +72,13 @@ export function TracesPage({ tenantId }: { tenantId: string }) {
   useEffect(() => {
     if (selectedId && !filteredTraces.some((trace) => trace.trace_id === selectedId)) setSelectedId("")
   }, [filteredTraces, selectedId])
+  const clearCorrelationFilter = () => {
+    setCorrelationId("")
+    setBefore(undefined)
+    const url = new URL(window.location.href)
+    url.searchParams.delete("correlation_id")
+    window.history.replaceState({}, "", url)
+  }
   return (
     <div className="flex flex-col gap-5">
       <PageHeader title={t("Traces")} description={t("Correlated execution paths across Gateway, policy, and upstream services.")} />
@@ -78,6 +86,8 @@ export function TracesPage({ tenantId }: { tenantId: string }) {
         <CardHeader className="border-b"><CardTitle><TitleHelp help={t("Select a trace to inspect its service path and timing.")}>{t("Trace explorer")}</TitleHelp></CardTitle><CardDescription>{t("Expand a trace to inspect its complete service path, timing, and span metadata.")}</CardDescription></CardHeader>
         <CardContent className="p-0">
           <RecordFilterBar query={query} onQueryChange={value => { setQuery(value); setBefore(undefined) }} searchPlaceholder={t("Search traces")} className="border-b px-5 py-3">
+            <label className="text-sm">{t("Correlation ID")}<Input data-testid="trace-correlation-filter" type="search" value={correlationId} onChange={(event) => { setCorrelationId(event.target.value.trim()); setBefore(undefined) }} /></label>
+            {correlationId ? <Button variant="outline" size="sm" onClick={clearCorrelationFilter}>{t("Clear filters")}</Button> : null}
             <label className="text-sm">{t("From")}<Input type="datetime-local" value={from} onChange={event => { setFrom(event.target.value); setBefore(undefined) }} /></label>
             <Button variant="outline" disabled={loading} onClick={() => { setBefore(undefined); setUntil(Date.now()) }}>{t("Refresh")}</Button>
             <EnforcementPointFilter
@@ -120,7 +130,7 @@ export function TracesPage({ tenantId }: { tenantId: string }) {
                     </Fragment>
                   )
                 })}
-                {!error && filteredTraces.length === 0 ? <TableRow><TableCell colSpan={6} className="h-28 text-center text-muted-foreground">{t(traces.length ? "No traces match the current filters" : "Run a governed request with trace collection enabled, then refresh to inspect its execution.")}</TableCell></TableRow> : null}
+                {!error && filteredTraces.length === 0 ? <TableRow><TableCell colSpan={6} className="h-28 text-center text-muted-foreground">{t(traces.length || query || correlationId ? "No traces match the current filters" : "Run a governed request with trace collection enabled, then refresh to inspect its execution.")}</TableCell></TableRow> : null}
               </TableBody>
             </Table>
           </div>

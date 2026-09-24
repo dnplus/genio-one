@@ -4290,6 +4290,7 @@ export type ListAccessGroups200Item = {
      * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
      */
   tenant_id: string;
+  organization_id: string | null;
   /**
      * @minLength 1
      * @maxLength 256
@@ -4377,6 +4378,7 @@ export type GetAccessGroup200 = {
      * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
      */
   tenant_id: string;
+  organization_id: string | null;
   /**
      * @minLength 1
      * @maxLength 256
@@ -4416,6 +4418,7 @@ export type GetAccessGroup200 = {
 export type SaveAccessGroupBody = {
   /** @minimum 0 */
   expected_revision: number;
+  organization_id?: string | null;
   /**
      * @minLength 1
      * @maxLength 256
@@ -4477,6 +4480,7 @@ export type SaveAccessGroup200 = {
      * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
      */
   tenant_id: string;
+  organization_id: string | null;
   /**
      * @minLength 1
      * @maxLength 256
@@ -4578,6 +4582,7 @@ export type ReplaceAccessGroupMembers200 = {
      * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
      */
   tenant_id: string;
+  organization_id: string | null;
   /**
      * @minLength 1
      * @maxLength 256
@@ -4665,6 +4670,7 @@ export type ListAccessGroupRevisions200Item = {
      * @pattern ^(?!\s)(?!.*\s$)[^\u0000\r\n]+$
      */
   tenant_id: string;
+  organization_id: string | null;
   /**
      * @minLength 1
      * @maxLength 256
@@ -28313,6 +28319,11 @@ from?: number;
  */
 until?: number;
 /**
+ * @minLength 1
+ * @maxLength 512
+ */
+correlation_id?: string;
+/**
  * @maxLength 512
  */
 search?: string;
@@ -29976,6 +29987,161 @@ export type ListGatewayAuthorizationAuditEvents400 = {
   /** @minLength 1 */
   message: string;
   violations: ListGatewayAuthorizationAuditEvents400ViolationsItem[];
+};
+
+export type ExportGatewayAuthorizationAuditParams = {
+/**
+ * @minimum 0
+ */
+from: number;
+/**
+ * @minimum 0
+ */
+to: number;
+/**
+ * @minLength 1
+ * @maxLength 256
+ */
+resource_id: string;
+};
+
+export type ExportGatewayAuthorizationAudit200SchemaVersion = typeof ExportGatewayAuthorizationAudit200SchemaVersion[keyof typeof ExportGatewayAuthorizationAudit200SchemaVersion];
+
+
+export const ExportGatewayAuthorizationAudit200SchemaVersion = {
+  'geniooneaudit-exportv1': 'genioone.audit-export.v1',
+} as const;
+
+export type ExportGatewayAuthorizationAudit200RecordsItem = {
+  policy_version: string | null;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  decision_correlation_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  audit_event_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  correlation_id: string;
+  resource_id: string | null;
+  /** @minimum 0 */
+  occurred_at: number;
+};
+
+export type ExportGatewayAuthorizationAudit200 = {
+  schema_version: ExportGatewayAuthorizationAudit200SchemaVersion;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /** @minimum 0 */
+  from: number;
+  /** @minimum 0 */
+  to: number;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  resource_id: string;
+  /**
+     * @minimum 0
+     * @maximum 10000
+     */
+  record_count: number;
+  /** @maxItems 10000 */
+  records: ExportGatewayAuthorizationAudit200RecordsItem[];
+};
+
+export type ExportGatewayAuthorizationAudit400ViolationsItem = {
+  /** @minLength 1 */
+  code: string;
+  /** @minLength 1 */
+  message: string;
+  /** @minLength 1 */
+  field?: string;
+};
+
+export type ExportGatewayAuthorizationAudit400 = {
+  /** @minLength 1 */
+  code: string;
+  /** @minLength 1 */
+  message: string;
+  violations: ExportGatewayAuthorizationAudit400ViolationsItem[];
+};
+
+export type ExportGatewayAuthorizationAudit403ViolationsItem = {
+  /** @minLength 1 */
+  code: string;
+  /** @minLength 1 */
+  message: string;
+  /** @minLength 1 */
+  field?: string;
+};
+
+export type ExportGatewayAuthorizationAudit403 = {
+  /** @minLength 1 */
+  code: string;
+  /** @minLength 1 */
+  message: string;
+  violations: ExportGatewayAuthorizationAudit403ViolationsItem[];
+};
+
+export type ExportGatewayAuthorizationAudit409ViolationsItem = {
+  /** @minLength 1 */
+  code: string;
+  /** @minLength 1 */
+  message: string;
+  /** @minLength 1 */
+  field?: string;
+};
+
+export type ExportGatewayAuthorizationAudit409 = {
+  /** @minLength 1 */
+  code: string;
+  /** @minLength 1 */
+  message: string;
+  violations: ExportGatewayAuthorizationAudit409ViolationsItem[];
+};
+
+export type ExportGatewayAuthorizationAudit422ViolationsItem = {
+  /** @minLength 1 */
+  code: string;
+  /** @minLength 1 */
+  message: string;
+  /** @minLength 1 */
+  field?: string;
+};
+
+export type ExportGatewayAuthorizationAudit422 = {
+  /** @minLength 1 */
+  code: string;
+  /** @minLength 1 */
+  message: string;
+  violations: ExportGatewayAuthorizationAudit422ViolationsItem[];
+};
+
+export type ExportGatewayAuthorizationAudit500ViolationsItem = {
+  /** @minLength 1 */
+  code: string;
+  /** @minLength 1 */
+  message: string;
+  /** @minLength 1 */
+  field?: string;
+};
+
+export type ExportGatewayAuthorizationAudit500 = {
+  /** @minLength 1 */
+  code: string;
+  /** @minLength 1 */
+  message: string;
+  violations: ExportGatewayAuthorizationAudit500ViolationsItem[];
 };
 
 export type GetV1TenantsTenantIdSiemDestination200ConfiguredByEvidenceLevel = typeof GetV1TenantsTenantIdSiemDestination200ConfiguredByEvidenceLevel[keyof typeof GetV1TenantsTenantIdSiemDestination200ConfiguredByEvidenceLevel];
@@ -44663,6 +44829,75 @@ export const listGatewayAuthorizationAuditEvents = async (tenantId: string,
     params?: ListGatewayAuthorizationAuditEventsParams, options?: Parameters<typeof managementApiFetch>[1]): Promise<listGatewayAuthorizationAuditEventsResponse> => {
 
   return managementApiFetch<listGatewayAuthorizationAuditEventsResponse>(getListGatewayAuthorizationAuditEventsUrl(tenantId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type exportGatewayAuthorizationAuditResponse200 = {
+  data: ExportGatewayAuthorizationAudit200
+  status: 200
+}
+
+export type exportGatewayAuthorizationAuditResponse400 = {
+  data: ExportGatewayAuthorizationAudit400
+  status: 400
+}
+
+export type exportGatewayAuthorizationAuditResponse403 = {
+  data: ExportGatewayAuthorizationAudit403
+  status: 403
+}
+
+export type exportGatewayAuthorizationAuditResponse409 = {
+  data: ExportGatewayAuthorizationAudit409
+  status: 409
+}
+
+export type exportGatewayAuthorizationAuditResponse422 = {
+  data: ExportGatewayAuthorizationAudit422
+  status: 422
+}
+
+export type exportGatewayAuthorizationAuditResponse500 = {
+  data: ExportGatewayAuthorizationAudit500
+  status: 500
+}
+
+export type exportGatewayAuthorizationAuditResponseSuccess = (exportGatewayAuthorizationAuditResponse200) & {
+  headers: Headers;
+};
+export type exportGatewayAuthorizationAuditResponseError = (exportGatewayAuthorizationAuditResponse400 | exportGatewayAuthorizationAuditResponse403 | exportGatewayAuthorizationAuditResponse409 | exportGatewayAuthorizationAuditResponse422 | exportGatewayAuthorizationAuditResponse500) & {
+  headers: Headers;
+};
+
+export type exportGatewayAuthorizationAuditResponse = (exportGatewayAuthorizationAuditResponseSuccess | exportGatewayAuthorizationAuditResponseError)
+
+export const getExportGatewayAuthorizationAuditUrl = (tenantId: string,
+    params: ExportGatewayAuthorizationAuditParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/tenants/${encodeURIComponent(String(tenantId))}/audit-export?${stringifiedParams}` : `/v1/tenants/${encodeURIComponent(String(tenantId))}/audit-export`
+}
+
+export const exportGatewayAuthorizationAudit = async (tenantId: string,
+    params: ExportGatewayAuthorizationAuditParams, options?: Parameters<typeof managementApiFetch>[1]): Promise<exportGatewayAuthorizationAuditResponse> => {
+
+  return managementApiFetch<exportGatewayAuthorizationAuditResponse>(getExportGatewayAuthorizationAuditUrl(tenantId,params),
   {
     ...options,
     method: 'GET'

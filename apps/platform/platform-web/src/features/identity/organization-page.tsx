@@ -71,17 +71,19 @@ export function OrganizationPage({
   const { t } = useTranslation()
   const peopleById = new Map((data.identity?.subjects ?? []).map((subject) => [subject.subject_id, subject]))
   const tenantAdministrators = data.identity?.tenant_administrators ?? []
-  const canManageRoles = identity.role === "TENANT_ADMINISTRATOR"
+  const canManageRoles = identity.role === "TENANT_ADMINISTRATOR" || identity.role === "ORGANIZATION_ADMINISTRATOR"
+  const canCreateOrganization = identity.role === "TENANT_ADMINISTRATOR"
+  const canViewTenantAdministrators = identity.role === "TENANT_ADMINISTRATOR"
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
         title={t("Organization and roles")}
         description={t("Manage organization membership, roles, and data scope.")}
-        actions={canManageRoles
+        actions={canCreateOrganization
           ? <CreateOrganizationSheet tenantId={tenantId} identity={data.identity} onCreated={onReload} />
           : undefined}
       />
-      {canManageRoles ? <Card>
+      {canViewTenantAdministrators ? <Card>
         <CardHeader className="border-b">
           <CardTitle><TitleHelp help={t("Tenant-wide administration and data access across all organizations.")}>{t("Administrators")}</TitleHelp></CardTitle>
         </CardHeader>
@@ -106,7 +108,7 @@ export function OrganizationPage({
                   <TableCell className="tabular-nums">{users.length}</TableCell>
                   <TableCell className="tabular-nums">{organizationAdministrators.length}</TableCell>
                   <TableCell>{t("Organization only")}</TableCell>
-                  <TableCell className="text-right">{canManageRoles ? <ManageOrganizationSheet tenantId={tenantId} organization={organization} identity={data.identity} onSaved={onReload} /> : "—"}</TableCell>
+                  <TableCell className="text-right">{canManageRoles && (identity.role === "TENANT_ADMINISTRATOR" || (identity.organization_ids ?? []).includes(organization.organization_id)) ? <ManageOrganizationSheet tenantId={tenantId} organization={organization} identity={data.identity} subjectScope={identity.role === "TENANT_ADMINISTRATOR" ? "tenant" : "organization"} onSaved={onReload} /> : "—"}</TableCell>
                 </TableRow>
               })}</TableBody>
             </Table>

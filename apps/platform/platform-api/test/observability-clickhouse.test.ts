@@ -32,6 +32,39 @@ test("ClickHouse traces keep tenant-scoped trace selection and return the comple
   assert.equal(traces[0]?.correlation_id, "request-1")
 })
 
+test("ClickHouse correlation filtering matches only the trusted span attribute", async () => {
+  let query = ""
+  const store = createClickHouseTraceStore({
+    ...clickhouse,
+    fetch: async (_input, init) => {
+      query = String(init?.body)
+      return new Response(JSON.stringify({ trace_id: "1".repeat(32), span_id: "2".repeat(16), parent_span_id: "", span_name: "ingress", service_name: "gateway", started_at_millis: 1000, duration_nanos: 2_000_000, status_code: "Ok", correlation_id: "other-correlation", attributes: { request_url: "https://example.test/?correlation_id=canonical-correlation" } }))
+    },
+  })
+
+  const traces = await store.list({ tenantId: "tenant-1", limit: 5, correlationId: "canonical-correlation" })
+
+  assert.match(query, /countIf\(SpanAttributes\['genio\.correlation\.id'\] = 'canonical-correlation'\) > 0/)
+  assert.doesNotMatch(query, /toJSONString\(SpanAttributes\)/)
+  assert.equal(traces[0]?.correlation_id, "canonical-correlation")
+})
+
+test("ClickHouse generic trace search remains separate from exact correlation filtering", async () => {
+  let query = ""
+  const store = createClickHouseTraceStore({
+    ...clickhouse,
+    fetch: async (_input, init) => {
+      query = String(init?.body)
+      return new Response(JSON.stringify({ trace_id: "1".repeat(32), span_id: "2".repeat(16), parent_span_id: "", span_name: "ingress", service_name: "gateway", started_at_millis: 1000, duration_nanos: 2_000_000, status_code: "Ok", correlation_id: "request-1" }))
+    },
+  })
+
+  await store.list({ tenantId: "tenant-1", limit: 5, search: "gateway" })
+
+  assert.match(query, /positionCaseInsensitiveUTF8\(concat\(TraceId, ServiceName, SpanName, toJSONString\(SpanAttributes\)\)/)
+  assert.doesNotMatch(query, /countIf\(SpanAttributes\['genio\.correlation\.id'\]/)
+})
+
 test("ClickHouse metrics summarize only the public listener and provider hop", async () => {
   const queries: string[] = []
   const responses = [

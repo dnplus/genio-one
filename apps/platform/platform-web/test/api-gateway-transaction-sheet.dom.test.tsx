@@ -131,6 +131,9 @@ test("Gateway Activity displays provider safety decision receipts", async () => 
     )
 
     const receipt = await screen.findByTestId("gateway-processor-receipt")
+    const traceLink = screen.getByTestId("open-trace-by-correlation")
+    expect(traceLink.getAttribute("href")).toContain("view=traces")
+    expect(traceLink.getAttribute("href")).toContain("correlation_id=safety-activity-correlation")
     expect(receipt.textContent).toContain("Safety decision receipts")
     expect(receipt.textContent).toContain("response · response-safety")
     expect(receipt.textContent).toContain("semantic-safety · HTTP · gateway-safety-model-v1")

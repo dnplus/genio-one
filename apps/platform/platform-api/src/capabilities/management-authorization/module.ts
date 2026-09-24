@@ -340,6 +340,10 @@ function isDistillationBotCancellation(route: TenantRoute, method: string): bool
     Boolean(route.rest[2])
 }
 
+function isAuditExportRead(route: TenantRoute, method: string): boolean {
+  return (method === "GET" || method === "HEAD") && route.rest.length === 1 && route.rest[0] === "audit-export"
+}
+
 function requiredRouteScopes(route: TenantRoute, method: string): readonly string[] {
   if (isDistillationBotCancellation(route, method)) return [MANAGEMENT_SCOPE, INVOCATION_SCOPE]
   if (method === "POST" && route.rest[0] === "distillation-markers") return [INVOCATION_SCOPE]
@@ -555,6 +559,10 @@ export function createManagementAuthorization(
         assertTenantAdministrator(principal)
         return
       }
+      if (isAuditExportRead(route, request.method)) {
+        assertTenantAdministrator(principal)
+        return
+      }
       if (isPublicationReview(route)) {
         assertTenantAdministrator(principal)
         return
@@ -619,10 +627,18 @@ export function createManagementAuthorization(
       }
       if (
         route.rest[0] === "organizations" &&
-        ((request.method === "POST" && route.rest.length === 1) ||
-          (request.method === "PUT" && route.rest.length === 2))
+        request.method === "POST" &&
+        route.rest.length === 1
       ) {
         assertTenantAdministrator(principal)
+        return
+      }
+      if (
+        route.rest[0] === "organizations" &&
+        request.method === "PUT" &&
+        route.rest.length === 2
+      ) {
+        assertOrganizationManager(principal, route.rest[1] ?? null)
         return
       }
       if (
@@ -655,7 +671,7 @@ export function createManagementAuthorization(
         return
       }
       if (route.rest[0] === "access-groups") {
-        assertTenantAdministrator(principal)
+        if (principal.role === "USER") assertTenantAdministrator(principal)
         return
       }
       // Login methods apply to the whole realm rather than to one Organization,

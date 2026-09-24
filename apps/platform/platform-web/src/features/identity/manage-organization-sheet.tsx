@@ -27,12 +27,14 @@ export function ManageOrganizationSheet({
   tenantId,
   organization,
   identity,
+  subjectScope = "tenant",
   onSaved,
   trigger,
 }: {
   tenantId: string
   organization: Organization
   identity: TenantIdentityInventory | null
+  subjectScope?: "tenant" | "organization"
   onSaved: () => Promise<void>
   trigger?: ReactNode
 }) {
@@ -46,7 +48,9 @@ export function ManageOrganizationSheet({
   const [directoryReference, setDirectoryReference] = useState(initialDirectorySource?.reference ?? "")
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
-  const people = identity?.subjects.filter((subject) => subject.kind === "PERSON") ?? []
+  const people = identity?.subjects
+    .filter((subject) => subject.kind === "PERSON")
+    .filter((subject) => subjectScope === "tenant" || organization.member_subject_ids.includes(subject.subject_id)) ?? []
 
   useEffect(() => {
     if (!open) return

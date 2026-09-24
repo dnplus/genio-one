@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
   Sheet,
   SheetContent,
@@ -135,12 +136,17 @@ export function ApiGatewayTransactionSheet({
   const title = event.enforcement_point_id === "AI_GATEWAY"
     ? "AI Gateway transaction details"
     : "API Gateway transaction details"
+  const traceUrl = new URL(window.location.href)
+  traceUrl.searchParams.set("view", "traces")
+  traceUrl.searchParams.set("correlation_id", event.correlation_id)
+  for (const parameter of ["q", "lane", "record", "table_q", "outcome", "traffic", "enforcement"]) traceUrl.searchParams.delete(parameter)
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-2xl" data-testid="api-gateway-transaction-sheet">
         <SheetHeader className="border-b px-6 py-5">
           <SheetTitle>{t(title)}</SheetTitle>
           <SheetDescription className="font-mono text-xs">{event.correlation_id}</SheetDescription>
+          <Button asChild size="sm" variant="outline"><a data-testid="open-trace-by-correlation" href={traceUrl.toString()}>{t("Traces")}</a></Button>
         </SheetHeader>
 
         <div className="grid grid-cols-2 gap-x-5 gap-y-4 border-b p-6 text-sm">

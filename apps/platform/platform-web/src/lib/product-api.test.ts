@@ -5,6 +5,7 @@ import { createMockOverview } from "@/mocks/overview"
 import {
   grantEntitlement,
   installDemoProject,
+  listTraces,
   loadDemoProject,
   loadOverview,
   skipDemoProject,
@@ -34,7 +35,7 @@ function responseFor(url: string): unknown {
   return []
 }
 
-test("overview requests Access Groups only for tenant administrators and keeps authorized failures visible", async () => {
+test("overview requests Access Groups for management administrators and keeps authorized failures visible", async () => {
   const originalFetch = globalThis.fetch
   const urls: string[] = []
   globalThis.fetch = (async (input: string | URL | Request) => {
@@ -46,12 +47,16 @@ test("overview requests Access Groups only for tenant administrators and keeps a
     })
   }) as typeof fetch
   try {
-    for (const role of [undefined, "USER", "ORGANIZATION_ADMINISTRATOR"] as const) {
+    for (const role of [undefined, "USER"] as const) {
       urls.length = 0
       const overview = await loadOverview("tenant-acme", role)
       assert.equal(urls.some((url) => url.endsWith("/access-groups")), false)
       assert.equal(overview.failures.some((failure) => failure.source === "Access groups"), false)
     }
+    urls.length = 0
+    const organizationAdminOverview = await loadOverview("tenant-acme", "ORGANIZATION_ADMINISTRATOR")
+    assert.equal(urls.some((url) => url.endsWith("/access-groups")), true)
+    assert.equal(organizationAdminOverview.failures.some((failure) => failure.source === "Access groups"), true)
     urls.length = 0
     const overview = await loadOverview("tenant-acme", "TENANT_ADMINISTRATOR")
     assert.equal(urls.some((url) => url.endsWith("/access-groups")), true)
@@ -258,5 +263,23 @@ test("Grant Entitlement sends one stable retry request identity", async () => {
       configurable: true,
       value: originalSessionStorage,
     })
+  }
+})
+
+test("listTraces sends correlation_id separately from generic search", async () => {
+  const originalFetch = globalThis.fetch
+  let requestedUrl = ""
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    requestedUrl = input instanceof Request ? input.url : String(input)
+    return new Response(JSON.stringify({ traces: [] }), { headers: { "content-type": "application/json" }, status: 200 })
+  }) as typeof fetch
+
+  try {
+    await listTraces("tenant /trace", 20, { correlation_id: "canonical /correlation", search: "gateway" })
+    const url = new URL(requestedUrl, "http://platform.test")
+    assert.equal(url.searchParams.get("correlation_id"), "canonical /correlation")
+    assert.equal(url.searchParams.get("search"), "gateway")
+  } finally {
+    globalThis.fetch = originalFetch
   }
 })
