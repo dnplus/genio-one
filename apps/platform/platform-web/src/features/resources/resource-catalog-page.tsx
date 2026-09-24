@@ -41,6 +41,7 @@ import {
   resourceFamilyLabel,
   resourceInventoryVisibility,
   resourceSubtype,
+  shouldPrepareStandardPublication,
   type PublicationListState,
   type ResourceFamily,
 } from "@/features/resources/resource-administration"
@@ -1058,7 +1059,7 @@ export function ResourceCatalogPage({
       const outcome = await resourceAdministration.requestPublication({
         tenantId,
         resource,
-        prepareStandardWorkflow: controls.workflowMode === "STANDARD",
+        prepareStandardWorkflow: shouldPrepareStandardPublication(resource, controls.workflowMode),
         autoApprove: isTenantAdministrator,
       })
       if (outcome.status === "FAILED") throw outcome.error

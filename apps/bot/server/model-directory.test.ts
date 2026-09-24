@@ -52,11 +52,35 @@ describe("BotModelDirectory", () => {
     })
     expect(directory.availableRoutes()).toEqual(["codex-subscription", "genio-gateway"])
     expect(directory.supports({ kind: "genio-gateway", modelProvider: "genio_one" })).toBe(true)
-    expect(await directory.resolve(principal, undefined, { kind: "genio-gateway", modelProvider: "genio_one" }, "user-token")).toEqual([{
+    expect(await directory.resolve(principal, undefined, { kind: "genio-gateway", modelProvider: "genio_one" }, "user-token", {
+      capability_id: "model.invoke",
+      action: "expose",
+      decision: "ALLOW",
+    })).toEqual([{
       publicModelId: "genio-standard",
       displayName: "Genio Standard",
       route: { kind: "genio-gateway", modelProvider: "genio_one" },
     }])
+  })
+
+  test("does not expose an entitled company model when Runtime Policy denies model exposure", async () => {
+    let requests = 0
+    const directory = createBotModelDirectory({
+      GENIO_ONE_MODEL_GATEWAY_BASE_URL: "http://gateway.test/v1",
+      GENIO_BOT_GENIO_GATEWAY_MODELS_JSON: JSON.stringify([{ publicModelId: "uat-vertex", displayName: "GCP Vertex Model API" }]),
+    }, {
+      fetcher: async () => {
+        requests += 1
+        return new Response(JSON.stringify([]), { status: 200 })
+      },
+    })
+
+    await expect(directory.resolve(principal, "bot-kevin", { kind: "genio-gateway", modelProvider: "genio_one" }, "user-token", {
+      capability_id: "model.invoke",
+      action: "expose",
+      decision: "DENY",
+    })).resolves.toEqual([])
+    expect(requests).toBe(0)
   })
 
   test("requires a user token before returning a company model", async () => {

@@ -13,7 +13,13 @@ export interface BotModelPlan {
 export interface BotModelDirectory {
   availableRoutes(): readonly BotModelRoute["kind"][]
   supports(route: BotModelRoute): boolean
-  resolve(principal: GenioPrincipal, botId?: string, route?: BotModelRoute, accessToken?: string): Promise<BotModelPlan[]>
+  resolve(principal: GenioPrincipal, botId?: string, route?: BotModelRoute, accessToken?: string, runtimeExposure?: BotModelExposureDecision): Promise<BotModelPlan[]>
+}
+
+export interface BotModelExposureDecision {
+  capability_id: string
+  action: string
+  decision: "ALLOW" | "DENY"
 }
 
 interface GatewayPlanDefinition {
@@ -199,9 +205,10 @@ export function createBotModelDirectory(
     supports(route) {
       return route.kind === "codex-subscription" || (route.kind === "genio-gateway" && gatewayPlans !== null)
     },
-    async resolve(principal, _botId, route = { kind: "codex-subscription" }, accessToken) {
+    async resolve(principal, _botId, route = { kind: "codex-subscription" }, accessToken, runtimeExposure) {
       if (route.kind === "genio-gateway") {
         if (!gatewayPlans) throw new Error("GENIO_ONE_MODEL_GATEWAY_NOT_CONFIGURED")
+        if (runtimeExposure && (runtimeExposure.capability_id !== "model.invoke" || runtimeExposure.action !== "expose" || runtimeExposure.decision !== "ALLOW")) return []
         return resolveGatewayPlans(principal, gatewayPlans, accessToken, fetcher, platformOrigin)
       }
       return [{

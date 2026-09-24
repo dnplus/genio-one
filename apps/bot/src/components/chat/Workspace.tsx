@@ -1199,6 +1199,7 @@ ${availableSkillsList}`,
           runtimeErrorTitle={runtimeBlock?.title}
           runtimeErrorDetail={runtimeBlock?.detail}
           onReconnect={() => location.reload()}
+          messages={messages}
           threadReady={demo || threadReady}
           channelReady={demo || channelReady}
           approval={approval}

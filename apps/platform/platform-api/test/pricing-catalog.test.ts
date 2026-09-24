@@ -54,6 +54,7 @@ test("freezes the LiteLLM version used by the token estimate", async () => {
     effectiveModelId: "gpt-example",
     inputTokens: 100,
     outputTokens: 25,
+    totalTokens: 125,
   }), {
     status: "ESTIMATED",
     currency: "USD",
@@ -78,12 +79,67 @@ test("marks an unmatched provider model unpriced without guessing", async () => 
     effectiveModelId: "local-model",
     inputTokens: 10,
     outputTokens: 20,
+    totalTokens: 30,
   }), {
     status: "UNPRICED",
     currency: null,
     estimatedCostMicros: null,
     pricingSource: "LITELLM",
     pricingVersion: version,
+  })
+})
+
+test("marks total-token-only provider usage unpriced without fabricating a split", async () => {
+  const catalog = createPostgresModelPriceCatalog({
+    sql: {
+      async query() {
+        throw new Error("pricing lookup is not used without an input/output split")
+      },
+      async transaction() {
+        throw new Error("transaction is not used by estimate")
+      },
+    },
+  })
+
+  assert.deepEqual(await catalog.estimate({
+    providerId: "OPENAI",
+    effectiveModelId: "gpt-example",
+    inputTokens: null,
+    outputTokens: null,
+    totalTokens: 120,
+  }), {
+    status: "UNPRICED",
+    currency: null,
+    estimatedCostMicros: null,
+    pricingSource: null,
+    pricingVersion: null,
+  })
+})
+
+test("keeps activities without provider usage not applicable", async () => {
+  const catalog = createPostgresModelPriceCatalog({
+    sql: {
+      async query() {
+        throw new Error("pricing lookup is not used without provider usage")
+      },
+      async transaction() {
+        throw new Error("transaction is not used by estimate")
+      },
+    },
+  })
+
+  assert.deepEqual(await catalog.estimate({
+    providerId: null,
+    effectiveModelId: null,
+    inputTokens: null,
+    outputTokens: null,
+    totalTokens: null,
+  }), {
+    status: "NOT_APPLICABLE",
+    currency: null,
+    estimatedCostMicros: null,
+    pricingSource: null,
+    pricingVersion: null,
   })
 })
 
@@ -114,6 +170,7 @@ test("matches an explicit LiteLLM zero-cost Ollama model without guessing", asyn
     effectiveModelId: "llama3:latest",
     inputTokens: 100,
     outputTokens: 25,
+    totalTokens: 125,
   }), {
     status: "ESTIMATED",
     currency: "USD",

@@ -100,11 +100,26 @@ spec:
               valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: bot-runtime-report-private-key.pem } }
             {{- end }}
             {{- if .Values.bot.modelGatewayBaseUrl }}
+            {{- if regexMatch "^https?://genio-one-aigw-internal(:[0-9]+)?(/|$)" .Values.bot.modelGatewayBaseUrl }}
+            {{- if not .Values.bot.modelGatewayPublicHost }}
+            {{- fail "bot.modelGatewayPublicHost is required when bot.modelGatewayBaseUrl targets genio-one-aigw-internal" }}
+            {{- end }}
+            {{- if not (regexMatch "^https?://genio-one-aigw-internal:1975(/|$)" .Values.bot.modelGatewayBaseUrl) }}
+            {{- fail "bot.modelGatewayBaseUrl must use port 1975 when targeting genio-one-aigw-internal; port 1976 is the internal sidecar listener" }}
+            {{- end }}
+            {{- end }}
             {{- if not .Values.bot.modelGatewayModels }}
             {{- fail "bot.modelGatewayModels is required when bot.modelGatewayBaseUrl is configured" }}
             {{- end }}
+            {{- if and (not .Values.runtimeReport.existingSecret) (not .Values.runtimeReport.generatedKeyId) }}
+            {{- fail "runtimeReport.existingSecret or runtimeReport.generatedKeyId is required when bot.modelGatewayBaseUrl is configured" }}
+            {{- end }}
             - name: GENIO_ONE_MODEL_GATEWAY_BASE_URL
               value: {{ .Values.bot.modelGatewayBaseUrl | quote }}
+            {{- if .Values.bot.modelGatewayPublicHost }}
+            - name: GENIO_ONE_MODEL_GATEWAY_PUBLIC_HOST
+              value: {{ .Values.bot.modelGatewayPublicHost | quote }}
+            {{- end }}
             - name: GENIO_BOT_GENIO_GATEWAY_MODELS_JSON
               value: {{ .Values.bot.modelGatewayModels | toJson | quote }}
             {{- end }}

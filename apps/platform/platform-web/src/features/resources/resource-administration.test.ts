@@ -6,6 +6,7 @@ import {
   createResourceAdministration,
   publicationErrorDetails,
   resourceAdministrationState,
+  shouldPrepareStandardPublication,
   type ResourceAdministrationOperations,
 } from "@/features/resources/resource-administration"
 import { ProductApiError } from "@/lib/product-api"
@@ -120,6 +121,45 @@ test("Publication failures preserve API violations and expose unexpected errors"
   assert.deepEqual(unexpected.violations, [{ code: "BROWSER_OIDC_UNAVAILABLE", message: "BROWSER_OIDC_UNAVAILABLE" }])
 })
 
+test("Published successor changes use the publication snapshot path while initial Draft publication prepares standard policy", async () => {
+  const resource = createMockOverview().resources[0]!
+  const published = { ...resource, lifecycle: "PUBLISHED" as const }
+  const calls: string[] = []
+  const administration = createResourceAdministration(operations({
+    ensureStandardModelRoutingPolicy: async () => { calls.push("routing") },
+    saveStandardResourceEnforcement: async () => { calls.push("enforcement") },
+    requestResourcePublication: async () => {
+      calls.push("request")
+      return { request_id: "publication-successor-1" }
+    },
+    reviewResourcePublication: async () => {
+      calls.push("review")
+      return published
+    },
+  }))
+
+  assert.equal(shouldPrepareStandardPublication({ ...resource, lifecycle: "DRAFT" }, "STANDARD"), true)
+  assert.equal(shouldPrepareStandardPublication(published, "STANDARD"), false)
+
+  const request = await administration.requestPublication({
+    tenantId: published.tenant_id,
+    resource: published,
+    prepareStandardWorkflow: shouldPrepareStandardPublication(published, "STANDARD"),
+    autoApprove: false,
+  })
+  assert.equal(request.status, "SUCCEEDED")
+  if (request.status === "SUCCEEDED") {
+    const review = await administration.reviewPublication({
+      tenantId: published.tenant_id,
+      resource: published,
+      requestId: request.value.requestId,
+      decision: "APPROVE",
+    })
+    assert.equal(review.status, "SUCCEEDED")
+  }
+  assert.deepEqual(calls, ["request", "review"])
+})
+
 test("Connection workflow reports the exact partial-failure stage and stops", async () => {
   const data = createMockOverview()
   const connection = data.connections[0]!
@@ -178,7 +218,7 @@ test("Connection workflow reports the exact partial-failure stage and stops", as
 })
 
 test("Standard publication preparation freezes inputs before request; approval only reviews that snapshot", async () => {
-  const resource = createMockOverview().resources[0]!
+  const resource = createMockOverview().resources.find((candidate) => candidate.lifecycle === "DRAFT")!
   const calls: string[] = []
   const administration = createResourceAdministration(operations({
     ensureStandardModelRoutingPolicy: async () => { calls.push("routing") },

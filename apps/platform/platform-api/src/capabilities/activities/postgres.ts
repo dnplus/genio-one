@@ -219,6 +219,7 @@ export function createPostgresGatewayActivityStore(options: {
         effectiveModelId: event.effective_model_id,
         inputTokens: event.input_tokens,
         outputTokens: event.output_tokens,
+        totalTokens: event.total_tokens,
       })
       const result = await options.sql.query<GatewayActivityRow>(
         `insert into genio_one_gateway_activities (

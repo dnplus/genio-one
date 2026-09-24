@@ -89,10 +89,8 @@ export function createPostgresModelPriceCatalog(options: { sql: SqlAdapter }): M
     },
 
     async estimate(input) {
-      if (
-        input.inputTokens === null || input.outputTokens === null ||
-        !input.providerId || !input.effectiveModelId
-      ) {
+      const hasUsage = input.inputTokens !== null || input.outputTokens !== null || input.totalTokens !== null
+      if (!hasUsage) {
         return {
           status: "NOT_APPLICABLE",
           currency: null,
@@ -100,6 +98,12 @@ export function createPostgresModelPriceCatalog(options: { sql: SqlAdapter }): M
           pricingSource: null,
           pricingVersion: null,
         }
+      }
+      if (
+        input.inputTokens === null || input.outputTokens === null ||
+        !input.providerId || !input.effectiveModelId
+      ) {
+        return unpriced(null)
       }
       const result = await options.sql.query<CurrentPriceRow>(
         `select version.source_version,

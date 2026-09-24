@@ -4131,11 +4131,11 @@
       "mode": 420
     },
     "apps/bot/server/model-directory.test.ts": {
-      "sha256": "ddbf743bc226f0397845c5c6bb58ed1b50352cff8ed7f4b718a36218c0c5352a",
+      "sha256": "533e6288b9ab14ad96ecd3b89b9a4091e4f8ecc5abe13cf4d9c17ec0c2b6e856",
       "mode": 420
     },
     "apps/bot/server/model-directory.ts": {
-      "sha256": "bfbeb4f6627428545c2dc69743aaac7db70c54a2845245c412ed412e95aa3e76",
+      "sha256": "bbb1bfccd29c96809620869ffb2f7b596fbe6477a61465b0ec57a1f40df0876a",
       "mode": 420
     },
     "apps/bot/server/model-gateway-relay.test.ts": {
@@ -4303,11 +4303,11 @@
       "mode": 420
     },
     "apps/bot/server/routes/codex-runtime-policy.test.ts": {
-      "sha256": "bc9151df34c5522397976392479accd772678cc862de5543f61a8d111c8d9077",
+      "sha256": "e3fc3110e38065ca42d145bc814a35bcd93dfa3c73d89344a52b712b6a7aac7a",
       "mode": 420
     },
     "apps/bot/server/routes/codex.ts": {
-      "sha256": "29114a7d660fd10b867d0b5e7f8946fba51440aabf518b13aff50c2e9b7c96bd",
+      "sha256": "8332d6eae677a15cb2a0b4ef5c7e143d4c68ebc69c71ad8376d0bd448c4b4b9a",
       "mode": 420
     },
     "apps/bot/server/routes/cross-owner-handoff.test.ts": {
@@ -4518,8 +4518,12 @@
       "sha256": "5c11d045a26526b9a6ffe214d7296e2b22a68bb1f3891cf4ceecd0fa301056e0",
       "mode": 420
     },
+    "apps/bot/src/components/chat/ChatComposer.test.tsx": {
+      "sha256": "c6a63126946999cab60507a235fa0482266650bc583a77dd82bd1b2cdeab1001",
+      "mode": 420
+    },
     "apps/bot/src/components/chat/ChatComposer.tsx": {
-      "sha256": "0cf0b5ee45dac4488ed6864e7d233d116fc963905ff3cf7af97f1ebab52cee53",
+      "sha256": "5861ce3f9b9519f88cc93023fb04014e17482605de5a809d415f28f280cd4f2d",
       "mode": 420
     },
     "apps/bot/src/components/chat/ChatMessageList.test.tsx": {
@@ -4555,11 +4559,11 @@
       "mode": 420
     },
     "apps/bot/src/components/chat/codex-stream-listeners.test.ts": {
-      "sha256": "938284ef24275aef8e317281c784265a74d224a3322ef6f0b961b2e8e849aec5",
+      "sha256": "1293618e122285f3bcfbfe6220c37ecedc18c44691ec7a22d19cd4d6e6a2996d",
       "mode": 420
     },
     "apps/bot/src/components/chat/codex-stream-listeners.ts": {
-      "sha256": "daa59e505994c4d71eb433984710ca68cac066d485444ca259ca61a1946f0c0f",
+      "sha256": "b8dd0eb6d73dd2b6e88d7dccf3952a284a5a0a3d810f50bd6cd9fb00a2b97fd3",
       "mode": 420
     },
     "apps/bot/src/components/chat/composer-mentions.test.ts": {
@@ -4659,7 +4663,7 @@
       "mode": 420
     },
     "apps/bot/src/components/chat/useCodexSession.ts": {
-      "sha256": "e155d19dcdf5fa659a44bbc4c34ce248232ad3f1271f12f1ff29eee4138d5927",
+      "sha256": "bc272d9ca9d7ee89ce295889aeaae98f3d5583072a74037fa556a8bd3896582d",
       "mode": 420
     },
     "apps/bot/src/components/chat/UserInputQuestionCard.test.ts": {
@@ -4687,7 +4691,7 @@
       "mode": 420
     },
     "apps/bot/src/components/chat/Workspace.tsx": {
-      "sha256": "90495b64706ef09452f30ddad7959b7400d31d8edeff311fe326aefc3352fe94",
+      "sha256": "97c80566389541da213add73656884951d21bc80c08346dcfbcad4489916d7d1",
       "mode": 420
     },
     "apps/bot/src/components/chat/WorkspaceHeader.test.ts": {
@@ -5751,7 +5755,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/activities/postgres.ts": {
-      "sha256": "27b5e0dd1727ee793733b05eb2fe855e72114006ddb9c216f6586b77dd88e341",
+      "sha256": "a12b4b621d0122c61373615b2f7e95a38108705320fa96d12ea51e2438aa2c2c",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/activities/usage-summary.ts": {
@@ -6547,11 +6551,11 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/pricing-catalog/module.ts": {
-      "sha256": "e871b1bc77bc1eeb2ebf0a28045d11355840ee25cc869e3f946579f0917594db",
+      "sha256": "2c4b2f431cebc823f6d8ab9025afaa178099853ed75ab8fbc631f65bf01110ed",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/pricing-catalog/postgres.ts": {
-      "sha256": "7234a438c34f217944597966680d27b8e034697a4323cd39008eff4b04c2ebf0",
+      "sha256": "47999bacf81bd95b6b6e0e5df4719c3b59b339173468ceb53a454f9ef0085e3c",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/processor-adapters/catalog.ts": {
@@ -6871,7 +6875,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/activity-usage-summary.test.ts": {
-      "sha256": "27c7988db9f1b2169448b95e7716aaa3251a8e07b1b69aad36f9acb41a3981b3",
+      "sha256": "293ddc17d6b9c41cba79cff6aaaa9f947147fb3947d5362c897a1fd6eb6f6d1e",
       "mode": 420
     },
     "apps/platform/platform-api/test/admin-policy-authoring.test.ts": {
@@ -7303,7 +7307,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/pricing-catalog.test.ts": {
-      "sha256": "8ae4534c156ed86fd9b3c409f3a7423dd7c6bbc81498d2d5d6146fecc057e2d5",
+      "sha256": "fecbc4e3d31e00e586c96e73585e5bc894b6c768de21786534a8e319a229df7b",
       "mode": 420
     },
     "apps/platform/platform-api/test/processor-adapters.test.ts": {
@@ -7943,15 +7947,15 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/features/resources/resource-administration.test.ts": {
-      "sha256": "2b1136780c87884e900475f463c6681d1b5ed0f17f71313f376241eb696273e0",
+      "sha256": "1c0ce33252fdb442d1b79a6674adb3571ff48142161b0107b5402cd3bff6af83",
       "mode": 420
     },
     "apps/platform/platform-web/src/features/resources/resource-administration.ts": {
-      "sha256": "97d0e6c47524a7bb6521f8fa9dd3f9f78127cf7c8c584a7c3193430bc4fca996",
+      "sha256": "9dcbf7228082617525ac0be9a651ceede7b8e69cfa20366833c2bced441702cd",
       "mode": 420
     },
     "apps/platform/platform-web/src/features/resources/resource-catalog-page.tsx": {
-      "sha256": "44c36bf56465a463db0ceb6e59d4f65608237137a9bc47bf313d6bfd24a6a1e4",
+      "sha256": "1893f3aa0f38103d9525904af3251efd6251264142818f03964f85d3bb47cec9",
       "mode": 420
     },
     "apps/platform/platform-web/src/features/resources/resource-context-tabs.tsx": {
@@ -8391,7 +8395,7 @@
       "mode": 420
     },
     "deploy/helm/genio-one/templates/bot.yaml": {
-      "sha256": "edc62ef25ba403bf19c6dfa84a810dee53d445fb307d9f92711b7afe977a1390",
+      "sha256": "2cdbb06a110a2d1a2ccf31489dee9cd6fb8f4ed118af9e3ab0e1ef893ca1ce51",
       "mode": 420
     },
     "deploy/helm/genio-one/templates/connectors.yaml": {
@@ -8455,7 +8459,7 @@
       "mode": 420
     },
     "deploy/helm/genio-one/values.yaml": {
-      "sha256": "07a32baeadbb12dedbbd07921284fd8d139e26640a3e5a1da444ae517c3f5621",
+      "sha256": "07d694c8c0e6aad9b02f527b4f36df244b14b2ac757f1121b123c8450edcba0f",
       "mode": 420
     },
     "docs/public/ce/assets/resource-management.png": {

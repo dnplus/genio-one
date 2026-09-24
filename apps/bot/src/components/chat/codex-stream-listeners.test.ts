@@ -196,6 +196,23 @@ describe("Codex stream runtime errors", () => {
     expect(value.state.runtimeState).not.toContain("Google Gemini")
   })
 
+  test("uses neutral copy when an interrupted turn does not identify its cause", () => {
+    const value = harness()
+    cleanups.push(value.unsubscribe)
+    value.messages.push({ id: "user-1", text: "請繼續", role: "user" } as never)
+    value.receive({
+      method: "turn/completed",
+      params: { threadId: "thread-dylan", turn: { status: "interrupted" } },
+    })
+
+    expect(value.state.turnRunning).toBe(false)
+    expect(value.state.agentState).toBe("exclaim")
+    expect(value.state.runtimeState).toBe("執行中止")
+    expect(value.messages.at(-1)?.text).toBe("⚠️ 此輪已中止")
+    expect(value.messages.at(-1)?.text).not.toContain("連線中斷")
+    expect(value.messages.at(-1)?.text).not.toContain("伺服器重新啟動")
+  })
+
   test("does not dispatch a replaced pending task after runtime preparation", async () => {
     const value = harness({ deferTimeout: true })
     cleanups.push(value.unsubscribe)

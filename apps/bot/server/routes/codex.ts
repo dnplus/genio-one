@@ -12,6 +12,7 @@ import { verifyGenioOneAccessToken } from "../auth"
 import { createCodexRuntime as defaultCreateCodexRuntime, type CodexRuntime, type RuntimeDetails, type RuntimeTier } from "../runtime"
 import { setBotSelection, setManagedMcpMounts, type RuntimeSession } from "../runtime-broker"
 import type { BotServerContext } from "../context"
+import type { BotModelPlan } from "../model-directory"
 import { botTurnContext } from "../bot-context"
 import { BotUsageContextError, resolveBotUsageContext } from "../usage-context"
 import { emitBotFeedbackLog } from "../telemetry"
@@ -495,8 +496,19 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
                 ? { kind: "genio-gateway" as const, modelProvider: "genio_one" }
                 : { kind: "codex-subscription" as const }
               if (!modelDirectory.supports(modelRoute)) throw new Error("BOT_MODEL_ROUTE_UNAVAILABLE")
+              const modelExposure = modelRoute.kind === "genio-gateway"
+                ? await runtimePolicy.resolve({
+                  principal: session.principal,
+                  botId: selectedBot.id,
+                  runtimeId: "codex",
+                  capabilityId: "model.invoke",
+                  action: "expose",
+                  sessionId: session.id,
+                  accessToken: sessionAccessToken ?? session.accessToken,
+                })
+                : undefined
               const models = modelRoute.kind === "genio-gateway"
-                ? await modelDirectory.resolve(session.principal, selectedBot.id, modelRoute, sessionAccessToken ?? session.accessToken).catch((error) => {
+                ? await modelDirectory.resolve(session.principal, selectedBot.id, modelRoute, sessionAccessToken ?? session.accessToken, modelExposure).catch((error) => {
                   if (error instanceof Error && error.message === "BOT_MODEL_NOT_ENTITLED") return []
                   throw error
                 })
@@ -837,12 +849,7 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
           const bootstrapRoute = policy.model_route === "genio-gateway" && modelDirectory.supports({ kind: "genio-gateway", modelProvider: "genio_one" })
             ? "genio-gateway" as const
             : null
-          const models = bootstrapRoute
-            ? await modelDirectory.resolve(principal, undefined, { kind: "genio-gateway", modelProvider: "genio_one" }, accessToken).catch((error) => {
-              if (error instanceof Error && error.message === "BOT_MODEL_NOT_ENTITLED") return []
-              throw error
-            })
-            : []
+          const models: BotModelPlan[] = []
           const session = await runtimeBroker.start(
             principal,
             runtimeCallbacks,

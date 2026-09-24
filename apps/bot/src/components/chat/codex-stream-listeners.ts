@@ -338,7 +338,7 @@ export function registerCodexStreamListeners(ctx: StreamListenerContext): () => 
                 {
                   id: `interrupted-${Date.now()}`,
                   role: "assistant",
-                  text: "⚠️ 此輪執行已中止（連線中斷或伺服器重新啟動）。請重新送出提問。",
+                  text: "⚠️ 此輪已中止",
                   createdAt: Date.now(),
                 },
               ]

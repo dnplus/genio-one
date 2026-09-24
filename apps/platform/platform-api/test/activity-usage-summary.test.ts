@@ -88,3 +88,29 @@ test("AI usage keeps explicitly priced zero-cost usage visible", () => {
     total_cost_micros: 0,
   }])
 })
+
+test("AI usage with provider-reported total tokens but no price is unpriced", () => {
+  const summary = summarizeGatewayActivities({
+    tenantId: "tenant-1",
+    from: 1_699_999_999,
+    to: 1_700_000_001,
+    events: [{
+      event: event({
+        input_tokens: null,
+        output_tokens: null,
+        total_tokens: 20_604,
+        cost_estimation_status: "UNPRICED",
+        estimated_cost_currency: null,
+        estimated_cost_micros: null,
+        pricing_source: null,
+        pricing_version: null,
+      }),
+      resourceDisplayName: "Unpriced Provider Usage",
+    }],
+  })
+
+  assert.equal(summary.usage.total_tokens, 20_604)
+  assert.equal(summary.priced_record_count, 0)
+  assert.equal(summary.unpriced_record_count, 1)
+  assert.deepEqual(summary.cost_by_currency, [])
+})

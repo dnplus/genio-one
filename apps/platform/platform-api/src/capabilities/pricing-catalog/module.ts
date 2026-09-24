@@ -27,6 +27,7 @@ export interface UsageCostEstimator {
     effectiveModelId: string | null
     inputTokens: number | null
     outputTokens: number | null
+    totalTokens: number | null
   }): Promise<UsageCostEstimate>
 }
 

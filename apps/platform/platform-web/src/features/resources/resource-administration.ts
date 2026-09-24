@@ -189,6 +189,13 @@ export function publicationState(resource: ResourceRegistration): PublicationLis
   return hasPendingPublication(resource) ? "PENDING_APPROVAL" : resource.lifecycle
 }
 
+export function shouldPrepareStandardPublication(
+  resource: Pick<ResourceRegistration, "lifecycle">,
+  workflowMode: "STANDARD" | "CUSTOM",
+) {
+  return workflowMode === "STANDARD" && resource.lifecycle === "DRAFT"
+}
+
 export function resourceAccessSummary(data: OverviewSnapshot, resourceId: string) {
   const entitlements = data.ownedEntitlements.filter(
     (entitlement) => entitlement.resource_id === resourceId && entitlement.state === "ACTIVE",

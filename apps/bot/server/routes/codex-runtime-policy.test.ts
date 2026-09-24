@@ -136,7 +136,11 @@ function createContext(
       return decision
     },
     async report(input: Record<string, unknown>) { reports.push(input) },
-    async resolve() { throw new Error("UNUSED") },
+    async resolve(input: { capabilityId: string; action: string }) {
+      const decision = runtimeDecision({ capabilityId: input.capabilityId, action: input.action, correlationId: `resolve-${++sequence}` })
+      calls.push(decision)
+      return decision
+    },
     async read(input: { botId: string }) {
       const decisions = ["shell.exec", "filesystem.read", "filesystem.write", "browser.open", "web_search.query"].map((capabilityId) => runtimeDecision({
         capabilityId,
@@ -161,8 +165,9 @@ function createContext(
   const modelDirectory = {
     availableRoutes: () => ["codex-subscription"],
     supports: () => true,
-    async resolve(_principal: unknown, _botId: string | undefined, route?: { kind: string }) {
+    async resolve(_principal: unknown, _botId: string | undefined, route?: { kind: string }, _accessToken?: string, exposure?: { decision?: string }) {
       if (modelError && route?.kind === "genio-gateway") throw new Error(modelError)
+      if (exposure && exposure.decision !== "ALLOW") return []
       return [{ publicModelId: "*", displayName: "Codex", route: { kind: route?.kind ?? "codex-subscription" } }]
     },
   }
@@ -696,6 +701,47 @@ describe("Codex runtime policy route", () => {
       const restored = socket.sent.map((line) => JSON.parse(line)).find(message => message.id === 3).result
       expect(restored.models).toEqual([])
     } finally { globalThis.fetch = originalFetch; socket.close() }
+  })
+
+  test("filters company models by Runtime Policy exposure and shows them again after policy restore", async () => {
+    const calls: Array<Record<string, unknown>> = []
+    const reports: Array<Record<string, unknown>> = []
+    const context = createContext(calls, reports, false, [], [], "genio-gateway")
+    let exposure: "ALLOW" | "DENY" = "DENY"
+    const resolvePolicy = context.runtimePolicy.resolve
+    context.runtimePolicy.resolve = async (input) => {
+      const decision = await resolvePolicy(input)
+      if (input.capabilityId === "model.invoke" && input.action === "expose") decision.decision = exposure
+      return decision
+    }
+    const bot = context.botRegistry.getOwned()
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => Response.json(principal)) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      const ready = socket.sent.map((line) => JSON.parse(line)).find((message) => message.method === "genio/codexReady")
+      expect(ready?.params.models).toEqual([])
+
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: bot.id } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
+      const denied = socket.sent.map((line) => JSON.parse(line)).find((message) => message.id === 2)
+      expect(denied?.result.models).toEqual([])
+
+      exposure = "ALLOW"
+      socket.emit("message", JSON.stringify({ id: 3, method: "genio/bot/select", params: { botId: bot.id } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 3))
+      const restored = socket.sent.map((line) => JSON.parse(line)).find((message) => message.id === 3)
+      expect(restored?.result.models.map((model: { publicModelId: string }) => model.publicModelId)).toEqual(["*"])
+      expect(calls.filter((call) => call.capability_id === "model.invoke" && call.action === "expose")).toHaveLength(2)
+    } finally {
+      globalThis.fetch = originalFetch
+      socket.close()
+    }
   })
 
   test.each([false, true])("late Bot selections cannot replace or clear the newer selection (old failure=%s)", async (failOld) => {

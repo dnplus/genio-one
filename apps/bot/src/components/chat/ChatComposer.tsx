@@ -20,10 +20,11 @@ import {
 import { BloubAvatar } from "../../avatar/bloub-avatar"
 import { ImagePicker, type DraftImage } from "./ImagePicker"
 import type { BotMentionSpan } from "./composer-mentions"
+import type { ChatMessage } from "../../bots-storage"
 import type { CodexModel } from "../../lib/codex-client"
 import type { GenioCatalog } from "../../lib/genio-one"
 import { companyModelGroups } from "../../lib/catalog-surface"
-import { COMPANY_MODEL_UNAVAILABLE_MESSAGE, type ModelRoute } from "../../lib/model-route"
+import { COMPANY_MODEL_UNAVAILABLE_MESSAGE, isModelRouteFailure, type ModelRoute } from "../../lib/model-route"
 import { botCopy } from "../../lib/ui-copy"
 import { ApprovalCard, type ApprovalRequest } from "./ApprovalCard"
 import { UserInputQuestionCard, type UserInputQuestionRequest } from "./UserInputQuestionCard"
@@ -177,6 +178,46 @@ function renderMentionIcon(mention: MentionItem) {
   )
 }
 
+export function runtimeErrorPresentation(input: {
+  runtimeError?: string
+  runtimeErrorTitle?: string
+  runtimeErrorDetail?: string
+  models?: readonly CodexModel[]
+  messages: readonly ChatMessage[]
+  modelRoute: ModelRoute
+}) {
+  const interrupted = input.runtimeError === "執行中止"
+  const noHealthyConnection = Boolean(input.runtimeError && /NO_HEALTHY_CONNECTION/i.test(input.runtimeError))
+  let lastUserIndex = -1
+  for (let index = input.messages.length - 1; index >= 0; index -= 1) {
+    if (input.messages[index]?.role === "user") {
+      lastUserIndex = index
+      break
+    }
+  }
+  const hasPreservedPartialOutput = lastUserIndex >= 0 && input.messages.slice(lastUserIndex + 1).some((message) => message.role === "assistant" && !message.localOnly && !message.id.startsWith("interrupted-") && message.text.trim().length > 0)
+  const companyModelUnavailable = !interrupted && input.modelRoute === "genio-gateway" && ((input.models?.length ?? 0) === 0 || (input.runtimeError ? isModelRouteFailure(input.runtimeError) || /model\.invoke|POLICY_SCOPE_NOT_ALLOWED/i.test(input.runtimeError) : false))
+  return {
+    title: input.runtimeErrorTitle || (interrupted
+      ? botCopy("Reply stopped", "這次回覆已停止")
+      : noHealthyConnection
+        ? botCopy("Company model connection is not ready", "公司模型連線尚未就緒")
+      : companyModelUnavailable
+        ? botCopy("Company model unavailable", "公司模型目前不可用")
+        : botCopy("Bot could not start", "Bot 無法啟動")),
+    detail: input.runtimeErrorDetail || (interrupted
+      ? hasPreservedPartialOutput
+        ? botCopy("This reply was stopped; partial output is preserved. Reconnect and try again to generate a new reply.", "這次回覆已停止，部分輸出已保留。按「重新連線」後可重新生成。")
+        : botCopy("This reply was stopped before visible output was produced. Reconnect and try again to generate a new reply.", "這次回覆已停止，尚未產生可顯示的回覆內容。按「重新連線」後可重新生成。")
+      : noHealthyConnection
+        ? botCopy("An administrator must verify the model Connection and republish the Resource. After the publication and Gateway Runtime are READY, reconnect and try again.", "請由管理員先驗證模型 Connection 並重新發佈 Resource；確認 Gateway Runtime READY 後，按「重新連線」再試。")
+      : companyModelUnavailable
+        ? botCopy("No company model is currently exposed to this Bot. Ask an administrator to restore the Runtime Policy access, then reconnect.", "目前沒有符合此 Bot Runtime Policy 曝光條件的公司模型。請聯絡管理員恢復群組或模型曝光授權後，按「重新連線」再試。")
+        : input.runtimeError ?? ""),
+    showTechnicalDetail: !interrupted && !noHealthyConnection,
+  }
+}
+
 export function ChatComposer({
   voiceToken = "",
   input,
@@ -191,6 +232,7 @@ export function ChatComposer({
   runtimeErrorTitle,
   runtimeErrorDetail,
   onReconnect,
+  messages,
   threadReady,
   channelReady = false,
   approval,
@@ -241,6 +283,7 @@ export function ChatComposer({
   runtimeErrorTitle?: string
   runtimeErrorDetail?: string
   onReconnect?: () => void
+  messages: readonly ChatMessage[]
   threadReady: boolean
   channelReady?: boolean
   approval: ApprovalRequest | null
@@ -389,6 +432,7 @@ export function ChatComposer({
 
   const companyModels = useMemo(() => companyModelGroups(catalog?.capabilities ?? []), [catalog])
   const companySelectable = modelRoute === "genio-gateway"
+  const runtimeErrorView = useMemo(() => runtimeErrorPresentation({ runtimeError, runtimeErrorTitle, runtimeErrorDetail, models, messages, modelRoute }), [messages, modelRoute, models, runtimeError, runtimeErrorDetail, runtimeErrorTitle])
   const pickerModels = models.length
     ? models
     : modelRoute === "genio-gateway"
@@ -402,9 +446,9 @@ export function ChatComposer({
       {(approval || userInputRequest || elicitationRequest) && onRefreshPending && <button type="button" className="secondary-button" onClick={onRefreshPending}>{botCopy("Reload pending items", "重新載入待處理事項")}</button>}
       {runtimeError && <div className="runtime-error-card" role="alert">
         <div>
-          <strong>{runtimeErrorTitle || botCopy("Bot could not start", "Bot 無法啟動")}</strong>
-          <p>{runtimeErrorDetail || runtimeError}</p>
-          {runtimeErrorDetail !== runtimeError && <code>{runtimeError}</code>}
+          <strong>{runtimeErrorView.title}</strong>
+          <p>{runtimeErrorView.detail}</p>
+          {runtimeErrorView.showTechnicalDetail && runtimeErrorDetail !== runtimeError && <code>{runtimeError}</code>}
         </div>
         {onReconnect && <button type="button" className="secondary-button" onClick={onReconnect}>{botCopy("Reconnect", "重新連線")}</button>}
       </div>}
@@ -653,7 +697,7 @@ export function ChatComposer({
           }}
           placeholder={
             runtimeError
-              ? runtimeError
+              ? runtimeErrorView.detail
               : modelRoute === "genio-gateway" && models.length === 0
               ? botCopy("No company model is available for this route yet.", COMPANY_MODEL_UNAVAILABLE_MESSAGE)
               : hasCodexLogin

@@ -114,6 +114,11 @@ export function nativeExecutionEnvironments(runtime: RuntimeDetails | null) {
   }]
 }
 
+function isCompanyModelPolicyFailure(error: unknown): boolean {
+  const reason = error instanceof Error ? error.message : typeof error === "string" ? error : ""
+  return /model\.invoke|POLICY_SCOPE_NOT_ALLOWED/i.test(reason)
+}
+
 export function useCodexSession({
   activeBot,
   activeThreadId,
@@ -918,9 +923,11 @@ export function useCodexSession({
     } catch (error) {
       setTurnRunning(false)
       pendingArtifactRef.current = null
-      if (executionRuntimeRef.current?.environmentId === taskRuntime?.environmentId && !isModelRouteFailure(error) && isRuntimePolicyFailure(error)) clearExecutionRuntime()
+      const modelRoute = canonicalModelRoute(activeBotRef.current.modelRoute)
+      const modelFailure = isModelRouteFailure(error) || (modelRoute === "genio-gateway" && isCompanyModelPolicyFailure(error))
+      if (executionRuntimeRef.current?.environmentId === taskRuntime?.environmentId && !modelFailure && isRuntimePolicyFailure(error)) clearExecutionRuntime()
       if (isMountedRef.current) {
-        setRuntimeState(error instanceof Error ? error.message : "執行失敗")
+        setRuntimeState(modelFailure ? modelRouteFailureMessage(modelRoute, error) : error instanceof Error ? error.message : "執行失敗")
         setAgentState("exclaim")
       }
       throw error
