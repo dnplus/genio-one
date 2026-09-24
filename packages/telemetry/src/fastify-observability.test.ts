@@ -3,7 +3,7 @@ import test from "node:test"
 import Fastify from "fastify"
 import { registerHttpObservability } from "./fastify-observability"
 
-test("HTTP observations retain regular evidence and omit sensitive responses", async () => {
+test("HTTP observations retain raw regular evidence and omit sensitive responses", async () => {
   const originalFetch = globalThis.fetch
   const originalOrigin = process.env.OTEL_EXPORTER_OTLP_ENDPOINT
   process.env.OTEL_EXPORTER_OTLP_ENDPOINT = "http://collector.test"
@@ -39,7 +39,8 @@ test("HTTP observations retain regular evidence and omit sensitive responses", a
     assert.ok(sensitiveLog)
     const sensitiveLogAttributes = Object.fromEntries(sensitiveLog.attributes.map((value: any) => [value.key, value.value.stringValue ?? value.value.intValue]))
     assert.equal(sensitiveLogAttributes["genio.response"], JSON.stringify({ availability: "OMITTED_SENSITIVE_RESPONSE" }))
-    assert.ok(!JSON.stringify(exports).includes("credential-only-value"))
+    // Request credentials are exported raw; redaction is the analytics collector's single pass.
+    assert.ok(JSON.stringify(exports).includes("credential-only-value"))
     assert.ok(!JSON.stringify(exports).includes("evidence-turn-secret"))
     assert.ok(exports.some(value => value.resourceLogs))
     assert.ok(exports.some(value => value.resourceMetrics))

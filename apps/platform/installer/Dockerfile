@@ -1,6 +1,6 @@
 FROM debian:bookworm-slim AS kubectl
 ARG TARGETARCH
-ARG KUBECTL_VERSION=v1.36.2
+ARG KUBECTL_VERSION=v1.36.4
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends ca-certificates curl \
     && curl --fail --location --silent --show-error \

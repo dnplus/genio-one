@@ -1,6 +1,7 @@
 import { instrumentModuleGraph, observedFetch } from "@genioone/telemetry/operation-observability"
 import { createDAVClient } from "tsdav"
 import type { Mail2000Credential } from "./server"
+import { parseMail2000VCard, searchMail2000Directory, type Mail2000DirectoryEntry } from "./vcard"
 
 export function davUrl(value: string, origin?: string): URL {
   const url = new URL(value)
@@ -46,6 +47,23 @@ export function createMail2000Dav(config: { url: string; kind: "caldav" | "cardd
     if (!response.ok) throw new Error(response.status === 412 ? "MAIL2000_DAV_CONFLICT" : "MAIL2000_DAV_OPERATION_FAILED")
     return { status: response.status, etag: response.headers.get("etag") }
   }
+  async function directory(credential: Mail2000Credential) {
+    if (config.kind !== "carddav") throw new Error("MAIL2000_CARDDAV_REQUIRED")
+    const dav = await client(credential)
+    const addressBooks = await dav.fetchAddressBooks()
+    const scanned: Mail2000DirectoryEntry[] = []
+    for (let index = 0; index < addressBooks.length; index += 4) {
+      const batch = await Promise.all(addressBooks.slice(index, index + 4).map(async (addressBook) => {
+        const rows = await dav.fetchVCards({ addressBook })
+        const label = typeof addressBook.displayName === "string" && addressBook.displayName ? addressBook.displayName : addressBook.url
+        const parsed = rows.map((row) => parseMail2000VCard({ url: row.url, data: String(row.data ?? ""), addressBook: label, addressBookUrl: addressBook.url }))
+        return parsed.filter((entry): entry is Mail2000DirectoryEntry => entry !== null)
+      }))
+      scanned.push(...batch.flat())
+    }
+    const entries = scanned
+    return { addressBooks, entries }
+  }
   const api = {
     async list(credential: Mail2000Credential) {
       const dav = await client(credential)
@@ -60,6 +78,16 @@ export function createMail2000Dav(config: { url: string; kind: "caldav" | "cardd
         ? await dav.fetchCalendarObjects({ calendar: selected, objectUrls, ...(args.start && args.end ? { timeRange: { start: args.start, end: args.end } } : {}) })
         : await dav.fetchVCards({ addressBook: selected, objectUrls })
       return { total: rows.length, objects: rows.slice(0, args.limit).map((row) => ({ url: row.url, etag: row.etag, data: String(row.data ?? "").slice(0, 100_000), truncated: String(row.data ?? "").length > 100_000 })) }
+    },
+    async searchDirectory(credential: Mail2000Credential, args: { query: string; kind: "all" | "person" | "group"; limit: number }) {
+      const { addressBooks, entries } = await directory(credential)
+      return { address_books_scanned: addressBooks.length, directory_entries_scanned: entries.length, ...searchMail2000Directory(entries, args) }
+    },
+    async getSelfContext(credential: Mail2000Credential) {
+      const { entries } = await directory(credential)
+      const connectionEmail = credential.username.trim().toLowerCase()
+      const self = entries.find((entry) => entry.kind === "person" && entry.emails.includes(connectionEmail))
+      return { identity_source: "mail2000_connection_email", match: self ? "exact_email" : "not_found", self_contact: self ?? null }
     },
     async create(credential: Mail2000Credential, args: { collection_url: string; filename: string; data: string }) {
       if (!/^[A-Za-z0-9_-]+\.(ics|vcf)$/.test(args.filename) || !args.filename.endsWith(config.kind === "caldav" ? ".ics" : ".vcf")) throw new Error("MAIL2000_DAV_FILENAME_INVALID")

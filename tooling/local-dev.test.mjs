@@ -4,7 +4,7 @@ import { once } from "node:events"
 import { resolve } from "node:path"
 import test from "node:test"
 
-import { adoptDistillationProcessor, canCompleteTriageRecovery, canRestartStandaloneDistillationTriage, configureDistillationLaunch, distillationLaunchConfiguration, distillationLaunchState, distillationPortRole, nextTriageHandoffAction, nextTriageRestoreAction, reconcileDistillationLaunchConfiguration, runtimePolicyReportEnvironment, services, serviceOwnerMatches, shouldMonitorUnmanagedTriageHandoff, signalVerifiedServiceOwner, startupServiceNames, triageHandoffPhase, triageHandoffStartupRecoveryOptions, triggerUnmanagedTriageRecovery, unmanagedTriageRecoveryOptions, waitForHealthy, watchServiceExit } from "./local-dev.mjs"
+import { adoptDistillationProcessor, canCompleteTriageRecovery, canRestartStandaloneDistillationTriage, configureDistillationLaunch, distillationLaunchConfiguration, distillationLaunchState, distillationPortRole, existingServiceLaunchIsCurrent, launchConfigurationDigest, nextTriageHandoffAction, nextTriageRestoreAction, reconcileDistillationLaunchConfiguration, runtimePolicyReportEnvironment, serviceLaunchState, services, serviceOwnerMatches, shouldMonitorUnmanagedTriageHandoff, signalVerifiedServiceOwner, startupServiceNames, triageHandoffPhase, triageHandoffStartupRecoveryOptions, triggerUnmanagedTriageRecovery, unmanagedTriageRecoveryOptions, waitForHealthy, watchServiceExit } from "./local-dev.mjs"
 
 function fixtureChild(script) {
   return spawn(process.execPath, ["-e", script], { stdio: "ignore" })
@@ -12,6 +12,7 @@ function fixtureChild(script) {
 
 test("local development supervisor owns the complete GenioOne web path", () => {
   assert.deepEqual(services.map((service) => [service.name, service.port]), [
+    ["mail2000-connector", 58111],
     ["platform-api", 58082],
     ["platform-web", 5173],
     ["bot-server", 5181],
@@ -20,8 +21,8 @@ test("local development supervisor owns the complete GenioOne web path", () => {
   ])
 })
 
-test("Bot service is ready before the Platform API bootstrap that seeds it", () => {
-  assert.deepEqual(startupServiceNames, ["distillation-triage", "bot-server", "platform-api", "platform-web", "bot-web"])
+test("Mail2000 connector and Bot service are ready before the Platform API bootstrap that seeds them", () => {
+  assert.deepEqual(startupServiceNames, ["distillation-triage", "mail2000-connector", "bot-server", "platform-api", "platform-web", "bot-web"])
   const triage = services.find((service) => service.name === "distillation-triage")
   const bot = services.find((service) => service.name === "bot-server")
   assert.equal(triage.env.GENIO_ONE_DISTILLATION_TRIAGE_TOKEN, "local-distillation-triage")
@@ -41,6 +42,38 @@ test("Bot service is ready before the Platform API bootstrap that seeds it", () 
   }, resolve(triage.cwd, "..", "..")), "other")
   const api = services.find((service) => service.name === "platform-api")
   assert.equal(api.env.GENIO_BOT_SERVICE_ENDPOINT, "http://127.0.0.1:5181")
+  assert.equal(api.env.GENIO_ONE_CONNECTION_VERIFIER_ALLOW_HTTP, "1")
+  assert.equal(api.env.GENIO_ONE_CONNECTION_VERIFIER_ALLOWED_HOSTS, "127.0.0.1,localhost,::1")
+  const mail2000 = services.find((service) => service.name === "mail2000-connector")
+  assert.equal(mail2000.env.CONNECTOR_PORT, "58111")
+})
+
+test("a healthy Platform API without the recorded connector launch is restarted, not reused", () => {
+  // Why: `pnpm dev:api` started by hand is healthy but lacks the Mail2000 endpoint and shared
+  // configuration key, so reusing it would silently leave the Mail2000 connector unavailable.
+  const names = ["GENIO_CONNECTOR_CONFIGURATION_KEY", "GENIO_CONNECTOR_MAIL2000_ENDPOINT"]
+  const configured = launchConfigurationDigest({
+    GENIO_CONNECTOR_CONFIGURATION_KEY: "k".repeat(43),
+    GENIO_CONNECTOR_MAIL2000_ENDPOINT: "http://127.0.0.1:58111/mcp",
+  }, names)
+  const owners = [{ pid: "4242", cwd: "/repo/apps/platform", command: "tsx platform-api/src/server.ts" }]
+  // Manually started API: nothing was recorded by the supervisor.
+  assert.equal(existingServiceLaunchIsCurrent({ recorded: "", configuration: configured, owners }), false)
+  // Supervisor launched these exact processes with this configuration: reuse.
+  const recorded = serviceLaunchState(configured, owners)
+  assert.equal(existingServiceLaunchIsCurrent({ recorded, configuration: configured, owners }), true)
+  // Same config but a different process now owns the port (restarted outside the supervisor).
+  assert.equal(existingServiceLaunchIsCurrent({ recorded, configuration: configured, owners: [{ ...owners[0], pid: "5151" }] }), false)
+  // Supervisor-launched process but connector configuration changed since (e.g. rotated key).
+  const rotated = launchConfigurationDigest({
+    GENIO_CONNECTOR_CONFIGURATION_KEY: "r".repeat(43),
+    GENIO_CONNECTOR_MAIL2000_ENDPOINT: "http://127.0.0.1:58111/mcp",
+  }, names)
+  assert.notEqual(rotated, configured)
+  assert.equal(existingServiceLaunchIsCurrent({ recorded, configuration: rotated, owners }), false)
+  // The recorded state never contains the raw configuration key.
+  assert.equal(recorded.includes("k".repeat(43)), false)
+  assert.equal(typeof services.find((service) => service.name === "platform-api").launchConfiguration, "function")
 })
 
 test("the distillation worker stays off until a local adapter registry exists", () => {

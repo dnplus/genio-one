@@ -24,6 +24,161 @@ data:
       filter/keep_gateway_detail:
         error_mode: propagate
         trace_conditions: ['span.name != "gateway.message.detail"']
+      # Detail spans live only in otel_gateway_details (24h TTL), never in the main traces table.
+      filter/drop_gateway_detail:
+        error_mode: propagate
+        trace_conditions:
+          - span.name == "gateway.message.detail"
+      # The single credential-redaction point: producers export raw payloads, this processor rewrites
+      # replayable credentials by value shape before anything reaches ClickHouse. Identifiers such as
+      # credential_id, token_type or secret_ref are kept. JWTs keep header and claims (signature removed);
+      # bearer tokens, API keys, cookies and OAuth tokens become sha256 fingerprints; passwords, client
+      # secrets, PKCE verifiers, Basic credentials and private keys are removed. ⟦fp:…⟧ is an internal
+      # marker that the last statement replaces with the fingerprint.
+      transform/redact_credentials:
+        error_mode: ignore
+        trace_statements:
+          - context: span
+            statements: &redact_attributes
+              - 'replace_all_patterns(attributes, "value", "-----BEGIN [A-Z ]*PRIVATE KEY-----(?s:.*?)-----END [A-Z ]*PRIVATE KEY-----", "[REDACTED:PRIVATE_KEY]")'
+              - 'replace_all_patterns(attributes, "value", "(eyJ[A-Za-z0-9_-]+\\.eyJ[A-Za-z0-9_-]+)\\.[A-Za-z0-9_-]+", "$$1.[REDACTED:JWT_SIGNATURE]")'
+              - 'replace_all_patterns(attributes, "value", "(?i)([a-z][a-z0-9+.-]*://)([^/:@\\s\"\\\\]+):[^/@\\s\"\\\\]*@", "$$1$$2:[REDACTED]@")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(\"(?:[A-Za-z0-9_-]*(?:password|passwd|secret|credential)|[A-Za-z0-9_-]*(?:private|encryption|signing)_?key(?:_?pem)?|(?:code|pkce)_?verifier)\"\\s*:\\s*\")(?:[^\"\\\\]|\\\\.)*(\"|$)", "$$1[REDACTED]$$2")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(\\\\\"(?:[A-Za-z0-9_-]*(?:password|passwd|secret|credential)|[A-Za-z0-9_-]*(?:private|encryption|signing)_?key(?:_?pem)?|(?:code|pkce)_?verifier)\\\\\"\\s*:\\s*\\\\\")(?:[^\"\\\\]|\\\\\\\\(?:\\\\\"|\\\\\\\\|[^\\\\\"]))*(\\\\\"|$)", "$$1[REDACTED]$$2")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(\"(?:[A-Za-z0-9_-]*token|[A-Za-z0-9_-]*api[_-]?key|cookie|set-cookie|(?:device|user|authorization)_?code)\"\\s*:\\s*\")((?:[^\"\\\\\\[⟦]|\\\\.)+)(\"|$)", "$$1⟦fp:$$2⟧$$3")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(\\\\\"(?:[A-Za-z0-9_-]*token|[A-Za-z0-9_-]*api[_-]?key|cookie|set-cookie|(?:device|user|authorization)_?code)\\\\\"\\s*:\\s*\\\\\")((?:[^\"\\\\\\[⟦]|\\\\\\\\(?:\\\\\"|\\\\\\\\|[^\\\\\"\\[⟦]))+)(\\\\\")", "$$1⟦fp:$$2⟧$$3")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(\"(?:[A-Za-z0-9_-]*(?:password|passwd|secret|credential)|[A-Za-z0-9_-]*(?:private|encryption|signing)_?key(?:_?pem)?|(?:code|pkce)_?verifier)\"\\s*:\\s*)(?:-?[0-9][0-9.eE+-]*|true|false|\\[[^\\[\\]]*\\]|\\{[^{}]*\\})", "$$1\"[REDACTED]\"")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(\\\\\"(?:[A-Za-z0-9_-]*(?:password|passwd|secret|credential)|[A-Za-z0-9_-]*(?:private|encryption|signing)_?key(?:_?pem)?|(?:code|pkce)_?verifier)\\\\\"\\s*:\\s*)(?:-?[0-9][0-9.eE+-]*|true|false)", "$$1\\\"[REDACTED]\\\"")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(\"(?:[A-Za-z0-9_-]*token|[A-Za-z0-9_-]*api[_-]?key|cookie|set-cookie|(?:device|user|authorization)_?code)\"\\s*:\\s*)(-?[0-9][0-9.eE+-]*)", "$$1\"⟦fp:$$2⟧\"")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(<(?:[A-Za-z0-9_.-]+:)?(?:[A-Za-z0-9_-]*(?:password|passwd|secret|credential)|[A-Za-z0-9_-]*(?:private|encryption|signing)_?key(?:_?pem)?|(?:code|pkce)_?verifier)(?:\\s[^>]*)?>)[^<]*(</)", "$$1[REDACTED]$$2")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(<(?:[A-Za-z0-9_.-]+:)?(?:[A-Za-z0-9_-]*token|[A-Za-z0-9_-]*api[_-]?key|cookie|set-cookie|(?:device|user|authorization)_?code)(?:\\s[^>]*)?>)([^<\\[⟦]+)(</)", "$$1⟦fp:$$2⟧$$3")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(\\s(?:[A-Za-z0-9_.-]+:)?(?:[A-Za-z0-9_-]*(?:password|passwd|secret|credential)|[A-Za-z0-9_-]*(?:private|encryption|signing)_?key(?:_?pem)?|(?:code|pkce)_?verifier)\\s*=\\s*)(?:\"[^\"]*\"|\\''[^\\'']*\\'')", "$$1\"[REDACTED]\"")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(\\s(?:[A-Za-z0-9_.-]+:)?(?:[A-Za-z0-9_-]*token|[A-Za-z0-9_-]*api[_-]?key|cookie|set-cookie|(?:device|user|authorization)_?code)\\s*=\\s*)(?:\"([^\"\\[⟦]+)\"|\\''([^\\''\\[⟦]+)\\'')", "$$1\"⟦fp:$$2$$3⟧\"")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(name=\\\\?\"(?:[A-Za-z0-9_-]*(?:password|passwd|secret|credential)|[A-Za-z0-9_-]*(?:private|encryption|signing)_?key(?:_?pem)?|(?:code|pkce)_?verifier)\\\\?\"(?:[^\\r\\n\\\\]|\\\\[^rn])*(?:(?:\\r?\\n|(?:\\\\r)?\\\\n)(?:[^\\r\\n\\\\]|\\\\[^rn])+)*(?:\\r?\\n|(?:\\\\r)?\\\\n)(?:\\r?\\n|(?:\\\\r)?\\\\n))(?:[^\\r\\n\\\\]|\\\\[^rn])*", "$$1[REDACTED]")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(name=\\\\?\"(?:[A-Za-z0-9_-]*token|[A-Za-z0-9_-]*api[_-]?key|cookie|set-cookie|(?:device|user|authorization)_?code)\\\\?\"(?:[^\\r\\n\\\\]|\\\\[^rn])*(?:(?:\\r?\\n|(?:\\\\r)?\\\\n)(?:[^\\r\\n\\\\]|\\\\[^rn])+)*(?:\\r?\\n|(?:\\\\r)?\\\\n)(?:\\r?\\n|(?:\\\\r)?\\\\n))((?:[^\\r\\n\\\\\\[⟦]|\\\\[^rn])+)", "$$1⟦fp:$$2⟧")'
+              - 'replace_all_patterns(attributes, "value", "(?i)([?&#\\s\"\\'']|^)([A-Za-z0-9_]*(?:password|secret|credential)|[A-Za-z0-9_]*(?:private|encryption|signing)_?key|(?:code|pkce)_verifier)=[^&#\\s\"\\\\]+", "$$1$$2=[REDACTED]")'
+              - 'replace_all_patterns(attributes, "value", "(?i)([?&#\\s\"\\'']|^)([A-Za-z0-9_]*token|api_?key|apikey|(?:proxy-)?authorization|device_code|user_code|authorization_code)=([^&#\\s\"\\\\\\[⟦]+)([&#\\s\"\\\\]|$)", "$$1$$2=⟦fp:$$3⟧$$4")'
+              - 'replace_all_patterns(attributes, "value", "(?i)([?&#\\s\"\\'']|^)([A-Za-z0-9_]*token|api_?key|apikey|(?:proxy-)?authorization|device_code|user_code|authorization_code)=([^&#\\s\"\\\\\\[⟦]+)([&#\\s\"\\\\]|$)", "$$1$$2=⟦fp:$$3⟧$$4")'
+              - 'replace_all_patterns(attributes, "value", "(?i)([?&#]|^)(code|key)=([^&#\\s\"\\\\\\[⟦]+)([&#\\s\"\\\\]|$)", "$$1$$2=⟦fp:$$3⟧$$4")'
+              - 'replace_all_patterns(attributes, "value", "(?i)([?&#]|^)(code|key)=([^&#\\s\"\\\\\\[⟦]+)([&#\\s\"\\\\]|$)", "$$1$$2=⟦fp:$$3⟧$$4")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(^|\"authorization\"\\s*:\\s*\"|\\\\\"authorization\\\\\"\\s*:\\s*\\\\\"|authorization:\\s*)(basic)\\s+[A-Za-z0-9+/=]+", "$$1$$2 [REDACTED:BASIC_CREDENTIAL]")'
+              - 'replace_all_patterns(attributes, "value", "(?i)\\b(basic)\\s+[A-Za-z0-9+/]*(?:[0-9+/]|(?-i:[a-z][A-Z]))[A-Za-z0-9+/]*={0,2}", "$$1 [REDACTED:BASIC_CREDENTIAL]")'
+              - 'replace_all_patterns(attributes, "value", "(?i)\\b(basic)\\s+(?:[A-Za-z0-9+/]{4})+(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?([^A-Za-z0-9+/=\\[⟦]|$)", "$$1 [REDACTED:BASIC_CREDENTIAL]$$2")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(^|\"authorization\"\\s*:\\s*\"|\\\\\"authorization\\\\\"\\s*:\\s*\\\\\"|authorization:\\s*)(bearer)\\s+([A-Za-z0-9._~+/=-]+)([^A-Za-z0-9._~+/=\\[-]|$)", "$$1$$2 ⟦fp:$$3⟧$$4")'
+              - 'replace_all_patterns(attributes, "value", "\\b(Bearer)\\s+([A-Za-z0-9._~+/=-]{8,})([^A-Za-z0-9._~+/=\\[-]|$)", "$$1 ⟦fp:$$2⟧$$3")'
+              - 'replace_all_patterns(attributes, "value", "(?i)\\b(bearer)\\s+((?:[A-Za-z0-9._~+/=-]{3,}[0-9._~+/=-][A-Za-z0-9._~+/=-]*|[A-Za-z0-9._~+/=-]*[0-9._~+/=-][A-Za-z0-9._~+/=-]{3,}))([^A-Za-z0-9._~+/=\\[-]|$)", "$$1 ⟦fp:$$2⟧$$3")'
+              - 'replace_all_patterns(attributes, "value", "\\b(sk-[A-Za-z0-9_-]{16,})", "⟦fp:$$1⟧")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(\"(?:proxy-)?authorization\"\\s*:\\s*\")((?:[^\"\\\\\\[⟦]|\\\\.)+)(\")", "$$1⟦fp:$$2⟧$$3")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(\\\\\"(?:proxy-)?authorization\\\\\"\\s*:\\s*\\\\\")((?:[^\"\\\\\\[⟦]|\\\\\\\\(?:\\\\\"|\\\\\\\\|[^\\\\\"\\[⟦]))+)(\\\\\")", "$$1⟦fp:$$2⟧$$3")'
+              - 'replace_all_patterns(attributes, "value", "⟦fp:([^⟧]*)⟧", "$$1", SHA256, "sha256:%s")'
+          - context: spanevent
+            statements: *redact_attributes
+          - context: resource
+            statements: &redact_resource
+              - 'replace_all_patterns(attributes, "value", "-----BEGIN [A-Z ]*PRIVATE KEY-----(?s:.*?)-----END [A-Z ]*PRIVATE KEY-----", "[REDACTED:PRIVATE_KEY]")'
+              - 'replace_all_patterns(attributes, "value", "(eyJ[A-Za-z0-9_-]+\\.eyJ[A-Za-z0-9_-]+)\\.[A-Za-z0-9_-]+", "$$1.[REDACTED:JWT_SIGNATURE]")'
+              - 'replace_all_patterns(attributes, "value", "(?i)([a-z][a-z0-9+.-]*://)([^/:@\\s\"\\\\]+):[^/@\\s\"\\\\]*@", "$$1$$2:[REDACTED]@")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(\"(?:[A-Za-z0-9_-]*(?:password|passwd|secret|credential)|[A-Za-z0-9_-]*(?:private|encryption|signing)_?key(?:_?pem)?|(?:code|pkce)_?verifier)\"\\s*:\\s*\")(?:[^\"\\\\]|\\\\.)*(\"|$)", "$$1[REDACTED]$$2")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(\\\\\"(?:[A-Za-z0-9_-]*(?:password|passwd|secret|credential)|[A-Za-z0-9_-]*(?:private|encryption|signing)_?key(?:_?pem)?|(?:code|pkce)_?verifier)\\\\\"\\s*:\\s*\\\\\")(?:[^\"\\\\]|\\\\\\\\(?:\\\\\"|\\\\\\\\|[^\\\\\"]))*(\\\\\"|$)", "$$1[REDACTED]$$2")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(\"(?:[A-Za-z0-9_-]*token|[A-Za-z0-9_-]*api[_-]?key|cookie|set-cookie|(?:device|user|authorization)_?code)\"\\s*:\\s*\")((?:[^\"\\\\\\[⟦]|\\\\.)+)(\"|$)", "$$1⟦fp:$$2⟧$$3")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(\\\\\"(?:[A-Za-z0-9_-]*token|[A-Za-z0-9_-]*api[_-]?key|cookie|set-cookie|(?:device|user|authorization)_?code)\\\\\"\\s*:\\s*\\\\\")((?:[^\"\\\\\\[⟦]|\\\\\\\\(?:\\\\\"|\\\\\\\\|[^\\\\\"\\[⟦]))+)(\\\\\")", "$$1⟦fp:$$2⟧$$3")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(\"(?:[A-Za-z0-9_-]*(?:password|passwd|secret|credential)|[A-Za-z0-9_-]*(?:private|encryption|signing)_?key(?:_?pem)?|(?:code|pkce)_?verifier)\"\\s*:\\s*)(?:-?[0-9][0-9.eE+-]*|true|false|\\[[^\\[\\]]*\\]|\\{[^{}]*\\})", "$$1\"[REDACTED]\"")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(\\\\\"(?:[A-Za-z0-9_-]*(?:password|passwd|secret|credential)|[A-Za-z0-9_-]*(?:private|encryption|signing)_?key(?:_?pem)?|(?:code|pkce)_?verifier)\\\\\"\\s*:\\s*)(?:-?[0-9][0-9.eE+-]*|true|false)", "$$1\\\"[REDACTED]\\\"")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(\"(?:[A-Za-z0-9_-]*token|[A-Za-z0-9_-]*api[_-]?key|cookie|set-cookie|(?:device|user|authorization)_?code)\"\\s*:\\s*)(-?[0-9][0-9.eE+-]*)", "$$1\"⟦fp:$$2⟧\"")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(<(?:[A-Za-z0-9_.-]+:)?(?:[A-Za-z0-9_-]*(?:password|passwd|secret|credential)|[A-Za-z0-9_-]*(?:private|encryption|signing)_?key(?:_?pem)?|(?:code|pkce)_?verifier)(?:\\s[^>]*)?>)[^<]*(</)", "$$1[REDACTED]$$2")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(<(?:[A-Za-z0-9_.-]+:)?(?:[A-Za-z0-9_-]*token|[A-Za-z0-9_-]*api[_-]?key|cookie|set-cookie|(?:device|user|authorization)_?code)(?:\\s[^>]*)?>)([^<\\[⟦]+)(</)", "$$1⟦fp:$$2⟧$$3")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(\\s(?:[A-Za-z0-9_.-]+:)?(?:[A-Za-z0-9_-]*(?:password|passwd|secret|credential)|[A-Za-z0-9_-]*(?:private|encryption|signing)_?key(?:_?pem)?|(?:code|pkce)_?verifier)\\s*=\\s*)(?:\"[^\"]*\"|\\''[^\\'']*\\'')", "$$1\"[REDACTED]\"")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(\\s(?:[A-Za-z0-9_.-]+:)?(?:[A-Za-z0-9_-]*token|[A-Za-z0-9_-]*api[_-]?key|cookie|set-cookie|(?:device|user|authorization)_?code)\\s*=\\s*)(?:\"([^\"\\[⟦]+)\"|\\''([^\\''\\[⟦]+)\\'')", "$$1\"⟦fp:$$2$$3⟧\"")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(name=\\\\?\"(?:[A-Za-z0-9_-]*(?:password|passwd|secret|credential)|[A-Za-z0-9_-]*(?:private|encryption|signing)_?key(?:_?pem)?|(?:code|pkce)_?verifier)\\\\?\"(?:[^\\r\\n\\\\]|\\\\[^rn])*(?:(?:\\r?\\n|(?:\\\\r)?\\\\n)(?:[^\\r\\n\\\\]|\\\\[^rn])+)*(?:\\r?\\n|(?:\\\\r)?\\\\n)(?:\\r?\\n|(?:\\\\r)?\\\\n))(?:[^\\r\\n\\\\]|\\\\[^rn])*", "$$1[REDACTED]")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(name=\\\\?\"(?:[A-Za-z0-9_-]*token|[A-Za-z0-9_-]*api[_-]?key|cookie|set-cookie|(?:device|user|authorization)_?code)\\\\?\"(?:[^\\r\\n\\\\]|\\\\[^rn])*(?:(?:\\r?\\n|(?:\\\\r)?\\\\n)(?:[^\\r\\n\\\\]|\\\\[^rn])+)*(?:\\r?\\n|(?:\\\\r)?\\\\n)(?:\\r?\\n|(?:\\\\r)?\\\\n))((?:[^\\r\\n\\\\\\[⟦]|\\\\[^rn])+)", "$$1⟦fp:$$2⟧")'
+              - 'replace_all_patterns(attributes, "value", "(?i)([?&#\\s\"\\'']|^)([A-Za-z0-9_]*(?:password|secret|credential)|[A-Za-z0-9_]*(?:private|encryption|signing)_?key|(?:code|pkce)_verifier)=[^&#\\s\"\\\\]+", "$$1$$2=[REDACTED]")'
+              - 'replace_all_patterns(attributes, "value", "(?i)([?&#\\s\"\\'']|^)([A-Za-z0-9_]*token|api_?key|apikey|(?:proxy-)?authorization|device_code|user_code|authorization_code)=([^&#\\s\"\\\\\\[⟦]+)([&#\\s\"\\\\]|$)", "$$1$$2=⟦fp:$$3⟧$$4")'
+              - 'replace_all_patterns(attributes, "value", "(?i)([?&#\\s\"\\'']|^)([A-Za-z0-9_]*token|api_?key|apikey|(?:proxy-)?authorization|device_code|user_code|authorization_code)=([^&#\\s\"\\\\\\[⟦]+)([&#\\s\"\\\\]|$)", "$$1$$2=⟦fp:$$3⟧$$4")'
+              - 'replace_all_patterns(attributes, "value", "(?i)([?&#]|^)(code|key)=([^&#\\s\"\\\\\\[⟦]+)([&#\\s\"\\\\]|$)", "$$1$$2=⟦fp:$$3⟧$$4")'
+              - 'replace_all_patterns(attributes, "value", "(?i)([?&#]|^)(code|key)=([^&#\\s\"\\\\\\[⟦]+)([&#\\s\"\\\\]|$)", "$$1$$2=⟦fp:$$3⟧$$4")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(^|\"authorization\"\\s*:\\s*\"|\\\\\"authorization\\\\\"\\s*:\\s*\\\\\"|authorization:\\s*)(basic)\\s+[A-Za-z0-9+/=]+", "$$1$$2 [REDACTED:BASIC_CREDENTIAL]")'
+              - 'replace_all_patterns(attributes, "value", "(?i)\\b(basic)\\s+[A-Za-z0-9+/]*(?:[0-9+/]|(?-i:[a-z][A-Z]))[A-Za-z0-9+/]*={0,2}", "$$1 [REDACTED:BASIC_CREDENTIAL]")'
+              - 'replace_all_patterns(attributes, "value", "(?i)\\b(basic)\\s+(?:[A-Za-z0-9+/]{4})+(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?([^A-Za-z0-9+/=\\[⟦]|$)", "$$1 [REDACTED:BASIC_CREDENTIAL]$$2")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(^|\"authorization\"\\s*:\\s*\"|\\\\\"authorization\\\\\"\\s*:\\s*\\\\\"|authorization:\\s*)(bearer)\\s+([A-Za-z0-9._~+/=-]+)([^A-Za-z0-9._~+/=\\[-]|$)", "$$1$$2 ⟦fp:$$3⟧$$4")'
+              - 'replace_all_patterns(attributes, "value", "\\b(Bearer)\\s+([A-Za-z0-9._~+/=-]{8,})([^A-Za-z0-9._~+/=\\[-]|$)", "$$1 ⟦fp:$$2⟧$$3")'
+              - 'replace_all_patterns(attributes, "value", "(?i)\\b(bearer)\\s+((?:[A-Za-z0-9._~+/=-]{3,}[0-9._~+/=-][A-Za-z0-9._~+/=-]*|[A-Za-z0-9._~+/=-]*[0-9._~+/=-][A-Za-z0-9._~+/=-]{3,}))([^A-Za-z0-9._~+/=\\[-]|$)", "$$1 ⟦fp:$$2⟧$$3")'
+              - 'replace_all_patterns(attributes, "value", "\\b(sk-[A-Za-z0-9_-]{16,})", "⟦fp:$$1⟧")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(\"(?:proxy-)?authorization\"\\s*:\\s*\")((?:[^\"\\\\\\[⟦]|\\\\.)+)(\")", "$$1⟦fp:$$2⟧$$3")'
+              - 'replace_all_patterns(attributes, "value", "(?i)(\\\\\"(?:proxy-)?authorization\\\\\"\\s*:\\s*\\\\\")((?:[^\"\\\\\\[⟦]|\\\\\\\\(?:\\\\\"|\\\\\\\\|[^\\\\\"\\[⟦]))+)(\\\\\")", "$$1⟦fp:$$2⟧$$3")'
+              - 'replace_all_patterns(attributes, "value", "⟦fp:([^⟧]*)⟧", "$$1", SHA256, "sha256:%s")'
+              - 'delete_matching_keys(attributes, "(?i)^(?:.*[._-])?(?:authorization|proxy-authorization|authorization_?code|cookie|set-cookie|x-api-key|[a-z0-9]*api[_-]?key|[a-z0-9]*token|[a-z0-9]*password|passwd|[a-z0-9]*secret|[a-z0-9]*credential|[a-z0-9]*(?:private|encryption|signing)_?key(?:_?pem)?|(?:code|pkce)_?verifier)$")'
+          - context: scope
+            statements: *redact_resource
+        metric_statements:
+          - context: resource
+            statements: *redact_resource
+          - context: scope
+            statements: *redact_resource
+          - context: datapoint
+            statements: *redact_attributes
+        log_statements:
+          - context: resource
+            statements: *redact_resource
+          - context: scope
+            statements: *redact_resource
+          - context: log
+            statements: *redact_attributes
+          # Structured bodies (kvlist/array) become their JSON string, which is what ClickHouse stores anyway.
+          - context: log
+            conditions:
+              - IsMap(body) or IsList(body)
+            statements:
+              - set(body, String(body))
+          - context: log
+            conditions:
+              - IsString(body)
+            statements:
+              - 'replace_pattern(body, "-----BEGIN [A-Z ]*PRIVATE KEY-----(?s:.*?)-----END [A-Z ]*PRIVATE KEY-----", "[REDACTED:PRIVATE_KEY]")'
+              - 'replace_pattern(body, "(eyJ[A-Za-z0-9_-]+\\.eyJ[A-Za-z0-9_-]+)\\.[A-Za-z0-9_-]+", "$$1.[REDACTED:JWT_SIGNATURE]")'
+              - 'replace_pattern(body, "(?i)([a-z][a-z0-9+.-]*://)([^/:@\\s\"\\\\]+):[^/@\\s\"\\\\]*@", "$$1$$2:[REDACTED]@")'
+              - 'replace_pattern(body, "(?i)(\"(?:[A-Za-z0-9_-]*(?:password|passwd|secret|credential)|[A-Za-z0-9_-]*(?:private|encryption|signing)_?key(?:_?pem)?|(?:code|pkce)_?verifier)\"\\s*:\\s*\")(?:[^\"\\\\]|\\\\.)*(\"|$)", "$$1[REDACTED]$$2")'
+              - 'replace_pattern(body, "(?i)(\\\\\"(?:[A-Za-z0-9_-]*(?:password|passwd|secret|credential)|[A-Za-z0-9_-]*(?:private|encryption|signing)_?key(?:_?pem)?|(?:code|pkce)_?verifier)\\\\\"\\s*:\\s*\\\\\")(?:[^\"\\\\]|\\\\\\\\(?:\\\\\"|\\\\\\\\|[^\\\\\"]))*(\\\\\"|$)", "$$1[REDACTED]$$2")'
+              - 'replace_pattern(body, "(?i)(\"(?:[A-Za-z0-9_-]*token|[A-Za-z0-9_-]*api[_-]?key|cookie|set-cookie|(?:device|user|authorization)_?code)\"\\s*:\\s*\")((?:[^\"\\\\\\[⟦]|\\\\.)+)(\"|$)", "$$1⟦fp:$$2⟧$$3")'
+              - 'replace_pattern(body, "(?i)(\\\\\"(?:[A-Za-z0-9_-]*token|[A-Za-z0-9_-]*api[_-]?key|cookie|set-cookie|(?:device|user|authorization)_?code)\\\\\"\\s*:\\s*\\\\\")((?:[^\"\\\\\\[⟦]|\\\\\\\\(?:\\\\\"|\\\\\\\\|[^\\\\\"\\[⟦]))+)(\\\\\")", "$$1⟦fp:$$2⟧$$3")'
+              - 'replace_pattern(body, "(?i)(\"(?:[A-Za-z0-9_-]*(?:password|passwd|secret|credential)|[A-Za-z0-9_-]*(?:private|encryption|signing)_?key(?:_?pem)?|(?:code|pkce)_?verifier)\"\\s*:\\s*)(?:-?[0-9][0-9.eE+-]*|true|false|\\[[^\\[\\]]*\\]|\\{[^{}]*\\})", "$$1\"[REDACTED]\"")'
+              - 'replace_pattern(body, "(?i)(\\\\\"(?:[A-Za-z0-9_-]*(?:password|passwd|secret|credential)|[A-Za-z0-9_-]*(?:private|encryption|signing)_?key(?:_?pem)?|(?:code|pkce)_?verifier)\\\\\"\\s*:\\s*)(?:-?[0-9][0-9.eE+-]*|true|false)", "$$1\\\"[REDACTED]\\\"")'
+              - 'replace_pattern(body, "(?i)(\"(?:[A-Za-z0-9_-]*token|[A-Za-z0-9_-]*api[_-]?key|cookie|set-cookie|(?:device|user|authorization)_?code)\"\\s*:\\s*)(-?[0-9][0-9.eE+-]*)", "$$1\"⟦fp:$$2⟧\"")'
+              - 'replace_pattern(body, "(?i)(<(?:[A-Za-z0-9_.-]+:)?(?:[A-Za-z0-9_-]*(?:password|passwd|secret|credential)|[A-Za-z0-9_-]*(?:private|encryption|signing)_?key(?:_?pem)?|(?:code|pkce)_?verifier)(?:\\s[^>]*)?>)[^<]*(</)", "$$1[REDACTED]$$2")'
+              - 'replace_pattern(body, "(?i)(<(?:[A-Za-z0-9_.-]+:)?(?:[A-Za-z0-9_-]*token|[A-Za-z0-9_-]*api[_-]?key|cookie|set-cookie|(?:device|user|authorization)_?code)(?:\\s[^>]*)?>)([^<\\[⟦]+)(</)", "$$1⟦fp:$$2⟧$$3")'
+              - 'replace_pattern(body, "(?i)(\\s(?:[A-Za-z0-9_.-]+:)?(?:[A-Za-z0-9_-]*(?:password|passwd|secret|credential)|[A-Za-z0-9_-]*(?:private|encryption|signing)_?key(?:_?pem)?|(?:code|pkce)_?verifier)\\s*=\\s*)(?:\"[^\"]*\"|\\''[^\\'']*\\'')", "$$1\"[REDACTED]\"")'
+              - 'replace_pattern(body, "(?i)(\\s(?:[A-Za-z0-9_.-]+:)?(?:[A-Za-z0-9_-]*token|[A-Za-z0-9_-]*api[_-]?key|cookie|set-cookie|(?:device|user|authorization)_?code)\\s*=\\s*)(?:\"([^\"\\[⟦]+)\"|\\''([^\\''\\[⟦]+)\\'')", "$$1\"⟦fp:$$2$$3⟧\"")'
+              - 'replace_pattern(body, "(?i)(name=\\\\?\"(?:[A-Za-z0-9_-]*(?:password|passwd|secret|credential)|[A-Za-z0-9_-]*(?:private|encryption|signing)_?key(?:_?pem)?|(?:code|pkce)_?verifier)\\\\?\"(?:[^\\r\\n\\\\]|\\\\[^rn])*(?:(?:\\r?\\n|(?:\\\\r)?\\\\n)(?:[^\\r\\n\\\\]|\\\\[^rn])+)*(?:\\r?\\n|(?:\\\\r)?\\\\n)(?:\\r?\\n|(?:\\\\r)?\\\\n))(?:[^\\r\\n\\\\]|\\\\[^rn])*", "$$1[REDACTED]")'
+              - 'replace_pattern(body, "(?i)(name=\\\\?\"(?:[A-Za-z0-9_-]*token|[A-Za-z0-9_-]*api[_-]?key|cookie|set-cookie|(?:device|user|authorization)_?code)\\\\?\"(?:[^\\r\\n\\\\]|\\\\[^rn])*(?:(?:\\r?\\n|(?:\\\\r)?\\\\n)(?:[^\\r\\n\\\\]|\\\\[^rn])+)*(?:\\r?\\n|(?:\\\\r)?\\\\n)(?:\\r?\\n|(?:\\\\r)?\\\\n))((?:[^\\r\\n\\\\\\[⟦]|\\\\[^rn])+)", "$$1⟦fp:$$2⟧")'
+              - 'replace_pattern(body, "(?i)([?&#\\s\"\\'']|^)([A-Za-z0-9_]*(?:password|secret|credential)|[A-Za-z0-9_]*(?:private|encryption|signing)_?key|(?:code|pkce)_verifier)=[^&#\\s\"\\\\]+", "$$1$$2=[REDACTED]")'
+              - 'replace_pattern(body, "(?i)([?&#\\s\"\\'']|^)([A-Za-z0-9_]*token|api_?key|apikey|(?:proxy-)?authorization|device_code|user_code|authorization_code)=([^&#\\s\"\\\\\\[⟦]+)([&#\\s\"\\\\]|$)", "$$1$$2=⟦fp:$$3⟧$$4")'
+              - 'replace_pattern(body, "(?i)([?&#\\s\"\\'']|^)([A-Za-z0-9_]*token|api_?key|apikey|(?:proxy-)?authorization|device_code|user_code|authorization_code)=([^&#\\s\"\\\\\\[⟦]+)([&#\\s\"\\\\]|$)", "$$1$$2=⟦fp:$$3⟧$$4")'
+              - 'replace_pattern(body, "(?i)([?&#]|^)(code|key)=([^&#\\s\"\\\\\\[⟦]+)([&#\\s\"\\\\]|$)", "$$1$$2=⟦fp:$$3⟧$$4")'
+              - 'replace_pattern(body, "(?i)([?&#]|^)(code|key)=([^&#\\s\"\\\\\\[⟦]+)([&#\\s\"\\\\]|$)", "$$1$$2=⟦fp:$$3⟧$$4")'
+              - 'replace_pattern(body, "(?i)(^|\"authorization\"\\s*:\\s*\"|\\\\\"authorization\\\\\"\\s*:\\s*\\\\\"|authorization:\\s*)(basic)\\s+[A-Za-z0-9+/=]+", "$$1$$2 [REDACTED:BASIC_CREDENTIAL]")'
+              - 'replace_pattern(body, "(?i)\\b(basic)\\s+[A-Za-z0-9+/]*(?:[0-9+/]|(?-i:[a-z][A-Z]))[A-Za-z0-9+/]*={0,2}", "$$1 [REDACTED:BASIC_CREDENTIAL]")'
+              - 'replace_pattern(body, "(?i)\\b(basic)\\s+(?:[A-Za-z0-9+/]{4})+(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?([^A-Za-z0-9+/=\\[⟦]|$)", "$$1 [REDACTED:BASIC_CREDENTIAL]$$2")'
+              - 'replace_pattern(body, "(?i)(^|\"authorization\"\\s*:\\s*\"|\\\\\"authorization\\\\\"\\s*:\\s*\\\\\"|authorization:\\s*)(bearer)\\s+([A-Za-z0-9._~+/=-]+)([^A-Za-z0-9._~+/=\\[-]|$)", "$$1$$2 ⟦fp:$$3⟧$$4")'
+              - 'replace_pattern(body, "\\b(Bearer)\\s+([A-Za-z0-9._~+/=-]{8,})([^A-Za-z0-9._~+/=\\[-]|$)", "$$1 ⟦fp:$$2⟧$$3")'
+              - 'replace_pattern(body, "(?i)\\b(bearer)\\s+((?:[A-Za-z0-9._~+/=-]{3,}[0-9._~+/=-][A-Za-z0-9._~+/=-]*|[A-Za-z0-9._~+/=-]*[0-9._~+/=-][A-Za-z0-9._~+/=-]{3,}))([^A-Za-z0-9._~+/=\\[-]|$)", "$$1 ⟦fp:$$2⟧$$3")'
+              - 'replace_pattern(body, "\\b(sk-[A-Za-z0-9_-]{16,})", "⟦fp:$$1⟧")'
+              - 'replace_pattern(body, "(?i)(\"(?:proxy-)?authorization\"\\s*:\\s*\")((?:[^\"\\\\\\[⟦]|\\\\.)+)(\")", "$$1⟦fp:$$2⟧$$3")'
+              - 'replace_pattern(body, "(?i)(\\\\\"(?:proxy-)?authorization\\\\\"\\s*:\\s*\\\\\")((?:[^\"\\\\\\[⟦]|\\\\\\\\(?:\\\\\"|\\\\\\\\|[^\\\\\"\\[⟦]))+)(\\\\\")", "$$1⟦fp:$$2⟧$$3")'
+              - 'replace_pattern(body, "⟦fp:([^⟧]*)⟧", "$$1", SHA256, "sha256:%s")'
+      # Attributes whose key names a credential (e.g. a native producer sending authorization -> opaque
+      # value) carry nothing a value-shape rule can recognise. Values already rewritten above are kept.
+      # The redaction processor offers no plain sha256, so these fingerprints are sha3 (listed in
+      # redaction.masked.keys) and are not comparable with the sha256: fingerprints above.
+      redaction/credential_keys_remove:
+        allow_all_keys: true
+        blocked_key_patterns: ['(?i)^(?:.*[._-])?(?:[a-z0-9]*password|passwd|[a-z0-9]*secret|[a-z0-9]*credential|[a-z0-9]*(?:private|encryption|signing)_?key(?:_?pem)?|(?:code|pkce)_?verifier)$']
+        allowed_values: ['^(?:(?:Bearer|Basic) )?(?:sha256:[0-9a-f]{64}|\[REDACTED(?::[A-Z_]+)?\])$', '^(?:Bearer )?eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.\[REDACTED:JWT_SIGNATURE\]$']
+        summary: debug
+      redaction/credential_keys_fingerprint:
+        allow_all_keys: true
+        blocked_key_patterns: ['(?i)^(?:.*[._-])?(?:authorization|proxy-authorization|authorization_?code|cookie|set-cookie|x-api-key|[a-z0-9]*api[_-]?key|[a-z0-9]*token)$']
+        allowed_values: ['^(?:(?:Bearer|Basic) )?(?:sha256:[0-9a-f]{64}|\[REDACTED(?::[A-Z_]+)?\])$', '^(?:Bearer )?eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.\[REDACTED:JWT_SIGNATURE\]$']
+        hash_function: sha3
+        summary: debug
     exporters:
       clickhouse:
         endpoint: {{ printf "tcp://%s-clickhouse:9000?dial_timeout=10s" (include "genio-one.fullname" .) }}
@@ -53,10 +208,10 @@ data:
     service:
       extensions: [health_check, file_storage]
       pipelines:
-        traces: { receivers: [otlp], processors: [memory_limiter], exporters: [clickhouse] }
-        traces/gateway_detail: { receivers: [otlp], processors: [memory_limiter, filter/keep_gateway_detail], exporters: [clickhouse/gateway_detail] }
-        metrics: { receivers: [otlp], processors: [memory_limiter], exporters: [clickhouse] }
-        logs: { receivers: [otlp], processors: [memory_limiter], exporters: [clickhouse] }
+        traces: { receivers: [otlp], processors: [memory_limiter, filter/drop_gateway_detail, transform/redact_credentials, redaction/credential_keys_remove, redaction/credential_keys_fingerprint], exporters: [clickhouse] }
+        traces/gateway_detail: { receivers: [otlp], processors: [memory_limiter, filter/keep_gateway_detail, transform/redact_credentials, redaction/credential_keys_remove, redaction/credential_keys_fingerprint], exporters: [clickhouse/gateway_detail] }
+        metrics: { receivers: [otlp], processors: [memory_limiter, transform/redact_credentials, redaction/credential_keys_remove, redaction/credential_keys_fingerprint], exporters: [clickhouse] }
+        logs: { receivers: [otlp], processors: [memory_limiter, transform/redact_credentials, redaction/credential_keys_remove, redaction/credential_keys_fingerprint], exporters: [clickhouse] }
   gravitee-reporter.yaml: |
     extensions:
       health_check: { endpoint: 0.0.0.0:13133 }

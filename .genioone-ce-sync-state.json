@@ -5343,15 +5343,15 @@
       "mode": 420
     },
     "apps/connectors/install.ts": {
-      "sha256": "352c54ef2e589b85ca73608584fa52b4532f6e75e4ac631b49e44feea368b6e9",
+      "sha256": "4d99ab6e87d0b1574529b967a595307434320ee22ebaea3fee0f351d9f47cb4c",
       "mode": 420
     },
     "apps/connectors/mail2000/dav.test.ts": {
-      "sha256": "db696fb1c743dd3ffcb6a3379717919a4125fd25cdb82fde99b7eb2503bdfaca",
+      "sha256": "abe7f24ba2b607fe850e51771205accde5d49adb55d39fb39aafc7b6487dc554",
       "mode": 420
     },
     "apps/connectors/mail2000/dav.ts": {
-      "sha256": "b49f8e280ff55f743be9556487380284d5d6263d8337d5391fc05d0df0c29133",
+      "sha256": "90e0183d19d9be81bb7e15a3c58ee729a8d550333f1a10af3341fb14e3c77c5b",
       "mode": 420
     },
     "apps/connectors/mail2000/imap.test.ts": {
@@ -5363,11 +5363,11 @@
       "mode": 420
     },
     "apps/connectors/mail2000/install.test.ts": {
-      "sha256": "6cdcaee26430b7af66303903e45f6d331e37fe95e105704b6c7cb412e2c9cdc3",
+      "sha256": "de0ee7043993f7089165a8f279e4140035dd6fd4e14bf73ad5765cd068bde744",
       "mode": 420
     },
     "apps/connectors/mail2000/install.ts": {
-      "sha256": "74a59b5a2e2fef675f3400dde642366e344d7c6990f6342a92ea4f3ed975aff3",
+      "sha256": "46300287bbd7d0eb8acc88b5fee5e6169a3740b3badfcb845bfe521d8b35af97",
       "mode": 420
     },
     "apps/connectors/mail2000/main.ts": {
@@ -5383,11 +5383,11 @@
       "mode": 420
     },
     "apps/connectors/mail2000/server.test.ts": {
-      "sha256": "4ea7cc4a8278c5f8d4f83ddf0946d34362d7de70753d087202214267860f6e0d",
+      "sha256": "dc4bcb93a2b0f3c93430379a62196ab9609dafa8a933805d8e4dc4430fbadcea",
       "mode": 420
     },
     "apps/connectors/mail2000/server.ts": {
-      "sha256": "e1d84d14485998ceb93dca0d481a82eef968a9c1b482cab6c43e3c0d899b2d01",
+      "sha256": "08f16008625102fa93d2c05e8b09557364107ec8204cf72fcc3788ee79608ffc",
       "mode": 420
     },
     "apps/connectors/mail2000/site.test.ts": {
@@ -5404,6 +5404,14 @@
     },
     "apps/connectors/mail2000/smtp.ts": {
       "sha256": "0bf7a2dcbfbbceae1cbe312372cab88e3d2767d26ec30bb35022c13014460c13",
+      "mode": 420
+    },
+    "apps/connectors/mail2000/vcard.test.ts": {
+      "sha256": "68e59e53899fbcea19556f01b704f44715070409b3e5caddf92781a7d030d5b0",
+      "mode": 420
+    },
+    "apps/connectors/mail2000/vcard.ts": {
+      "sha256": "bf91870d02c1601f2301e6ca717d4caaef33802709c155232efe3140e3c808ad",
       "mode": 420
     },
     "apps/connectors/package.json": {
@@ -5515,7 +5523,7 @@
       "mode": 420
     },
     "apps/platform/.env.example": {
-      "sha256": "8b28042abcf1d4a62c19d0e2e8a8ad0eee828e1213c2c59ea1df7c80086e8930",
+      "sha256": "7c816f321d94d6a77777b5d940b1e714dea92ce778b531c8ad8e257758231242",
       "mode": 420
     },
     "apps/platform/AGENTS.md": {
@@ -5543,7 +5551,7 @@
       "mode": 420
     },
     "apps/platform/config/ai-mcp-gateway/provider-versions.env": {
-      "sha256": "28274ec481628f361602b33707b9104e911da18ca39aea820980f06d76e1e66c",
+      "sha256": "5292eaa7cda966d97abdc4288e49e53c324e2279886fa7024f00b9e986480440",
       "mode": 420
     },
     "apps/platform/config/ai-mcp-gateway/README.md": {
@@ -5563,7 +5571,7 @@
       "mode": 420
     },
     "apps/platform/config/gravitee/Dockerfile.jdbc": {
-      "sha256": "1c941a1b48744dd4eeea4701aa4dbf5bd7f3c193519dc41462fdcab7494ec24c",
+      "sha256": "e7eadb850a5b947fd1b6a71afd9be9d3bf33e0cca34ec57afecb425fd916c682",
       "mode": 420
     },
     "apps/platform/config/keycloak/genio-one-realm.json": {
@@ -5575,7 +5583,7 @@
       "mode": 420
     },
     "apps/platform/config/otel-collector-clickhouse.yaml": {
-      "sha256": "a4bcf6052c21f620bb28cc165f5a8d6c01c76737d586543e36e8833f8f4ed571",
+      "sha256": "6177993ec503dd19c12f25aaaf52b654103d897bc333bdf1b57bd97cce8d7daa",
       "mode": 420
     },
     "apps/platform/config/otel-collector.yaml": {
@@ -5591,7 +5599,7 @@
       "mode": 420
     },
     "apps/platform/config/release/oss-inventory.json": {
-      "sha256": "341bf652d166fb85588dc8439ccb82940ffc31a932ba6ccd55c87545f117ad39",
+      "sha256": "5875c43a095c6630af97bfc3ff0afa25be50dba815934350d5d4cd541937fb17",
       "mode": 420
     },
     "apps/platform/config/uat-scenarios.json": {
@@ -5607,7 +5615,7 @@
       "mode": 420
     },
     "apps/platform/installer/Dockerfile": {
-      "sha256": "8cfadd81788e3698c4f96d91c458d05d26c8acf8d5c80169e99bf0b8bb5460a0",
+      "sha256": "cde0f9f915c40e73e7f4226fb19e609142a89262d2dcaed1a1a50fd0bdb0743d",
       "mode": 420
     },
     "apps/platform/management.html": {
@@ -7023,7 +7031,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/endpoint-credentials.test.ts": {
-      "sha256": "723c1b7aa9504d1c70f75f7db71eccaf7b42edcd340ba58db83bbdded75bbf36",
+      "sha256": "43a42924c4ff006657bc4693f9aa52255e5067642e6a0a4ce76bbb79e2a09a2e",
       "mode": 420
     },
     "apps/platform/platform-api/test/endpoint-lifecycle-postgres.test.ts": {
@@ -7459,7 +7467,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/components/page-header.tsx": {
-      "sha256": "6a15b03b9d8ca8389693547420256ecfb727e64913db78f3c246670904481f2c",
+      "sha256": "436cfde52ad719e6dc1bd798fd32e2af2ea3c6198143a11b34c8d9f2d966c64c",
       "mode": 420
     },
     "apps/platform/platform-web/src/components/relation-value.tsx": {
@@ -8063,7 +8071,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/i18n.ts": {
-      "sha256": "02c565a533025a11db4f965e43d1b173468c6c5f4feafb1c883d21b545f75868",
+      "sha256": "96da043dafc6403acad458d6f9c8cd96dd756b71bd79d7313c4da1fc0541e7bb",
       "mode": 420
     },
     "apps/platform/platform-web/src/i18n/admin-governance.ts": {
@@ -8208,6 +8216,10 @@
     },
     "apps/platform/platform-web/test/one-policy-drawer.dom.test.tsx": {
       "sha256": "cf91e9a8d46ea5bbcb83124af86b6d9e67efac6c30ee99ffbda1cfd6e76a10d7",
+      "mode": 420
+    },
+    "apps/platform/platform-web/test/page-header.dom.test.tsx": {
+      "sha256": "85d42ddcd4384dc66bbfbf87f4dfc796aa146880b95387b59ffdc77915de7533",
       "mode": 420
     },
     "apps/platform/platform-web/test/policy-authoring-governance.dom.test.tsx": {
@@ -8359,11 +8371,11 @@
       "mode": 420
     },
     "deploy/helm/genio-one/Chart.lock": {
-      "sha256": "86f2d51131280f07cb95bdc68db87c491d91d8f2f23a1db8dc707ffe5468c90d",
+      "sha256": "7dc3428fee5038aa776651fe01e3821b4f080620bec131239b122bdd99ba8ad7",
       "mode": 420
     },
     "deploy/helm/genio-one/Chart.yaml": {
-      "sha256": "e0da850ef96b8cdab4b32f126ae1ef9b13a83dc4e0757ac359dacd34d50c7539",
+      "sha256": "f288808ed4c129eb2ef2db1fbe31f71710f020acf7ee7faf28a3b6869f8dd9d2",
       "mode": 420
     },
     "deploy/helm/genio-one/charts/ai-gateway-crds-helm-v1.1.0.tgz": {
@@ -8374,8 +8386,8 @@
       "sha256": "2d9cbdc0516257cb6f78c50ae19cf43a3ac8860fd8aeaa89b683225a9243e274",
       "mode": 420
     },
-    "deploy/helm/genio-one/charts/gateway-helm-v1.8.4.tgz": {
-      "sha256": "315a3cc5f23171735129fb7e5449edc3e5ab2693aefffcceacc96f5a24c2bc09",
+    "deploy/helm/genio-one/charts/gateway-helm-v1.9.1.tgz": {
+      "sha256": "68ce74961eeb5fc5e395628d6bbed9305a85b34619bd7ee17b01187f101bb8c5",
       "mode": 420
     },
     "deploy/helm/genio-one/files/keycloak-theme/genio-one/login/messages/messages_en.properties": {
@@ -8415,7 +8427,7 @@
       "mode": 420
     },
     "deploy/helm/genio-one/templates/analytics.yaml": {
-      "sha256": "352b364d50ed8d3010d5538d97fad53a5b407535cbf5d7a8b3089bcebfb5a5fc",
+      "sha256": "a78f2dfcf49627ba744a591b0eb6adaac4ff1cb6d01c0c3b548709f67bfcae52",
       "mode": 420
     },
     "deploy/helm/genio-one/templates/archify.yaml": {
@@ -8487,7 +8499,7 @@
       "mode": 420
     },
     "deploy/helm/genio-one/values.yaml": {
-      "sha256": "82d567ebd03c1c62389dfa5a928ce47dc99730b82cfe70484d322b1490088363",
+      "sha256": "5bb1b4aee43094d4b36933cac0a9c241d85a4d8c964ce4c2e855869c0107de28",
       "mode": 420
     },
     "docs/public/ce/assets/resource-management.png": {
@@ -8503,7 +8515,7 @@
       "mode": 420
     },
     "docs/public/ce/helm.md": {
-      "sha256": "a4630064280936ac7d4d3972913644afce0b08c7fff7d4c6c415f643060d4ee7",
+      "sha256": "9f0f1971b39e25a175bc8141886b8d29acbb4db1b14132eafbfc1fe14e4c5b4a",
       "mode": 420
     },
     "docs/public/ce/known-issues.md": {
@@ -8799,7 +8811,7 @@
       "mode": 420
     },
     "packages/telemetry/src/browser-observability.ts": {
-      "sha256": "d0b4dba6436f41841a055783a15aed181703b28e893141f057480b0360ec7313",
+      "sha256": "58cda82f3933eecce9831f3dc9d4ed70ecf0461914263518553596f63da29e08",
       "mode": 420
     },
     "packages/telemetry/src/browser-telemetry-http.test.ts": {
@@ -8811,7 +8823,7 @@
       "mode": 420
     },
     "packages/telemetry/src/fastify-observability.test.ts": {
-      "sha256": "ea4daf94be6b1b015379dfcca204df3f29591aacc959f732dc8a135b795f58de",
+      "sha256": "0a4b768f31264ecb8ecc36d73b48b5d3ed9f80e3c3c8b5187efce73aa727c678",
       "mode": 420
     },
     "packages/telemetry/src/fastify-observability.ts": {
@@ -8823,35 +8835,35 @@
       "mode": 420
     },
     "packages/telemetry/src/native-telemetry.test.ts": {
-      "sha256": "d78b2c6a340ab3917938d16a6da5c42a6cc555f364281c3f7f7e97b79add3ebb",
+      "sha256": "c6c15403577eb635e89cc7995d3cd8c75429af4e308d4e3bbd290a3baa6cdb28",
       "mode": 420
     },
     "packages/telemetry/src/native-telemetry.ts": {
-      "sha256": "84b5753e5fccd5f82d3d3de0454becce2bccd412ce9e4d58eeb25df0258027b2",
+      "sha256": "85bb3baea326c9a43532ceae807b006fa163fe655ee5457f4c5dcc65ebf89a73",
       "mode": 420
     },
     "packages/telemetry/src/operation-observability.test.ts": {
-      "sha256": "4f5024dde4de4335792d15faa41bdfb8cb91767f221e756c6a4e7befaf2e9132",
+      "sha256": "b11262417a873d46c7f110de96ede675c34ba1f9e518201f44d83fac43372f99",
       "mode": 420
     },
     "packages/telemetry/src/operation-observability.ts": {
-      "sha256": "5792f30ee400df16bb916f1a6f6738884ac0ae804a67fd041845141d2e38ffb4",
+      "sha256": "6d78ab3664a337b73b1fd2ceb245874c4f36d689ca4d9b18d6eca37868c28d6f",
       "mode": 420
     },
     "packages/telemetry/src/operational-log.test.ts": {
-      "sha256": "ad69a1276a03ccdc2957f3d5f48c2d260a534b8ddaaba0e64b449eb6da1e635b",
+      "sha256": "5fdf11475db7369896a4dacf679323bd3332321bc9427d34f0674012a59bbe69",
       "mode": 420
     },
     "packages/telemetry/src/operational-log.ts": {
-      "sha256": "e1d50a279a5cf48af9200b687884fd84cc5f0917c2caee6bda41607e15680029",
+      "sha256": "b23e1e062070975e2063c46c2a59d3ec2d729c7dfb05ee10bb1b8d18e34add37",
       "mode": 420
     },
     "packages/telemetry/src/otlp-detail-capture.test.ts": {
-      "sha256": "6b2db27884279f53255a0d91a496f7cbef13cf4d7b2e8395b83c6f539a153074",
+      "sha256": "7a47eda7d18a65dceee053920b267c80ad3541d8b365fd9e63ea863bc4311630",
       "mode": 420
     },
     "packages/telemetry/src/otlp-detail-capture.ts": {
-      "sha256": "9fe056b11d1f256e962a24bf2863ac899b8f7aa155b280c225b0e41ea47d7ca6",
+      "sha256": "3257f71e55151eadb45f69616a5f65f6f75cb7ed70b879a8317a9b906cf2c943",
       "mode": 420
     },
     "packages/telemetry/src/otlp-observability.test.ts": {
@@ -8931,7 +8943,7 @@
       "mode": 420
     },
     "runtimes/gateway/controller/Dockerfile": {
-      "sha256": "55afb5b44796a2b04507ebbe298f4c3fa716be65ffb7f6132ebe85877d2fc23e",
+      "sha256": "d663c4ebeff08cdbf19b57dd2ae3048b2e137d7a3289117d922061b1b12b0690",
       "mode": 420
     },
     "runtimes/gateway/controller/file-state.ts": {
@@ -9311,11 +9323,11 @@
       "mode": 420
     },
     "tooling/local-dev.mjs": {
-      "sha256": "8bf5d9183a74f9490dcaea354fefa36e746b2749bba90e2cfa30030104235e93",
+      "sha256": "75a955cd84d885e5f8e1bc69eed04b4313b511ca42bed58f1c13bc992bb4d79a",
       "mode": 420
     },
     "tooling/local-dev.test.mjs": {
-      "sha256": "feff918f1a1a137389c8a417fdd74b9baa5eea8c8a6e3ae0c8580607e8c77e8a",
+      "sha256": "a9d02a20a6027ff7dcc62036522266fe8e5db7854dd67793d6d7c0a971b3a97a",
       "mode": 420
     },
     "tooling/oss-export.mjs": {

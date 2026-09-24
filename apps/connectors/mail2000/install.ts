@@ -5,6 +5,7 @@ export const MAIL2000_TOOLS = [
   "list_mailboxes", "search_mail", "read_mail", "set_mail_flags", "move_mail", "delete_mail", "append_mail",
   "create_mailbox", "rename_mailbox", "delete_mailbox", "send_mail",
   ...["caldav", "carddav"].flatMap((prefix) => ["list_collections", "read_objects", "create_object", "update_object", "delete_object"].map((operation) => `${prefix}_${operation}`)),
+  "carddav_search_directory", "carddav_get_self_context",
 ]
 export function installMail2000(configuration: CommonInstallConfig, request: Api) {
   const site = configuration.connectorConfiguration?.kind === "mail2000" ? configuration.connectorConfiguration : undefined

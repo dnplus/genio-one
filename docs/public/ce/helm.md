@@ -6,7 +6,7 @@ The CE chart is exported at `deploy/helm/genio-one`. It is a source distribution
 
 You need a Kubernetes cluster, `kubectl`, Helm `v4.2.4`, registry push access, and cluster-administrator coordination for the Gateway API and Envoy AI Gateway CRDs. The CE profile does not install those cluster-scoped CRDs (`aiMcpGateway.installCrds: false`). It deploys single replicas, disables API management and Ingress, and leaves hostnames and TLS under your control.
 
-The local-cluster validation reference is kind `v0.33.0` with node image `kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed`, Helm `v4.2.4`, and kubectl `v1.36.2`. It is a reproducible test target, not a compatibility or production-readiness guarantee.
+The local-cluster validation reference is kind `v0.33.0` with node image `kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed`, Helm `v4.2.4`, and kubectl `v1.36.4`. It is a reproducible test target, not a compatibility or production-readiness guarantee.
 
 ## Build and publish images
 
@@ -71,7 +71,7 @@ Before rendering the main chart for the first time, have the cluster administrat
 
 ```sh
 mkdir -p .local/ce-helm
-helm show crds deploy/helm/genio-one/charts/gateway-helm-v1.8.4.tgz \
+helm show crds deploy/helm/genio-one/charts/gateway-helm-v1.9.1.tgz \
   > .local/ce-helm/gateway-crds.yaml
 kubectl apply --server-side -f .local/ce-helm/gateway-crds.yaml
 

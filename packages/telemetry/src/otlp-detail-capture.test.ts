@@ -1,11 +1,13 @@
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import test from "node:test"
 
 import {
   createOtlpGatewayDetailCapture,
   gatewayDetailActivityReference,
   GatewayDetailBodyBuffer,
-  sanitizeGatewayDetailBody,
+  captureDetailBody,
+  createDetailBodyDecoder,
 } from "./otlp-detail-capture"
 
 test("captured Activity metadata expires with the detail retention window", () => {
@@ -59,7 +61,11 @@ test("detail capture emits request and response under one OTel correlation", asy
   )
 })
 
-test("detail capture removes credentials from structured request and response bodies", async () => {
+
+// Accounting needs the payload the gateway actually carried. Redaction is the analytics
+// collector's job (transform/redact_credentials); if the SDK rewrote bodies, the collector
+// could never be tuned against real traffic and AAA identifiers would be lost at the source.
+test("detail capture exports request and response bodies unmodified", async () => {
   let payload: Record<string, any> | undefined
   const capture = createOtlpGatewayDetailCapture({
     endpoint: "http://collector.test/v1/traces",
@@ -68,24 +74,17 @@ test("detail capture removes credentials from structured request and response bo
       return true
     },
   })
+  const request = JSON.stringify({ credential_id: "cred-1", token_type: "Bearer", authorization: "Bearer raw-request-token" })
+  const response = "data: {\"choices\":[{\"delta\":{\"content\":\"streamed\"}}]}\n\n"
   await capture.capture({
     tenantId: "tenant-test",
-    correlationId: "correlation-secret",
-    requestBody: Buffer.from(JSON.stringify({
-      prompt: "safe",
-      note: "embedded Bearer request-inline-secret must not survive",
-      authorization: "Bearer request-secret",
-      nested: { api_key: "provider-secret", note: "visible" },
-      clientSecret: "camel-secret",
-    })),
+    correlationId: "correlation-raw",
+    requestBody: Buffer.from(request),
     requestBodyTruncated: false,
-    requestContentType: "application/json; charset=utf-8",
-    responseBody: Buffer.from(JSON.stringify({
-      result: "safe",
-      access_token: "response-secret",
-    })),
+    requestContentType: "application/json",
+    responseBody: Buffer.from(response),
     responseBodyTruncated: false,
-    responseContentType: "application/json",
+    responseContentType: "text/event-stream",
   })
 
   const span = payload?.resourceSpans[0].scopeSpans[0].spans[0]
@@ -93,33 +92,31 @@ test("detail capture removes credentials from structured request and response bo
     attribute.key,
     attribute.value.stringValue ?? attribute.value.boolValue,
   ]))
-  assert.equal(attributes.get("input.value"), '{"prompt":"safe","note":"embedded [REDACTED] must not survive","authorization":"[REDACTED]","nested":{"api_key":"[REDACTED]","note":"visible"},"clientSecret":"[REDACTED]"}')
-  assert.equal(attributes.get("output.value"), '{"result":"safe","access_token":"[REDACTED]"}')
-  assert.equal(attributes.get("input.redacted"), true)
-  assert.equal(attributes.get("output.redacted"), true)
+  assert.equal(attributes.get("input.value"), request)
+  assert.equal(attributes.get("output.value"), response)
+  assert.equal(attributes.get("input.encoding"), "utf8")
+  assert.equal(attributes.get("output.mime_type"), "text/event-stream")
   assert.match(String(attributes.get("input.sha256")), /^[a-f0-9]{64}$/)
-  assert.equal(JSON.stringify(payload).includes("request-secret"), false)
-  assert.equal(JSON.stringify(payload).includes("request-inline-secret"), false)
-  assert.equal(JSON.stringify(payload).includes("provider-secret"), false)
-  assert.equal(JSON.stringify(payload).includes("camel-secret"), false)
-  assert.equal(JSON.stringify(payload).includes("response-secret"), false)
 })
 
-test("detail capture omits unstructured and invalid structured payloads", () => {
-  const text = sanitizeGatewayDetailBody(Buffer.from("Bearer plaintext-secret"), "text/plain")
-  assert.deepEqual(
-    { value: text.value, redacted: text.redacted, disposition: text.disposition },
-    { value: "[CONTENT_NOT_CAPTURED]", redacted: true, disposition: "OMITTED" },
-  )
-  const invalidJson = sanitizeGatewayDetailBody(Buffer.from("{not-json"), "application/json")
-  assert.equal(invalidJson.value, "[CONTENT_NOT_CAPTURED]")
-  assert.equal(invalidJson.redacted, true)
+// The collector can only redact text it can read, so a body with invalid UTF-8 (binary,
+// multipart) must stay text rather than become base64 that hides a credential from it.
+test("non-UTF-8 bodies stay redactable text and keep the original digest", () => {
+  const binary = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from("&access_token=raw-in-binary")])
+  const captured = captureDetailBody(binary)
+  assert.equal(captured.encoding, "utf8-lossy")
+  assert.ok(captured.value.includes("access_token=raw-in-binary"))
+  assert.equal(captured.digest, createHash("sha256").update(binary).digest("hex"))
+  assert.equal(captureDetailBody(Buffer.from("{not-json")).value, "{not-json")
 })
 
-test("nested native login payloads redact one-time credentials and callback codes", () => {
-  const body = Buffer.from(JSON.stringify({ message: JSON.stringify({ userCode: "private-device-code", verificationUrl: "https://login.test/callback?code=private-callback-code" }) }))
-  const captured = sanitizeGatewayDetailBody(body, "application/json")
-  assert.equal(captured.redacted, true)
-  assert.equal(captured.value.includes("private-device-code"), false)
-  assert.equal(captured.value.includes("private-callback-code"), false)
+// Evidence must not silently lose bytes: an incomplete multibyte prefix buffered from one part
+// that turns invalid in the next part is kept (as U+FFFD), not dropped.
+test("streamed decoding keeps a buffered prefix when the sequence turns invalid", () => {
+  const decode = createDetailBodyDecoder()
+  const first = decode(Uint8Array.from([0x61, 0xe2]), false)
+  const second = decode(Uint8Array.from([0x41]), true)
+  assert.equal(first.value + second.value, "a\uFFFDA")
+  assert.equal(first.encoding, "utf8")
+  assert.equal(second.encoding, "utf8-lossy")
 })

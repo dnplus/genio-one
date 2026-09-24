@@ -55,11 +55,11 @@ images:
     pullPolicy: IfNotPresent
   postgres: postgres@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2
   valkey: valkey/valkey@sha256:a0dbf4c1d5708782907c10e2c72deff317518518b5288a58416981d9db95d30b
-  otelCollector: otel/opentelemetry-collector-contrib@sha256:b3079f45e19bdb7326bf49cdddce6cf60dfd865138db39f2733ea48ab17bc4cb
-  keycloak: quay.io/keycloak/keycloak@sha256:ff4257d0d64efbe99ed1ddfaf07765cc3c36dc7518bf8324d41961327f441c54
-  clickhouse: clickhouse/clickhouse-server@sha256:5a94a6cc2005af20844c31aa49906d55c3c48b0e0fb9f29bf0d6c29e52692f3a
-  graviteeManagement: genio-one/gravitee-management-api:4.9.0-postgresql-42.7.13
-  graviteeGateway: genio-one/gravitee-gateway:4.9.0-postgresql-42.7.13
+  otelCollector: otel/opentelemetry-collector-contrib@sha256:fd328de2552466ad78385e1b1289c3f2402b1c45f265b252aab1955b42845ac1
+  keycloak: quay.io/keycloak/keycloak@sha256:82a77884f3af238beab1e7afd63b5f530e1b5c0590bd7aa60b40a40463e29b2c
+  clickhouse: clickhouse/clickhouse-server@sha256:a73b5c0fb6f88e02357aead0906ad53882b07e4d202327489798844ba745e64d
+  graviteeManagement: genio-one/gravitee-management-api:4.12.19-postgresql-42.7.13
+  graviteeGateway: genio-one/gravitee-gateway:4.12.19-postgresql-42.7.13
 
 secrets:
   existingSecret: ""

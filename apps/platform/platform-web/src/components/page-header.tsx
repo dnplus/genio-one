@@ -1,5 +1,6 @@
 import type { ReactNode } from "react"
 import { ArrowLeftIcon } from "lucide-react"
+import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button"
 
@@ -16,11 +17,18 @@ export function PageHeader({
   onBack?: () => void
   title: ReactNode
 }) {
+  const { t } = useTranslation()
+  const computedBackLabel =
+    backLabel ??
+    (typeof title === "string" && title.trim()
+      ? t("Go back to {{title}}", { title })
+      : t("Go back"))
+
   return (
     <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
       <div className="flex min-w-0 items-center gap-3">
         {onBack ? (
-          <Button aria-label={backLabel} className="shrink-0" onClick={onBack} size="icon" type="button" variant="outline">
+          <Button aria-label={computedBackLabel} className="shrink-0" onClick={onBack} size="icon" type="button" variant="outline">
             <ArrowLeftIcon />
           </Button>
         ) : null}

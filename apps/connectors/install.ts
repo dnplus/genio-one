@@ -193,9 +193,12 @@ export async function installStandardConnector(configuration: CommonInstallConfi
   }))
   if (resource.lifecycle === "PUBLISHED") {
     if (resource.publication_endpoint?.visibility !== "PUBLIC" || resource.publication_endpoint.hostname !== config.hostname || resource.publication_endpoint.base_path !== config.basePath) throw new Error("STANDARD_PUBLICATION_CONFLICT")
-    if (definition.tools.every((tool) => connection.mcp_selected_tools?.includes(tool)) && (!resource.publication_request || resource.publication_request.publication_state === "READY")) {
+    // A published resource's tool set is an administrator decision: tools that are not yet selected
+    // (newly added by a connector upgrade, or deliberately deselected) stay pending for explicit authorization.
+    const pendingTools = definition.tools.filter((tool) => !connection.mcp_selected_tools?.includes(tool))
+    if (!resource.publication_request || resource.publication_request.publication_state === "READY") {
       await ensureResourceCapabilityPolicy(request, { base, resourceId: resource.resource_id, capabilityId: "mcp.invoke", steps: standardEnforcementSteps(config) })
-      return { resourceId: resource.resource_id, connectionId: connection.connection_id, access: "AUTO_GRANT", lifecycle: resource.lifecycle }
+      return { resourceId: resource.resource_id, connectionId: connection.connection_id, access: "AUTO_GRANT", lifecycle: resource.lifecycle, ...(pendingTools.length ? { pendingTools } : {}) }
     }
   }
   if (!["DRAFT", "PUBLISHED"].includes(resource.lifecycle)) throw new Error("STANDARD_RESOURCE_NOT_DRAFT")
@@ -224,7 +227,9 @@ export async function installStandardConnector(configuration: CommonInstallConfi
     }
   }
   if (matchedToolNames.size !== requiredTools.length) throw new Error("STANDARD_TOOLS_INCOMPLETE")
-  await Promise.all(pendingTools.map((tool) => request(`${connectionPath}/mcp-discovery/candidates/${encodeURIComponent(tool.candidate_id)}/decision`, json({ expected_revision_digest: tool.revision_digest, state: "PUBLISHED" }))))
+  // Only a first publication auto-publishes the definition's tools; never expand an already published resource.
+  const autoPublishedTools = resource.lifecycle === "PUBLISHED" ? [] : pendingTools
+  await Promise.all(autoPublishedTools.map((tool) => request(`${connectionPath}/mcp-discovery/candidates/${encodeURIComponent(tool.candidate_id)}/decision`, json({ expected_revision_digest: tool.revision_digest, state: "PUBLISHED" }))))
   await ensureResourceCapabilityPolicy(request, { base, resourceId: resource.resource_id, capabilityId: "mcp.invoke", steps: standardEnforcementSteps(config) })
   if (!resource.publication_endpoint) await request(`${resourcePath}/publication-endpoint`, { method: "PUT", body: JSON.stringify({ gateway_id: config.gatewayId, hostname: config.hostname, base_path: config.basePath, visibility: "PUBLIC", dns_management: "EXTERNAL", dns_verification: "VERIFIED", dns_target: config.dnsTarget }) })
   else if (resource.publication_endpoint.visibility !== "PUBLIC" || resource.publication_endpoint.hostname !== config.hostname || resource.publication_endpoint.base_path !== config.basePath) throw new Error("STANDARD_PUBLICATION_CONFLICT")
@@ -233,7 +238,8 @@ export async function installStandardConnector(configuration: CommonInstallConfi
   await request(`${resourcePath}/publication-requests/${encodeURIComponent(publication.request_id)}/review`, json({ decision: "APPROVE" }))
   resource = await request<Resource>(resourcePath)
   if (resource.lifecycle !== "PUBLISHED") throw new Error("STANDARD_PUBLICATION_NOT_PUBLISHED")
-  return { resourceId: resource.resource_id, connectionId: connection.connection_id, access: "AUTO_GRANT", lifecycle: resource.lifecycle }
+  const unpublishedTools = autoPublishedTools === pendingTools ? [] : pendingTools.map((tool) => tool.tool_name)
+  return { resourceId: resource.resource_id, connectionId: connection.connection_id, access: "AUTO_GRANT", lifecycle: resource.lifecycle, ...(unpublishedTools.length ? { pendingTools: unpublishedTools } : {}) }
 }
 
 export function managementApi(origin: string, token: string): Api {

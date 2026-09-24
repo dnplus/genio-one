@@ -45,10 +45,13 @@ export function createMail2000Handler(options: Partial<Mail2000Imap> & { caldav?
     const reference = { folder, uid: z.number().int().min(1), uid_validity: z.string().regex(/^[0-9]+$/) }
     const read = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }
     const write = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true }
-    const execute = async (operation: (credential: Mail2000Credential) => Promise<unknown>) => {
+    const execute = async (operation: (credential: Mail2000Credential) => Promise<unknown>, structured = false) => {
       if (!credential) return { isError: true, content: [{ type: "text" as const, text: "MAIL2000_CONNECTION_REQUIRED" }] }
       if (!options.listMailboxes) return { isError: true, content: [{ type: "text" as const, text: "CONNECTOR_CONFIGURATION_REQUIRED" }] }
-      try { return { content: [{ type: "text" as const, text: JSON.stringify(await operation(credential)) }] } }
+      try {
+        const result = await operation(credential)
+        return { content: [{ type: "text" as const, text: JSON.stringify(result) }], ...(structured && result !== null && typeof result === "object" ? { structuredContent: result as Record<string, unknown> } : {}) }
+      }
       catch (error) {
         const safe = error instanceof Error && /^MAIL2000_[A-Z_]+$/.test(error.message) ? error.message : "MAIL2000_OPERATION_FAILED"
         return { isError: true, content: [{ type: "text" as const, text: safe }] }
@@ -71,6 +74,20 @@ export function createMail2000Handler(options: Partial<Mail2000Imap> & { caldav?
       const data = z.string().min(1).max(100000)
       server.registerTool(`${prefix}_list_collections`, { title: `列出${label}集合`, description: `列出目前帳號可存取的${label}集合。`, inputSchema: {}, annotations: read }, () => execute((credential) => dav!.list(credential)))
       server.registerTool(`${prefix}_read_objects`, { title: `讀取${label}`, description: `讀取集合中的${label}，保留原始 iCalendar/vCard 格式與 ETag。`, inputSchema: { ...collection, object_url: z.string().url().optional(), start: z.string().datetime().optional(), end: z.string().datetime().optional(), limit: z.number().int().min(1).max(100).default(20) }, annotations: read }, (args) => execute((credential) => dav!.read(credential, args)))
+      if (prefix === "carddav") {
+        server.registerTool("carddav_search_directory", {
+          title: "搜尋 Mail2000 組織名錄",
+          description: "搜尋目前使用者可讀取的 CardDAV 通訊錄，整理 vCard 姓名、Email、ORG、TITLE、CATEGORIES 與 KIND/MEMBER 群組成員。群組成員會依 Email 對回名錄中的姓名與職稱；結果是通訊錄線索，不代表公司組織圖或正式邀請名單。",
+          inputSchema: { query: z.string().trim().min(1).max(200), kind: z.enum(["all", "person", "group"]).default("all"), limit: z.number().int().min(1).max(50).default(20) },
+          annotations: read,
+        }, (args) => execute((credential) => dav!.searchDirectory(credential, args), true))
+        server.registerTool("carddav_get_self_context", {
+          title: "查詢 Mail2000 本人通訊錄資料",
+          description: "以目前 Mail2000 連線帳號的精確 Email 比對 CardDAV 個人聯絡人，回傳本人姓名、職稱與組織欄位；找不到時明確回報，不猜測身分。",
+          inputSchema: {},
+          annotations: read,
+        }, () => execute((credential) => dav!.getSelfContext(credential), true))
+      }
       server.registerTool(`${prefix}_create_object`, { title: `新增${label}`, description: `使用固定檔名新增${label}物件，不覆寫既有檔案。`, inputSchema: { ...collection, filename: z.string().regex(/^[A-Za-z0-9_-]+\.(ics|vcf)$/), data }, annotations: write }, (args) => execute((credential) => dav!.create(credential, args)))
       server.registerTool(`${prefix}_update_object`, { title: `更新${label}`, description: `以讀取時取得的 ETag 更新${label}，版本衝突時拒絕。`, inputSchema: { ...object, data }, annotations: write }, (args) => execute((credential) => dav!.update(credential, args)))
       server.registerTool(`${prefix}_delete_object`, { title: `刪除${label}`, description: `以讀取時取得的 ETag 刪除指定${label}物件。`, inputSchema: object, annotations: write }, (args) => execute((credential) => dav!.remove(credential, args)))

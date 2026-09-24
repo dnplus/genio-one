@@ -78,103 +78,35 @@ function booleanAttribute(key: string, value: boolean) {
   return { key, value: { boolValue: value } }
 }
 
-const SENSITIVE_KEY = /(^|[_-])(authorization|cookie|credential|password|secret|token|api[_-]?key)([_-]|$)/i
-const SENSITIVE_VALUE = /(bearer|basic)\s+\S+|sk-[A-Za-z0-9_-]{8,}|[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/gi
-const REDACTED = "[REDACTED]"
-const OMITTED = "[CONTENT_NOT_CAPTURED]"
+export type DetailBodyCapture = { value: string; encoding: "utf8" | "utf8-lossy"; digest: string }
 
-function sensitiveKey(value: string): boolean {
-  if (SENSITIVE_KEY.test(value)) return true
-  const normalized = value.replace(/[^a-z0-9]/gi, "").toLowerCase()
-  return [
-    "authorization",
-    "cookie",
-    "credential",
-    "password",
-    "secret",
-    "token",
-    "apikey",
-    "clientsecret",
-    "accesstoken",
-    "refreshtoken",
-    "idtoken",
-    "privatekey",
-    "privatekeypem",
-    "encryptionkey",
-    "signingkey",
-    "devicecode",
-    "usercode",
-    "authorizationcode",
-    "codeverifier",
-    "pkceverifier",
-  ].some((suffix) => normalized === suffix || normalized.endsWith(suffix))
+// Raw capture only. Credential redaction runs once, server side, in the analytics collector
+// (transform/redact_credentials), which can only read text: bodies are therefore always exported
+// as UTF-8 text, never an encoding the collector cannot see through. Invalid UTF-8 is decoded
+// lossily (U+FFFD) and flagged utf8-lossy; the exact original bytes are identified by sha256.
+// Pass final=false for successive parts of one stream so a character split across parts survives.
+export function createDetailBodyDecoder(): (body: Uint8Array, final?: boolean) => DetailBodyCapture {
+  const strict = new TextDecoder("utf-8", { fatal: true })
+  const lossy = new TextDecoder("utf-8")
+  let encoding: DetailBodyCapture["encoding"] = "utf8"
+  // The lossy decoder always produces the text, so bytes it buffered from an earlier part are
+  // replayed correctly when the sequence turns out invalid; the strict decoder only detects that.
+  return (body, final = true) => {
+    const digest = createHash("sha256").update(body).digest("hex")
+    const value = lossy.decode(body, { stream: !final })
+    if (encoding === "utf8") {
+      try {
+        strict.decode(body, { stream: !final })
+      } catch {
+        encoding = "utf8-lossy"
+      }
+    }
+    return { value, encoding, digest }
+  }
 }
 
-function sanitizeValue(value: unknown, key?: string): { value: unknown; redacted: boolean } {
-  if (key && sensitiveKey(key)) return { value: REDACTED, redacted: true }
-  if (typeof value === "string") {
-    try {
-      const nested = /^\s*[\[{]/.test(value) ? JSON.parse(value) : null
-      if (nested && typeof nested === "object") {
-        const sanitized = sanitizeValue(nested)
-        if (sanitized.redacted) return { value: JSON.stringify(sanitized.value), redacted: true }
-      }
-    } catch {}
-    const sanitized = value.replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, REDACTED).replace(SENSITIVE_VALUE, REDACTED).replace(/([?&#](?:access_token|refresh_token|id_token|token|api_key|secret|password|code|device_code|user_code|code_verifier)=)[^&#\s]*/gi, `$1${REDACTED}`)
-    return { value: sanitized, redacted: sanitized !== value }
-  }
-  if (Array.isArray(value)) {
-    let redacted = false
-    const result = value.map((entry) => {
-      const sanitized = sanitizeValue(entry)
-      redacted ||= sanitized.redacted
-      return sanitized.value
-    })
-    return { value: result, redacted }
-  }
-  if (value && typeof value === "object") {
-    let redacted = false
-    const result = Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([entryKey, entry]) => {
-      const sanitized = sanitizeValue(entry, entryKey)
-      redacted ||= sanitized.redacted
-      return [entryKey, sanitized.value]
-    }))
-    return { value: result, redacted }
-  }
-  return { value, redacted: false }
-}
-
-export function sanitizeGatewayDetailBody(
-  body: Uint8Array,
-  contentType: string | null,
-): { value: string; redacted: boolean; disposition: "SANITIZED" | "OMITTED"; digest: string } {
-  const digest = createHash("sha256").update(body).digest("hex")
-  const mimeType = contentType?.split(";", 1)[0]?.trim().toLowerCase() ?? ""
-  const raw = Buffer.from(body).toString("utf8")
-  if (mimeType === "application/json" || mimeType.endsWith("+json")) {
-    try {
-      const sanitized = sanitizeValue(JSON.parse(raw) as unknown)
-      return {
-        value: JSON.stringify(sanitized.value),
-        redacted: sanitized.redacted,
-        disposition: "SANITIZED",
-        digest,
-      }
-    } catch {
-      return { value: OMITTED, redacted: true, disposition: "OMITTED", digest }
-    }
-  }
-  if (mimeType === "application/x-www-form-urlencoded") {
-    const values = new URLSearchParams(raw)
-    let redacted = false
-    for (const key of [...values.keys()]) {
-      const sanitized = sanitizeValue(values.get(key) ?? "", key)
-      redacted ||= sanitized.redacted
-      values.set(key, String(sanitized.value))
-    }
-    return { value: values.toString(), redacted, disposition: "SANITIZED", digest }
-  }
-  return { value: OMITTED, redacted: true, disposition: "OMITTED", digest }
+export function captureDetailBody(body: Uint8Array): DetailBodyCapture {
+  return createDetailBodyDecoder()(body)
 }
 
 export function createOtlpGatewayDetailCapture(options: {
@@ -190,8 +122,8 @@ export function createOtlpGatewayDetailCapture(options: {
   return {
     async capture(input) {
       const started = BigInt(Date.now()) * 1_000_000n
-      const requestDetail = sanitizeGatewayDetailBody(input.requestBody, input.requestContentType)
-      const responseDetail = sanitizeGatewayDetailBody(input.responseBody, input.responseContentType)
+      const requestDetail = captureDetailBody(input.requestBody)
+      const responseDetail = captureDetailBody(input.responseBody)
       const accepted = await persist("traces", {
           resourceSpans: [{
             resource: {
@@ -214,14 +146,12 @@ export function createOtlpGatewayDetailCapture(options: {
                   stringAttribute("genio.correlation.id", input.correlationId),
                   stringAttribute("input.value", requestDetail.value),
                   stringAttribute("input.sha256", requestDetail.digest),
-                  stringAttribute("input.capture_disposition", requestDetail.disposition),
-                  booleanAttribute("input.redacted", requestDetail.redacted),
+                  stringAttribute("input.encoding", requestDetail.encoding),
                   booleanAttribute("input.truncated", input.requestBodyTruncated),
                   stringAttribute("input.mime_type", input.requestContentType ?? "application/octet-stream"),
                   stringAttribute("output.value", responseDetail.value),
                   stringAttribute("output.sha256", responseDetail.digest),
-                  stringAttribute("output.capture_disposition", responseDetail.disposition),
-                  booleanAttribute("output.redacted", responseDetail.redacted),
+                  stringAttribute("output.encoding", responseDetail.encoding),
                   booleanAttribute("output.truncated", input.responseBodyTruncated),
                   stringAttribute("output.mime_type", input.responseContentType ?? "application/octet-stream"),
                 ],

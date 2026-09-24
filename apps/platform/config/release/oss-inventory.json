@@ -17,43 +17,43 @@
     },
     {
       "name": "OpenTelemetry Collector Contrib",
-      "version": "0.154.0",
-      "image": "otel/opentelemetry-collector-contrib@sha256:b3079f45e19bdb7326bf49cdddce6cf60dfd865138db39f2733ea48ab17bc4cb",
+      "version": "0.161.0",
+      "image": "otel/opentelemetry-collector-contrib@sha256:fd328de2552466ad78385e1b1289c3f2402b1c45f265b252aab1955b42845ac1",
       "license": "Apache-2.0",
       "source": "https://github.com/open-telemetry/opentelemetry-collector-contrib"
     },
     {
       "name": "Keycloak",
-      "version": "26.7.3",
-      "image": "quay.io/keycloak/keycloak@sha256:ff4257d0d64efbe99ed1ddfaf07765cc3c36dc7518bf8324d41961327f441c54",
+      "version": "26.7.4",
+      "image": "quay.io/keycloak/keycloak@sha256:82a77884f3af238beab1e7afd63b5f530e1b5c0590bd7aa60b40a40463e29b2c",
       "license": "Apache-2.0",
       "source": "https://github.com/keycloak/keycloak"
     },
     {
       "name": "ClickHouse",
-      "version": "26.7",
-      "image": "clickhouse/clickhouse-server@sha256:5a94a6cc2005af20844c31aa49906d55c3c48b0e0fb9f29bf0d6c29e52692f3a",
+      "version": "26.8.6.5",
+      "image": "clickhouse/clickhouse-server@sha256:a73b5c0fb6f88e02357aead0906ad53882b07e4d202327489798844ba745e64d",
       "license": "Apache-2.0",
       "source": "https://github.com/ClickHouse/ClickHouse"
     },
     {
       "name": "Gravitee APIM Management API",
-      "version": "4.9.0",
-      "image": "graviteeio/apim-management-api@sha256:134afe31e65dbaaa977f3870682dd5dbac8d0314ac9ecce220c5ea960352a20b",
+      "version": "4.12.19",
+      "image": "graviteeio/apim-management-api@sha256:242bb755629160f5353bdb4a46dd18b5e05273df9593d0d7ce49a947b8823249",
       "license": "Apache-2.0",
       "source": "https://github.com/gravitee-io/gravitee-api-management"
     },
     {
       "name": "Gravitee APIM Gateway",
-      "version": "4.9.0",
-      "image": "graviteeio/apim-gateway@sha256:26382f7697e5d4a621f4ba21cd60e7dc12d66e05235d725d402318688077bb1e",
+      "version": "4.12.19",
+      "image": "graviteeio/apim-gateway@sha256:5b5837c79dd06ca4726e230dfc6460f62ee2a503dde828e908943a3a9186d537",
       "license": "Apache-2.0",
       "source": "https://github.com/gravitee-io/gravitee-api-management"
     },
     {
       "name": "NGINX",
-      "version": "1.30.4-alpine",
-      "image": "nginx@sha256:dc5069ad14f19660b141b21236140b91656bf89bbc3e2417c70ae650cd66104c",
+      "version": "1.30.5-alpine",
+      "image": "nginx@sha256:bf3201ab56f23e5954646379c775d511fc466e9f11376d9725361064ad07ed35",
       "license": "BSD-2-Clause",
       "source": "https://github.com/nginx/nginx"
     }

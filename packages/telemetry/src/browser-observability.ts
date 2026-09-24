@@ -90,9 +90,8 @@ export function createBrowserObserver(options: { service: string; token: () => s
       if (target) emit("ui.click", { path: location.pathname, control: target.getAttribute("aria-label") ?? target.getAttribute("data-testid") ?? target.tagName })
     }
     const onOnline = () => { retryAt = 0; void flush() }
-    const clean = (value: string) => value.replace(/(bearer|basic)\s+\S+|sk-[A-Za-z0-9_-]{8,}|[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/gi, "[REDACTED]").replace(/(code|token|password|secret|authorization|api_key)=[^&\s]+/gi, "$1=[REDACTED]")
-    const onError = (event: ErrorEvent) => emit("browser.error", { path: location.pathname, error: event.error instanceof Error ? event.error.name : "SCRIPT_ERROR", message: clean(event.message), stack: clean(event.error instanceof Error ? event.error.stack ?? "" : ""), line: String(event.lineno), column: String(event.colno) }, 500)
-    const onRejection = (event: PromiseRejectionEvent) => emit("browser.unhandled_rejection", { path: location.pathname, error: event.reason instanceof Error ? event.reason.name : "UNHANDLED_REJECTION", message: clean(String(event.reason)), stack: clean(event.reason instanceof Error ? event.reason.stack ?? "" : "") }, 500)
+    const onError = (event: ErrorEvent) => emit("browser.error", { path: location.pathname, error: event.error instanceof Error ? event.error.name : "SCRIPT_ERROR", message: event.message, stack: event.error instanceof Error ? event.error.stack ?? "" : "", line: String(event.lineno), column: String(event.colno) }, 500)
+    const onRejection = (event: PromiseRejectionEvent) => emit("browser.unhandled_rejection", { path: location.pathname, error: event.reason instanceof Error ? event.reason.name : "UNHANDLED_REJECTION", message: String(event.reason), stack: event.reason instanceof Error ? event.reason.stack ?? "" : "" }, 500)
     const timer = setInterval(() => { void flush() }, 2000)
     window.addEventListener("online", onOnline)
     window.addEventListener("click", onClick, { capture: true })

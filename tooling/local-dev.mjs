@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process"
-import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync } from "node:crypto"
+import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync, randomBytes } from "node:crypto"
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -23,7 +23,10 @@ const root = resolve(fileURLToPath(new URL("..", import.meta.url)))
 const platformDir = resolve(root, "apps/platform")
 const botDir = resolve(root, "apps/bot")
 const gatewayDir = resolve(root, "runtimes/gateway")
+const connectorsDir = resolve(root, "apps/connectors")
 const signingKeyDir = resolve(platformDir, ".local/gateway-runtime/keys")
+const connectorConfigurationKeyPath = resolve(signingKeyDir, "connector-configuration.key")
+const launchStateDir = resolve(platformDir, ".local/gateway-runtime/launch-state")
 const distillationLaunchConfigurationPath = resolve(platformDir, ".local/gateway-runtime/distillation-launch-configuration")
 const processorAdapterCredentialNames = "GENIO_ONE_PROCESSOR_ADAPTER_CREDENTIAL_ENV_NAMES"
 
@@ -299,8 +302,24 @@ export { distillationPortRole }
 const localPlatformOrigin = "http://127.0.0.1:58082"
 const localBotServiceEndpoint = "http://127.0.0.1:5181"
 const localRuntimeReportKeyId = "local-bot-runtime-report"
+const localMail2000Endpoint = "http://127.0.0.1:58111/mcp"
 
 const services = [
+  {
+    name: "mail2000-connector",
+    url: "http://127.0.0.1:58111/health",
+    port: 58111,
+    cwd: connectorsDir,
+    args: ["dev:mail2000"],
+    marker: "mail2000/main.ts",
+    healthy(body) {
+      return body?.service === "genio-connector-mail2000" && body?.status === "ready"
+    },
+    stale(body) {
+      return body?.service === "genio-connector-mail2000" && body?.status !== "ready"
+    },
+    env: { CONNECTOR_HOST: "127.0.0.1", CONNECTOR_PORT: "58111" },
+  },
   {
     name: "platform-api",
     url: "http://127.0.0.1:58082/healthz",
@@ -319,6 +338,18 @@ const services = [
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://127.0.0.1:54320",
       GENIO_ONE_PLATFORM_ORIGIN: localPlatformOrigin,
       GENIO_BOT_SERVICE_ENDPOINT: localBotServiceEndpoint,
+      GENIO_ONE_CONNECTION_VERIFIER_ALLOW_HTTP: "1",
+      GENIO_ONE_CONNECTION_VERIFIER_ALLOWED_HOSTS: "127.0.0.1,localhost,::1",
+    },
+    // A healthy API started outside this supervisor (for example `pnpm dev:api`) cannot report
+    // whether it received the installed-connector environment, so its launch must be recorded.
+    launchConfiguration() {
+      return launchConfigurationDigest(serviceEnvironment(this), [
+        "GENIO_CONNECTOR_CONFIGURATION_KEY",
+        "GENIO_CONNECTOR_MAIL2000_ENDPOINT",
+        "GENIO_ONE_CONNECTION_VERIFIER_ALLOW_HTTP",
+        "GENIO_ONE_CONNECTION_VERIFIER_ALLOWED_HOSTS",
+      ])
     },
   },
   {
@@ -421,7 +452,7 @@ const services = [
   },
 ]
 
-const startupServiceNames = ["distillation-triage", "bot-server", "platform-api", "platform-web", "bot-web"]
+const startupServiceNames = ["distillation-triage", "mail2000-connector", "bot-server", "platform-api", "platform-web", "bot-web"]
 
 const children = new Map()
 let stopping = false
@@ -442,6 +473,45 @@ function ensureSigningKeys() {
     writeFileSync(privateKeyPath, privateKey.export({ type: "pkcs8", format: "pem" }), { mode: 0o600 })
     writeFileSync(publicKeyPath, publicKey.export({ type: "spki", format: "pem" }), { mode: 0o600 })
   }
+}
+
+function ensureConnectorConfigurationKey() {
+  if (!existsSync(connectorConfigurationKeyPath)) {
+    writeFileSync(connectorConfigurationKeyPath, randomBytes(32).toString("base64url"), { mode: 0o600 })
+  }
+  const key = readFileSync(connectorConfigurationKeyPath, "utf8").trim()
+  if (key.length < 32) throw new Error("LOCAL_CONNECTOR_CONFIGURATION_KEY_INVALID")
+  return key
+}
+
+export function launchConfigurationDigest(environment, names) {
+  return createHash("sha256")
+    .update(JSON.stringify(names.map((name) => [name, environment[name] ?? null])))
+    .digest("hex")
+}
+
+export function serviceLaunchState(configuration, owners) {
+  return JSON.stringify({ schema_version: 1, configuration, pids: owners.map((owner) => owner.pid).sort() })
+}
+
+// An existing healthy service is reused only when this supervisor recorded launching the same
+// processes with the same configuration; anything else (manual start, changed env) is restarted.
+export function existingServiceLaunchIsCurrent({ recorded, configuration, owners }) {
+  return owners.length > 0 && recorded === serviceLaunchState(configuration, owners)
+}
+
+function serviceLaunchStatePath(service) {
+  return resolve(launchStateDir, service.name)
+}
+
+function recordedServiceLaunchState(service) {
+  const path = serviceLaunchStatePath(service)
+  return existsSync(path) ? readFileSync(path, "utf8").trim() : ""
+}
+
+function recordServiceLaunchState(service, configuration) {
+  mkdirSync(launchStateDir, { recursive: true })
+  writeFileSync(serviceLaunchStatePath(service), `${serviceLaunchState(configuration, serviceOwners(service))}\n`, { mode: 0o600 })
 }
 
 export function runtimePolicyReportEnvironment(serviceName, privateKeyPem, publicKeyPem) {
@@ -472,11 +542,16 @@ function serviceEnvironment(service) {
     return {
       ...service.env,
       ...runtimeReport,
+      GENIO_CONNECTOR_CONFIGURATION_KEY: ensureConnectorConfigurationKey(),
+      GENIO_CONNECTOR_MAIL2000_ENDPOINT: localMail2000Endpoint,
       GENIO_ONE_GATEWAY_SIGNING_PRIVATE_KEY_FILE: resolve(signingKeyDir, "projection.pem"),
       GENIO_ONE_RUNTIME_COMMAND_SIGNING_PRIVATE_KEY_FILE: resolve(signingKeyDir, "runtime-command.pem"),
       GENIO_ONE_POLICY_ARTIFACT_SIGNING_PRIVATE_KEY_FILE: resolve(signingKeyDir, "policy-artifact.pem"),
       GENIO_ONE_RELEASE_ROOT_SIGNING_PRIVATE_KEY_FILE: resolve(signingKeyDir, "release-root.pem"),
     }
+  }
+  if (service.name === "mail2000-connector") {
+    return { ...service.env, GENIO_CONNECTOR_CONFIGURATION_KEY: ensureConnectorConfigurationKey() }
   }
   return { ...service.env, ...runtimeReport }
 }
@@ -651,9 +726,23 @@ async function ensureService(service) {
   const occupied = await portIsOccupied(service.port)
   if (stopping) return false
   const owners = serviceOwners(service)
+  const configuration = service.launchConfiguration?.()
   if (result && service.healthy(result.body, result.response)) {
     assertServiceOwners(service, owners)
-    process.stdout.write(`${JSON.stringify({ event: "local-dev.service-existing", service: service.name, port: service.port })}\n`)
+    if (configuration === undefined || existingServiceLaunchIsCurrent({
+      recorded: recordedServiceLaunchState(service),
+      configuration,
+      owners,
+    })) {
+      process.stdout.write(`${JSON.stringify({ event: "local-dev.service-existing", service: service.name, port: service.port })}\n`)
+      return true
+    }
+    await stopStale(service)
+    if (stopping) return false
+    process.stdout.write(`${JSON.stringify({ event: "local-dev.service-launch-configuration-restarted", service: service.name, port: service.port })}\n`)
+    if (!spawnService(service)) return false
+    if (!(await waitForHealthy(service))) return false
+    recordServiceLaunchState(service, configuration)
     return true
   }
   const handoffRecovery = service.handoffRecovery?.({ occupied, owners })
@@ -675,7 +764,9 @@ async function ensureService(service) {
     throw new Error(`${service.name} port ${service.port} is occupied but does not expose the expected health contract`)
   }
   if (!spawnService(service)) return false
-  return waitForHealthy(service)
+  if (!(await waitForHealthy(service))) return false
+  if (configuration !== undefined) recordServiceLaunchState(service, configuration)
+  return true
 }
 
 async function runCommand(command, args, cwd) {

@@ -1,4 +1,3 @@
-import { observationEvidence } from "@genioone/telemetry/operation-observability"
 import assert from "node:assert/strict"
 import test from "node:test"
 import { createInMemoryEndpointRuntimeStore } from "../src/capabilities/endpoint-runtime/memory"
@@ -14,7 +13,6 @@ test("Endpoint credentials consume bootstrap once, bind device and tenant, rotat
   await assert.rejects(store.bootstrap(binding), /ENDPOINT_BOOTSTRAP_ALREADY_DELIVERED/)
   const auth = (token: string, tenantId = binding.tenantId) => store.authenticateCredential({ tenantId, token })
   await assert.rejects(auth(bootstrap.credential.token, "other-tenant"), /ENDPOINT_CREDENTIAL_REJECTED/)
-  assert.ok(!observationEvidence(bootstrap).includes(bootstrap.credential.token))
   const identity = await auth(bootstrap.credential.token)
   assert.equal(identity.kind, "BOOTSTRAP")
   assert.ok(!JSON.stringify(identity).includes(bootstrap.credential.token))

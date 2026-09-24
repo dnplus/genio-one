@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test"
 import { installMail2000, MAIL2000_TOOLS } from "./install"
 
-test("Mail2000 installs one password Connection with Auto Grant and upgrades only missing tools", async () => {
+test("Mail2000 installs one password Connection with Auto Grant and never auto-publishes tools added to a published resource", async () => {
   const config = { platformOrigin: "https://cp.test", tenantId: "tenant", ownerOrganizationId: "org", environmentId: "dev", gatewayId: "gateway", upstreamEndpoint: "https://mail.test/mcp", hostname: "gateway.test", basePath: "/mcp", dnsTarget: "gateway.test", identityIssuer: "https://identity.test/realms/genio-one", identityAudience: "api" }
   let resource: any
   let connection: any
@@ -78,16 +78,24 @@ test("Mail2000 installs one password Connection with Auto Grant and upgrades onl
   expect((await installMail2000(config, api)).access).toBe("AUTO_GRANT")
   expect(resource.publication_endpoint.visibility).toBe("PUBLIC")
   expect(connection.downstream_identity).toEqual({ mode: "USER_PASSWORD" })
-  expect(connection.mcp_selected_tools).toHaveLength(21)
+  expect(connection.mcp_selected_tools).toHaveLength(MAIL2000_TOOLS.length)
   expect(policyMutations).toHaveLength(4)
   expect(policyMutations.map((path) => path.split("/").at(-1))).toEqual(["policy-draft", "validate", "review", "publish"])
   await installMail2000(config, api)
-  expect(decisions).toHaveLength(21)
+  expect(decisions).toHaveLength(MAIL2000_TOOLS.length)
   expect(policyMutations).toHaveLength(4)
-  connection.mcp_selected_tools = connection.mcp_selected_tools.filter((name: string) => name !== "send_mail")
-  await installMail2000(config, api)
-  expect(decisions).toHaveLength(22)
-  expect(decisions.at(-1)).toBe("send_mail")
+  // Rerunning after an upgrade adds tools (here the CardDAV directory tools) must not silently expand a
+  // published resource: the admin setup playbook requires new tools to be selected and authorized explicitly.
+  const upgradeTools = ["carddav_search_directory", "carddav_get_self_context"]
+  connection.mcp_selected_tools = connection.mcp_selected_tools.filter((name: string) => !upgradeTools.includes(name))
+  expect((await installMail2000(config, api)).pendingTools).toEqual(upgradeTools)
+  expect(decisions).toHaveLength(MAIL2000_TOOLS.length)
+  expect(connection.mcp_selected_tools).not.toContain("carddav_search_directory")
+  // Even when the publication must be re-reviewed, the installer still does not publish tool decisions.
+  resource.publication_request = { request_id: "request", state: "APPROVED", publication_state: "APPLYING" }
+  expect((await installMail2000(config, api)).pendingTools).toEqual(upgradeTools)
+  expect(decisions).toHaveLength(MAIL2000_TOOLS.length)
+  expect(connection.mcp_selected_tools).not.toContain("carddav_get_self_context")
   expect(resourcesCreated).toBe(1)
   expect(connectionsCreated).toBe(1)
 })

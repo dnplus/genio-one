@@ -1,6 +1,5 @@
 import { randomBytes } from "node:crypto"
 import { persistOtel } from "./otlp-observability"
-import { sanitizeGatewayDetailBody } from "./otlp-detail-capture"
 
 type NativeIdentity = { tenantId?: string; subjectId?: string; runtimeSessionId?: string }
 
@@ -26,21 +25,29 @@ export function removeClaimedIdentity(value: any): void {
   }
 }
 
+function plainAnyValue(value: any): unknown {
+  if (!value || typeof value !== "object") return value
+  if ("stringValue" in value) return value.stringValue
+  if ("boolValue" in value) return value.boolValue
+  if ("intValue" in value) return Number.isSafeInteger(Number(value.intValue)) ? Number(value.intValue) : String(value.intValue)
+  if ("doubleValue" in value) return value.doubleValue
+  if ("bytesValue" in value) return value.bytesValue
+  if (value.arrayValue) return (value.arrayValue.values ?? []).map(plainAnyValue)
+  if (value.kvlistValue) return Object.fromEntries((value.kvlistValue.values ?? []).map((entry: any) => [entry?.key, plainAnyValue(entry?.value)]))
+  return null
+}
+
+// Only the receiver's own loopback capability is removed; credential redaction runs in the collector.
+// A structured attribute value (kvlist/array) is flattened to its JSON string — how ClickHouse
+// stores it anyway — because the collector's rules only read string attribute values and cannot
+// walk nested maps, so {request.headers: {authorization: …}} would otherwise bypass them.
 function sanitizeTelemetry(value: unknown, capability: string): unknown {
   if (typeof value === "string") return value.replaceAll(capability, "[REDACTED]")
   if (Array.isArray(value)) return value.map(item => sanitizeTelemetry(item, capability))
   if (!value || typeof value !== "object") return value
-  const source = value as Record<string, unknown>
-  if (typeof source.key === "string" && source.value && typeof source.value === "object") {
-    const attributeValue = source.value as Record<string, unknown>
-    const plain = attributeValue.stringValue ?? attributeValue.intValue ?? attributeValue.doubleValue ?? attributeValue.boolValue ?? attributeValue
-    const captured = sanitizeGatewayDetailBody(Buffer.from(JSON.stringify({ [source.key]: plain })), "application/json")
-    const clean = JSON.parse(captured.value)[source.key]
-    if (clean !== plain && typeof clean === "string") return { ...source, value: { stringValue: clean } }
-  }
-  if (typeof source.stringValue === "string") {
-    const captured = sanitizeGatewayDetailBody(Buffer.from(JSON.stringify({ value: source.stringValue })), "application/json")
-    return { ...source, stringValue: String(JSON.parse(captured.value).value).replaceAll(capability, "[REDACTED]") }
+  const source = value as Record<string, any>
+  if (typeof source.key === "string" && (source.value?.kvlistValue || source.value?.arrayValue)) {
+    return { ...source, value: { stringValue: JSON.stringify(plainAnyValue(source.value)).replaceAll(capability, "[REDACTED]") } }
   }
   return Object.fromEntries(Object.entries(source).map(([key, item]) => [key, sanitizeTelemetry(item, capability)]))
 }
