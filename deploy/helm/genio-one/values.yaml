@@ -234,8 +234,9 @@ analytics:
   # expiry, so telemetry would otherwise grow without bound into the fixed
   # volume above. Raise these only alongside storage, and keep them at least as
   # long as the evidence-retention period the deployment has committed to.
+  # Values are Go durations, which have no day unit: write 720h, not 30d.
   retention:
-    telemetry: 30d
+    telemetry: 720h
     # Captured request and response bodies are the most sensitive rows and are
     # only needed while diagnosing, so they expire far sooner.
     messageDetail: 24h

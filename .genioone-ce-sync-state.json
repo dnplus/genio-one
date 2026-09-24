@@ -8291,11 +8291,11 @@
       "mode": 420
     },
     "deploy/helm/genio-one/values-local.yaml": {
-      "sha256": "659054d176fa19f8f928aabbb2dd2b4a77cd50adde13bbb8c02fda77fd7bcf5b",
+      "sha256": "a480a580f6fb47936ef8c408ae4c3b971e303eb09d4d4b6e670f6eaac455093c",
       "mode": 420
     },
     "deploy/helm/genio-one/values.yaml": {
-      "sha256": "3b04b06ec5d22611842d5b2478ab8814388bed3ea2e47d9bde02178e2beccf72",
+      "sha256": "7f8975994ba9b9e9bd813676a046e86cf273385b900a1144513cd43916f7bb80",
       "mode": 420
     },
     "docs/public/ce/assets/resource-management.png": {

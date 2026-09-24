@@ -45,7 +45,7 @@ analytics:
   # A local volume is a tenth of the default, so telemetry expires sooner to
   # match it rather than filling the disk.
   retention:
-    telemetry: 7d
+    telemetry: 168h
     messageDetail: 24h
   collectorResources:
     requests: { cpu: 50m, memory: 128Mi }
