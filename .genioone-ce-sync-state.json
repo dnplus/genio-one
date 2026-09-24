@@ -7967,7 +7967,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/features/resources/resource-catalog-page.tsx": {
-      "sha256": "1893f3aa0f38103d9525904af3251efd6251264142818f03964f85d3bb47cec9",
+      "sha256": "0e486c05ba512b0175b27a707a56c99712b726c288aeccf017eabdf2861642cd",
       "mode": 420
     },
     "apps/platform/platform-web/src/features/resources/resource-context-tabs.tsx": {
@@ -8067,7 +8067,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/i18n/admin-governance.ts": {
-      "sha256": "9d6490fcb92a003ccbd6efb10921ecf9c73596a3053ebf7b69b05b4315f00f3e",
+      "sha256": "77065c02c32dadcd094e243ae80e91a43d08474498d738032f23f24b5bcca032",
       "mode": 420
     },
     "apps/platform/platform-web/src/lib/browser-oidc.test.ts": {
@@ -8199,7 +8199,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/test/identity-access-scoping.dom.test.tsx": {
-      "sha256": "9862f2ed71a7711d1595eb9fc206daa93562c018a26c52430c735750bd0269af",
+      "sha256": "b45b192d5f33a53f196153ee25e87f0347d4c7d48a4e8c6c82bedd661f96ab29",
       "mode": 420
     },
     "apps/platform/platform-web/test/observability-pages.dom.test.tsx": {

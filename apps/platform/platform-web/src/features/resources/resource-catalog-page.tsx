@@ -1267,6 +1267,17 @@ export function ResourceCatalogPage({
     </>
   }
 
+  if (selectedResourceId) {
+    return <div className="flex flex-col gap-5">
+      <DataEmpty
+        icon={DatabaseIcon}
+        title={t("Resource unavailable")}
+        description={t("This Resource may have been removed or is outside your current scope.")}
+      />
+      <div><Button variant="outline" onClick={() => setSelectedResourceId(null)}>{t("Back to Resources")}</Button></div>
+    </div>
+  }
+
   if (creating) {
     return <CreateResourceWizard
       tenantId={tenantId}

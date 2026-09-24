@@ -8,6 +8,7 @@ import { SheetWorkspaceRoot } from "@/components/ui/sheet"
 import type { IdentitySession, OverviewSnapshot } from "@/domain/contracts"
 import { AccessGroupsPanel } from "@/features/identity/access-groups-panel"
 import { OrganizationPage } from "@/features/identity/organization-page"
+import { ResourceCatalogPage } from "@/features/resources/resource-catalog-page"
 
 const organizationIdentity: IdentitySession = {
   tenant_id: "tenant-acme",
@@ -90,4 +91,65 @@ test("Organization-owned Access Group editor limits members and owner choices to
   await waitFor(() => expect(screen.getByRole("listbox")).toBeTruthy())
   expect(screen.getByRole("option", { name: /Sophie/ })).toBeTruthy()
   expect(screen.queryByRole("option", { name: /Other User/ })).toBeNull()
+})
+
+test("Resource deep links outside an Organization Administrator's inventory show a generic unavailable state", async () => {
+  const user = userEvent.setup()
+  const inaccessibleResourceId = "resource-c5a8149e-a059-4018-97b2-b0b6499a1b76"
+  window.history.replaceState({}, "", `/management?view=resources&resource=${inaccessibleResourceId}`)
+  const snapshot = {
+    ...data(),
+    resources: [{
+      tenant_id: "tenant-acme",
+      resource_id: "resource-sales",
+      display_name: "Sales Resource",
+      kind: "MCP" as const,
+      owner_organization_id: "org-ai",
+      authentication_strategy: "NONE" as const,
+      environment_id: "environment-production",
+      version: "1.0.0",
+      lifecycle: "PUBLISHED" as const,
+      operational_state: "HEALTHY" as const,
+      capabilities: [],
+      enforcement_point_id: "gateway-sales",
+      created_at: 1,
+    }],
+    connections: [],
+    ownedEntitlements: [],
+    auditEvents: [],
+    activity: { recent_activity: [] },
+    apiActivity: { events: [] },
+  } as OverviewSnapshot
+
+  await withI18n(<ResourceCatalogPage tenantId="tenant-acme" identity={organizationIdentity} data={snapshot} initialResourceId={inaccessibleResourceId} search="" onRefresh={async () => {}} />)
+
+  expect(screen.getByText("Resource unavailable")).toBeTruthy()
+  expect(screen.getByText("This Resource may have been removed or is outside your current scope.")).toBeTruthy()
+  expect(screen.queryByText(inaccessibleResourceId)).toBeNull()
+  expect(screen.queryByText("Security")).toBeNull()
+
+  await user.click(screen.getByRole("button", { name: "Back to Resources" }))
+
+  await waitFor(() => expect(screen.getByText("Sales Resource")).toBeTruthy())
+  expect(new URL(window.location.href).searchParams.get("resource")).toBeNull()
+})
+
+test("Unknown Resource deep links use the same generic unavailable state", async () => {
+  const unknownResourceId = "resource-unknown"
+  window.history.replaceState({}, "", `/management?view=resources&resource=${unknownResourceId}`)
+  const snapshot = {
+    ...data(),
+    resources: [],
+    connections: [],
+    ownedEntitlements: [],
+    auditEvents: [],
+    activity: { recent_activity: [] },
+    apiActivity: { events: [] },
+  } as OverviewSnapshot
+
+  await withI18n(<ResourceCatalogPage tenantId="tenant-acme" identity={organizationIdentity} data={snapshot} initialResourceId={unknownResourceId} search="" onRefresh={async () => {}} />)
+
+  expect(screen.getByText("Resource unavailable")).toBeTruthy()
+  expect(screen.getByText("This Resource may have been removed or is outside your current scope.")).toBeTruthy()
+  expect(screen.queryByText(unknownResourceId)).toBeNull()
 })
