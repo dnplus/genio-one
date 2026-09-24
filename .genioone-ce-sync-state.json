@@ -163,7 +163,7 @@
       "mode": 420
     },
     "apps/bot/Dockerfile": {
-      "sha256": "19f46d1b0171fb551b1fbca7ac8f1293df7c30799876761b2b2888cd996e4d1d",
+      "sha256": "92c8371d7fa9c34745090d85204b9c25509c2b1f804924de67aa30862682749f",
       "mode": 420
     },
     "apps/bot/docs/app-server-boundary.md": {
