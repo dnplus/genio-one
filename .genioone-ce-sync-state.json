@@ -8247,7 +8247,7 @@
       "mode": 420
     },
     "deploy/helm/genio-one/templates/gateway-runtime.yaml": {
-      "sha256": "08eb15f23fca3df1cdd259b7b2a528d23a73dbf5b47ee76ad1bf40787529e8bf",
+      "sha256": "9cd920cc77a6d20d6829a9c5ab7950ba9a8de8881fbad9c1776c5c8619541792",
       "mode": 420
     },
     "deploy/helm/genio-one/templates/gravitee.yaml": {
