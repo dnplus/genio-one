@@ -8887,11 +8887,11 @@
       "mode": 420
     },
     "packages/protocol/src/canonical.test.ts": {
-      "sha256": "6c70ad94b2b97d27fda3dcde491149ba757c5d570ff0fe69d2cf4f9b8c4371f9",
+      "sha256": "847c5f669cf42626c25976a2e2c270cd383bea0df72ae64f8beed22df842b132",
       "mode": 420
     },
     "packages/protocol/src/canonical.ts": {
-      "sha256": "c1cee68904c146fc007fb33656ef7352155461508c62d2e67c94f4f15bd5f376",
+      "sha256": "0e4681e45ed5742fd87862e3c213ac1083ed603f88b4dd26b49a57d711dc443d",
       "mode": 420
     },
     "packages/protocol/src/ce-demo-package.json": {

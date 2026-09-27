@@ -72,6 +72,18 @@ describe("canonicalValue", () => {
     expect(canonicalJson({ a: undefined, b: 1 })).toBe('{"b":1}')
   })
 
+  test("preserves getter evaluation across filtering and serialization", () => {
+    let reads = 0
+    const value = {
+      get a() {
+        reads += 1
+        return reads === 1 ? "first" : undefined
+      },
+    }
+    expect(canonicalJson(value)).toBe("{}")
+    expect(reads).toBe(2)
+  })
+
   test("matches JSON undefined handling for array items", () => {
     expect(canonicalJson({ values: [undefined, , { b: undefined, a: 1 }] })).toBe('{"values":[null,null,{"a":1}]}')
   })
@@ -85,6 +97,7 @@ describe("canonicalValue", () => {
     expect(canonicalJson("text")).toBe('"text"')
     expect(canonicalJson(7)).toBe("7")
     expect(canonicalJson(true)).toBe("true")
+    expect(canonicalJson(undefined)).toBeUndefined()
   })
 })
 

@@ -25,25 +25,35 @@ export function canonicalValue(value: unknown): unknown {
   return value
 }
 
+// Serialize without first cloning the whole value graph. Keep canonicalValue's
+// undefined filter before the sorted second read so accessor values agree too.
 function serializeCanonicalValue(value: unknown): string | undefined {
   if (Array.isArray(value)) {
-    return `[${Array.from({ length: value.length }, (_, index) => serializeCanonicalValue(value[index]) ?? "null").join(",")}]`
+    const len = value.length
+    const items = new Array(len)
+    for (let i = 0; i < len; i++) {
+      items[i] = serializeCanonicalValue(value[i]) ?? "null"
+    }
+    return `[${items.join(",")}]`
   }
   if (value && typeof value === "object") {
     const record = value as Record<string, unknown>
-    const entries = Object.keys(record)
-      .sort(compareUtf8)
-      .flatMap((key) => {
-        const serialized = serializeCanonicalValue(record[key])
-        return serialized === undefined ? [] : [`${JSON.stringify(key)}:${serialized}`]
-      })
+    const keys = Object.keys(record).filter((key) => record[key] !== undefined).sort(compareUtf8)
+    const entries: string[] = []
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i]!
+      const serialized = serializeCanonicalValue(record[key])
+      if (serialized !== undefined) {
+        entries.push(`${JSON.stringify(key)}:${serialized}`)
+      }
+    }
     return `{${entries.join(",")}}`
   }
   return JSON.stringify(value)
 }
 
 export function canonicalJson(value: unknown): string {
-  return serializeCanonicalValue(canonicalValue(value))!
+  return serializeCanonicalValue(value)!
 }
 
 export function canonicalBytes(value: unknown): Uint8Array {
