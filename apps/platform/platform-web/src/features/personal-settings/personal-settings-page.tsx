@@ -80,8 +80,10 @@ export function PersonalSettingsPage({ identity, mockMode }: PersonalSettingsPag
   const [productNotifications, setProductNotifications] = useState(initialPreferences.productNotifications)
   const [saved, setSaved] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [copiedSecret, setCopiedSecret] = useState<string | null>(null)
   const [hasApiKey, setHasApiKey] = useState(mockMode)
   const [issuedSecret, setIssuedSecret] = useState<string | null>(null)
+  const secretCopied = issuedSecret !== null && copiedSecret === issuedSecret
 
   function savePreferences() {
     savePersonalPreferences(identity.subject_id, {
@@ -100,14 +102,22 @@ export function PersonalSettingsPage({ identity, mockMode }: PersonalSettingsPag
     window.setTimeout(() => setCopied(false), 2000)
   }
 
+  async function copyIssuedSecret(secret: string) {
+    await navigator.clipboard.writeText(secret)
+    setCopiedSecret(secret)
+    window.setTimeout(() => setCopiedSecret((current) => current === secret ? null : current), 2000)
+  }
+
   function createApiKey() {
     if (!mockMode) return
+    setCopiedSecret(null)
     setIssuedSecret(`gok_personal_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`)
     setHasApiKey(true)
   }
 
   function revokeApiKey() {
     if (!mockMode) return
+    setCopiedSecret(null)
     setHasApiKey(false)
     setIssuedSecret(null)
   }
@@ -201,8 +211,12 @@ export function PersonalSettingsPage({ identity, mockMode }: PersonalSettingsPag
               <InputGroup className="col-span-full mt-2 h-10">
                 <InputGroupInput className="font-mono" readOnly value={issuedSecret} aria-label={t("One-time API key")} />
                 <InputGroupAddon align="inline-end">
-                  <InputGroupButton aria-label={t("Copy")} onClick={() => void navigator.clipboard.writeText(issuedSecret)}>
-                    <CopyIcon />{t("Copy")}
+                  <InputGroupButton
+                    aria-label={t(secretCopied ? "Copied" : "Copy")}
+                    onClick={() => void copyIssuedSecret(issuedSecret)}
+                  >
+                    {secretCopied ? <CheckIcon /> : <CopyIcon />}
+                    {t(secretCopied ? "Copied" : "Copy")}
                   </InputGroupButton>
                 </InputGroupAddon>
               </InputGroup>

@@ -8007,7 +8007,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/features/personal-settings/personal-settings-page.tsx": {
-      "sha256": "89fbe7f79209a575fd4ddbff1448e6ae459c0823bc204ddc4f450bb7f3886ed0",
+      "sha256": "3f54536f48ec201077094b63f593c708b715155ba209b5ab30e4e2a1953e040f",
       "mode": 420
     },
     "apps/platform/platform-web/src/features/policy/bot-policy-editor.tsx": {
@@ -8356,6 +8356,10 @@
     },
     "apps/platform/platform-web/test/page-header.dom.test.tsx": {
       "sha256": "85d42ddcd4384dc66bbfbf87f4dfc796aa146880b95387b59ffdc77915de7533",
+      "mode": 420
+    },
+    "apps/platform/platform-web/test/personal-settings-copy.dom.test.tsx": {
+      "sha256": "dd06279493ad81ceea3c495c1b61f4571fa78c99c0c4cca68221d6c070ee209a",
       "mode": 420
     },
     "apps/platform/platform-web/test/policy-authoring-governance.dom.test.tsx": {
