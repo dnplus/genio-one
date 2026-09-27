@@ -6499,7 +6499,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/metrics/clickhouse.ts": {
-      "sha256": "2925392e82878dd29cda2929f730a5a46495d89998e16e8aa78197e54226fee7",
+      "sha256": "c9c884d7ac18d3b950127d21d7a41e692f35f2e198d21d692f43dc19c2b6a0a8",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/metrics/contract.ts": {
@@ -7395,7 +7395,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/observability-clickhouse.test.ts": {
-      "sha256": "ef8cea5dd15b599f2d120011e800cf6704250c94afde271790c4a2570bfacb4e",
+      "sha256": "d68055bce1610ebcec8dd75c2c25d1cfa4d191918212bf7facefc1b483e14739",
       "mode": 420
     },
     "apps/platform/platform-api/test/oidc-authentication.test.ts": {

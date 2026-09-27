@@ -173,3 +173,19 @@ test("ClickHouse trace store rejects non-integer numeric parameters instead of i
   )
   assert.equal(queries.length, 2)
 })
+
+test("ClickHouse metrics store rejects non-integer windowSeconds parameter", async () => {
+  const store = createClickHouseGatewayMetricsStore({
+    ...clickhouse,
+    fetch: async () => new Response("", { status: 200 }),
+  })
+  const injected = "100) OR 1=1 --" as unknown as number
+
+  for (const invalidWindow of [injected, 1.5, -10, Number.NaN]) {
+    await assert.rejects(
+      store.summarize({ tenantId: "tenant-1", windowSeconds: invalidWindow }),
+      (error: Error & { statusCode?: number }) =>
+        error.message === "INVALID_METRICS_QUERY_PARAMETER:windowSeconds" && error.statusCode === 400,
+    )
+  }
+})

@@ -20,6 +20,17 @@ function quote(value: string): string {
   return `'${value.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`
 }
 
+// Numeric query parameters are interpolated into SQL text, so the store accepts
+// only non-negative safe integers here even though the HTTP schemas already
+// enforce this: internal callers bypass those schemas, and a malformed bound
+// would fail SQL parsing or produce invalid query text.
+function integerParam(value: number, name: string): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw Object.assign(new Error(`INVALID_METRICS_QUERY_PARAMETER:${name}`), { statusCode: 400 })
+  }
+  return value
+}
+
 async function queryRow<T>(
   request: HttpFetch,
   origin: string,
@@ -49,7 +60,8 @@ export function createClickHouseGatewayMetricsStore(options: {
   const authorization = `Basic ${Buffer.from(`${options.username}:${options.password}`).toString("base64")}`
   return {
     async summarize({ tenantId, windowSeconds }) {
-      const window = Math.max(60, Math.min(604_800, Math.floor(windowSeconds)))
+      const validatedWindow = integerParam(windowSeconds, "windowSeconds")
+      const window = Math.max(60, Math.min(604_800, validatedWindow))
       const tenant = quote(tenantId)
       const [sums, histograms] = await Promise.all([
         queryRow<SumRow>(request, origin, authorization, `
