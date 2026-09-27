@@ -129,9 +129,10 @@ function ReferenceField({
     <div className="flex flex-wrap gap-2">
       {values.map((value) => {
         const option = options.find((candidate) => candidate.value === value)
+        const itemLabel = option?.label ?? value
         return <Badge key={value} variant="secondary" className="gap-1">
-          {option?.label ?? value}
-          {!disabled ? <Button type="button" variant="ghost" size="icon-xs" aria-label={t("Remove")} onClick={() => onRemove(value)}>×</Button> : null}
+          {itemLabel}
+          {!disabled ? <Button type="button" variant="ghost" size="icon-xs" aria-label={`${t("Remove")} ${itemLabel} (${t(label)})`} onClick={() => onRemove(value)}>×</Button> : null}
         </Badge>
       })}
     </div>
