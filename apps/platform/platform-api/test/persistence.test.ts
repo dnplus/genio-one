@@ -273,7 +273,7 @@ class FakeCrossVersionMarkerAdapter implements SqlAdapter {
 
 test("the clean-install baseline and ordered migrations encode the current Platform schema", async () => {
   const migrations = await loadMigrations()
-  assert.deepEqual(migrations.map((migration) => migration.id), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
+  assert.deepEqual(migrations.map((migration) => migration.id), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
   assert.equal(migrations[1].name, "gateway_activity_safety_decisions")
   assert.equal(migrations[2].name, "distillation_markers")
   assert.match(migrations[2].sql, /create table genio_one_distillation_markers/i)
@@ -355,6 +355,46 @@ test("the clean-install baseline and ordered migrations encode the current Platf
   assert.equal(accessGroupMigration.name, "access_group_organization_scope")
   assert.match(accessGroupMigration.sql, /organization_id text/i)
   assert.match(accessGroupMigration.sql, /value \? 'organization_id'/i)
+  const mcpToolReviewMigration = migrations.find(
+    (migration) => migration.name === "mcp_tool_read_only_reviews",
+  )
+  assert.ok(mcpToolReviewMigration)
+  assert.equal(mcpToolReviewMigration.id, 13)
+  assert.match(mcpToolReviewMigration.sql, /add column mcp_tool_reviews jsonb/i)
+  assert.match(mcpToolReviewMigration.sql, /jsonb_typeof\(mcp_tool_reviews\) = 'array'/i)
+  const accessCorrelationMigration = migrations.find(
+    (migration) => migration.name === "access_request_correlations",
+  )
+  assert.ok(accessCorrelationMigration)
+  assert.equal(accessCorrelationMigration.id, 14)
+  assert.match(accessCorrelationMigration.sql, /add column if not exists request_correlation_id text/i)
+  assert.match(accessCorrelationMigration.sql, /add column if not exists decision_correlation_id text/i)
+  assert.match(accessCorrelationMigration.sql, /genio_one_access_requests_request_correlation_idx/i)
+  assert.match(accessCorrelationMigration.sql, /genio_one_access_requests_decision_correlation_idx/i)
+  assert.match(accessCorrelationMigration.sql, /genio_one_model_entitlements_revocation_correlation_idx/i)
+  const postHogMigration = migrations.find(
+    (migration) => migration.name === "posthog_integration",
+  )
+  assert.ok(postHogMigration)
+  assert.equal(postHogMigration.id, 15)
+  assert.match(postHogMigration.sql, /create table genio_one_posthog_integrations/i)
+  assert.match(postHogMigration.sql, /https:\/\/us\.i\.posthog\.com/i)
+  assert.match(postHogMigration.sql, /https:\/\/eu\.i\.posthog\.com/i)
+  assert.match(postHogMigration.sql, /not enabled or \(host is not null and project_id is not null and project_token is not null\)/i)
+  const gatewayActivityIdentityMigration = migrations.find(
+    (migration) => migration.name === "gateway_activity_user_password",
+  )
+  assert.ok(gatewayActivityIdentityMigration)
+  assert.equal(gatewayActivityIdentityMigration.id, 16)
+  assert.match(
+    gatewayActivityIdentityMigration.sql,
+    /drop constraint (if exists )?genio_one_gateway_activities_downstream_identity_mode_check/i,
+  )
+  assert.match(
+    gatewayActivityIdentityMigration.sql,
+    /'NONE'::text[\s\S]*'SERVICE'::text[\s\S]*'USER_PASSTHROUGH'::text[\s\S]*'USER_OAUTH'::text[\s\S]*'USER_PASSWORD'::text/i,
+  )
+  assert.doesNotMatch(gatewayActivityIdentityMigration.sql, /USER_CERTIFICATE|BEARER|JWT/i)
   assert.equal(migrations[0].id, 1)
   assert.equal(migrations[0].name, "platform_baseline")
   assert.match(migrations[0].checksum, /^[a-f0-9]{64}$/)

@@ -297,6 +297,7 @@ export const ResourceUpdateSchema = Type.Object({
 export const ResourceLifecycleCommandSchema = Type.Object({
   lifecycle: Type.Union([
     Type.Literal("DRAFT"),
+    Type.Literal("PUBLISHED"),
     Type.Literal("DEPRECATED"),
     Type.Literal("RETIRED"),
   ]),

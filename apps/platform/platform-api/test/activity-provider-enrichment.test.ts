@@ -84,6 +84,7 @@ test("Activity resolves the Provider from its trusted Resource Connection before
     endpoint: "http://127.0.0.1:11434/v1",
     mcp_selected_tools: [],
     mcp_tool_selection_operation_id: null,
+    mcp_tool_reviews: [],
     credential_ref: null,
     downstream_identity: { mode: "NONE" },
     request_mapping: null,

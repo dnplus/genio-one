@@ -56,6 +56,7 @@ import { useBotInvocations } from "./useBotInvocations"
 import { extractMentionedBotIds, fanOutBlockedMessage } from "./handoff-ui"
 import { RealtimeVoiceModal } from "./RealtimeVoiceModal"
 import { botCopy, botDisplayName } from "../../lib/ui-copy"
+import { captureProductEvent } from "../../lib/posthog-analytics"
 
 export function requiresHeadlessRuntime(text: string) {
   const ownerTool = /\b(?:read_self|update_self|create_bot|list_owned_skills|read_owned_skill|write_owned_skill|revert_owned_skill|delete_owned_skill|list_schedules|list_schedule_runs|create_schedule|update_schedule|delete_schedule|list_bots|send_to_bot)\b/i
@@ -302,12 +303,12 @@ export function Workspace({
   const shouldAutoScrollRef = useRef(true)
   const restoringPositionRef = useRef(true)
   const [showScrollBottom, setShowScrollBottom] = useState(false)
-  const sendMessageRef = useRef<(text?: string) => void>(() => {})
+  const sendMessageRef = useRef<(text?: string, telemetryCaptured?: boolean) => void>(() => {})
   const focusInput = useCallback(() => {
     textareaRef.current?.focus()
   }, [])
   const onPendingExecutionReady = useCallback((task: string) => {
-    sendMessageRef.current(task)
+    sendMessageRef.current(task, true)
   }, [])
 
   const scrollToBottom = useCallback((smooth = false) => {
@@ -673,7 +674,7 @@ ${availableSkillsList}`,
       : message))
   }, [activeBot.name, activeBot.workspacePath, displayBotName, runtime])
 
-  const sendMessage = useCallback((customText?: string) => {
+  const sendMessage = useCallback((customText?: string, telemetryCaptured = false) => {
     sendMessageRef.current = sendMessage
     const images = customText === undefined ? draftImages : []
     const text = (customText !== undefined ? customText : input).trim() || (images.length ? "請查看附加圖片。" : "")
@@ -815,6 +816,7 @@ ${availableSkillsList}`,
         kind,
       }).then((ack) => {
         if (!ack) return
+        if (!demo) captureProductEvent("genioone_journey_action", { action: "bot_message_sent" })
         updateView((current) => current.handoffRequest?.id === clientRequestId ? { ...current, handoffRequest: undefined } : current)
         if (customText === undefined) setInput((current) => current === input ? "" : current)
       })
@@ -854,6 +856,7 @@ ${availableSkillsList}`,
       setInput("")
       setRuntimeState("等待 Headless 工作區")
       setAgentState("orbit")
+      captureProductEvent("genioone_journey_action", { action: "bot_message_sent" })
       return
     }
 
@@ -943,6 +946,7 @@ ${availableSkillsList}`,
     const mentionedSkills = allMentionItems.filter((s) => text.includes(`@${s.id}`))
     const sentIds = new Set(images.map((image) => image.id))
     void startTurn(text, { taskRuntime, mentionedSkills, clientMessageId, images: images.map((image) => image.url) }).then(() => {
+      if (!demo && !telemetryCaptured) captureProductEvent("genioone_journey_action", { action: "bot_message_sent" })
       if (customText === undefined) setInput((current) => current === input ? "" : current)
       void imageDraft.removeSent(sentIds)
     }).catch(() => {})

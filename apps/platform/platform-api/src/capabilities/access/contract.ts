@@ -12,6 +12,8 @@ const AccessRequestStateSchema = Type.Union([
 
 export const AccessRequestSchema = Type.Object({
   access_request_id: Identifier,
+  request_correlation_id: NullableIdentifier,
+  decision_correlation_id: NullableIdentifier,
   requester: Identifier,
   target_subject: Identifier,
   acting_client: Type.Object({
@@ -81,6 +83,12 @@ export const RevokeEntitlementSchema = Type.Object({
   reason: Type.String({ minLength: 1, maxLength: 4096 }),
 }, { additionalProperties: false })
 
+export const ActivateAutoGrantSchema = Type.Object({
+  correlation_id: Identifier,
+  resource_id: Identifier,
+  capability_id: Identifier,
+}, { additionalProperties: false })
+
 export const LegacyEntitlementSchema = Type.Object({
   entitlement_id: Identifier,
   subject_id: Identifier,
@@ -88,10 +96,34 @@ export const LegacyEntitlementSchema = Type.Object({
   capability_id: Identifier,
   state: Type.Union([Type.Literal("ACTIVE"), Type.Literal("REVOKED"), Type.Literal("EXPIRED")]),
   valid_from: Timestamp,
-  valid_until: Timestamp,
+  valid_until: NullableTimestamp,
   revocation_reason: Type.Union([Type.String(), Type.Null()]),
 }, { additionalProperties: false })
 export const LegacyEntitlementListSchema = Type.Array(LegacyEntitlementSchema)
+
+const VerifiedEvidenceSchema = Type.Object({
+  subject_id: Identifier,
+  evidence_level: Type.Literal("VERIFIED"),
+}, { additionalProperties: false })
+
+export const AutoGrantActivationAuditEventSchema = Type.Object({
+  tenant_id: Identifier,
+  audit_event_id: Identifier,
+  correlation_id: Identifier,
+  kind: Type.Literal("AUTO_GRANT_ACTIVATION"),
+  outcome: Type.Literal("SUCCESS"),
+  activation: Type.Union([Type.Literal("GRANTED"), Type.Literal("ALREADY_ENTITLED")]),
+  subject: VerifiedEvidenceSchema,
+  actor_subject: VerifiedEvidenceSchema,
+  acting_client: Type.Object({
+    acting_client_id: Identifier,
+    evidence_level: Type.Literal("VERIFIED"),
+  }, { additionalProperties: false }),
+  resource_id: Identifier,
+  capability_id: Identifier,
+  entitlement_id: Identifier,
+  occurred_at: Timestamp,
+}, { additionalProperties: false })
 
 const SubjectCatalogCapabilitySchema = Type.Object({
   resource_id: Identifier,
@@ -154,6 +186,8 @@ export type RequestAccessOutcome = Static<typeof RequestAccessOutcomeSchema>
 export type DecideAccessRequestInput = Static<typeof DecideAccessRequestSchema>
 export type CancelAccessRequestInput = Static<typeof CancelAccessRequestSchema>
 export type RevokeEntitlementInput = Static<typeof RevokeEntitlementSchema>
+export type ActivateAutoGrantInput = Static<typeof ActivateAutoGrantSchema>
 export type LegacyEntitlement = Static<typeof LegacyEntitlementSchema>
+export type AutoGrantActivationAuditEvent = Static<typeof AutoGrantActivationAuditEventSchema>
 export type SubjectCatalog = Static<typeof SubjectCatalogSchema>
 export type AccessNotification = Static<typeof AccessNotificationSchema>

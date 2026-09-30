@@ -8,6 +8,7 @@ test("Mail2000 installs one password Connection with Auto Grant and never auto-p
   let resourcesCreated = 0
   let connectionsCreated = 0
   const decisions: string[] = []
+  let discoveryPosts = 0
   const policyMutations: string[] = []
   let enforcement: any
   let draft: any
@@ -63,6 +64,10 @@ test("Mail2000 installs one password Connection with Auto Grant and never auto-p
       connection = { ...body, connection_id: "connection", verification_state: "VERIFIED", mcp_selected_tools: [] }
       return connection as T
     }
+    if (path.endsWith("/mcp-discovery") && init?.method === "POST") {
+      discoveryPosts += 1
+      return {} as T
+    }
     if (path.endsWith("/mcp-discovery/latest")) return { state: "SUCCEEDED", candidates: MAIL2000_TOOLS.map((name) => ({ candidate_id: name, tool_name: name, revision_digest: "digest" })) } as T
     if (path.endsWith("/decision")) {
       const name = path.split("/").at(-2)!
@@ -81,14 +86,18 @@ test("Mail2000 installs one password Connection with Auto Grant and never auto-p
   expect(connection.mcp_selected_tools).toHaveLength(MAIL2000_TOOLS.length)
   expect(policyMutations).toHaveLength(4)
   expect(policyMutations.map((path) => path.split("/").at(-1))).toEqual(["policy-draft", "validate", "review", "publish"])
+  const discoveryAfterInstall = discoveryPosts
   await installMail2000(config, api)
   expect(decisions).toHaveLength(MAIL2000_TOOLS.length)
   expect(policyMutations).toHaveLength(4)
+  expect(discoveryPosts).toBe(discoveryAfterInstall)
   // Rerunning after an upgrade adds tools (here the CardDAV directory tools) must not silently expand a
   // published resource: the admin setup playbook requires new tools to be selected and authorized explicitly.
+  // Discovery still runs so Platform has candidates an administrator can select.
   const upgradeTools = ["carddav_search_directory", "carddav_get_self_context"]
   connection.mcp_selected_tools = connection.mcp_selected_tools.filter((name: string) => !upgradeTools.includes(name))
   expect((await installMail2000(config, api)).pendingTools).toEqual(upgradeTools)
+  expect(discoveryPosts).toBe(discoveryAfterInstall + 1)
   expect(decisions).toHaveLength(MAIL2000_TOOLS.length)
   expect(connection.mcp_selected_tools).not.toContain("carddav_search_directory")
   // Even when the publication must be re-reviewed, the installer still does not publish tool decisions.

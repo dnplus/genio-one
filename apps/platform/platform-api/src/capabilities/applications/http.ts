@@ -39,6 +39,26 @@ export const applicationHttp: FastifyPluginAsync<{
     }
     return application
   }
+  async function managedApplication(input: {
+    tenantId: string
+    applicationId: string
+    role?: string
+    administratorOrganizationIds?: readonly string[]
+  }) {
+    const application = (await options.registry.list({ tenantId: input.tenantId }))
+      .find((value) => value.application_id === input.applicationId)
+    if (!application) throw new PlatformApiError("APPLICATION_NOT_FOUND", 404)
+    if (
+      input.role !== "TENANT_ADMINISTRATOR" &&
+      (
+        input.role !== "ORGANIZATION_ADMINISTRATOR" ||
+        !new Set(input.administratorOrganizationIds ?? []).has(application.owner_organization_id)
+      )
+    ) {
+      throw new PlatformApiError("RESOURCE_OWNER_OR_TENANT_ADMIN_REQUIRED", 403)
+    }
+    return application
+  }
   routes.get(
     "/v1/tenants/:tenant_id/applications",
     {
@@ -108,11 +128,11 @@ export const applicationHttp: FastifyPluginAsync<{
       },
     },
     async (request, reply) => {
-      await visibleApplication({
+      await managedApplication({
         tenantId: request.params.tenant_id,
         applicationId: request.params.application_id,
         role: request.principal?.role,
-        organizationIds: request.principal?.organization_ids,
+        administratorOrganizationIds: request.principal?.administrator_organization_ids,
       })
       return reply.code(201).send(await options.registry.issueOAuthCredential({
         tenantId: request.params.tenant_id,
@@ -133,11 +153,11 @@ export const applicationHttp: FastifyPluginAsync<{
       },
     },
     async (request, reply) => {
-      await visibleApplication({
+      await managedApplication({
         tenantId: request.params.tenant_id,
         applicationId: request.params.application_id,
         role: request.principal?.role,
-        organizationIds: request.principal?.organization_ids,
+        administratorOrganizationIds: request.principal?.administrator_organization_ids,
       })
       return reply.code(201).send(await options.registry.rotateCredential({
         tenantId: request.params.tenant_id,
@@ -159,11 +179,11 @@ export const applicationHttp: FastifyPluginAsync<{
       },
     },
     async (request) => {
-      await visibleApplication({
+      await managedApplication({
         tenantId: request.params.tenant_id,
         applicationId: request.params.application_id,
         role: request.principal?.role,
-        organizationIds: request.principal?.organization_ids,
+        administratorOrganizationIds: request.principal?.administrator_organization_ids,
       })
       return options.registry.revokeCredential({
         tenantId: request.params.tenant_id,

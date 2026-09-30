@@ -442,7 +442,19 @@ export function createMcpOAuthService(options: {
         subjectId: input.subjectId,
       })
       if (binding && connection.connector_configuration && binding.resource_url !== connection.endpoint) return null
-      return binding ? bindingFromRecord(binding, options.codec) : null
+      if (!binding) return null
+      try {
+        await usableAccessToken(binding, connection)
+      } catch (error) {
+        if (error instanceof PlatformApiError && error.code === "MCP_OAUTH_REAUTHORIZATION_REQUIRED") return null
+        throw error
+      }
+      const current = await options.store.getBinding({
+        tenantId: input.tenantId,
+        connectionId: input.connectionId,
+        subjectId: input.subjectId,
+      })
+      return current ? bindingFromRecord(current, options.codec) : null
     },
 
     async disconnect(input) {
@@ -485,12 +497,7 @@ export function createMcpOAuthService(options: {
           if (input.credentialsOptional) return null
           throw new PlatformApiError("MCP_OAUTH_AUTHORIZATION_REQUIRED", 412)
         }
-        let token
-        try { token = await usableAccessToken(binding, connection) }
-        catch (error) {
-          if (input.credentialsOptional && error instanceof PlatformApiError && error.code === "MCP_OAUTH_REAUTHORIZATION_REQUIRED") return null
-          throw error
-        }
+        const token = await usableAccessToken(binding, connection)
         return {
           name: mcpOAuthHeaderName(connection.connection_id),
           value: `Bearer ${token.accessToken}`,

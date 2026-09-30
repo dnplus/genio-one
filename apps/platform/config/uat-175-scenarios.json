@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "environment": "uat-175",
+  "resources": [
+    { "key": "discovery", "display_name": "GenioOne Discovery", "service_kind": "DISCOVERY", "installed": true },
+    { "key": "servicenow", "display_name": "ServiceNow CSM", "service_kind": "SERVICENOW_CSM", "installed": true },
+    { "key": "mail2000", "display_name": "Mail2000", "service_kind": "MAIL2000", "installed": true },
+    { "key": "genio-bot", "display_name": "Genio Bot", "service_kind": "GENIO_BOT", "installed": true },
+    { "key": "notion", "display_name": "Notion MCP", "kind": "MCP", "installed": false },
+    {
+      "key": "access-lifecycle",
+      "display_name": "UAT Requestable Access",
+      "kind": "EXTENSION",
+      "installed": false,
+      "owner_organization": "UAT Access",
+      "authentication_strategy": "NONE",
+      "environment_id": "uat",
+      "version": "1.0.0",
+      "enforcement_point_id": "genio-one-platform",
+      "lifecycle": "PUBLISHED",
+      "capabilities": [{ "capability_id": "access.request", "display_name": "UAT Access Request" }]
+    }
+  ],
+  "actors": [
+    { "username": "anrita", "display_name": "Anrita", "organization": "Executive", "bot": "Executive Agent", "purpose": "summarize-analyze", "resources": ["discovery", "mail2000", "notion"], "personal_codex": false },
+    { "username": "kevin", "display_name": "Kevin", "organization": "Sales", "bot": "Sales Agent", "purpose": "research-draft-follow-up", "resources": ["discovery", "servicenow", "mail2000"], "personal_codex": false },
+    { "username": "dylan", "display_name": "Dylan", "organization": "Engineering", "bot": "Engineering Agent", "purpose": "code-debug-document", "resources": ["discovery", "notion"], "personal_codex": true },
+    { "username": "brief", "display_name": "Weekly Brief UAT", "organization": "Operations", "bot": "Weekly Brief Agent", "purpose": "weekly-meeting-brief", "resources": ["discovery", "mail2000", "notion"], "personal_codex": true }
+  ],
+  "access_lifecycle": {
+    "organization": "UAT Access",
+    "organization_slug": "uat-access",
+    "organization_administrator_username": "kevin",
+    "requester_username": "anrita",
+    "resource_key": "access-lifecycle",
+    "capability_id": "access.request"
+  },
+  "self_service_configuration": {
+    "brand_name": "GenioOne",
+    "language": "zh-TW",
+    "catalog_visibility": "ENTITLED_AND_REQUESTABLE",
+    "request_form": {
+      "enabled": true,
+      "required_fields": ["justification", "requested_ttl"],
+      "default_ttl_seconds": 28800
+    },
+    "ttl_options_seconds": [3600, 28800, 86400],
+    "approval_workflow_version": "uat-175-access-v1",
+    "notification_channels": ["IN_APP"],
+    "login_branding": {
+      "tagline": "企業 AI 存取治理控制平面",
+      "logo_url": "",
+      "primary_color": "#425fea",
+      "page_color": "#f7f8fa",
+      "custom_css": ""
+    }
+  },
+  "scenarios": [
+    {
+      "id": "UAT-175-05",
+      "scope": { "resources": ["mail2000", "notion"], "deferred_resources": ["servicenow"] },
+      "task": "週會 Bot 以 Mail2000 與 Notion 產出附來源的週會 brief 草案，並建議 2026-09-28 至 2026-10-09 需預訂會議室的週會與時段",
+      "completion": [
+        "缺少週會固定時間、參與者、人數、會議室偏好、排程觸發時間或 Notion 寫回頁面時，Bot 明確提問",
+        "可見 brief 以實際 Mail2000 與 Notion 結果為來源，僅保留可核對的標題與日期，不揭露完整郵件內容",
+        "會議室建議明確標示可用性尚未查核，使用者確認前不建立排程、不寫回 Notion、不寄信也不預訂會議室",
+        "兩來源 post setup 與驗收分別使用 --apply --resources mail2000,notion 及 --verify --resources mail2000,notion；ServiceNow 保持 OUT_OF_SCOPE，不執行其連線、工具、政策、發布或 Bot binding 操作",
+        "驗收保留員工身分、tenant、release revision、可見結果及每筆工具操作的 correlation 與 Gateway audit"
+      ]
+    },
+    {
+      "id": "UAT-175-06",
+      "scope": { "resources": ["notion"], "deferred_resources": ["servicenow"] },
+      "task": "Notion MCP discovery 後，管理員只核准 notion-search 與 notion-fetch 的自動唯讀執行，讓新版 signed Gateway policy 生效",
+      "completion": [
+        "兩個已發布 candidate 的審核紀錄保存相同 revision digest 與 discovery input schema",
+        "最新成功 discovery 若缺少任一唯讀工具的 input schema，--apply 重新 discovery 後才依新 candidate revision 審核與發布；--verify 只回報 PENDING",
+        "notion-update-page 沒有 AUTO_READ_ONLY 審核，Bot 仍要求使用者逐次確認",
+        "publication successor 已批准並回到 READY，相關 Gateway runtime 連線、同步與套用 revision 均為 READY",
+        "post verify 檢查 app-server 掛載的 notion__notion-search 與 notion__notion-fetch 均有 readOnlyHint，且 mail2000__search_mail 有 text、since、before、folders inputSchema；此 metadata 就緒不取代員工 Bot 實際無同意卡的畫面驗收",
+        "驗收保留管理員、員工、resource、connection、publication revision 與 runtime 狀態，不記錄 OAuth token 或 Notion 內容"
+      ]
+    },
+    {
+      "id": "UAT-175-07",
+      "scope": { "resource": "access-lifecycle", "capability": "access.request", "organization": "UAT Access", "execution_path": "NOT_CONFIGURED" },
+      "task": "Anrita 在 Self-Service 對 UAT Requestable Access 提出存取申請，Kevin 以 UAT Access 組織管理員完成拒絕、核准與撤銷",
+      "completion": [
+        "重建後 person-uat-anrita 對 access.request 沒有 ACTIVE entitlement，也沒有 PENDING access request；Catalog 顯示 UAT Requestable Access 為 REQUEST_ACCESS",
+        "Self-Service 組態以 uat-175 fixture 的完整設定發布且投影為目前 revision；若既有設定內容不同，setup 以衝突中止，不覆寫 tenant 設定",
+        "Anrita 先提出一筆有業務理由與已發布 TTL 選項的申請，Kevin 在管理介面拒絕；請求顯示 DENIED 且不產生 entitlement",
+        "Anrita 再提出一筆申請，Kevin 核准後顯示 APPROVED，且同一 resource、capability 與 subject 的限時 ACTIVE entitlement 可見",
+        "Kevin 以有意義的理由撤銷該 entitlement；重新載入後 entitlement 顯示 REVOKED，且不再以 CONNECTED 狀態出現在 Anrita 的 Catalog",
+        "重跑 setup 只回報同一 requester、resource 與 capability 的 READY、IN_PROGRESS、AUTHORIZED、REVOKED 等現況與識別碼，不重置既有申請或 entitlement",
+        "這個 EXTENSION 只驗證 Self-Service 與組織管理員的 access lifecycle；沒有 Bot、Codex 或 Gateway 工具執行路徑，撤銷後的 runtime 拒絕驗收維持 NOT RUN",
+        "驗收保留 requester、組織管理員、tenant、resource、capability、access request、entitlement、correlation 與 audit 證據；不記錄密碼、token 或業務內容"
+      ]
+    }
+  ]
+}

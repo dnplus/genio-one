@@ -89,7 +89,12 @@ export function auditSearchText(event: AuditEvent): string {
   if (isGovernanceAuditEvent(event)) return searchable(
     event.audit_event_id, event.correlation_id, event.kind, event.outcome,
     event.subject?.subject_id, event.actor_subject?.subject_id,
-    event.kind === "POLICY_CHANGE" ? event.policy_key : event.access_group_id,
+    event.kind === "POLICY_CHANGE" ? event.policy_key : event.kind === "ACCESS_GROUP_CHANGE" ? event.access_group_id : event.resource_id,
+    event.kind === "ACCESS_GOVERNANCE_CHANGE" ? event.capability_id : undefined,
+    event.kind === "ACCESS_GOVERNANCE_CHANGE" ? event.acting_client?.acting_client_id : undefined,
+    event.kind === "ACCESS_GOVERNANCE_CHANGE" ? event.access_request_id : undefined,
+    event.kind === "ACCESS_GOVERNANCE_CHANGE" ? event.entitlement_id : undefined,
+    event.kind === "ACCESS_GOVERNANCE_CHANGE" ? event.operation : undefined,
   )
   return searchable(
     event.audit_event_id,

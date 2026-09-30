@@ -148,6 +148,18 @@ export async function getBotProfile(token: string, botId: string) {
   return request<BotProfileDto>(token, `/api/bots/${encodeURIComponent(botId)}`)
 }
 
+export type BotConnectionRecovery =
+  | { state: "ready" }
+  | { state: "guarded"; requestToken: string; resourceName: string; error: string; runtimeSessionId: string | null; canReset: boolean }
+
+export function getBotConnectionRecovery(token: string, botId: string) {
+  return request<BotConnectionRecovery>(token, `/api/bots/${encodeURIComponent(botId)}/connection-recovery`, { cache: "no-store" })
+}
+
+export function resetBotConnectionRecovery(token: string, botId: string, input: { requestToken: string; runtimeSessionId: string }) {
+  return request<{ state: "ready"; reset: true }>(token, `/api/bots/${encodeURIComponent(botId)}/connection-recovery/reset`, { method: "POST", body: JSON.stringify(input) })
+}
+
 export async function createBot(token: string, input: {
   name: string
   title: string

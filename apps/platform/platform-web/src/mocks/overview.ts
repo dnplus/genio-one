@@ -305,6 +305,7 @@ function connections(allResources: ResourceRegistration[]): ConnectionSummary[] 
       endpoint_url: `https://${resource.resource_id}-${label.toLowerCase()}.example.internal`,
       mcp_selected_tools: [],
       mcp_tool_selection_operation_id: null,
+      mcp_tool_reviews: [],
       credential_configured: resource.authentication_strategy !== "NONE",
       downstream_identity: { mode: "NONE" },
       resource_id: resource.resource_id,

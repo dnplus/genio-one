@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { LocalHandsModal } from "../modals/LocalHandsModal"
 import { Monitor, MonitorOff, PanelRightOpen, Plus, Settings, Wrench } from "lucide-react"
 import { AppMark } from "../common"
@@ -8,6 +8,7 @@ import type { StateId } from "../../vendor/bloub/bot/states"
 import type { GenioCatalog } from "../../lib/genio-one"
 import { boundEnterpriseToolCount } from "../../lib/catalog-surface"
 import { botCopy, botDisplayName, botStatusText, handsProviderLabel, handsWorkspaceLabel } from "../../lib/ui-copy"
+import { getBotConnectionRecovery, resetBotConnectionRecovery, type BotConnectionRecovery } from "../../lib/bot-api"
 
 export function getDesktopStatus(runtime: RuntimeDetails | null) {
   if (runtime?.kind === "endpoint") return { text: runtime.execReady ? "本機已連接" : "本機已離線", active: runtime.execReady, offline: !runtime.execReady, title: `本機工作資料夾：${runtime.cwd}` }
@@ -71,9 +72,38 @@ export function WorkspaceHeader({
   onOpenRightPanel,
 }: WorkspaceHeaderProps) {
   const [localHandsOpen, setLocalHandsOpen] = useState(false)
+  const [connectionRecovery, setConnectionRecovery] = useState<BotConnectionRecovery | null>(null)
+  const [resettingConnection, setResettingConnection] = useState(false)
+  const [connectionRecoveryMessage, setConnectionRecoveryMessage] = useState("")
   const displayName = botDisplayName(activeBot)
   const desktopStatus = useMemo(() => getDesktopStatus(runtime), [runtime])
   const toolStatus = useMemo(() => getToolStatus(mcpStatus, catalog, activeBot), [mcpStatus, catalog, activeBot])
+
+  useEffect(() => {
+    if (!token) return
+    let active = true
+    const refresh = () => void getBotConnectionRecovery(token, activeBot.id).then((value) => {
+      if (active) setConnectionRecovery(value)
+    }).catch(() => {
+      if (active) setConnectionRecovery(null)
+    })
+    refresh()
+    const timer = setInterval(refresh, 2000)
+    return () => { active = false; clearInterval(timer) }
+  }, [token, activeBot.id])
+
+  const resetConnection = async () => {
+    if (!token || connectionRecovery?.state !== "guarded" || !connectionRecovery.runtimeSessionId) return
+    setResettingConnection(true)
+    setConnectionRecoveryMessage("")
+    try {
+      await resetBotConnectionRecovery(token, activeBot.id, { requestToken: connectionRecovery.requestToken, runtimeSessionId: connectionRecovery.runtimeSessionId })
+      setConnectionRecovery({ state: "ready" })
+      setConnectionRecoveryMessage("工作階段已重設，請重新開啟此 Bot 繼續。")
+    } catch (error) {
+      setConnectionRecoveryMessage(error instanceof Error ? error.message : "工作階段重設失敗")
+    } finally { setResettingConnection(false) }
+  }
 
   return (
     <header className="chat-header">
@@ -139,6 +169,17 @@ export function WorkspaceHeader({
               </button>
             )}
           </div>
+          {connectionRecovery?.state === "guarded" && (
+            <div role="status" aria-live="polite" style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <span>連線接續已暫停，以保護工作階段寫入。</span>
+              <button type="button" className="header-status-pill" onClick={() => void resetConnection()} disabled={!connectionRecovery.canReset || resettingConnection}>
+                {resettingConnection ? "正在重設…" : "重設此 Bot 工作階段"}
+              </button>
+              {!connectionRecovery.canReset && <span>目前無法安全重設，請等待其他 Bot 工作完成。</span>}
+              {connectionRecoveryMessage && <span>{connectionRecoveryMessage}</span>}
+            </div>
+          )}
+          {connectionRecovery?.state === "ready" && connectionRecoveryMessage && <div role="status" aria-live="polite" style={{ marginTop: 8 }}>{connectionRecoveryMessage}</div>}
         </div>
       </div>
       {!rightPanelOpen && (

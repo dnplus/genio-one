@@ -10,6 +10,7 @@ import type {
 import type { EnforcementChainRevision } from "../src/capabilities/enforcement/module"
 import { createInMemoryResourceConnectionRegistry } from "../src/capabilities/connections/memory"
 import { createInMemoryGatewayProjector } from "../src/capabilities/gateway-projection/memory"
+import type { GatewayProjection, GatewayProjectionSnapshot } from "../src/capabilities/gateway-projection/contract"
 import type { GatewayProjector } from "../src/capabilities/gateway-projection/module"
 import {
   createAiResourcePublicationWorkflow,
@@ -25,6 +26,7 @@ import { createInMemoryProviderProfileCatalog } from "../src/capabilities/provid
 import { createInMemoryResourceRegistry } from "../src/capabilities/resources/memory"
 import type { ResourceRegistration } from "../src/capabilities/resources/contract"
 import { createResourceMemoryState } from "../src/capabilities/resources/state"
+import { snapshotDigest } from "../src/capabilities/publications/snapshot-digest"
 
 const tenantId = "tenant-acme"
 const capabilityId = "chat"
@@ -278,6 +280,74 @@ test("approval claims BUILDING while Resource stays DRAFT, then commits READY/PU
   assert.equal(storedRequest?.state, "APPROVED")
   assert.equal(storedRequest?.publication_state, "READY")
   assert.equal(storedRequest?.attempt_id, "publication-attempt-test")
+})
+
+test("published snapshots remain tenant-scoped for equal Resource ids", async () => {
+  const fixture = await createFixture()
+  const request = await pendingRequest(fixture)
+  await review(fixture, request.request_id)
+  const primary = await fixture.workflow.getPublishedSnapshot({
+    tenantId,
+    resourceId: fixture.resource.resource_id,
+  })
+  assert.ok(primary)
+  const otherTenantId = "tenant-other"
+  const otherResource = {
+    ...(await fixture.resources.getResource({ tenantId, resourceId: fixture.resource.resource_id })),
+    tenant_id: otherTenantId,
+  }
+  const otherSnapshotWithoutDigest: Omit<GatewayProjectionSnapshot, "snapshot_digest"> = {
+    ...primary,
+    tenant_id: otherTenantId,
+    publication_id: "publication-other-tenant",
+    resource: { ...primary.resource, tenant_id: otherTenantId },
+    one_policy_chain: { ...primary.one_policy_chain, tenant_id: otherTenantId },
+    connections: primary.connections.map((connection) => ({ ...connection, tenant_id: otherTenantId })),
+    models: primary.models.map((model) => ({ ...model, tenant_id: otherTenantId })),
+    model_mappings: primary.model_mappings.map((mapping) => ({ ...mapping, tenant_id: otherTenantId })),
+  }
+  const otherSnapshot: GatewayProjectionSnapshot = {
+    ...otherSnapshotWithoutDigest,
+    snapshot_digest: snapshotDigest(otherSnapshotWithoutDigest),
+  }
+  fixture.state.resources.set(`${otherTenantId}:${fixture.resource.resource_id}`, otherResource)
+  fixture.state.publicationSnapshots.set(
+    `${otherTenantId}:${otherSnapshot.publication_id}`,
+    otherSnapshot,
+  )
+  fixture.state.publicationProjections.set(
+    `${otherTenantId}:${otherSnapshot.publication_id}`,
+    {
+      tenant_id: otherTenantId,
+      resource_id: fixture.resource.resource_id,
+      publication_id: otherSnapshot.publication_id,
+      operation: "APPLY",
+    } as GatewayProjection,
+  )
+
+  const other = await fixture.workflow.getPublishedSnapshot({
+    tenantId: otherTenantId,
+    resourceId: fixture.resource.resource_id,
+  })
+  assert.equal(other?.publication_id, otherSnapshot.publication_id)
+  assert.equal(
+    (await fixture.workflow.getPublishedSnapshot({
+      tenantId,
+      resourceId: fixture.resource.resource_id,
+    }))?.publication_id,
+    primary.publication_id,
+  )
+  fixture.state.resources.set(`${otherTenantId}:${fixture.resource.resource_id}`, {
+    ...otherResource,
+    lifecycle: "DEPRECATED",
+  })
+  assert.equal(
+    await fixture.workflow.getPublishedSnapshot({
+      tenantId: otherTenantId,
+      resourceId: fixture.resource.resource_id,
+    }),
+    null,
+  )
 })
 
 test("a published Resource can stage a verified secondary Connection mapping", async () => {

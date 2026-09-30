@@ -27,6 +27,7 @@ test("scoped Organization Administrator manages Use Cases and immutable Usage Po
         subject_id: "person-admin",
         role: "ORGANIZATION_ADMINISTRATOR",
         organization_ids: [organization.organization_id],
+        administrator_organization_ids: [organization.organization_id],
         client_id: "platform-web",
       },
     }),

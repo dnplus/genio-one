@@ -60,6 +60,21 @@ async function insertEntries(
   }
 }
 
+export async function readCurrentPriceCatalogFetchedAt(
+  sql: SqlAdapter,
+  source: ReplaceModelPriceCatalogInput["source"],
+): Promise<number | null> {
+  const result = await sql.query<{ fetched_at: string | number } & Record<string, unknown>>(
+    `select fetched_at from genio_one_price_catalog_versions
+     where source = $1 and status = 'CURRENT'
+     order by fetched_at desc
+     limit 1`,
+    [source],
+  )
+  const value = result.rows[0]?.fetched_at
+  return value === undefined ? null : Number(value)
+}
+
 export function createPostgresModelPriceCatalog(options: { sql: SqlAdapter }): ModelPriceCatalog {
   return {
     async replace(input) {

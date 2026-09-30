@@ -1,6 +1,8 @@
 import { Type, type Static } from "typebox"
 import { RuntimePolicyAuditEventSchema, type RuntimePolicyAuditEvent } from "../one-policy/runtime"
 import { AccessGroupAuditEventSchema, type AccessGroupAuditEvent } from "../access-groups/audit"
+import { AccessGovernanceAuditEventSchema, type AccessGovernanceAuditEvent } from "../access/audit"
+import { AutoGrantActivationAuditEventSchema, type AutoGrantActivationAuditEvent } from "../access/contract"
 
 const Identifier = Type.String({ minLength: 1, maxLength: 256 })
 const NullableIdentifier = Type.Union([Identifier, Type.Null()])
@@ -132,6 +134,8 @@ export const AuthorizationAuditEventSchema = Type.Union([
   RuntimePolicyAuditEventSchema,
   PolicyChangeAuditEventSchema,
   AccessGroupAuditEventSchema,
+  AccessGovernanceAuditEventSchema,
+  AutoGrantActivationAuditEventSchema,
 ])
 
 export const GatewayAuthorizationAuditPathSchema = Type.Object({
@@ -202,6 +206,8 @@ export type GatewayAuthorizationAuditIngest = Static<typeof GatewayAuthorization
 export type GatewayAuthorizationAuditEvent = Static<typeof GatewayAuthorizationAuditEventSchema>
 export type PolicyChangeAuditEvent = Static<typeof PolicyChangeAuditEventSchema>
 export type { AccessGroupAuditEvent }
+export type { AccessGovernanceAuditEvent }
+export type { AutoGrantActivationAuditEvent }
 export type AuthorizationAuditEvent = Static<typeof AuthorizationAuditEventSchema>
 export type GatewayAuthorizationAuditQueryResponse = Static<typeof GatewayAuthorizationAuditQueryResponseSchema>
 export type AuditExportQuery = Static<typeof AuditExportQuerySchema>

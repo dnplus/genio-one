@@ -1,10 +1,12 @@
 import { createHash } from "node:crypto"
 
+import { canonicalJson } from "@genioone/protocol/canonical"
+
 import type { McpDiscoveryCandidate, McpDiscoveryObservation } from "./contract"
 import { mcpToolCapabilityId } from "../../../../../../runtimes/gateway/services/shared/mcp-tool-capability"
 
 function digest(value: unknown): string {
-  return createHash("sha256").update(JSON.stringify(value)).digest("hex")
+  return createHash("sha256").update(canonicalJson(value)).digest("hex")
 }
 
 export function discoveryCandidates(

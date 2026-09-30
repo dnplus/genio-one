@@ -22,6 +22,7 @@ import type { ConnectionRegistration } from "../connections/contract"
 import type { ProviderCredentialProfileRevision } from "../provider-credentials/contract"
 import type {
   GatewayNativeResource,
+  GatewayMcpToolDefinition,
   GatewayProjectionPublication,
   GatewayProjectionSnapshot,
   GatewayProjectionRendererOptions,
@@ -39,6 +40,7 @@ const AI_GATEWAY_GROUP = "aigateway.envoyproxy.io"
 const ENVOY_GATEWAY_GROUP = "gateway.envoyproxy.io"
 const PROCESSOR_HTTP_PORT = 8182
 const UPSTREAM_TLS_ECDH_CURVES = ["X25519", "P-256", "P-384"] as const
+const MAX_HTTP_ROUTE_FILTER_DIRECT_RESPONSE_BYTES = 4096
 
 const DEFAULT_OPTIONS: Required<
   Pick<
@@ -133,6 +135,11 @@ function kubernetesName(value: string, label: string): string {
 function normalizePathPrefix(value: string): string {
   if (value === "/") return value
   return value.replace(/\/+$/, "") || "/"
+}
+
+function mcpProtectedResourceMetadataPath(resource: string): string {
+  const resourcePath = normalizePathPrefix(new URL(resource).pathname)
+  return `/.well-known/oauth-protected-resource${resourcePath === "/" ? "" : resourcePath}`
 }
 
 function assertPublicationEndpoint(
@@ -862,6 +869,9 @@ function connectionBackend(
   revision: number,
 ): { backend: GatewayNativeResource; caBundle?: GatewayNativeResource; parsed: ParsedEndpoint; name: string } {
   const parsed = parseEndpoint(connection.endpoint)
+  const backendHost = !isIP(parsed.host) && !parsed.host.includes(".")
+    ? `${parsed.host}.${namespace}.svc.cluster.local`
+    : parsed.host
   const name = kubernetesName(
     connection.mcp_tool_namespace ?? `${resourceId}-${connection.connection_id}-backend`,
     "backend",
@@ -901,12 +911,58 @@ function connectionBackend(
       resourceId,
       revision,
       {
-        endpoints: [backendEndpoint(parsed.host, parsed.port)],
+        endpoints: [backendEndpoint(backendHost, parsed.port)],
         ...(tls ? { tls: Object.fromEntries(Object.entries(tls).filter(([, value]) => value !== undefined)) } : {}),
       },
+      { "genio.one/connection-id": connection.connection_id },
     ),
     ...(caBundle ? { caBundle } : {}),
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+}
+
+function approvedMcpToolDefinitions(
+  connection: ConnectionRegistration,
+  resourceId: string,
+  backendName: string,
+): GatewayMcpToolDefinition[] {
+  const reviews = connection.mcp_tool_reviews ?? []
+  if (!Array.isArray(reviews)) {
+    throw new PlatformApiError("MCP_TOOL_REVIEW_INVALID", 422)
+  }
+  const selectedTools = new Set(connection.mcp_selected_tools)
+  const definitions = reviews
+    .filter((review) => review.execution_mode === "AUTO_READ_ONLY")
+    .map((review) => {
+      if (
+        typeof review.tool_name !== "string" ||
+        !selectedTools.has(review.tool_name) ||
+        typeof review.source_revision_digest !== "string" ||
+        !/^[a-f0-9]{64}$/.test(review.source_revision_digest) ||
+        (review.description !== null && typeof review.description !== "string") ||
+        !isRecord(review.input_schema)
+      ) {
+        throw new PlatformApiError("MCP_TOOL_REVIEW_INVALID", 422)
+      }
+      return {
+        resource_id: resourceId,
+        connection_id: connection.connection_id,
+        canonical_tool_name: review.tool_name,
+        exposed_tool_name: `${backendName}__${review.tool_name}`,
+        source_revision_digest: review.source_revision_digest,
+        description: review.description,
+        input_schema: review.input_schema,
+        read_only: true,
+      } as const
+    })
+    .sort((left, right) => compareUtf8(left.exposed_tool_name, right.exposed_tool_name))
+  if (new Set(definitions.map((definition) => definition.exposed_tool_name)).size !== definitions.length) {
+    throw new PlatformApiError("DUPLICATE_MCP_TOOL_REVIEW", 422)
+  }
+  return definitions
 }
 
 function providerSchemaPrefix(parsed: ParsedEndpoint): Record<string, string> {
@@ -1897,6 +1953,7 @@ export function createInMemoryGatewayProjector(
       const credentialPolicies: GatewayNativeResource[] = []
       const aiServiceBackendByConnection = new Map<string, string>()
       const mcpBackendRefs: Array<Record<string, unknown>> = []
+      const mcpToolDefinitions: GatewayMcpToolDefinition[] = []
       let apiBackendReference: Record<string, unknown> | null = null
       let apiEndpoint: ParsedEndpoint | null = null
       for (const connection of [...candidateConnections].sort((left, right) =>
@@ -1976,6 +2033,11 @@ export function createInMemoryGatewayProjector(
             toolSelector: { include: connection.mcp_selected_tools },
             forwardHeaders: [{ name: "x-request-id" }, ...passthroughHeaders],
           })
+          mcpToolDefinitions.push(...approvedMcpToolDefinitions(
+            connection,
+            snapshot.resource_id,
+            projected.name,
+          ))
         } else {
           if (connection.connection_kind !== "API" || !connection.request_mapping) {
             throw new PlatformApiError("API_CONNECTION_MAPPING_REQUIRED", 422)
@@ -2219,6 +2281,84 @@ export function createInMemoryGatewayProjector(
             },
           )]
 
+      const mcpMetadataResources: GatewayNativeResource[] = []
+      if (mcpSecurityPolicy) {
+        const metadataName = kubernetesName(
+          `${routeName}-oauth-protected-resource-metadata`,
+          "OAuth protected resource metadata",
+        )
+        const metadata = mcpSecurityPolicy.oauth.protectedResourceMetadata
+        const metadataBody = JSON.stringify({
+          resource: metadata.resource,
+          authorization_servers: [mcpSecurityPolicy.oauth.issuer],
+          scopes_supported: metadata.scopesSupported,
+          bearer_methods_supported: ["header"],
+        })
+        const metadataBodyBytes = new TextEncoder().encode(metadataBody).byteLength
+        if (metadataBodyBytes > MAX_HTTP_ROUTE_FILTER_DIRECT_RESPONSE_BYTES) {
+          throw new PlatformApiError(
+            "MCP_OAUTH_PROTECTED_RESOURCE_METADATA_TOO_LARGE",
+            422,
+            `OAuth protected resource metadata direct response is ${metadataBodyBytes} bytes; maximum is ${MAX_HTTP_ROUTE_FILTER_DIRECT_RESPONSE_BYTES}`,
+          )
+        }
+        mcpMetadataResources.push(
+          nativeResource(
+            ENVOY_GATEWAY_API_VERSION,
+            "HTTPRouteFilter",
+            metadataName,
+            namespace,
+            snapshot.resource_id,
+            snapshot.endpoint_revision,
+            {
+              directResponse: {
+                contentType: "application/json",
+                statusCode: 200,
+                body: {
+                  type: "Inline",
+                  inline: metadataBody,
+                },
+              },
+            },
+          ),
+          nativeResource(
+            "gateway.networking.k8s.io/v1",
+            "HTTPRoute",
+            metadataName,
+            namespace,
+            snapshot.resource_id,
+            snapshot.endpoint_revision,
+            {
+              hostnames: [publication.hostname],
+              parentRefs: [{
+                name: publication.gateway_id,
+                kind: "Gateway",
+                group: GATEWAY_API_GROUP,
+                namespace,
+                sectionName: "http",
+              }],
+              rules: [{
+                matches: [{
+                  method: "GET",
+                  path: {
+                    type: "Exact",
+                    value: mcpProtectedResourceMetadataPath(metadata.resource),
+                  },
+                }],
+                filters: [{
+                  type: "ExtensionRef",
+                  extensionRef: {
+                    group: ENVOY_GATEWAY_GROUP,
+                    kind: "HTTPRouteFilter",
+                    name: metadataName,
+                  },
+                }],
+              }],
+            },
+          ),
+        )
+      }
+
       const securityPolicy = (resource.kind === "LLM" || resource.kind === "API") && authorizeStep && jwtConfig
         ? authorizationPolicy(
             routeName,
@@ -2277,6 +2417,7 @@ export function createInMemoryGatewayProjector(
         ...aiServiceBackends,
         ...credentialPolicies,
         ...routeResources,
+        ...mcpMetadataResources,
         ...(authorizeStep && jwtConfig
           ? [authorizationFilterOrder(
               publication.gateway_id,
@@ -2301,6 +2442,16 @@ export function createInMemoryGatewayProjector(
         return compareUtf8(kindOrder, rightKindOrder)
       })
 
+      const sortedMcpToolDefinitions = [...mcpToolDefinitions].sort((left, right) =>
+        compareUtf8(left.exposed_tool_name, right.exposed_tool_name),
+      )
+      if (
+        new Set(sortedMcpToolDefinitions.map((definition) => definition.exposed_tool_name)).size !==
+        sortedMcpToolDefinitions.length
+      ) {
+        throw new PlatformApiError("DUPLICATE_MCP_TOOL_REVIEW", 422)
+      }
+
       const unsigned = {
         schema_version: "genio.one.gateway.v1" as const,
         operation: "APPLY" as const,
@@ -2316,6 +2467,9 @@ export function createInMemoryGatewayProjector(
         policy_bundle: {
           enforcement_chain: safeChain,
         },
+        ...(sortedMcpToolDefinitions.length > 0
+          ? { mcp_tool_definitions: sortedMcpToolDefinitions }
+          : {}),
         resources,
       }
       const projectionDigest = digest(unsigned)

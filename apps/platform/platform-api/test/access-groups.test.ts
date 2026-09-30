@@ -68,6 +68,7 @@ function principal(subjectId: string, tenant = tenantId): Principal {
     client_id: "genio-one-bot",
     role: subjectId === "admin" ? "TENANT_ADMINISTRATOR" : subjectId === "org-admin" ? "ORGANIZATION_ADMINISTRATOR" : "USER",
     organization_ids: subjectId === "org-admin" ? ["org-1"] : [],
+    administrator_organization_ids: subjectId === "org-admin" ? ["org-1"] : [],
     scopes: ["genioone-management", "genioone-invocation"],
   }
 }

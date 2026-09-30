@@ -17,7 +17,7 @@ import {
   type UsageRejectionObservation,
 } from "./grpc"
 import { authorize } from "@genioone/policy/authorize"
-import { verifyAuthorizationBundle } from "./signed-bundle"
+import { isCompiledAuthorizationBundle, verifyAuthorizationBundle } from "./signed-bundle"
 import type { AuthorizationBundleSnapshot } from "./bundle-store"
 import { TRUSTED_RELEASE_HEADERS } from "../shared/release-handoff"
 import {
@@ -222,6 +222,38 @@ test("authorization bundles require a known EdDSA signature", () => {
       }),
     /signature is invalid/,
   )
+})
+
+test("authorization bundles reject unsigned external MCP read-only claims", () => {
+  const definition = {
+    resource_id: "notion",
+    connection_id: "connection-notion",
+    canonical_tool_name: "notion-search",
+    exposed_tool_name: "notion__notion-search",
+    source_revision_digest: "e".repeat(64),
+    description: "Search pages.",
+    input_schema: { type: "object", properties: { query: { type: "string" } } },
+    read_only: true,
+  }
+  assert.equal(isCompiledAuthorizationBundle({
+    ...bundle,
+    mcp_tool_definitions: [definition],
+  }), true)
+  assert.equal(isCompiledAuthorizationBundle({
+    ...bundle,
+    mcp_tool_definitions: [{ ...definition, source_read_only_hint: true }],
+  }), false)
+  assert.equal(isCompiledAuthorizationBundle({
+    ...bundle,
+    mcp_tool_definitions: [{ ...definition, read_only: false }],
+  }), false)
+  assert.equal(isCompiledAuthorizationBundle({
+    ...bundle,
+    mcp_tool_definitions: [{
+      ...definition,
+      input_schema: { type: "object", description: "x".repeat(16_385) },
+    }],
+  }), false)
 })
 
 type AuthorizationClient = {
@@ -1192,6 +1224,208 @@ test("Envoy gRPC ext_authz returns the Subject MCP tool surface without an upstr
         }],
       },
     })
+  } finally {
+    Date.now = originalNow
+    await stop()
+  }
+})
+
+test("MCP tools/list preserves first-party curated read-only behavior", async () => {
+  const originalNow = Date.now
+  Date.now = () => now * 1000
+  const mcpBundle: CompiledAuthorizationBundle = {
+    ...bundle,
+    rules: [{
+      ...bundle.rules[0]!,
+      rule_id: "allow-mail2000",
+      resource_id: "mail2000",
+      capability_id: "mcp.invoke",
+      public_models: [],
+      mcp_tools: ["mail2000__list_mailboxes", "mail2000__search_mail", "mail2000__send_mail", "external_tool"],
+    }, {
+      ...bundle.rules[0]!,
+      rule_id: "allow-servicenow-csm",
+      resource_id: "servicenow-csm",
+      capability_id: "mcp.invoke",
+      public_models: [],
+      mcp_tools: ["servicenow__list_cases", "servicenow__create_case"],
+    }, {
+      ...bundle.rules[0]!,
+      rule_id: "allow-unknown-mcp",
+      resource_id: "notion",
+      capability_id: "mcp.invoke",
+      public_models: [],
+      mcp_tools: ["mail2000__list_mailboxes"],
+    }],
+    resource_owners: [
+      { resource_id: "mail2000", organization_id: "genio-one-system" },
+      { resource_id: "servicenow-csm", organization_id: "genio-one-system" },
+      { resource_id: "notion", organization_id: "external-owner" },
+    ],
+  }
+  const { client, stop } = await startAuthorizationClient({
+    async current() { return { ...bundleSnapshot(), bundle: mcpBundle } },
+  })
+  try {
+    const request = checkRequest()
+    const attributes = request.attributes as any
+    attributes.context_extensions = {
+      tenant_id: input.tenantId,
+      resource_id: "mail2000",
+      capability_id: "mcp.invoke",
+      request_protocol: "MCP",
+    }
+    attributes.request.http.body = JSON.stringify({ jsonrpc: "2.0", id: 17, method: "tools/list" })
+    const response = await check(client, request)
+    assert.equal(response.denied_response.status.code, 200, response.denied_response.body)
+    const tools = JSON.parse(response.denied_response.body).result.tools
+    assert.deepEqual(tools, [
+      {
+        name: "external_tool",
+        description: "Published MCP tool",
+        inputSchema: { type: "object", additionalProperties: true },
+      },
+      {
+        name: "mail2000__list_mailboxes",
+        description: "使用目前使用者的 Mail2000 連線列出可用郵件資料夾。",
+        inputSchema: {
+          $schema: "http://json-schema.org/draft-07/schema#",
+          type: "object",
+          properties: {},
+        },
+        annotations: { readOnlyHint: true },
+      },
+      {
+        name: "mail2000__search_mail",
+        description: "搜尋 Mail2000 郵件，依日期新到舊回傳，每筆附 folder、uid、uid_validity 供後續讀取或管理。folders 可一次搜尋多個資料夾（先用 list_mailboxes 取得）。text 比對主旨、寄件者、收件者與副本，不含內文；有 text 或 from 時預設只搜最近 30 天，可用 since 指定更早日期；truncated 為 true 時 total 只是已掃描範圍內的筆數。",
+        inputSchema: {
+          $schema: "http://json-schema.org/draft-07/schema#",
+          type: "object",
+          properties: {
+            folder: { default: "INBOX", type: "string", minLength: 1, maxLength: 1024, pattern: "^[^\\x00\\r\\n]+$" },
+            folders: { minItems: 1, maxItems: 10, type: "array", items: { type: "string", minLength: 1, maxLength: 1024, pattern: "^[^\\x00\\r\\n]+$" } },
+            text: { type: "string", maxLength: 1000 },
+            from: { type: "string", maxLength: 512 },
+            unseen: { type: "boolean" },
+            since: { description: "YYYY-MM-DD，含當日", type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+            before: { description: "YYYY-MM-DD，不含當日", type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+            limit: { default: 20, type: "integer", minimum: 1, maximum: 500 },
+          },
+        },
+        annotations: { readOnlyHint: true },
+      },
+      {
+        name: "mail2000__send_mail",
+        description: "Published MCP tool",
+        inputSchema: { type: "object", additionalProperties: true },
+      },
+    ])
+
+    attributes.context_extensions.resource_id = "servicenow-csm"
+    attributes.request.http.body = JSON.stringify({ jsonrpc: "2.0", id: 18, method: "tools/list" })
+    const serviceNowResponse = await check(client, request)
+    assert.equal(serviceNowResponse.denied_response.status.code, 200)
+    assert.deepEqual(JSON.parse(serviceNowResponse.denied_response.body).result.tools, [
+      {
+        name: "servicenow__create_case",
+        description: "Published MCP tool",
+        inputSchema: { type: "object", additionalProperties: true },
+      },
+      {
+        name: "servicenow__list_cases",
+        description: "Published MCP tool",
+        inputSchema: { type: "object", additionalProperties: true },
+        annotations: { readOnlyHint: true },
+      },
+    ])
+
+    attributes.context_extensions.resource_id = "notion"
+    attributes.request.http.body = JSON.stringify({ jsonrpc: "2.0", id: 19, method: "tools/list" })
+    const unknownResponse = await check(client, request)
+    assert.equal(unknownResponse.denied_response.status.code, 200)
+    assert.deepEqual(JSON.parse(unknownResponse.denied_response.body).result.tools, [{
+      name: "mail2000__list_mailboxes",
+      description: "Published MCP tool",
+      inputSchema: { type: "object", additionalProperties: true },
+    }])
+  } finally {
+    Date.now = originalNow
+    await stop()
+  }
+})
+
+test("MCP tools/list uses only signed approved definitions for external schemas and read-only hints", async () => {
+  const originalNow = Date.now
+  Date.now = () => now * 1000
+  const mcpBundle: CompiledAuthorizationBundle = {
+    ...bundle,
+    rules: [{
+      ...bundle.rules[0]!,
+      rule_id: "allow-notion-tools",
+      resource_id: "notion",
+      capability_id: "mcp.invoke",
+      public_models: [],
+      mcp_tools: [
+        "notion__notion-search",
+        "notion__notion-fetch",
+        "notion__notion-update-page",
+      ],
+    }],
+    resource_owners: [{ resource_id: "notion", organization_id: "external-owner" }],
+    mcp_tool_definitions: [{
+      resource_id: "notion",
+      connection_id: "connection-notion",
+      canonical_tool_name: "notion-search",
+      exposed_tool_name: "notion__notion-search",
+      source_revision_digest: "d".repeat(64),
+      description: "Search approved Notion workspace pages.",
+      input_schema: {
+        type: "object",
+        properties: { query: { type: "string" }, page_size: { type: "integer", minimum: 1 } },
+        required: ["query"],
+        additionalProperties: false,
+      },
+      read_only: true,
+    }],
+  }
+  const { client, stop } = await startAuthorizationClient({
+    async current() { return { ...bundleSnapshot(), bundle: mcpBundle } },
+  })
+  try {
+    const request = checkRequest()
+    const attributes = request.attributes as any
+    attributes.context_extensions = {
+      tenant_id: input.tenantId,
+      resource_id: "notion",
+      capability_id: "mcp.invoke",
+      request_protocol: "MCP",
+    }
+    attributes.request.http.body = JSON.stringify({ jsonrpc: "2.0", id: 20, method: "tools/list" })
+    const response = await check(client, request)
+    assert.equal(response.denied_response.status.code, 200)
+    assert.deepEqual(JSON.parse(response.denied_response.body).result.tools, [
+      {
+        name: "notion__notion-fetch",
+        description: "Published MCP tool",
+        inputSchema: { type: "object", additionalProperties: true },
+      },
+      {
+        name: "notion__notion-search",
+        description: "Search approved Notion workspace pages.",
+        inputSchema: {
+          type: "object",
+          properties: { query: { type: "string" }, page_size: { type: "integer", minimum: 1 } },
+          required: ["query"],
+          additionalProperties: false,
+        },
+        annotations: { readOnlyHint: true },
+      },
+      {
+        name: "notion__notion-update-page",
+        description: "Published MCP tool",
+        inputSchema: { type: "object", additionalProperties: true },
+      },
+    ])
   } finally {
     Date.now = originalNow
     await stop()

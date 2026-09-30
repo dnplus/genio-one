@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { createManagementApi } from "../src/app"
+import { autoGrantActivationAuditEvent } from "../src/capabilities/access/audit"
 import { createPostgresGatewayAuthorizationAuditStore } from "../src/capabilities/audit-events/postgres"
 import { createInMemoryPlatformModules } from "../src/capabilities/platform-modules"
 import { createStaticPrincipalAuthenticator } from "../src/capabilities/tenancy-auth/memory"
@@ -137,4 +138,35 @@ test("PostgreSQL audit persistence keeps identical retries and rejects a changed
     event: { ...event, outcome: "DENY" },
   }), { code: "AUDIT_EVENT_CONFLICT" })
   assert.equal((rows.get("tenant\0audit-immutable")?.event as { outcome: string }).outcome, "ALLOW")
+})
+
+test("audit lookup within an activation transaction uses the same connection", async () => {
+  const event = autoGrantActivationAuditEvent({
+    tenantId: "tenant-acme",
+    subjectId: "person-user",
+    clientId: "self-service-ui",
+    correlationId: "activate-1",
+    resourceId: "resource-ai",
+    capabilityId: "mcp.invoke",
+    entitlementId: "entitlement-1",
+    disposition: "GRANTED",
+    occurredAt: 100,
+  })
+  const sql: SqlAdapter = {
+    async query() { throw new Error("AUDIT_LOOKUP_LEFT_TRANSACTION") },
+    async transaction(work) {
+      return work({
+        async query<Row extends Record<string, unknown>>(text: string, parameters: readonly unknown[] = []): Promise<SqlQueryResult<Row>> {
+          assert.match(text, /where tenant_id = \$1 and audit_event_id = \$2/)
+          assert.deepEqual(parameters, [event.tenant_id, event.audit_event_id])
+          return { rows: [{ tenant_id: event.tenant_id, audit_event_id: event.audit_event_id, event, occurred_at: 100 } as unknown as Row], rowCount: 1 }
+        },
+      })
+    },
+  }
+  const audit = createPostgresGatewayAuthorizationAuditStore({ sql })
+
+  await sql.transaction(async (transaction) => {
+    assert.deepEqual(await audit.findById({ tenantId: event.tenant_id, auditEventId: event.audit_event_id, transaction }), event)
+  })
 })

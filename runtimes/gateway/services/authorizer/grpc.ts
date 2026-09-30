@@ -76,6 +76,7 @@ import {
   type UsageCounterStore,
 } from "../shared/usage-governance"
 import { executionActionDigest, type ExecutionGrantConsumer } from "../shared/execution-grant"
+import { mail2000ReadOnlyMcpToolMetadata } from "../../../../apps/connectors/mail2000/metadata"
 
 /**
  * Headers written by this ext_authz service after native authentication and
@@ -656,9 +657,49 @@ function deniedResponse(
   }
 }
 
+const FIRST_PARTY_READ_ONLY_MCP_TOOLS: Readonly<Record<string, ReadonlySet<string>>> = {
+  mail2000: new Set([
+    "mail2000__list_mailboxes",
+    "mail2000__search_mail",
+    "mail2000__read_mail",
+    "mail2000__caldav_list_collections",
+    "mail2000__caldav_read_objects",
+    "mail2000__carddav_list_collections",
+    "mail2000__carddav_read_objects",
+    "mail2000__carddav_search_directory",
+    "mail2000__carddav_get_self_context",
+  ]),
+  "servicenow-csm": new Set(["servicenow__list_cases", "servicenow__get_case"]),
+}
+
+function firstPartyMcpToolReadOnlyHint(input: AuthorizationInput, name: string): boolean {
+  return input.requestProtocol === "MCP" &&
+    input.capabilityId === "mcp.invoke" &&
+    input.resourceOwnerOrganizationId === "genio-one-system" &&
+    FIRST_PARTY_READ_ONLY_MCP_TOOLS[input.resourceId]?.has(name) === true
+}
+
+function firstPartyMcpToolMetadata(input: AuthorizationInput, name: string) {
+  if (!firstPartyMcpToolReadOnlyHint(input, name) || input.resourceId !== "mail2000") return undefined
+  return mail2000ReadOnlyMcpToolMetadata(name)
+}
+
+function signedMcpToolDefinition(
+  bundle: CompiledAuthorizationBundle,
+  input: AuthorizationInput,
+  name: string,
+) {
+  return bundle.mcp_tool_definitions?.find((definition) =>
+    definition.resource_id === input.resourceId &&
+    definition.exposed_tool_name === name,
+  )
+}
+
 function mcpToolsListResponse(
   request: EnvoyCheckRequest,
   decision: AuthorizationDecision,
+  input: AuthorizationInput,
+  bundle: CompiledAuthorizationBundle,
 ): EnvoyCheckResponse {
   const requestId = parsedRequestBody(request)?.id
   return {
@@ -673,11 +714,18 @@ function mcpToolsListResponse(
         jsonrpc: "2.0",
         id: typeof requestId === "string" || typeof requestId === "number" ? requestId : null,
         result: {
-          tools: decision.allowedMcpTools.map((name) => ({
-            name,
-            description: "Published MCP tool",
-            inputSchema: { type: "object", additionalProperties: true },
-          })),
+          tools: decision.allowedMcpTools.map((name) => {
+            const definition = signedMcpToolDefinition(bundle, input, name)
+            const firstParty = firstPartyMcpToolMetadata(input, name)
+            return {
+              name,
+              description: definition?.description ?? firstParty?.description ?? "Published MCP tool",
+              inputSchema: definition?.input_schema ?? firstParty?.input_schema ?? { type: "object", additionalProperties: true },
+              ...(definition?.read_only || firstPartyMcpToolReadOnlyHint(input, name)
+                ? { annotations: { readOnlyHint: true } }
+                : {}),
+            }
+          }),
         },
       }),
     },
@@ -857,7 +905,7 @@ function createExternalAuthorizerHandler(
         }
         if (input.requestProtocol === "MCP" && input.mcpMethod === "tools/list") {
           observeDecision()
-          callback(null, mcpToolsListResponse(call.request, decision))
+          callback(null, mcpToolsListResponse(call.request, decision, input, bundle))
           return
         }
         const observeUsageRejection = (reason: UsageAdmissionReason, statusCode: 429 | 503) => {

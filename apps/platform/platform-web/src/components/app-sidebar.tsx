@@ -13,7 +13,7 @@ import genioOneLightLogo from "../../../../../packages/brand/assets/logo-02.svg"
 import genioOneDarkLogo from "../../../../../packages/brand/assets/logo-03.svg"
 
 import { ManagementSearchDialog } from "@/components/management-search-dialog"
-import { managementNavigation, type PageId } from "@/components/management-navigation"
+import { managementNavigationForRole, type PageId } from "@/components/management-navigation"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -97,6 +97,7 @@ export function AppSidebar({
   const [permissionPreviewOpen, setPermissionPreviewOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [globalQuery, setGlobalQuery] = useState(search)
+  const navigation = managementNavigationForRole(identity.role)
 
   function openGlobalSearch() {
     setGlobalQuery(search)
@@ -149,7 +150,7 @@ export function AppSidebar({
         </SidebarHeader>
 
         <SidebarContent className="py-3">
-          {managementNavigation.map((group, groupIndex) => (
+          {navigation.map((group, groupIndex) => (
             <SidebarGroup key={group.label} className="py-1 group-data-[collapsible=icon]:px-3">
               {groupIndex > 0 ? <SidebarGroupLabel>{t(group.label)}</SidebarGroupLabel> : null}
               <SidebarGroupContent>
@@ -270,7 +271,7 @@ export function AppSidebar({
       <ManagementSearchDialog
         currentSearch={search}
         data={data}
-        navigation={managementNavigation}
+        navigation={navigation}
         onNavigate={handleNavigate}
         onOpenChange={setSearchOpen}
         onQueryChange={setGlobalQuery}

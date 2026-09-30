@@ -64,7 +64,7 @@ Python 測試使用真實 ffmpeg 與測試 recognizer；CP 測試使用記憶體
 
 ## Codex 語音調查
 
-Bot 所固定的 Codex app-server 0.153.4 生成協定已包含 `audio`／`localAudio` 輸入，以及 EXPERIMENTAL 的 thread realtime API。這代表有音訊協定接點，不代表可把本機 Breeze 直接插成 Codex 內建語音供應者。本版由 Bot 與 GenioOne 管理 ASR，避免將實驗中的 Codex realtime API 變成語音輸入的必要依賴。
+Bot 所固定的 Codex app-server 0.159.2 生成協定已包含 `audio`／`localAudio` 輸入，以及 EXPERIMENTAL 的 thread realtime API。這代表有音訊協定接點，不代表可把本機 Breeze 直接插成 Codex 內建語音供應者。本版由 Bot 與 GenioOne 管理 ASR，避免將實驗中的 Codex realtime API 變成語音輸入的必要依賴。
 
 來源：[Breeze ASR 25 模型與官方範例](https://huggingface.co/MediaTek-Research/Breeze-ASR-25)、[Envoy AI Gateway 音訊轉錄](https://aigateway.envoyproxy.io/docs/capabilities/llm-integrations/supported-endpoints/)、本 repo 的 `apps/bot/server/generated/v2/UserInput.ts` 與 `ThreadRealtimeStartParams.ts`。
 

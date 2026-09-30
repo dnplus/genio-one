@@ -221,8 +221,8 @@ test("MCP relay uses each mount's publication endpoint with the configured gatew
     expect((await app.inject(request)).statusCode).toBe(200)
     expect((await app.inject({ ...request, url: `/api/mcp-gateway/${session.id}/bots/ce-bot/genio.demo.archify/mcp` })).statusCode).toBe(200)
     expect(targets).toEqual([
-      { url: "http://127.0.0.1:1975/", host: "context7.stellar-freight.localhost:1975", authorization: "Bearer agent-token" },
-      { url: "http://127.0.0.1:1975/", host: "archify.stellar-freight.localhost:1975", authorization: "Bearer agent-token" },
+      { url: "http://127.0.0.1:1975/", host: "context7.stellar-freight.localhost", authorization: "Bearer agent-token" },
+      { url: "http://127.0.0.1:1975/", host: "archify.stellar-freight.localhost", authorization: "Bearer agent-token" },
     ])
     expect(catalogTokens).toEqual(["Bearer agent-token", "Bearer agent-token"])
     session.selectedBotId = "other-ui-bot"
@@ -295,7 +295,7 @@ test("resource-scoped MCP relay preserves the method, headers, route, and curren
       url: "http://127.0.0.1:1975/mcp?cursor=next",
       method: "POST",
       authorization: "Bearer active-token",
-      host: "notion.stellar-freight.localhost:1975",
+      host: "notion.stellar-freight.localhost",
       requestId: expect.any(String),
       correlationId: expect.any(String),
       sessionId: session.id,

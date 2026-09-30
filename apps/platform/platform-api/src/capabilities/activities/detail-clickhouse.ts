@@ -8,6 +8,13 @@ interface OTelTraceRow {
   attributes: Record<string, string>
 }
 
+function databaseIdentifier(value: string): string {
+  if (!/^[a-zA-Z0-9_]+$/.test(value)) {
+    throw new Error(`INVALID_CLICKHOUSE_DATABASE_NAME:${value}`)
+  }
+  return value
+}
+
 function quote(value: string): string {
   return `'${value.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`
 }
@@ -138,6 +145,7 @@ export function createClickHouseGatewayActivityDetailStore(options: {
 }): GatewayActivityDetailStore {
   const request = options.fetch ?? fetch
   const origin = options.origin.replace(/\/$/, "")
+  const database = databaseIdentifier(options.database)
   const authorization = `Basic ${Buffer.from(`${options.username}:${options.password}`).toString("base64")}`
 
   return {
@@ -146,7 +154,7 @@ export function createClickHouseGatewayActivityDetailStore(options: {
         select
           toUnixTimestamp64Milli(Timestamp) as captured_at_millis,
           SpanAttributes as attributes
-        from ${options.database}.otel_gateway_details
+        from ${database}.otel_gateway_details
         where (
           ResourceAttributes['genio.tenant.id'] = ${quote(tenantId)}
           or SpanAttributes['genio.tenant.id'] = ${quote(tenantId)}

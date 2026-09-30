@@ -43,6 +43,8 @@ function fixtureOperation(): McpDiscoveryOperation {
 
 test("Management UI request is claimed once by its Gateway Runtime group and reports discovery", async () => {
   let operation: McpDiscoveryOperation | null = null
+  let readOnlyApproval: Parameters<McpDiscoveryStore["decideReadOnlyApproval"]>[0] | null = null
+  let principalRole: "TENANT_ADMINISTRATOR" | "ORGANIZATION_ADMINISTRATOR" = "TENANT_ADMINISTRATOR"
   const store: McpDiscoveryStore = {
     async request(input) {
       operation = {
@@ -75,6 +77,11 @@ test("Management UI request is claimed once by its Gateway Runtime group and rep
       assert.ok(operation)
       return operation
     },
+    async decideReadOnlyApproval(input) {
+      readOnlyApproval = input
+      assert.ok(operation)
+      return operation
+    },
   }
   const registrations = createInMemoryRuntimeControlStore()
   const { publicKey } = generateKeyPairSync("ed25519")
@@ -99,7 +106,7 @@ test("Management UI request is claimed once by its Gateway Runtime group and rep
     request.principal = {
       tenant_id: tenantId,
       subject_id: "person-admin",
-      role: "TENANT_ADMINISTRATOR",
+      role: principalRole,
       organization_ids: [],
       client_id: runtimeId,
     }
@@ -144,7 +151,13 @@ test("Management UI request is claimed once by its Gateway Runtime group and rep
           protocol_version: "2025-06-18",
           server_name: "genio-one-local",
           server_version: "0.1.0",
-          tools: [{ name: "echo", title: null, description: "Return the supplied text." }],
+          tools: [{
+            name: "echo",
+            title: null,
+            description: "Return the supplied text.",
+            input_schema: { type: "object", properties: { text: { type: "string" } } },
+            read_only_hint: true,
+          }],
         },
       },
     })
@@ -159,6 +172,37 @@ test("Management UI request is claimed once by its Gateway Runtime group and rep
     assert.equal(latest.statusCode, 200, latest.body)
     assert.equal(latest.json().correlation_id, "console-correlation")
     assert.equal(latest.json().runtime_id, runtimeId)
+
+    principalRole = "ORGANIZATION_ADMINISTRATOR"
+    const denied = await app.inject({
+      method: "POST",
+      url: `/v1/tenants/${tenantId}/resources/${resourceId}/connections/${connectionId}/mcp-discovery/candidates/candidate-echo/read-only-approval`,
+      payload: {
+        expected_revision_digest: "a".repeat(64),
+        execution_mode: "AUTO_READ_ONLY",
+      },
+    })
+    assert.equal(denied.statusCode, 403, denied.body)
+
+    principalRole = "TENANT_ADMINISTRATOR"
+    const approved = await app.inject({
+      method: "POST",
+      url: `/v1/tenants/${tenantId}/resources/${resourceId}/connections/${connectionId}/mcp-discovery/candidates/candidate-echo/read-only-approval`,
+      payload: {
+        expected_revision_digest: "a".repeat(64),
+        execution_mode: "AUTO_READ_ONLY",
+      },
+    })
+    assert.equal(approved.statusCode, 200, approved.body)
+    assert.deepEqual(readOnlyApproval, {
+      tenantId,
+      resourceId,
+      connectionId,
+      candidateId: "candidate-echo",
+      expectedRevisionDigest: "a".repeat(64),
+      executionMode: "AUTO_READ_ONLY",
+      approvedBySubjectId: "person-admin",
+    })
   } finally {
     await app.close()
   }

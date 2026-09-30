@@ -1,6 +1,8 @@
 # GenioOne 產品概念
 
-GenioOne 是企業 AI、MCP、API、SaaS 與私有資源的治理與控制平面。它讓人員、應用程式與第三方代理，以一致方式探索、申請、使用與複核存取權，而且不要求每個工作負載都先經過第一方聊天代理。
+GenioOne 讓團隊透過共用的 Resource、Connection 與存取政策，把工作所需的工具與模型提供給 AI 代理。團隊發布一個 Resource 後，可供多個 Bot 或支援的用戶端使用，並依每個呼叫者評估存取權。內建的 Genio Bot 提供使用這些資源完成工作的操作介面。
+
+Platform 控制平面管理資源探索、存取權與請求紀錄，Gateway 與 Endpoint Runtime 執行設定的政策。本頁說明完整產品架構；[社群版](https://github.com/dnplus/genio-one/blob/main/docs/public/ce/README.zh-TW.md)包含 Platform、Gateway Runtime 與 Genio Bot，不包含 Endpoint 與 Secure Access Runtime，CE Helm 設定檔也關閉 API Management。
 
 產品把原本分散在身分、Gateway、安全與稽核工具中的四個問題串在一起：
 
@@ -11,7 +13,7 @@ GenioOne 是企業 AI、MCP、API、SaaS 與私有資源的治理與控制平面
 
 ## GenioOne 解決的問題
 
-企業存取權通常分散在不同系統：身分在目錄服務、資源憑證在平台或 Provider、路由在 Gateway，證據又散落在多份日誌。最後往往只能在「授權過大」和「控制碎片化、難以維運」之間取捨。
+團隊將 AI 代理帶進工作時，往往花時間重複連接工具、安排存取權與排查失敗。身分、資源憑證、Gateway 路由與請求紀錄又分散在不同系統。共用的資源設定讓團隊集中維護這些整合，並保留每個呼叫者各自的存取範圍。
 
 GenioOne 把這些分散狀態整理成同一套模型：
 
@@ -144,13 +146,13 @@ GenioOne 從最小可用控制路徑開始成長，不要求第一天就部署�
 6. 在適當 Endpoint 或 Gateway 評估呼叫與路由決策。
 7. 透過 Activity、Audit、拓樸與存取分析，理解誰能存取什麼，以及實際如何使用。
 
-## GenioOne 不是什麼
+## 產品邊界
 
 - 不是 Identity Provider；驗證仍由設定的 Provider 負責。
 - 不是用 Prompt 猜測授權結果的系統；政策決策必須確定、可版本化。
 - 不只是一套 VPN、Proxy 或 API Gateway；那些是完整治理模型中的執行路徑。
 - 不會把 Provider 憑證或 Connection 當成 Entitlement。
-- GenioOne V1 會治理第三方代理，但不要求第一方 GenioOne Agent 體驗；那是後續產品層。
+- CE 已包含 Genio Bot。其他 MCP 用戶端若支援所需的傳輸與驗證方式，也能使用已發布的端點；每個呼叫者仍須通過存取權與政策檢查。
 
 ## 接續閱讀
 

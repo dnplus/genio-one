@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { authorize } from "./authorize"
-import type { CompiledAuthorizationBundle, AuthorizationInput } from "@genioone/protocol/authorization"
+import type { CompiledAuthorizationBundle, CompiledAuthorizationRule, AuthorizationInput } from "@genioone/protocol/authorization"
 import { AUTHORIZATION_BUNDLE_SCHEMA_VERSION } from "@genioone/protocol/authorization"
 
 describe("authorize & intersectGrants", () => {
@@ -56,6 +56,17 @@ describe("authorize & intersectGrants", () => {
     const result = authorize(mockBundle, baseInput)
     expect(result.disposition).toBe("ALLOW")
     expect(result.allowedPublicModels).toEqual(["gpt-4", "claude-3"])
+  })
+
+  test("an unrecognized matching disposition does not authorize", () => {
+    const invalidRule = {
+      ...mockBundle.rules[0]!,
+      disposition: "UNKNOWN",
+    } as unknown as CompiledAuthorizationRule
+    const result = authorize({ ...mockBundle, rules: [invalidRule] }, baseInput)
+
+    expect(result.disposition).toBe("DENY")
+    expect(result.reason).toBe("NO_MATCHING_ENTITLEMENT")
   })
 
   test("delegated authorization intersects public models correctly", () => {

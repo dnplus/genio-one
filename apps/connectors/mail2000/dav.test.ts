@@ -53,9 +53,10 @@ test("CardDAV searches groups and resolves exact member emails from the same dir
     },
   })) as unknown as typeof createDAVClient)
   const result = await dav.searchDirectory(credential, { query: "BDSVD", kind: "group", limit: 10 })
+  const matchedGroup = result.results.find((entry) => entry.kind === "group")
   expect(result.address_books_scanned).toBe(1)
   expect(result.directory_entries_scanned).toBe(2)
-  expect(result.results[0]?.members).toEqual([
+  expect(matchedGroup?.members).toEqual([
     { email: "member@example.com", full_name: "王小明", organization: "GSS / BDSVD", title: null, found_in_directory: true },
   ])
   const self = await dav.getSelfContext({ username: "member@example.com", password: "secret" })

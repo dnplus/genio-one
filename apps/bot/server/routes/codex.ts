@@ -10,7 +10,7 @@ import { assertCapability, CapabilityDeniedError, PERSONAL_BOT_COMPUTER_USE, PER
 import { desktopBrowserGrants, proxiedDesktopUrl } from "../desktop-proxy"
 import { verifyGenioOneAccessToken } from "../auth"
 import { configuredRuntimeKind, pendingRuntimeDetails, createCodexRuntime as defaultCreateCodexRuntime, type CodexRuntime, type RuntimeDetails, type RuntimeTier } from "../runtime"
-import { setBotSelection, setManagedMcpMounts, type RuntimeSession } from "../runtime-broker"
+import { managedMcpMountsForBot, setBotSelection, setManagedMcpMounts, type RuntimeSession } from "../runtime-broker"
 import type { BotServerContext } from "../context"
 import type { BotModelPlan } from "../model-directory"
 import { botTurnContext } from "../bot-context"
@@ -21,7 +21,7 @@ import {
   type RuntimePolicyDecision,
   type RuntimePolicyExecutableAction,
 } from "../runtime-policy-contract"
-import { isManagedMcpServerName, managedMcpConfig, resolveManagedMcpMounts, type ManagedMcpMounts } from "../managed-mcp"
+import { isDynamicManagedMcpServerName, isManagedMcpServerName, managedMcpConfig, managedMcpServersConfig, resolveManagedMcpMounts, type ManagedMcpMounts } from "../managed-mcp"
 import { BotConnectionInteractions } from "../bot-connection-interactions"
 import {
   readNativeRuntimeExposure,
@@ -64,7 +64,7 @@ const HOST_EXECUTION_COMMANDS = new Set([
 const CODEX_SUBSCRIPTION_CAPABILITY = "codex.subscription" as const
 const SHELL_EXEC_CAPABILITY = "shell.exec" as const
 
-const SUPPORTED_CLIENT_METHODS = new Set([
+export const SUPPORTED_CLIENT_METHODS = new Set([
   "initialize",
   "initialized",
   "genio/runtime/start",
@@ -73,6 +73,7 @@ const SUPPORTED_CLIENT_METHODS = new Set([
   "genio/runtime/ensureExec",
   "genio/runtime/stop",
   "genio/bot/select",
+  "genio/mcp/refresh",
   "genio/thread/pending",
   "genio/request/respond",
   "genio/personalConnection/complete",
@@ -81,6 +82,7 @@ const SUPPORTED_CLIENT_METHODS = new Set([
   "account/read",
   "account/login/start",
   "account/login/cancel",
+  "account/logout",
   "thread/start",
   "thread/resume",
   "thread/read",
@@ -117,13 +119,225 @@ function nativeMethodRequiresSelection(method: string): boolean {
   return method === "model/list" || method === "mcpServerStatus/list" || method === "modelProvider/capabilities/read" || method.startsWith("account/")
 }
 
-function isAccountMethodAllowed(method: string, modelRoute: "codex-subscription" | "genio-gateway"): boolean {
-  return modelRoute === "codex-subscription" && (method === "account/read" || method === "account/login/start" || method === "account/login/cancel")
+export function isAccountMethodAllowed(method: string, modelRoute: "codex-subscription" | "genio-gateway"): boolean {
+  return modelRoute === "codex-subscription" && (method === "account/read" || method === "account/login/start" || method === "account/login/cancel" || method === "account/logout")
 }
 
 function isManagedMcpConfigKey(key: string) {
   if (!key.startsWith("mcp_servers.")) return false
   return isManagedMcpServerName(key.slice("mcp_servers.".length).split(".", 1)[0])
+}
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null
+}
+
+function connectionContinuationState(response: { content?: Array<{ type?: unknown; text?: unknown }> }) {
+  for (const entry of response.content ?? []) {
+    if (entry.type !== "text" || typeof entry.text !== "string") continue
+    try {
+      const value = record(JSON.parse(entry.text))
+      if (typeof value?.continuationState === "string") return value.continuationState
+    } catch {}
+  }
+  return null
+}
+
+function persistentMcpServers(value: unknown) {
+  const response = record(value)
+  if (!response || !Array.isArray(response.layers)) throw new Error("MANAGED_MCP_CONFIG_SNAPSHOT_UNAVAILABLE")
+  const layers = response.layers
+  const userLayer = layers.find((layer) => {
+    const name = record(record(layer)?.name)
+    return name?.type === "user"
+  })
+  const user = record(userLayer)
+  const version = typeof user?.version === "string" ? user.version.trim() : ""
+  const config = record(user?.config)
+  if (!user || !version || !config) throw new Error("MANAGED_MCP_CONFIG_SNAPSHOT_UNAVAILABLE")
+  const mcpServers = config.mcp_servers
+  const configured = mcpServers === undefined ? {} : record(mcpServers)
+  if (!configured) throw new Error("MANAGED_MCP_CONFIG_SNAPSHOT_UNAVAILABLE")
+  return {
+    servers: Object.fromEntries(Object.entries(configured).filter(([name]) => !isDynamicManagedMcpServerName(name))),
+    expectedVersion: version,
+  }
+}
+
+type ManagedMcpExposure = {
+  resourceId: string
+  mount: ManagedMcpMounts[string]
+  decision: RuntimePolicyDecision
+}
+
+type ManagedMcpExposureLifecycle = {
+  resolve: (session: RuntimeSession, botId: string, mounts: ManagedMcpMounts, isCurrent: () => boolean) => Promise<ManagedMcpExposure[]>
+  report: (session: RuntimeSession, botId: string, entries: ManagedMcpExposure[], outcome: "ALLOW" | "COMPLETED" | "FAILED", reasonCode: string | undefined, isCurrent: () => boolean) => Promise<boolean>
+  authorize: (session: RuntimeSession, botId: string, mounts: ManagedMcpMounts, isCurrent: () => boolean, outcome: "ALLOW" | "COMPLETED", reasonCode: string) => Promise<ManagedMcpMounts>
+}
+
+type ManagedMcpRefreshOptions = {
+  context: BotServerContext
+  session: RuntimeSession
+  botId: string
+  accessToken?: string | null
+  isCurrent: () => boolean
+  claimAlreadyHeld?: boolean
+  onReportFailure?: () => void
+  selectMounts?: (mounts: ManagedMcpMounts) => ManagedMcpMounts
+}
+
+function logManagedMcpExposureDenied(
+  session: RuntimeSession,
+  botId: string,
+  resourceId: string,
+  error: unknown,
+) {
+  console.warn(JSON.stringify({
+    event: "bot.managed-mcp.exposure_denied",
+    runtime_session_id: session.id,
+    bot_id: botId,
+    resource_id: resourceId,
+    reason: error instanceof Error ? error.message : "RUNTIME_POLICY_DENIED",
+  }))
+}
+
+function createManagedMcpExposureLifecycle(options: {
+  context: BotServerContext
+  accessToken: () => string | null
+  onReportFailure: () => void
+}): ManagedMcpExposureLifecycle {
+  const { runtimePolicy } = options.context
+  const { authorize: authorizeRuntime, report: reportRuntimeDecision } = createRuntimePolicyLifecycle({
+    policy: runtimePolicy,
+    accessToken: options.accessToken,
+    onReportFailure: options.onReportFailure,
+  })
+  const resolve = async (
+    session: RuntimeSession,
+    botId: string,
+    mounts: ManagedMcpMounts = {},
+    isCurrent: () => boolean,
+  ) => {
+    const entries: ManagedMcpExposure[] = []
+    for (const [resourceId, mount] of Object.entries(mounts)) {
+      try {
+        const decision = await authorizeRuntime(session, botId, "mcp.invoke", "expose", isCurrent)
+        entries.push({ resourceId, mount, decision })
+      } catch (error) {
+        logManagedMcpExposureDenied(session, botId, resourceId, error)
+      }
+    }
+    return entries
+  }
+  const report = async (
+    session: RuntimeSession,
+    botId: string,
+    entries: ManagedMcpExposure[],
+    outcome: "ALLOW" | "COMPLETED" | "FAILED",
+    reasonCode: string | undefined,
+    isCurrent: () => boolean,
+  ) => {
+    const reports = await Promise.all(entries.map(({ decision }) => reportRuntimeDecision(session, botId, decision, outcome, reasonCode, isCurrent)))
+    return reports.every(Boolean)
+  }
+  const authorize = async (
+    session: RuntimeSession,
+    botId: string,
+    mounts: ManagedMcpMounts = {},
+    isCurrent: () => boolean,
+    outcome: "ALLOW" | "COMPLETED",
+    reasonCode: string,
+  ) => {
+    const allowed: ManagedMcpMounts = {}
+    for (const entry of await resolve(session, botId, mounts, isCurrent)) {
+      if (await report(session, botId, [entry], outcome, reasonCode, isCurrent)) {
+        allowed[entry.resourceId] = entry.mount
+      } else {
+        logManagedMcpExposureDenied(session, botId, entry.resourceId, new Error("RUNTIME_POLICY_REPORT_UNAVAILABLE"))
+      }
+    }
+    return allowed
+  }
+  return { resolve, report, authorize }
+}
+
+export async function refreshManagedMcpConfiguration({
+  context,
+  session,
+  botId,
+  accessToken,
+  isCurrent,
+  claimAlreadyHeld = false,
+  onReportFailure = () => {},
+  selectMounts = (mounts) => mounts,
+}: ManagedMcpRefreshOptions): Promise<ManagedMcpMounts> {
+  const { runtimeBroker, capabilityGate, botRegistry } = context
+  const lifecycle = createManagedMcpExposureLifecycle({
+    context,
+    accessToken: () => accessToken ?? session.accessToken ?? null,
+    onReportFailure,
+  })
+  const release = claimAlreadyHeld ? null : runtimeBroker.claimBotTurn(botId, session.id)
+  if ((!claimAlreadyHeld && !release) || botRegistry.timeline.hasRunningTurns(botId) || runtimeBroker.hasOtherBotTurn(session.id, botId)) {
+    release?.()
+    throw new Error("MCP_REFRESH_TURN_ACTIVE")
+  }
+  let entries: ManagedMcpExposure[] = []
+  let managedMcpConfigurationWritten = false
+  const assertRefreshable = () => {
+    if (!isCurrent()) throw new Error("MCP_REFRESH_SUPERSEDED")
+    if (botRegistry.timeline.hasRunningTurns(botId)) {
+      throw new Error("MCP_REFRESH_TURN_ACTIVE")
+    }
+    if (runtimeBroker.hasOtherBotTurn(session.id, botId)) throw new Error("MCP_REFRESH_TURN_ACTIVE")
+  }
+  try {
+    assertRefreshable()
+    const bot = botRegistry.getOwned(botId, session.principal)
+    if (!bot) throw new Error("BOT_NOT_FOUND")
+    await assertCapability(capabilityGate, session.principal, PERSONAL_BOT_USE, accessToken ?? session.accessToken ?? undefined)
+    assertRefreshable()
+    const resolvedMcpMounts = selectMounts(await resolveManagedMcpMounts({
+      bindings: bot.bindings,
+      tenantId: session.principal.tenant_id,
+      accessToken: accessToken ?? session.accessToken,
+      onDegraded: (reason) => console.warn(JSON.stringify({
+        event: "bot.managed-mcp.degraded",
+        runtime_session_id: session.id,
+        bot_id: bot.id,
+        reason,
+      })),
+    }))
+    assertRefreshable()
+    entries = await lifecycle.resolve(session, botId, resolvedMcpMounts, isCurrent)
+    assertRefreshable()
+    const configuration = await runtimeBroker.request(session.id, "config/read", { includeLayers: true })
+    assertRefreshable()
+    const existing = persistentMcpServers(configuration)
+    const mcpMounts = Object.fromEntries(entries.map(({ resourceId, mount }) => [resourceId, mount]))
+    await runtimeBroker.request(session.id, "config/value/write", {
+      keyPath: "mcp_servers",
+      value: { ...existing.servers, ...managedMcpServersConfig(session.id, botId, mcpMounts) },
+      mergeStrategy: "replace",
+      expectedVersion: existing.expectedVersion,
+    })
+    managedMcpConfigurationWritten = true
+    assertRefreshable()
+    await runtimeBroker.request(session.id, "config/mcpServer/reload", undefined)
+    if (!await lifecycle.report(session, botId, entries, "COMPLETED", "MANAGED_MCP_CONFIG_REFRESHED", isCurrent)) {
+      throw new Error("RUNTIME_POLICY_REPORT_UNAVAILABLE")
+    }
+    if (isCurrent()) session.managedMcpMountsByBot = { [botId]: mcpMounts }
+    else setManagedMcpMounts(session, botId, mcpMounts)
+    return mcpMounts
+  } catch (error) {
+    if (managedMcpConfigurationWritten) session.managedMcpMountsByBot = {}
+    await lifecycle.report(session, botId, entries, "FAILED", error instanceof Error ? error.message : "MANAGED_MCP_CONFIG_REFRESH_FAILED", isCurrent)
+    throw error
+  } finally {
+    release?.()
+  }
 }
 
 export async function codexRoutes(app: FastifyInstance, context: BotServerContext) {
@@ -185,6 +399,10 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
         principal: session.principal,
         botId,
         runtimeSessionId: session.id,
+        isCurrent: (request) => {
+          const active = botRegistry.timeline.activeTurns(request.botId)
+          return active.length === 1 && active[0]?.threadId === request.threadId && active[0]?.turnId === request.turnId
+        },
         send: (request) => {
           if (closed || runtimeSession !== session || selectedBotId !== request.botId || socket.readyState !== socket.OPEN) return
           socket.send(JSON.stringify({ method: "genio/personalConnection/request", params: request }))
@@ -207,35 +425,11 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
       accessToken: () => sessionAccessToken,
       onReportFailure: showRuntimeReportFailure,
     })
-
-    const authorizeManagedMcpExposure = async (
-      session: RuntimeSession,
-      botId: string,
-      mounts: ManagedMcpMounts = {},
-      isCurrent: () => boolean,
-      outcome: "ALLOW" | "COMPLETED",
-      reasonCode: string,
-    ) => {
-      const allowed: ManagedMcpMounts = {}
-      for (const [resourceId, mount] of Object.entries(mounts)) {
-        try {
-          const decision = await authorizeRuntime(session, botId, "mcp.invoke", "expose", isCurrent)
-          if (!await reportRuntimeDecision(session, botId, decision, outcome, reasonCode, isCurrent)) {
-            throw new Error("RUNTIME_POLICY_REPORT_UNAVAILABLE")
-          }
-          allowed[resourceId] = mount
-        } catch (error) {
-          console.warn(JSON.stringify({
-            event: "bot.managed-mcp.exposure_denied",
-            runtime_session_id: session.id,
-            bot_id: botId,
-            resource_id: resourceId,
-            reason: error instanceof Error ? error.message : "RUNTIME_POLICY_DENIED",
-          }))
-        }
-      }
-      return allowed
-    }
+    const managedMcpExposure = createManagedMcpExposureLifecycle({
+      context,
+      accessToken: () => sessionAccessToken,
+      onReportFailure: showRuntimeReportFailure,
+    })
 
     const sendRuntimePolicyError = (message: string, tier?: RuntimeTier, id?: number | string) => {
       if (socket.readyState !== socket.OPEN) return
@@ -424,7 +618,10 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
             }
             try {
               if (message.method === "genio/thread/pending") {
-                const connectionRequests = context.connectionInteractions?.pendingRequests({ principal: runtimeSession.principal, botId, runtimeSessionId: runtimeSession.id, threadId }) ?? []
+                const active = botRegistry.timeline.activeTurns(botId).find((turn) => turn.threadId === threadId)
+                const connectionRequests = active
+                  ? context.connectionInteractions?.pendingRequests({ principal: runtimeSession.principal, botId, runtimeSessionId: runtimeSession.id, threadId, turnId: active.turnId }) ?? []
+                  : []
                 socket.send(JSON.stringify({ id: message.id, result: [
                   ...runtimeBroker.pendingInteractions(runtimeSession.id, threadId),
                   ...connectionRequests.map((request) => ({ method: "genio/personalConnection/request", params: request })),
@@ -453,19 +650,28 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
                 requestToken: message.params?.requestToken,
                 botId: message.params?.botId,
                 threadId: message.params?.threadId,
+                turnId: message.params?.turnId,
               }
               if (message.method === "genio/personalConnection/cancel") {
                 interactions.cancel(base)
                 socket.send(JSON.stringify({ id: message.id, result: { cancelled: true } }))
               } else {
-                await interactions.complete({
+                const completed = await interactions.complete({
                   ...base,
                   resourceId: message.params?.resourceId,
                   connectionId: message.params?.connectionId,
                   status: message.params?.status,
                   accessToken: sessionAccessToken ?? session.accessToken ?? "",
                 })
-                socket.send(JSON.stringify({ id: message.id, result: { completed: true } }))
+                const continuationState = connectionContinuationState(completed)
+                socket.send(JSON.stringify({
+                  id: message.id,
+                  result: {
+                    completed: true,
+                    ...(continuationState ? { continuationState } : {}),
+                    managedMcpServerNames: Object.values(managedMcpMountsForBot(session, botId)).map((mount) => mount.serverName),
+                  },
+                }))
               }
             } catch (error) {
               socket.send(JSON.stringify({ id: message.id, error: { code: error instanceof Error ? error.message : "BOT_CONNECTION_INTERACTION_FAILED" } }))
@@ -518,6 +724,38 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
             }
             return
           }
+          if (message.method === "genio/mcp/refresh") {
+            const session = runtimeSession
+            const botId = selectedBotId
+            const threadId = message.params?.threadId
+            if (!session || !botId || typeof threadId !== "string" || !botRegistry.ownsThread(session.principal, botId, threadId)) {
+              if (socket.readyState === socket.OPEN) socket.send(JSON.stringify({ id: message.id, error: { code: "BOT_THREAD_NOT_OWNED", message: "這個執行段不屬於目前的 Bot" } }))
+              return
+            }
+            const isCurrent = () => !closed && runtimeSession === session && selectedBotId === botId
+            try {
+              const mounts = await refreshManagedMcpConfiguration({
+                context,
+                session,
+                botId,
+                accessToken: sessionAccessToken,
+                isCurrent,
+                onReportFailure: showRuntimeReportFailure,
+              })
+              if (!isCurrent()) return
+              if (socket.readyState === socket.OPEN) socket.send(JSON.stringify({
+                id: message.id,
+                result: { managedMcpServerNames: Object.values(mounts).map((mount) => mount.serverName) },
+              }))
+            } catch (error) {
+              if (!isCurrent()) return
+              if (socket.readyState === socket.OPEN) {
+                const code = error instanceof Error ? error.message : "MANAGED_MCP_REFRESH_FAILED"
+                socket.send(JSON.stringify({ id: message.id, error: { code, message: code === "MCP_REFRESH_TURN_ACTIVE" ? "目前工作仍在進行，完成後再重新連線工具。" : code } }))
+              }
+            }
+            return
+          }
           if (message.method === "genio/bot/select") {
             const session = runtimeSession
             const botId = typeof message.params?.botId === "string" ? message.params.botId : ""
@@ -552,7 +790,7 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
                 })),
               })
               assertCurrentSelection()
-              const mcpMounts = await authorizeManagedMcpExposure(session, selectedBot.id, resolvedMcpMounts, isCurrentSelection, "ALLOW", "MANAGED_MCP_MOUNT_EXPOSED")
+              const mcpMounts = await managedMcpExposure.authorize(session, selectedBot.id, resolvedMcpMounts, isCurrentSelection, "ALLOW", "MANAGED_MCP_MOUNT_EXPOSED")
               assertCurrentSelection()
               const usageContext = await resolveBotUsageContext({
                 principal: session.principal,
@@ -631,6 +869,7 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
                 models,
                 skillRoots: materialized.skillRoots,
                 plugins: materialized.plugins.map((plugin) => plugin.name),
+                managedMcpServerNames: Object.values(mcpMounts).map((mount) => mount.serverName),
               } }))
             } catch (error) {
               if (codexDecision && !codexReportAttempted) await reportRuntimeDecision(session, botId, codexDecision, "FAILED", error instanceof Error ? error.message : "BOT_SELECT_FAILED", isCurrentSelection)
@@ -811,6 +1050,31 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
               socket.send(JSON.stringify({ id: message.id, error: { code: "BOT_THREAD_NOT_OWNED", message: "這個執行段不屬於目前的 Bot" } }))
               return
             }
+            let refreshedMcpMounts: ManagedMcpMounts | null = null
+            if (message.method === "thread/resume" && message.params?.genioRefreshManagedMcp === true) {
+              try {
+                const session = runtimeSession
+                const isCurrentRefresh = () => !closed && runtimeSession === session && selectedBotId === botId
+                refreshedMcpMounts = await refreshManagedMcpConfiguration({
+                  context,
+                  session,
+                  botId,
+                  accessToken: sessionAccessToken,
+                  isCurrent: isCurrentRefresh,
+                  onReportFailure: showRuntimeReportFailure,
+                })
+                if (!isCurrentRefresh()) {
+                  socket.send(JSON.stringify({ id: message.id, error: { code: "MCP_REFRESH_SUPERSEDED", message: "MCP_REFRESH_SUPERSEDED" } }))
+                  return
+                }
+                const { genioRefreshManagedMcp: _refresh, ...params } = message.params
+                message.params = params
+              } catch (error) {
+                const code = error instanceof Error ? error.message : "MANAGED_MCP_REFRESH_FAILED"
+                socket.send(JSON.stringify({ id: message.id, error: { code, message: code === "MCP_REFRESH_TURN_ACTIVE" ? "目前工作仍在進行，完成後再重新連線工具。" : code } }))
+                return
+              }
+            }
             const authorizations: RuntimePolicyDecision[] = []
             const isNativeExecutionRequest = message.method === "thread/start" || message.method === "thread/resume" || message.method === "turn/start"
             let nativeExposure: NativeRuntimeExposure | null = null
@@ -875,19 +1139,22 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
                 sendRuntimePolicyError("BOT_NOT_FOUND", undefined, message.id)
                 return
               }
-              const resolvedMcpMounts = await resolveManagedMcpMounts({
-                bindings: bot.bindings,
-                tenantId: session.principal.tenant_id,
-                accessToken: sessionAccessToken ?? session.accessToken,
-                onDegraded: (reason) => console.warn(JSON.stringify({
-                  event: "bot.managed-mcp.degraded",
-                  runtime_session_id: session.id,
-                  bot_id: bot.id,
-                  reason,
-                })),
-              })
-              const mcpMounts = await authorizeManagedMcpExposure(session, botId, resolvedMcpMounts, () => true, "COMPLETED", "MANAGED_MCP_CONFIG_INJECTED")
-              setManagedMcpMounts(session, botId, mcpMounts)
+              const mcpMounts = refreshedMcpMounts ?? await (async () => {
+                const resolvedMcpMounts = await resolveManagedMcpMounts({
+                  bindings: bot.bindings,
+                  tenantId: session.principal.tenant_id,
+                  accessToken: sessionAccessToken ?? session.accessToken,
+                  onDegraded: (reason) => console.warn(JSON.stringify({
+                    event: "bot.managed-mcp.degraded",
+                    runtime_session_id: session.id,
+                    bot_id: bot.id,
+                    reason,
+                  })),
+                })
+                const mounts = await managedMcpExposure.authorize(session, botId, resolvedMcpMounts, () => true, "ALLOW", "MANAGED_MCP_CONFIG_INJECTED")
+                setManagedMcpMounts(session, botId, mounts)
+                return mounts
+              })()
               const config = { ...message.params.config }
               for (const key of Object.keys(config)) if (isManagedMcpConfigKey(key)) delete config[key]
               if (config.mcp_servers && typeof config.mcp_servers === "object") {

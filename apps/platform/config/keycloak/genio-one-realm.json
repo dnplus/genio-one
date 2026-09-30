@@ -631,7 +631,7 @@
         "pkce.code.challenge.method": "S256"
       },
       "redirectUris": [
-        "http://127.0.0.1/*",
+        "http://127.0.0.1:*",
         "http://genio-bot.localhost:5181/api/mcp/oauth/callback/*"
       ],
       "webOrigins": [],
@@ -737,7 +737,7 @@
         "pkce.code.challenge.method": "S256"
       },
       "redirectUris": [
-        "http://127.0.0.1/*"
+        "http://127.0.0.1:*"
       ],
       "webOrigins": [],
       "protocolMappers": [

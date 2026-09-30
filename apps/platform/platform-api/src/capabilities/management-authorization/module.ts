@@ -103,7 +103,7 @@ function assertOrganizationManager(principal: Principal, organizationId: string 
     isTenantAdministrator(principal) ||
     (principal.role === "ORGANIZATION_ADMINISTRATOR" &&
       organizationId !== null &&
-      principal.organization_ids.includes(organizationId))
+      principal.administrator_organization_ids?.includes(organizationId))
   ) {
     return
   }
@@ -290,12 +290,22 @@ function isEndpointRuntimeTransport(route: TenantRoute, method: string): boolean
     ["heartbeat", "enforcements", "ai-activities", "rotate-credential"].includes(route.rest[2]!)
 }
 
+function isPostHogBrowserConfiguration(route: TenantRoute, method: string): boolean {
+  return method === "GET" &&
+    route.rest.length === 3 &&
+    route.rest[0] === "telemetry" &&
+    route.rest[1] === "posthog" &&
+    route.rest[2] === "browser-configuration"
+}
+
 function isInvocationRoute(route: TenantRoute, method: string): boolean {
+  if (isPostHogBrowserConfiguration(route, method)) return true
   if (route.rest.length === 2 && route.rest[0] === "discovery" && route.rest[1] === "mcp") return true
   if (method === "POST" && route.rest.length === 2 && route.rest[0] === "me" && route.rest[1] === "agents") return true
   if (route.rest[0] === "me" && route.rest[1] === "resource-connections") {
     return (method === "GET" && route.rest.length === 3) ||
-      (method === "POST" && route.rest.length === 5 && ["authorize", "password"].includes(route.rest[4]!)) ||
+      (method === "POST" && route.rest.length === 5 && ["authorize", "password", "discovery"].includes(route.rest[4]!)) ||
+      (method === "GET" && route.rest.length === 6 && route.rest[4] === "discovery") ||
       (method === "DELETE" && route.rest.length === 4)
   }
   if (method === "GET" && route.rest.length === 0) return true
@@ -303,6 +313,13 @@ function isInvocationRoute(route: TenantRoute, method: string): boolean {
   if (method === "GET" && (route.rest[0] === "catalog" || route.rest[0] === "me")) return true
   if (method === "GET" && route.rest[0] === "one-policy" && route.rest[1] === "bot-access") return true
   if (method === "GET" && route.rest[0] === "one-policy" && route.rest[1] === "runtime-effective") return true
+  if (
+    method === "POST" &&
+    route.rest.length === 3 &&
+    route.rest[0] === "me" &&
+    route.rest[1] === "entitlements" &&
+    route.rest[2] === "activate"
+  ) return true
   if (isManagementOnlyKnowledgeCandidateRoute(route, method)) return false
   if (method === "GET" && route.rest[0] === "knowledge-candidates") return true
   if (method === "GET" && route.rest[0] === "distillation-markers") return true
@@ -342,6 +359,10 @@ function isDistillationBotCancellation(route: TenantRoute, method: string): bool
 
 function isAuditExportRead(route: TenantRoute, method: string): boolean {
   return (method === "GET" || method === "HEAD") && route.rest.length === 1 && route.rest[0] === "audit-export"
+}
+
+function isAuditEventListRead(route: TenantRoute, method: string): boolean {
+  return (method === "GET" || method === "HEAD") && route.rest.length === 1 && route.rest[0] === "audit-events"
 }
 
 function requiredRouteScopes(route: TenantRoute, method: string): readonly string[] {
@@ -563,6 +584,10 @@ export function createManagementAuthorization(
         assertTenantAdministrator(principal)
         return
       }
+      if (isAuditEventListRead(route, request.method)) {
+        assertTenantAdministrator(principal)
+        return
+      }
       if (isPublicationReview(route)) {
         assertTenantAdministrator(principal)
         return
@@ -765,16 +790,22 @@ export function createManagementAuthorization(
         return
       }
       if (resource) {
-        assertOrganizationManager(principal, resource.owner_organization_id)
-        if (
-          route.rest[0] === "resources" &&
-          route.rest.length === 2 &&
-          request.method === "PATCH" &&
-          isRecord(request.body) &&
-          typeof request.body.owner_organization_id === "string" &&
-          !isTenantAdministrator(principal)
-        ) {
-          assertOrganizationManager(principal, request.body.owner_organization_id)
+        if (["GET", "HEAD"].includes(request.method) && route.rest.length === 2) {
+          if (!isTenantAdministrator(principal) && !principal.organization_ids.includes(resource.owner_organization_id)) {
+            throw new PlatformApiError("ORGANIZATION_ACCESS_DENIED", 403)
+          }
+        } else {
+          assertOrganizationManager(principal, resource.owner_organization_id)
+          if (
+            route.rest[0] === "resources" &&
+            route.rest.length === 2 &&
+            request.method === "PATCH" &&
+            isRecord(request.body) &&
+            typeof request.body.owner_organization_id === "string" &&
+            !isTenantAdministrator(principal)
+          ) {
+            assertOrganizationManager(principal, request.body.owner_organization_id)
+          }
         }
       }
       if (

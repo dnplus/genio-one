@@ -10,6 +10,8 @@ export interface McpDiscoveryTool {
   name: string
   title: string | null
   description: string | null
+  input_schema?: Record<string, unknown>
+  read_only_hint?: boolean
 }
 
 export interface McpDiscoveryObservation {
@@ -55,6 +57,10 @@ export async function discoverMcpConnection(
         name: tool.name,
         title: tool.title ?? null,
         description: tool.description?.slice(0, 16_384) ?? null,
+        ...(tool.inputSchema && typeof tool.inputSchema === "object" && !Array.isArray(tool.inputSchema)
+          ? { input_schema: tool.inputSchema as Record<string, unknown> }
+          : {}),
+        read_only_hint: tool.annotations?.readOnlyHint === true,
       })),
     }
   } finally {

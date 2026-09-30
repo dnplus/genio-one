@@ -5,7 +5,7 @@ import { createInstance } from "i18next"
 import { I18nextProvider } from "react-i18next"
 
 import { SheetWorkspaceRoot } from "@/components/ui/sheet"
-import type { ResourceRegistration, TenantIdentityInventory } from "@/domain/contracts"
+import type { IdentitySession, ResourceRegistration, TenantIdentityInventory } from "@/domain/contracts"
 import { GrantEntitlementSheet } from "@/features/access/grant-entitlement-sheet"
 
 const resource: ResourceRegistration = {
@@ -55,7 +55,58 @@ const identity: TenantIdentityInventory = {
   tenant_administrators: ["subject-admin"],
 }
 
+const tenantAdministrator: IdentitySession = {
+  tenant_id: "tenant-acme",
+  subject_id: "subject-admin",
+  acting_client_id: "management-ui",
+  role: "TENANT_ADMINISTRATOR",
+  scopes: ["genioone-management"],
+  acr: "oidc",
+  amr: ["oidc"],
+}
+
+const organizationAdministrator: IdentitySession = {
+  ...tenantAdministrator,
+  role: "ORGANIZATION_ADMINISTRATOR",
+}
+
 const loadResource = async () => [resource]
+
+test("Grant Entitlement is available only to the canonical Tenant Administrator", async () => {
+  const i18n = createInstance()
+  await i18n.init({ lng: "en", resources: { en: { translation: {} } } })
+  const view = render(
+    <I18nextProvider i18n={i18n}>
+      <SheetWorkspaceRoot>
+        <GrantEntitlementSheet
+          tenantId="tenant-acme"
+          actorIdentity={organizationAdministrator}
+          identity={identity}
+          loadResources={loadResource}
+          onGranted={async () => {}}
+        />
+      </SheetWorkspaceRoot>
+    </I18nextProvider>,
+  )
+
+  expect(screen.queryByRole("button", { name: "Grant Entitlement" })).toBeNull()
+
+  view.rerender(
+    <I18nextProvider i18n={i18n}>
+      <SheetWorkspaceRoot>
+        <GrantEntitlementSheet
+          tenantId="tenant-acme"
+          actorIdentity={tenantAdministrator}
+          identity={identity}
+          loadResources={loadResource}
+          onGranted={async () => {}}
+        />
+      </SheetWorkspaceRoot>
+    </I18nextProvider>,
+  )
+
+  expect(screen.getByRole("button", { name: "Grant Entitlement" })).toBeTruthy()
+})
 
 test("Grant Entitlement lists every published capability for the selected Resource", async () => {
   const i18n = createInstance()
@@ -67,6 +118,7 @@ test("Grant Entitlement lists every published capability for the selected Resour
       <SheetWorkspaceRoot>
         <GrantEntitlementSheet
           tenantId="tenant-acme"
+          actorIdentity={tenantAdministrator}
           identity={identity}
           loadResources={loadResource}
           onGranted={async () => {}}
@@ -98,6 +150,7 @@ test("Grant Entitlement does not retain an empty capability search after reopeni
       <SheetWorkspaceRoot>
         <GrantEntitlementSheet
           tenantId="tenant-acme"
+          actorIdentity={tenantAdministrator}
           identity={identity}
           loadResources={loadResource}
           onGranted={async () => {}}
@@ -137,6 +190,7 @@ test("Grant Entitlement clears a no-result capability query when its Resource ch
       <SheetWorkspaceRoot>
         <GrantEntitlementSheet
           tenantId="tenant-acme"
+          actorIdentity={tenantAdministrator}
           identity={identity}
           loadResources={async () => [resource, otherResource]}
           onGranted={async () => {}}
@@ -173,6 +227,7 @@ test("Grant Entitlement refreshes a stale Resource inventory before choosing a C
       <SheetWorkspaceRoot>
         <GrantEntitlementSheet
           tenantId="tenant-acme"
+          actorIdentity={tenantAdministrator}
           identity={identity}
           loadResources={async () => {
             loads += 1
@@ -205,6 +260,7 @@ test("Grant Entitlement reports an unavailable Resource inventory instead of an 
       <SheetWorkspaceRoot>
         <GrantEntitlementSheet
           tenantId="tenant-acme"
+          actorIdentity={tenantAdministrator}
           identity={identity}
           loadResources={async () => { throw new Error("RESOURCE_INVENTORY_UNAVAILABLE") }}
           onGranted={async () => {}}
@@ -237,6 +293,7 @@ test("Grant Entitlement reuses a retry identity only while its selected payload 
         <SheetWorkspaceRoot>
           <GrantEntitlementSheet
             tenantId="tenant-acme"
+            actorIdentity={tenantAdministrator}
             identity={identity}
             loadResources={loadResource}
             onGranted={async () => { throw new Error("REFRESH_FAILED") }}

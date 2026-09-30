@@ -34,7 +34,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import type { AccessRequest, Entitlement, OverviewSnapshot } from "@/domain/contracts"
+import type { AccessRequest, Entitlement, IdentitySession, OverviewFailure, OverviewSnapshot } from "@/domain/contracts"
 import { } from "@/features/provider-credentials/provider-credential-profiles-panel"
 import { AccessRequestSheet } from "@/features/access/access-request-sheet"
 import { GrantEntitlementSheet } from "@/features/access/grant-entitlement-sheet"
@@ -62,12 +62,25 @@ import { relativeTime } from "@/lib/format"
 import { formatEpochSeconds } from "@/lib/personal-preferences"
 import { loadResources } from "@/lib/product-api"
 
+const accessFailureDescriptions = {
+  "Access requests": "The Access request inventory could not be loaded. Refresh to try again.",
+  "Owned Entitlements": "The entitlement inventory could not be loaded. Refresh to try again.",
+  "Access notifications": "The Access notification inventory could not be loaded. Refresh to try again.",
+  Identity: "The canonical identity directory could not be loaded. Refresh to try again.",
+} as const
+
+function isAccessFailure(failure: OverviewFailure): failure is OverviewFailure & { source: keyof typeof accessFailureDescriptions } {
+  return Object.prototype.hasOwnProperty.call(accessFailureDescriptions, failure.source)
+}
+
 export function AccessPage({
   tenantId,
+  actorIdentity,
   data,
   onRefresh,
 }: {
   tenantId: string
+  actorIdentity: IdentitySession
   data: OverviewSnapshot
   onRefresh: () => Promise<void>
 }) {
@@ -76,6 +89,7 @@ export function AccessPage({
   const [selectedEntitlement, setSelectedEntitlement] = useState<Entitlement | null>(null)
   const display = useMemo(() => createActivityDisplayDirectory(data), [data])
   const loadResourceInventory = useCallback(() => loadResources(tenantId), [tenantId])
+  const accessFailure = data.failures.find(isAccessFailure)
 
   function subjectHref(subjectId: string, kind: string) {
     if (kind === "Agent") return managementRelationHref("agents", { q: subjectId })
@@ -119,12 +133,29 @@ export function AccessPage({
     }
   }
 
+  if (accessFailure) {
+    return (
+      <div className="flex flex-col gap-5">
+        <PageHeader
+          title={t("Access")}
+          description={t("Requests are approval history. Entitlements are the currently effective grants. An approved Request is not by itself Active access.")}
+          actions={<Button type="button" variant="outline" onClick={() => void onRefresh()}>{t("Refresh")}</Button>}
+        />
+        <DataEmpty
+          icon={ShieldCheckIcon}
+          title={t("Access management data is unavailable")}
+          description={t(accessFailureDescriptions[accessFailure.source])}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
         title={t("Access")}
         description={t("Requests are approval history. Entitlements are the currently effective grants. An approved Request is not by itself Active access.")}
-        actions={<GrantEntitlementSheet tenantId={tenantId} identity={data.identity} loadResources={loadResourceInventory} onGranted={onRefresh} />}
+        actions={<GrantEntitlementSheet tenantId={tenantId} actorIdentity={actorIdentity} identity={data.identity} loadResources={loadResourceInventory} onGranted={onRefresh} />}
       />
       <AccessUpdates
         display={{
@@ -182,7 +213,7 @@ export function AccessPage({
                       </Button>
                     ) : <span className="text-xs text-muted-foreground">—</span>}
                   </TableCell>
-                  <TableCell>{formatEpochSeconds(entitlement.valid_until)}</TableCell>
+                  <TableCell>{entitlement.valid_until === null ? t("No expiration") : formatEpochSeconds(entitlement.valid_until)}</TableCell>
                   <TableCell className="text-right"><Button size="sm" variant="destructive" disabled={entitlement.state !== "ACTIVE"} onClick={() => setSelectedEntitlement(entitlement)}>{t("Revoke")}</Button></TableCell>
                 </TableRow>
                 )
@@ -285,4 +316,3 @@ export function AccessPage({
     </div>
   )
 }
-

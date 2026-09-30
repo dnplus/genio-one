@@ -19,6 +19,8 @@ import {
   UsersRoundIcon,
   WorkflowIcon,
 } from "lucide-react"
+import { canReadTenantAudit } from "@/domain/audit-events"
+import type { IdentitySession } from "@/domain/contracts"
 
 export type PageId =
   | "overview"
@@ -98,6 +100,19 @@ export const managementNavigation: Array<{
     ],
   },
 ]
+
+export function canAccessManagementPage(page: PageId, role?: IdentitySession["role"]) {
+  return page !== "audit" || canReadTenantAudit(role)
+}
+
+export function managementNavigationForRole(role?: IdentitySession["role"]) {
+  return managementNavigation
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => canAccessManagementPage(item.id, role)),
+    }))
+    .filter((group) => group.items.length > 0)
+}
 
 export const managementPageIds = new Set<PageId>([
   "overview",

@@ -160,6 +160,19 @@ export async function ensureResourceCapabilityPolicy(
   })
 }
 
+async function discoverStandardTools(request: Api, connectionPath: string) {
+  await request(`${connectionPath}/mcp-discovery`, { method: "POST", body: JSON.stringify({ correlation_id: randomUUID() }) })
+  let discovery: Discovery | undefined
+  const deadline = Date.now() + 30_000
+  while (Date.now() < deadline) {
+    discovery = await request<Discovery>(`${connectionPath}/mcp-discovery/latest`)
+    if (discovery.state === "SUCCEEDED" || discovery.state === "FAILED") break
+    await new Promise((resolve) => setTimeout(resolve, 500))
+  }
+  if (discovery?.state !== "SUCCEEDED") throw new Error(`STANDARD_DISCOVERY_FAILED:${discovery?.error_code ?? "TIMEOUT"}`)
+  return discovery
+}
+
 function standardEnforcementSteps(config: CommonInstallConfig) {
   const issuer = config.identityIssuer.replace(/\/$/, "")
   return [
@@ -195,24 +208,24 @@ export async function installStandardConnector(configuration: CommonInstallConfi
     if (resource.publication_endpoint?.visibility !== "PUBLIC" || resource.publication_endpoint.hostname !== config.hostname || resource.publication_endpoint.base_path !== config.basePath) throw new Error("STANDARD_PUBLICATION_CONFLICT")
     // A published resource's tool set is an administrator decision: tools that are not yet selected
     // (newly added by a connector upgrade, or deliberately deselected) stay pending for explicit authorization.
-    const pendingTools = definition.tools.filter((tool) => !connection.mcp_selected_tools?.includes(tool))
+    const missingTools = definition.tools.filter((tool) => !connection.mcp_selected_tools?.includes(tool))
     if (!resource.publication_request || resource.publication_request.publication_state === "READY") {
       await ensureResourceCapabilityPolicy(request, { base, resourceId: resource.resource_id, capabilityId: "mcp.invoke", steps: standardEnforcementSteps(config) })
-      return { resourceId: resource.resource_id, connectionId: connection.connection_id, access: "AUTO_GRANT", lifecycle: resource.lifecycle, ...(pendingTools.length ? { pendingTools } : {}) }
+      if (missingTools.length === 0) {
+        return { resourceId: resource.resource_id, connectionId: connection.connection_id, access: "AUTO_GRANT", lifecycle: resource.lifecycle }
+      }
+      // Refresh Platform's candidate list so an administrator can select the new tools.
+      // Decisions stay pending; this path must not publish them.
+      const discovered = await discoverStandardTools(request, `${resourcePath}/connections/${encodeURIComponent(connection.connection_id)}`)
+      const discoveredNames = new Set(discovered.candidates.map((candidate) => candidate.tool_name))
+      if (!missingTools.every((tool) => discoveredNames.has(tool))) throw new Error("STANDARD_TOOLS_INCOMPLETE")
+      return { resourceId: resource.resource_id, connectionId: connection.connection_id, access: "AUTO_GRANT", lifecycle: resource.lifecycle, pendingTools: [...missingTools] }
     }
   }
   if (!["DRAFT", "PUBLISHED"].includes(resource.lifecycle)) throw new Error("STANDARD_RESOURCE_NOT_DRAFT")
   const connectionPath = `${resourcePath}/connections/${encodeURIComponent(connection.connection_id)}`
   if (connection.verification_state !== "VERIFIED") await request(`${connectionPath}/verify`, { method: "POST" })
-  await request(`${connectionPath}/mcp-discovery`, json({ correlation_id: randomUUID() }))
-  let discovery: Discovery | undefined
-  const deadline = Date.now() + 30_000
-  while (Date.now() < deadline) {
-    discovery = await request<Discovery>(`${connectionPath}/mcp-discovery/latest`)
-    if (discovery.state === "SUCCEEDED" || discovery.state === "FAILED") break
-    await new Promise((resolve) => setTimeout(resolve, 500))
-  }
-  if (discovery?.state !== "SUCCEEDED") throw new Error(`STANDARD_DISCOVERY_FAILED:${discovery?.error_code ?? "TIMEOUT"}`)
+  const discovery = await discoverStandardTools(request, connectionPath)
   const requiredTools = definition.tools
   const requiredToolSet = new Set(requiredTools)
   const selectedToolSet = connection.mcp_selected_tools ? new Set(connection.mcp_selected_tools) : null

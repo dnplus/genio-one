@@ -6,7 +6,7 @@
 
 ## 固定版本與來源
 
-目前 workspace 的 SDK/CLI 版本以 `apps/bot/package.json` 與 `pnpm-lock.yaml` 為準：`@e2b/desktop@2.4.0`、`e2b@2.50.0`、`@openai/codex@0.155.0`。Codex 0.155.0 是產品模板 bootstrap 目標；本 pilot 的 GUI base template smoke 不包含產品 Bot bootstrap。
+目前 workspace 的 SDK/CLI 版本以 `apps/bot/package.json` 與 `pnpm-lock.yaml` 為準：`@e2b/desktop@2.4.0`、`e2b@2.50.0`、`@openai/codex@0.159.2`。Codex 0.159.2 是產品模板 bootstrap 目標；本 pilot 的 GUI base template smoke 不包含產品 Bot bootstrap。
 
 175 實際採用的 Embed compose provenance 是 `e2b-dev/runtime` commit
 `7ec416d183c9e8357fb9208a5527c677bf6b35a9`；該 commit 的 raw compose
@@ -181,7 +181,7 @@ docker run --rm --network=host \
   node /app/desktop-build.mjs
 ```
 
-產品模板仍應使用 repo 內的 `apps/bot/scripts/build-e2b-desktop-base.ts` 與 `apps/bot/scripts/build-e2b-template.ts`，把 `@openai/codex@0.155.0` 安裝與版本檢查放在產品 build；不得把這個 pilot custom base 當成 governed Bot 完成證據。
+產品模板仍應使用 repo 內的 `apps/bot/scripts/build-e2b-desktop-base.ts` 與 `apps/bot/scripts/build-e2b-template.ts`，把 `@openai/codex@0.159.2` 安裝與版本檢查放在產品 build；不得把這個 pilot custom base 當成 governed Bot 完成證據。
 
 在已啟動的 pilot 上，SDK smoke 使用 2.4.0/2.50.0 建立 `desktop-self-hosted` sandbox，啟動 Mousepad，執行 SDK click、type、Enter、screenshot 與 authenticated stream：
 

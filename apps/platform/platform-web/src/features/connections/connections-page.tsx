@@ -531,6 +531,7 @@ export function ConnectionsPage({
   resources,
   connections,
   runtimes,
+  canApproveMcpReadOnly,
   focusedResourceId,
   onRefresh,
   onOpenResource,
@@ -539,6 +540,7 @@ export function ConnectionsPage({
   resources: ResourceRegistration[]
   connections: ConnectionSummary[]
   runtimes: RuntimeInventoryEntry[]
+  canApproveMcpReadOnly: boolean
   focusedResourceId?: string | null
   onRefresh: () => Promise<void>
   onOpenResource?: (resourceId: string) => void
@@ -815,6 +817,7 @@ export function ConnectionsPage({
                   tenantId={tenantId}
                   backend={backend}
                   editable={backend.lifecycle !== "REVOKED" && backend.lifecycle !== "REVOKE_PENDING" && (!resource || !hasPendingPublication(resource))}
+                  canApproveReadOnly={canApproveMcpReadOnly}
                   onUpdated={onRefresh}
                 />
               ) : null}

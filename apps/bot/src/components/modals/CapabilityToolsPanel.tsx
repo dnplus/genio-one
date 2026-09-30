@@ -215,6 +215,10 @@ export function CapabilityToolsPanel({
     const busyKey = enterprise ? `${enterprise.resourceId}:${enterprise.capabilityId}` : null
     const busy = busyKey !== null && addBusy === busyKey
     const isConnect = row.status === "connect_first"
+    const isBuiltin = enterprise?.builtinService === "DISCOVERY"
+    const statusLabel = isBuiltin && row.enterprise?.addState === "CONNECTED"
+      ? botCopy("Connected", "已連線")
+      : capabilityStatusLabel(row)
     const userMessage = capabilityUserMessage(row)
     const disabled =
       row.source === "runtime"
@@ -236,14 +240,12 @@ export function CapabilityToolsPanel({
         <div className="plugin-copy">
           <strong>{row.source === "enterprise" ? row.subtitle : row.title}</strong>
           {row.source === "runtime" ? <small>{row.subtitle}</small> : null}
-          <small
-            className={
-              row.status === "unavailable" || row.status === "request" || row.status === "connect_first"
-                ? "requestable"
-                : "available"
-            }
-          >
-            {row.source === "runtime" ? "Runtime" : botCopy("Enterprise", "企業")} · {capabilityStatusLabel(row)}
+          <small className={`${row.status === "unavailable" || row.status === "request" || row.status === "connect_first" ? "requestable" : "available"}${isBuiltin && (row.status === "available" || row.status === "added") ? " capability-builtin-status" : ""}`}>
+            {row.source === "runtime"
+              ? `Runtime · ${capabilityStatusLabel(row)}`
+              : isBuiltin
+                ? botCopy(`Built in · ${statusLabel}`, `平台內建 · ${statusLabel}`)
+                : `${botCopy("Enterprise", "企業")} · ${capabilityStatusLabel(row)}`}
           </small>
           {userMessage ? <small className="capability-user-message">{userMessage}</small> : null}
         </div>

@@ -1,5 +1,5 @@
 import type { ConnectorConfiguration, ConnectorKind, DemoProjectStatus, IdentitySession } from "@/domain/contracts"
-import { isDecisionAuditEvent } from "@/domain/audit-events"
+import { canReadTenantAudit, isDecisionAuditEvent } from "@/domain/audit-events"
 import {
   getGetRuntimePolicyDraftUrl,
   getGetV1TenantsTenantIdOnePolicyFirstPartyBotDraftUrl,
@@ -82,6 +82,7 @@ import type {
   LocalAccessGroupInventory,
   LocalAccessGroup,
   McpDiscoveryOperation,
+  McpToolReview,
   McpOAuthAuthorization,
   McpOAuthBinding,
   OverviewFailure,
@@ -107,6 +108,8 @@ import type {
   NotificationType,
   NotificationSubscription,
   OnePolicyBotSeed,
+  PostHogIngestHost,
+  PostHogTelemetrySettings,
   TenantConfiguration,
   TenantConfigurationRevision,
   UseCaseEntry,
@@ -207,6 +210,10 @@ function notInstalled<T>(value: T) {
   return Promise.resolve({ value, failure: null as OverviewFailure | null })
 }
 
+function notRequested<T>(value: T) {
+  return Promise.resolve({ value, failure: null as OverviewFailure | null })
+}
+
 function accessGroupInventory(tenantId: string, groups: LocalAccessGroup[]): LocalAccessGroupInventory {
   return {
     tenant_id: tenantId,
@@ -243,13 +250,14 @@ export function loadResources(tenantId: string) {
 export async function loadOverview(tenantId: string, role?: IdentitySession["role"]): Promise<OverviewSnapshot> {
   const tenant = encodeURIComponent(tenantId)
   const base = `/v1/tenants/${tenant}`
+  const canLoadTenantAudit = canReadTenantAudit(role)
   const analyticsTo = Math.floor(Date.now() / 1000)
   const analyticsFrom = analyticsTo - defaultGatewayMetricsWindowSeconds
   const analyticsQuery = new URLSearchParams({
     from: String(analyticsFrom),
     to: String(analyticsTo),
   })
-  const [resources, apiEnvironmentDeployments, activity, apiActivity, aiUsage, gatewayMetrics, auditEvents, endpointEnrolledEvents, endpointRevokedEvents, endpointSessionRejectedEvents, siemDestination, siemDeliveries, accessRequests, ownedEntitlements, accessNotifications, apiVersionMigrationNotices, resourceOnboardingRequests, identity, agentDelegations, executionGrantRequests, agentExtensions, accessGroups, organizations, applications, runtimes, gatewayRegistrations, gatewaySites, health] =
+  const overviewResults =
     await Promise.all([
       settled("Resources", loadResources(tenantId), []),
       notInstalled([] as ApiEnvironmentDeployment[]),
@@ -269,22 +277,22 @@ export async function loadOverview(tenantId: string, role?: IdentitySession["rol
         null,
       ),
       settled("Gateway metrics", getGatewayMetrics(tenantId, defaultGatewayMetricsWindowSeconds), null),
-      settled("Audit", loadAuditEvents(tenantId), []),
-      settled(
+      canLoadTenantAudit ? settled("Audit", loadAuditEvents(tenantId), []) : notRequested([] as AuditEvent[]),
+      canLoadTenantAudit ? settled(
         "Endpoint enrolled audit",
         requestJson<AuditEvent[]>(`${base}/audit-events?kind=ENDPOINT_ENROLLED&limit=50`),
         [],
-      ),
-      settled(
+      ) : notRequested([] as AuditEvent[]),
+      canLoadTenantAudit ? settled(
         "Endpoint revoked audit",
         requestJson<AuditEvent[]>(`${base}/audit-events?kind=ENDPOINT_REVOKED&limit=50`),
         [],
-      ),
-      settled(
+      ) : notRequested([] as AuditEvent[]),
+      canLoadTenantAudit ? settled(
         "Endpoint session rejection audit",
         requestJson<AuditEvent[]>(`${base}/audit-events?kind=ENDPOINT_SESSION_REJECTED&limit=50`),
         [],
-      ),
+      ) : notRequested([] as AuditEvent[]),
       settled("SIEM destination", requestJson<SiemDestination | null>(`${base}/siem-destination`), null),
       settled("SIEM deliveries", requestJson<SiemDelivery[]>(`${base}/siem-deliveries?limit=100`), []),
       settled("Access requests", requestJson<AccessRequest[]>(`${base}/access-requests`), []),
@@ -314,6 +322,7 @@ export async function loadOverview(tenantId: string, role?: IdentitySession["rol
       settled("Gateway Sites", requestJson<GatewayFleetAvailability>(`${base}/gateway-sites`), null),
       settled("Platform health", requestJson<{ status: string }>("/healthz"), null),
     ])
+  const [resources, apiEnvironmentDeployments, activity, apiActivity, aiUsage, gatewayMetrics, auditEvents, endpointEnrolledEvents, endpointRevokedEvents, endpointSessionRejectedEvents, siemDestination, siemDeliveries, accessRequests, ownedEntitlements, accessNotifications, apiVersionMigrationNotices, resourceOnboardingRequests, identity, agentDelegations, executionGrantRequests, agentExtensions, accessGroups, organizations, applications, runtimes, gatewayRegistrations, gatewaySites, health] = overviewResults
 
   const platformConnections = (await Promise.all(resources.value.map(async (resource) => {
     try {
@@ -326,6 +335,7 @@ export async function loadOverview(tenantId: string, role?: IdentitySession["rol
         mcp_tool_namespace?: string | null
         mcp_selected_tools: string[]
         mcp_tool_selection_operation_id: string | null
+        mcp_tool_reviews?: McpToolReview[]
         credential_ref?: string | null
         provider_credential_profile?: {
           profile_id: string
@@ -362,6 +372,7 @@ export async function loadOverview(tenantId: string, role?: IdentitySession["rol
         mcp_tool_namespace: connection.mcp_tool_namespace ?? null,
         mcp_selected_tools: connection.mcp_selected_tools,
         mcp_tool_selection_operation_id: connection.mcp_tool_selection_operation_id,
+        mcp_tool_reviews: connection.mcp_tool_reviews ?? [],
         credential_configured: Boolean(connection.credential_ref || connection.provider_credential_profile),
         provider_credential_profile: connection.provider_credential_profile ?? null,
         downstream_identity: connection.downstream_identity,
@@ -421,36 +432,7 @@ export async function loadOverview(tenantId: string, role?: IdentitySession["rol
     gatewayRegistrations: gatewayRegistrations.value,
     gatewayFleet: gatewaySites.value,
     platformHealthy: health.value?.status === "ok",
-    failures: [
-      resources.failure,
-      apiEnvironmentDeployments.failure,
-      activity.failure,
-      apiActivity.failure,
-      aiUsage.failure,
-      gatewayMetrics.failure,
-      auditEvents.failure,
-      endpointEnrolledEvents.failure,
-      endpointRevokedEvents.failure,
-      endpointSessionRejectedEvents.failure,
-      siemDestination.failure,
-      siemDeliveries.failure,
-      accessRequests.failure,
-      ownedEntitlements.failure,
-      accessNotifications.failure,
-      apiVersionMigrationNotices.failure,
-      resourceOnboardingRequests.failure,
-      identity.failure,
-      agentDelegations.failure,
-      executionGrantRequests.failure,
-      agentExtensions.failure,
-      accessGroups.failure,
-      organizations.failure,
-      applications.failure,
-      runtimes.failure,
-      gatewayRegistrations.failure,
-      gatewaySites.failure,
-      health.failure,
-    ].filter((failure): failure is OverviewFailure => Boolean(failure)),
+    failures: overviewResults.flatMap((result) => result.failure ? [result.failure] : []),
   }
 }
 
@@ -542,6 +524,36 @@ export async function configureSiemDestination(
         event_kinds: input.eventKinds,
         enabled: input.enabled,
       }),
+    },
+  )
+}
+
+export function loadPostHogTelemetrySettings(tenantId: string) {
+  return requestJson<PostHogTelemetrySettings>(
+    `/v1/tenants/${encodeURIComponent(tenantId)}/telemetry/posthog`,
+  )
+}
+
+export function configurePostHogTelemetry(
+  tenantId: string,
+  input:
+    | { enabled: false }
+    | { enabled: boolean; host: PostHogIngestHost; projectId: number; projectToken: string },
+) {
+  return requestJson<PostHogTelemetrySettings>(
+    `/v1/tenants/${encodeURIComponent(tenantId)}/telemetry/posthog`,
+    {
+      method: "PUT",
+      body: JSON.stringify(
+        "host" in input
+          ? {
+              enabled: input.enabled,
+              host: input.host,
+              project_id: input.projectId,
+              project_token: input.projectToken,
+            }
+          : { enabled: false },
+      ),
     },
   )
 }
@@ -2102,6 +2114,26 @@ export async function decideMcpDiscoveryCandidate(
     {
       method: "POST",
       body: JSON.stringify({ expected_revision_digest: expectedRevisionDigest, state }),
+    },
+  )
+}
+
+export async function decideMcpReadOnlyApproval(
+  tenantId: string,
+  resourceId: string,
+  connectionId: string,
+  candidateId: string,
+  expectedRevisionDigest: string,
+  executionMode: "AUTO_READ_ONLY" | "REQUIRE_CONFIRMATION",
+) {
+  return requestJson<McpDiscoveryOperation>(
+    `/v1/tenants/${encodeURIComponent(tenantId)}/resources/${encodeURIComponent(resourceId)}/connections/${encodeURIComponent(connectionId)}/mcp-discovery/candidates/${encodeURIComponent(candidateId)}/read-only-approval`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        expected_revision_digest: expectedRevisionDigest,
+        execution_mode: executionMode,
+      }),
     },
   )
 }

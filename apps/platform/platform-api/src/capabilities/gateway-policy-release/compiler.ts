@@ -5,6 +5,7 @@ import type {
   CompiledAgentDelegation,
   CompiledExecutionGrant,
   CompiledAuthorizationRule,
+  CompiledMcpToolDefinition,
   CompiledSubjectContext,
   CompiledUsageContext,
   CompiledUsagePolicy,
@@ -230,9 +231,16 @@ function projectionKey(projection: Pick<GatewayProjection, "resource_id" | "capa
 interface PublishedMcpTool {
   canonicalName: string
   exposedName: string
+  connectionId: string | null
 }
 
 function publishedMcpTools(projection: GatewayProjection): PublishedMcpTool[] {
+  const connectionByBackend = new Map(projection.resources
+    .filter((resource) => resource.kind === "Backend")
+    .map((resource) => [
+      resource.metadata.name,
+      resource.metadata.annotations?.["genio.one/connection-id"] ?? null,
+    ] as const))
   const tools = projection.resources
     .filter((resource) => resource.kind === "MCPRoute")
     .flatMap((resource) => Array.isArray(resource.spec?.backendRefs) ? resource.spec.backendRefs : [])
@@ -243,15 +251,102 @@ function publishedMcpTools(projection: GatewayProjection): PublishedMcpTool[] {
       if (!selector || typeof selector !== "object" || Array.isArray(selector)) return []
       const include = (selector as { include?: unknown }).include
       if (!Array.isArray(include)) return []
-      const namespace = typeof backendReference.name === "string" && backendReference.name
-        ? `${backendReference.name}__`
+      const backendName = typeof backendReference.name === "string" && backendReference.name
+        ? backendReference.name
         : ""
+      const namespace = backendName ? `${backendName}__` : ""
       return include
         .filter((tool): tool is string => typeof tool === "string")
-        .map((tool) => ({ canonicalName: tool, exposedName: `${namespace}${tool}` }))
+        .map((tool) => ({
+          canonicalName: tool,
+          exposedName: `${namespace}${tool}`,
+          connectionId: connectionByBackend.get(backendName) ?? null,
+        }))
     })
   return [...new Map(tools.map((tool) => [tool.exposedName, tool])).values()]
     .sort((left, right) => compareUtf8(left.exposedName, right.exposedName))
+}
+
+function safeMcpSchemaValue(value: unknown, depth = 0, state = { nodes: 0 }): boolean {
+  if (depth > 24 || state.nodes++ > 2_048) return false
+  if (value === null || typeof value === "boolean") return true
+  if (typeof value === "string") return value.length <= 16_384
+  if (typeof value === "number") return Number.isFinite(value)
+  if (Array.isArray(value)) return value.every((entry) => safeMcpSchemaValue(entry, depth + 1, state))
+  if (!value || typeof value !== "object") return false
+  const prototype = Object.getPrototypeOf(value)
+  if (prototype !== Object.prototype && prototype !== null) return false
+  return Object.entries(value as Record<string, unknown>).every(([key, entry]) =>
+    key.length <= 256 &&
+    !/[\u0000\r\n]/.test(key) &&
+    key !== "__proto__" &&
+    key !== "constructor" &&
+    key !== "prototype" &&
+    safeMcpSchemaValue(entry, depth + 1, state),
+  )
+}
+
+function compiledMcpToolDefinitions(
+  projections: readonly (GatewayProjection & { operation: "APPLY" })[],
+): CompiledMcpToolDefinition[] {
+  const definitions: CompiledMcpToolDefinition[] = []
+  const identities = new Set<string>()
+  for (const [projectionIndex, projection] of projections.entries()) {
+    const published = new Map(publishedMcpTools(projection).map((tool) => [tool.exposedName, tool]))
+    for (const [definitionIndex, definition] of (projection.mcp_tool_definitions ?? []).entries()) {
+      if (definition.resource_id !== projection.resource_id) {
+        throw new Error(`projection[${projectionIndex}].mcp_tool_definitions[${definitionIndex}] resource is invalid`)
+      }
+      identifier(definition.connection_id, `projection[${projectionIndex}].mcp_tool_definitions[${definitionIndex}].connection_id`)
+      identifier(definition.canonical_tool_name, `projection[${projectionIndex}].mcp_tool_definitions[${definitionIndex}].canonical_tool_name`)
+      identifier(definition.exposed_tool_name, `projection[${projectionIndex}].mcp_tool_definitions[${definitionIndex}].exposed_tool_name`)
+      if (!/^[a-f0-9]{64}$/.test(definition.source_revision_digest)) {
+        throw new Error(`projection[${projectionIndex}].mcp_tool_definitions[${definitionIndex}] revision is invalid`)
+      }
+      if (definition.description !== null && (typeof definition.description !== "string" || definition.description.length > 16_384)) {
+        throw new Error(`projection[${projectionIndex}].mcp_tool_definitions[${definitionIndex}] description is invalid`)
+      }
+      if (
+        !definition.input_schema ||
+        typeof definition.input_schema !== "object" ||
+        Array.isArray(definition.input_schema) ||
+        definition.input_schema.type !== "object" ||
+        !safeMcpSchemaValue(definition.input_schema)
+      ) {
+        throw new Error(`projection[${projectionIndex}].mcp_tool_definitions[${definitionIndex}] schema is invalid`)
+      }
+      if (definition.read_only !== true) {
+        throw new Error(`projection[${projectionIndex}].mcp_tool_definitions[${definitionIndex}] approval is invalid`)
+      }
+      const publishedTool = published.get(definition.exposed_tool_name)
+      if (
+        !publishedTool ||
+        publishedTool.canonicalName !== definition.canonical_tool_name ||
+        publishedTool.connectionId !== definition.connection_id
+      ) {
+        throw new Error(`projection[${projectionIndex}].mcp_tool_definitions[${definitionIndex}] is not published`)
+      }
+      const identity = `${definition.resource_id}\u0000${definition.exposed_tool_name}`
+      if (identities.has(identity)) {
+        throw new Error(`mcp_tool_definitions contains duplicate exposed tool: ${definition.exposed_tool_name}`)
+      }
+      identities.add(identity)
+      definitions.push({
+        resource_id: definition.resource_id,
+        connection_id: definition.connection_id,
+        canonical_tool_name: definition.canonical_tool_name,
+        exposed_tool_name: definition.exposed_tool_name,
+        source_revision_digest: definition.source_revision_digest,
+        description: definition.description,
+        input_schema: definition.input_schema,
+        read_only: true,
+      })
+    }
+  }
+  return definitions.sort((left, right) => compareTuple(
+    [left.resource_id, left.exposed_tool_name],
+    [right.resource_id, right.exposed_tool_name],
+  ))
 }
 
 function assertProjectionShape(
@@ -690,6 +785,7 @@ export function compileGatewayPolicyArtifacts(
     subjectContexts,
     projections,
   )
+  const mcpToolDefinitions = compiledMcpToolDefinitions(projections)
   const authorization_bundle: CompiledAuthorizationBundle = {
     schema_version: 1,
     tenant_id: input.tenant_id,
@@ -731,6 +827,7 @@ export function compileGatewayPolicyArtifacts(
     subject_contexts: subjectContexts,
     agent_delegations: agentDelegations,
     execution_grants: executionGrants,
+    ...(mcpToolDefinitions.length > 0 ? { mcp_tool_definitions: mcpToolDefinitions } : {}),
   }
   if (!isCompiledAuthorizationBundle(authorization_bundle)) {
     throw new Error("compiled authorization bundle failed validation")

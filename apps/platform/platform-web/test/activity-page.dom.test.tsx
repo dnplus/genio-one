@@ -1,12 +1,18 @@
-import { expect, test } from "bun:test"
+import { expect, mock, test } from "bun:test"
 import { fireEvent, render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { createInstance } from "i18next"
 import { I18nextProvider } from "react-i18next"
 
-import type { DecisionAuditEvent, OverviewSnapshot } from "@/domain/contracts"
-import { ActivityPage } from "@/features/activity/activity-page"
+import { SheetWorkspaceRoot } from "@/components/ui/sheet"
+import type { ApiGatewayActivityEvent, DecisionAuditEvent, OverviewSnapshot } from "@/domain/contracts"
 import { createMockOverview } from "@/mocks/overview"
+
+const captureProductEvent = mock()
+
+mock.module("@/lib/posthog-analytics", () => ({ captureProductEvent }))
+
+const { ActivityPage } = await import("@/features/activity/activity-page")
 
 const runtimeEvent: DecisionAuditEvent = {
   audit_event_id: "runtime-report",
@@ -66,20 +72,30 @@ const queriedRuntimeEvent: DecisionAuditEvent = {
   resource_id: "corporate-gpt",
 }
 
+const apiActivityEvent = createMockOverview().apiActivity.events[0]!
+
 function dataWith({
   auditEvents = [runtimeEvent],
   failures = [],
+  apiEvents = [],
 }: {
   auditEvents?: OverviewSnapshot["auditEvents"]
   failures?: OverviewSnapshot["failures"]
+  apiEvents?: ApiGatewayActivityEvent[]
 } = {}): OverviewSnapshot {
   const data = createMockOverview()
   return {
     ...data,
     auditEvents,
-    apiActivity: { events: [] },
+    apiActivity: { events: apiEvents },
     failures,
   }
+}
+
+function json(value: unknown): Response {
+  return new Response(JSON.stringify(value), {
+    headers: { "content-type": "application/json" },
+  })
 }
 
 async function renderActivity(
@@ -87,19 +103,66 @@ async function renderActivity(
   search = "",
   onRefresh: (scope?: "all" | "audit") => Promise<void> = async () => {},
   mode: "activity" | "audit" = "activity",
+  withWorkspaceRoot = false,
 ) {
   const i18n = createInstance()
   await i18n.init({ lng: "en", resources: { en: { translation: {} } } })
   window.history.replaceState({}, "", `/management?view=${mode}`)
   const user = userEvent.setup()
+  const activity = <ActivityPage tenantId="tenant-design-preview" data={data} search={search} onRefresh={onRefresh} mode={mode} />
   const rendered = render(
     <I18nextProvider i18n={i18n}>
-      <ActivityPage tenantId="tenant-design-preview" data={data} search={search} onRefresh={onRefresh} mode={mode} />
+      {withWorkspaceRoot ? <SheetWorkspaceRoot>{activity}</SheetWorkspaceRoot> : activity}
     </I18nextProvider>,
   )
   if (mode === "activity") await user.click(screen.getByRole("tab", { name: "Agent Runtime" }))
   return { i18n, rendered, user }
 }
+
+test("Audit view captures one open for each entry after its audit data is available", async () => {
+  const initialCallCount = captureProductEvent.mock.calls.length
+  const { i18n, rendered } = await renderActivity(dataWith(), "", async () => {}, "audit")
+
+  await screen.findByTestId("audit-policy-decisions")
+  expect(captureProductEvent.mock.calls.slice(initialCallCount)).toEqual([[
+    "genioone_journey_action",
+    { action: "audit_opened" },
+  ]])
+
+  rendered.rerender(
+    <I18nextProvider i18n={i18n}>
+      <ActivityPage tenantId="tenant-design-preview" data={dataWith()} search="" onRefresh={async () => {}} mode="audit" />
+    </I18nextProvider>,
+  )
+  expect(captureProductEvent.mock.calls.slice(initialCallCount)).toHaveLength(1)
+
+  rendered.rerender(
+    <I18nextProvider i18n={i18n}>
+      <ActivityPage tenantId="tenant-design-preview" data={dataWith()} search="" onRefresh={async () => {}} mode="activity" />
+    </I18nextProvider>,
+  )
+  rendered.rerender(
+    <I18nextProvider i18n={i18n}>
+      <ActivityPage tenantId="tenant-design-preview" data={dataWith()} search="" onRefresh={async () => {}} mode="audit" />
+    </I18nextProvider>,
+  )
+  expect(captureProductEvent.mock.calls.slice(initialCallCount)).toHaveLength(2)
+
+  rendered.rerender(
+    <I18nextProvider i18n={i18n}>
+      <ActivityPage tenantId="tenant-design-preview" data={dataWith()} search="" onRefresh={async () => {}} mode="audit" />
+    </I18nextProvider>,
+  )
+  expect(captureProductEvent.mock.calls.slice(initialCallCount)).toHaveLength(2)
+  rendered.unmount()
+
+  const failedCallCount = captureProductEvent.mock.calls.length
+  const failed = await renderActivity(dataWith({ failures: [{ source: "Audit", code: "AUDIT_UNAVAILABLE", status: 503 }] }), "", async () => {}, "audit")
+
+  await screen.findByTestId("audit-policy-decisions")
+  expect(captureProductEvent.mock.calls.slice(failedCallCount)).toHaveLength(0)
+  failed.rendered.unmount()
+})
 
 test("Agent Runtime activity shows decision evidence, empty state, and audit load failure", async () => {
   const { i18n, rendered } = await renderActivity(dataWith())
@@ -143,6 +206,57 @@ test("Agent Runtime activity shows decision evidence, empty state, and audit loa
   expect(loadFailure.textContent).toContain("AUDIT_UNAVAILABLE")
   expect(within(loadFailure).getByRole("button", { name: "Refresh latest Audit source" })).toBeTruthy()
   expect(screen.queryByTestId("agent-runtime-empty-state")).toBeNull()
+})
+
+test("API Gateway Activity row opens a redacted transaction detail with its trace and traffic path", async () => {
+  const originalFetch = globalThis.fetch
+  const requests: string[] = []
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = input instanceof Request ? input.url : String(input)
+    requests.push(url)
+    if (url.includes(`/api-activities/${apiActivityEvent.correlation_id}/detail`)) {
+      return json({
+        correlation_id: apiActivityEvent.correlation_id,
+        availability: "AVAILABLE",
+        captured_at: apiActivityEvent.occurred_at,
+        expires_at: apiActivityEvent.detail_expires_at,
+        redacted_fields: ["request.headers.authorization"],
+        request: {
+          headers: [["authorization", "[REDACTED]"]],
+          body: '{"customer_id":"cust_***"}',
+          body_truncated: false,
+          content_type: "application/json",
+        },
+        response: {
+          headers: [["content-type", "application/json"]],
+          body: '{"status":"accepted"}',
+          body_truncated: false,
+          content_type: "application/json",
+        },
+      })
+    }
+    if (url.includes("routing-reconstruction")) return json(null)
+    return json([])
+  }) as typeof fetch
+
+  try {
+    const { user } = await renderActivity(dataWith({ apiEvents: [apiActivityEvent] }), "", async () => {}, "activity", true)
+    await user.click(screen.getByRole("tab", { name: "API Gateway" }))
+    const row = await screen.findByTestId(`api-gateway-activity-row-${apiActivityEvent.correlation_id}`)
+    expect(within(row).getByText("Managed Resource")).toBeTruthy()
+
+    await user.click(row)
+    const sheet = await screen.findByTestId("api-gateway-transaction-sheet")
+    await within(sheet).findByText("Sensitive values redacted")
+    expect(within(sheet).getByText("[REDACTED]")).toBeTruthy()
+    const trace = within(sheet).getByTestId("open-trace-by-correlation")
+    const traceUrl = new URL(trace.getAttribute("href")!, "http://localhost")
+    expect(traceUrl.searchParams.get("view")).toBe("traces")
+    expect(traceUrl.searchParams.get("correlation_id")).toBe(apiActivityEvent.correlation_id)
+    expect(requests.some((url) => url.includes(`/api-activities/${apiActivityEvent.correlation_id}/detail`))).toBe(true)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
 })
 
 test("Agent Runtime Audit failure retries only Audit and preserves the search scope", async () => {

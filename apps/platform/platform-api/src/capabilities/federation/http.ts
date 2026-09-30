@@ -37,6 +37,27 @@ export const federationHttp: FastifyPluginAsync<{
     return application
   }
 
+  async function managedApplication(input: {
+    tenantId: string
+    applicationId: string
+    role?: string
+    administratorOrganizationIds?: readonly string[]
+  }) {
+    const application = (await options.applications.list({ tenantId: input.tenantId }))
+      .find((value) => value.application_id === input.applicationId)
+    if (!application) throw new PlatformApiError("APPLICATION_NOT_FOUND", 404)
+    if (
+      input.role !== "TENANT_ADMINISTRATOR" &&
+      (
+        input.role !== "ORGANIZATION_ADMINISTRATOR" ||
+        !new Set(input.administratorOrganizationIds ?? []).has(application.owner_organization_id)
+      )
+    ) {
+      throw new PlatformApiError("RESOURCE_OWNER_OR_TENANT_ADMIN_REQUIRED", 403)
+    }
+    return application
+  }
+
   routes.get(
     "/v1/tenants/:tenant_id/applications/:application_id/federation-trust-revisions",
     {
@@ -73,11 +94,11 @@ export const federationHttp: FastifyPluginAsync<{
       },
     },
     async (request, reply) => {
-      await visibleApplication({
+      await managedApplication({
         tenantId: request.params.tenant_id,
         applicationId: request.params.application_id,
         role: request.principal?.role,
-        organizationIds: request.principal?.organization_ids,
+        administratorOrganizationIds: request.principal?.administrator_organization_ids,
       })
       return reply.code(201).send(await options.service.createTrustRevision({
         tenantId: request.params.tenant_id,

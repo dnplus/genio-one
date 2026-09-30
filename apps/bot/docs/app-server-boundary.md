@@ -1,7 +1,7 @@
 # Codex app-server ownership boundary
 
-Genio Bot pins Codex CLI/app-server `0.153.4` to upstream tag `rust-v0.153.4` and commit
-`3d2ee51ca2d5db578f328aa75e20aa22c0197c9a`. The executable and the generated
+Genio Bot pins Codex CLI/app-server `0.159.2` to upstream tag `rust-v0.159.2` and commit
+`ff6aec96948b70d94983af2641a6b67c94faeff5`. The executable and the generated
 TypeScript protocol must move together.
 
 ## Owned by Codex app-server

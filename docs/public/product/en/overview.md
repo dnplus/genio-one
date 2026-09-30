@@ -1,6 +1,8 @@
 # GenioOne product concept
 
-GenioOne is a governance and control plane for enterprise AI, MCP, APIs, SaaS, and private resources. It gives people, Applications, and third-party Agents one consistent way to discover, request, use, and review access without forcing every workload through a first-party chat Agent.
+GenioOne helps teams make their tools and models available to AI agents through shared Resources, Connections, and access policies. A team can publish a Resource once and use it from multiple Bots or supported clients, with access evaluated for each caller. Genio Bot provides an included workspace for putting those resources to work.
+
+The Platform control plane manages discovery, access, and request history. Gateway and Endpoint runtimes enforce the configured policies. This overview covers the wider product architecture; [Community Edition](https://github.com/dnplus/genio-one/blob/main/docs/public/ce/README.md) includes the Platform, Gateway Runtime, and Genio Bot. CE excludes Endpoint and Secure Access runtimes, and its Helm profile disables API Management.
 
 The product connects four questions that are usually split across identity, gateway, security, and audit tools:
 
@@ -11,7 +13,7 @@ The product connects four questions that are usually split across identity, gate
 
 ## The problem GenioOne solves
 
-Enterprise access becomes hard to reason about when identities live in one system, resource credentials in another, routing in gateways, and evidence in several logs. The result is often a choice between grants that are too broad and controls that are too fragmented to operate.
+Teams spend time reconnecting tools, arranging access, and diagnosing failures as they add AI agents to their work. Identities, resource credentials, gateway routing, and request records often live in separate systems. Shared resource configuration gives teams a place to maintain those integrations while each caller keeps its own access scope.
 
 GenioOne turns that fragmented state into a shared model:
 
@@ -144,13 +146,13 @@ GenioOne grows from a working control path rather than requiring every runtime c
 6. Evaluate invocation and route decisions at the relevant Endpoint or Gateway.
 7. Use Activity, Audit, topology, and access analysis to understand who can access what and how that access was used.
 
-## What GenioOne is not
+## Product boundaries
 
 - It is not an Identity Provider; authentication remains with the configured provider.
 - It is not a prompt-based authorization system; policy decisions are deterministic and versioned.
 - It is not only a VPN, proxy, or API gateway; those are enforcement paths within a larger governance model.
 - It does not treat a provider credential or Connection as an Entitlement.
-- GenioOne V1 governs third-party Agents, but does not require a first-party GenioOne Agent experience. That is a later product layer.
+- Genio Bot is included in CE. Other MCP clients can use published endpoints when they support the required transport and authentication; each caller remains subject to access and policy checks.
 
 ## Continue reading
 

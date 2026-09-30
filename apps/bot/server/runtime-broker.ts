@@ -104,7 +104,7 @@ export class RuntimeBroker {
   }
 
   claimBotTurn(botId: string, sessionId?: string): (() => void) | null {
-    if (this.closing || this.botTurnClaims.has(botId)) return null
+    if (this.closing || this.botTurnClaims.has(botId) || (sessionId && this.hasOtherBotTurn(sessionId, botId))) return null
     if (Array.from(this.stoppingSessions.keys()).some((id) => {
       const session = this.sessions.get(id)?.session
       return session && this.workspaces?.belongsToOwner(session.principal, botId)

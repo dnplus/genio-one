@@ -9,6 +9,7 @@ allowBuilds:
   '@google/genai': true
   '@scarf/scarf': true
   '@tree-sitter-grammars/tree-sitter-yaml': true
+  core-js: true
   core-js-pure: true
   edgedriver: true
   esbuild: true
@@ -17,3 +18,6 @@ allowBuilds:
   tree-sitter: true
   tree-sitter-json: true
   workerd: true
+
+minimumReleaseAgeExclude:
+  - '@openai/codex@0.159.2-darwin-arm64 || 0.159.2-darwin-x64 || 0.159.2-linux-arm64 || 0.159.2-linux-x64 || 0.159.2-win32-arm64 || 0.159.2-win32-x64 || 0.159.2'

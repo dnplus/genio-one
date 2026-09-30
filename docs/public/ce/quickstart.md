@@ -16,7 +16,7 @@ docker compose version
 
 ## Start the stack
 
-Clone the CE repository, install dependencies, and create local-only environment files. During private review, use a GitHub account with repository access. Do not commit either `.env.local` file.
+Clone the CE repository, install dependencies, and create local-only environment files. Do not commit either `.env.local` file.
 
 ```sh
 git clone https://github.com/dnplus/genio-one.git
@@ -27,7 +27,7 @@ cp apps/bot/.env.example apps/bot/.env.local
 pnpm dev
 ```
 
-`pnpm dev` starts or verifies the local identity and supporting containers, then starts Platform API, Platform Web, Bot server, and Bot Web. The first run may take time to pull container images. It prints a `local-dev.ready` event after all application services pass their health checks.
+`pnpm dev` starts or reuses local Keycloak, brings up the analytics Compose profile, then supervises Platform API and Web, Bot server and Web, and the included local support processes. The first run may take time to pull container images. It prints `local-dev.ready` after the supervised application services pass their health checks.
 
 Open these local endpoints:
 
@@ -38,7 +38,9 @@ Open these local endpoints:
 | Platform API | http://127.0.0.1:58082 |
 | Genio Bot | http://127.0.0.1:5180/ |
 
-Sign in to Management with `admin` / `admin`. A successful quickstart reaches the Management home after sign-in and returns `status: "ok"` from `http://127.0.0.1:58082/healthz`. Next, complete [local Gateway Runtime setup](../product/en/initial-setup.md#local-gateway-runtime).
+Sign in to Management with `admin` / `admin`. The local stack is ready when Management reaches its home after sign-in and `http://127.0.0.1:58082/healthz` returns `status: "ok"`.
+
+Before a governed MCP or Bot tool call, complete [local Gateway Runtime setup](../product/en/initial-setup.md#local-gateway-runtime). It registers and starts the local Runtime. A newly registered Runtime can correctly wait for its first published release; after a Resource is published, wait for the Gateway revision to reach `READY` before sending traffic.
 
 ## Stop, restart, and inspect
 
@@ -52,7 +54,7 @@ pnpm env:logs
 pnpm env:down
 ```
 
-`env:down` stops the Docker support services. Start them again by running `pnpm dev` from the repository root. `pnpm dev clean` is different: it is an interactive local-test-data cleanup command and will display its scope and require the literal confirmation before it removes anything.
+`env:down` stops the Docker support services. Start them again by running `pnpm dev` from the repository root. `pnpm dev clean` is different: it is an interactive local-test-data cleanup command that displays its scope and requires the literal confirmation `CLEAN LOCAL GENIO DATA` before removing anything.
 
 ## Data that persists
 

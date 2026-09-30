@@ -46,6 +46,49 @@ test("schema discovery without an OAuth binding is allowed while invocation rema
   await assert.rejects(service.resolveRequestHeaders(input), /MCP_OAUTH_AUTHORIZATION_REQUIRED/)
 })
 
+test("an expired binding that needs reauthorization is not omitted during optional discovery", async () => {
+  const store = createInMemoryMcpOAuthStore()
+  const codec = createMcpOAuthSecretCodec(Buffer.alloc(32, 10))
+  const owner = { tenantId: "tenant", resourceId: "resource", connectionId: "connection", subjectId: "alice" }
+  await store.putBinding({
+    tenant_id: owner.tenantId,
+    resource_id: owner.resourceId,
+    connection_id: owner.connectionId,
+    subject_id: owner.subjectId,
+    issuer: "https://auth.test",
+    resource_url: "https://mcp.test",
+    updated_at: 1,
+    sealed_state: codec.seal({
+      tokens: { access_token: "expired", refresh_token: "refresh", token_type: "Bearer", expires_in: 1 },
+      tokens_saved_at: 1,
+      client_information: { client_id: "client" },
+      discovery_state: {
+        authorizationServerUrl: "https://auth.test",
+        authorizationServerMetadata: { issuer: "https://auth.test", token_endpoint: "https://auth.test/token", response_types_supported: ["code"] },
+      },
+    }),
+  })
+  const service = createMcpOAuthService({
+    store,
+    codec,
+    connections: {
+      async get() { return { connection_kind: "MCP", endpoint: "https://mcp.test" } },
+      async list() { return [{ connection_id: owner.connectionId, connection_kind: "MCP", status: "READY", downstream_identity: { mode: "USER_OAUTH" }, endpoint: "https://mcp.test" }] },
+    } as unknown as ResourceConnectionRegistry,
+    identity: { async canonicalSubjectId(input) { return input.subjectId } },
+    publicOrigin: "https://cp.test",
+    managementUiOrigin: "https://ui.test",
+    now: () => 1_000,
+    refreshAuthorization: async () => { throw new Error("refresh rejected") },
+  })
+
+  assert.equal(await service.status(owner), null)
+  await assert.rejects(
+    service.resolveRequestHeaders({ ...owner, credentialsOptional: true }),
+    /MCP_OAUTH_REAUTHORIZATION_REQUIRED/,
+  )
+})
+
 test("expired MCP OAuth tokens refresh once and persist without a resource override", async () => {
   const codec = createMcpOAuthSecretCodec(Buffer.alloc(32, 7))
   let binding: McpOAuthBindingRecord = {

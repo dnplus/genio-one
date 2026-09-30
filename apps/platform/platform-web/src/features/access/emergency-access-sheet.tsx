@@ -122,7 +122,7 @@ export function EmergencyAccessSheet({
               <div className="font-semibold">{t("Emergency Access granted")}</div>
               <div className="mt-2 font-mono text-xs">{granted.entitlement_id}</div>
               <div className="mt-2">{granted.resource_id} / {granted.capability_id}</div>
-              <div className="mt-1">{t("Valid until")}: {formatEpochSeconds(granted.valid_until)}</div>
+              <div className="mt-1">{t("Valid until")}: {granted.valid_until === null ? t("No expiration") : formatEpochSeconds(granted.valid_until)}</div>
               <div className="mt-2 text-xs text-muted-foreground">{t("Elevated audit is recorded and the Entitlement expires automatically.")}</div>
             </div>
           ) : (

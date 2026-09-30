@@ -1,12 +1,20 @@
 import { createPublicationDnsVerifier } from "./publication-dns-verifier"
 import { installedConnectorsFromEnvironment } from "./capabilities/connections/installed-connectors"
 import { seedInstalledServices } from "./capabilities/installed-services/seed"
+import {
+  ardPublisherConfigFromEnvironment,
+  createArdPublisher,
+} from "./capabilities/ard-publisher/module"
 import { readFile } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
 
 import { createClient } from "redis"
 
 import { createManagementApi } from "./app"
+import {
+  createSingleFlightGatewayActivityMaterializer,
+  startGatewayActivityBackgroundRefresh,
+} from "./capabilities/activities/background-refresh"
 import type { GatewayProjectionRendererOptions } from "./capabilities/gateway-projection/contract"
 import { createDurableEd25519Signer } from "./capabilities/gateway-projection/signer"
 import type { BootstrapSubjectInput } from "./capabilities/identity/contract"
@@ -428,11 +436,22 @@ async function createMemoryDevApi(environment: NodeJS.ProcessEnv, logger: boolea
     } : {}),
     processorAdapterRegistry: loadProcessorAdapterRegistryFromEnvironment(environment),
   })
+  const ardPublisherConfig = ardPublisherConfigFromEnvironment(environment)
+  const bootstrapSubjects = bootstrapSubjectsFromEnvironment(environment)
+  for (const [tenantId, subjects] of bootstrapSubjects) {
+    await modules.identity.bootstrap({ tenantId, subjects })
+  }
+  const principalAuthenticator = createCanonicalPrincipalAuthenticator({
+    delegate: createEnvironmentPrincipalAuthenticator(environment),
+    identity: modules.identity,
+    organizations: modules.organizations,
+    justInTimeProviderIds: justInTimeProviderIdsFromEnvironment(environment),
+  })
   return createManagementApi({
     logger,
     modules,
     resourceCatalog: modules.resources,
-    principalAuthenticator: createEnvironmentPrincipalAuthenticator(environment),
+    principalAuthenticator,
     entitlementResolver: modules.entitlements,
     swaggerUiStaticDir: environment.GENIO_ONE_SWAGGER_UI_STATIC_DIR,
     webHtml: await webHtmlFromEnvironment(environment),
@@ -448,6 +467,15 @@ async function createMemoryDevApi(environment: NodeJS.ProcessEnv, logger: boolea
     demoProjectGatewayId: environment.GENIO_ONE_DEFAULT_GATEWAY_ID ?? "genio-ai-mcp-gateway",
     demoProjectGatewayIdentity: demoMcpGatewayIdentityFromEnvironment(environment),
     demoProjectMcpPublicationTarget: demoMcpPublicationTargetFromEnvironment(environment),
+    ...(ardPublisherConfig
+      ? {
+          ardPublisher: createArdPublisher({
+            config: ardPublisherConfig,
+            resources: modules.resources,
+            publications: modules.publicationWorkflow,
+          }),
+        }
+      : {}),
   })
 }
 
@@ -639,6 +667,7 @@ export async function createConfiguredManagementApi(
         : {}),
     })
     const connectorDeployment = installedConnectorsFromEnvironment(environment)
+    const ardPublisherConfig = ardPublisherConfigFromEnvironment(environment)
     const bootstrapSubjects = bootstrapSubjectsFromEnvironment(environment)
     for (const [tenantId, subjects] of bootstrapSubjects) {
       await modules.identity.bootstrap({ tenantId, subjects })
@@ -656,9 +685,15 @@ export async function createConfiguredManagementApi(
         enforcementPointId: environment.GENIO_ONE_DEFAULT_GATEWAY_ID,
       })
     }
+    const activityMaterializer = modules.activityMaterializer
+      ? createSingleFlightGatewayActivityMaterializer(modules.activityMaterializer)
+      : undefined
     const app = await createManagementApi({
       logger,
-      modules,
+      modules: {
+        ...modules,
+        ...(activityMaterializer ? { activityMaterializer } : {}),
+      },
       resourceCatalog: modules.resources,
       principalAuthenticator: createCanonicalPrincipalAuthenticator({
         delegate: principalAuthenticator,
@@ -681,7 +716,30 @@ export async function createConfiguredManagementApi(
       demoProjectGatewayId: environment.GENIO_ONE_DEFAULT_GATEWAY_ID ?? "genio-ai-mcp-gateway",
       demoProjectGatewayIdentity: demoMcpGatewayIdentityFromEnvironment(environment),
       demoProjectMcpPublicationTarget: demoMcpPublicationTargetFromEnvironment(environment),
+      ...(ardPublisherConfig
+        ? {
+            ardPublisher: createArdPublisher({
+              config: ardPublisherConfig,
+              resources: modules.resources,
+              publications: modules.publicationWorkflow,
+            }),
+          }
+        : {}),
     })
+    const activityBackgroundRefresh = activityMaterializer
+      ? startGatewayActivityBackgroundRefresh({
+          materializer: activityMaterializer,
+          integrations: modules.postHogIntegration,
+          reportFailure({ tenantId, error }) {
+            app.log.error(
+              tenantId === undefined ? { err: error } : { err: error, tenant_id: tenantId },
+              tenantId === undefined
+                ? "PostHog enabled tenant lookup failed"
+                : "Gateway Activity background materialization failed",
+            )
+          },
+        })
+      : undefined
     let renewalRunning = false
     const renewGatewayPolicyReleases = async () => {
       if (renewalRunning || !modules.gatewayPolicyReleaseRenewal) return
@@ -750,6 +808,7 @@ export async function createConfiguredManagementApi(
     )
     siemDeliveryInterval.unref()
     app.addHook("onClose", async () => {
+      activityBackgroundRefresh?.stop()
       clearInterval(renewalInterval)
       clearInterval(credentialRetirementInterval)
       clearInterval(siemDeliveryInterval)

@@ -6,6 +6,7 @@ import { PlatformApiError } from "../errors"
 import type { Principal } from "../tenancy-auth/contract"
 import {
   AccessNotificationListSchema,
+  ActivateAutoGrantSchema,
   AccessEntitlementPathSchema,
   AccessRequestListSchema,
   AccessRequestPathSchema,
@@ -28,6 +29,7 @@ function actor(principal: Principal): AccessActor {
     clientId: principal.client_id,
     role: principal.role,
     organizationIds: principal.organization_ids,
+    administratorOrganizationIds: principal.administrator_organization_ids ?? [],
   }
 }
 
@@ -42,6 +44,19 @@ export const accessHttp: FastifyPluginAsync<{ store: AccessGovernanceStore }> = 
   routes.post("/v1/tenants/:tenant_id/access-requests", {
     schema: { tags: ["Access"], params: AccessTenantPathSchema, body: RequestAccessSchema, response: { 200: RequestAccessOutcomeSchema } },
   }, async (request) => options.store.request({
+    tenantId: request.params.tenant_id,
+    actor: actor(request.principal!),
+    value: request.body,
+  }))
+  routes.post("/v1/tenants/:tenant_id/me/entitlements/activate", {
+    schema: {
+      operationId: "activateAutoGrantEntitlement",
+      tags: ["Access"],
+      params: AccessTenantPathSchema,
+      body: ActivateAutoGrantSchema,
+      response: { 200: LegacyEntitlementSchema },
+    },
+  }, async (request) => options.store.activateAutoGrant({
     tenantId: request.params.tenant_id,
     actor: actor(request.principal!),
     value: request.body,

@@ -39,4 +39,13 @@ export interface McpDiscoveryStore {
     expectedRevisionDigest: string
     state: "PUBLISHED" | "IGNORED" | "BLOCKED"
   }): Promise<McpDiscoveryOperation>
+  decideReadOnlyApproval(input: {
+    tenantId: string
+    resourceId: string
+    connectionId: string
+    candidateId: string
+    expectedRevisionDigest: string
+    executionMode: "AUTO_READ_ONLY" | "REQUIRE_CONFIRMATION"
+    approvedBySubjectId: string
+  }): Promise<McpDiscoveryOperation>
 }

@@ -3,6 +3,7 @@ import { TypeBoxTypeProvider } from "@fastify/type-provider-typebox"
 import { Type } from "typebox"
 
 import { PlatformApiError } from "../errors"
+import type { Principal } from "../tenancy-auth/contract"
 import type { UsagePolicyLimits } from "./contract"
 import type { UsageGovernanceDirectory } from "./directory"
 import type { AccountingLedger } from "./accounting"
@@ -144,6 +145,12 @@ export const usageGovernanceHttp: FastifyPluginAsync<{
   }): Promise<void>
 }> = async (app, options) => {
   const routes = app.withTypeProvider<TypeBoxTypeProvider>()
+  const canManageOrganization = (principal: Principal | undefined, organizationId: string) =>
+    principal?.role === "TENANT_ADMINISTRATOR" ||
+    (
+      principal?.role === "ORGANIZATION_ADMINISTRATOR" &&
+      principal.administrator_organization_ids?.includes(organizationId) === true
+    )
   routes.post("/v1/tenants/:tenant_id/runtime-control/GATEWAY/:runtime_id/accounting", {
     schema: {
       operationId: "recordInvocationAccounting",
@@ -221,7 +228,11 @@ export const usageGovernanceHttp: FastifyPluginAsync<{
       response: { 201: UseCaseSchema },
     },
   }, async (request, reply) => {
-    if (!request.principal || request.principal.tenant_id !== request.params.tenant_id || (request.principal.role !== "TENANT_ADMINISTRATOR" && (request.principal.role !== "ORGANIZATION_ADMINISTRATOR" || !request.principal.organization_ids.includes(request.params.organization_id)))) {
+    if (
+      !request.principal ||
+      request.principal.tenant_id !== request.params.tenant_id ||
+      !canManageOrganization(request.principal, request.params.organization_id)
+    ) {
       throw new PlatformApiError("ORGANIZATION_ADMIN_REQUIRED", 403)
     }
     const value = await options.directory.createUseCase({
@@ -252,7 +263,7 @@ export const usageGovernanceHttp: FastifyPluginAsync<{
       response: { 201: PolicySchema },
     },
   }, async (request, reply) => {
-    if (request.principal?.role !== "TENANT_ADMINISTRATOR" && !request.principal?.organization_ids.includes(request.body.owner_organization_id)) {
+    if (!canManageOrganization(request.principal, request.body.owner_organization_id)) {
       throw new PlatformApiError("ORGANIZATION_ADMIN_REQUIRED", 403)
     }
     const usagePolicyId = request.body.usage_policy_id?.trim() || `usage-policy-${crypto.randomUUID()}`

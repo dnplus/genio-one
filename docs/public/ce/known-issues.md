@@ -2,6 +2,8 @@
 
 This is a living list of issues observed while installing and validating the CE export locally. These entries are follow-ups, not claims that the public release is complete. Re-run the affected product path after each fix.
 
+The dated sections preserve the versions and outcomes of those validation runs. For the versions used by a new installation, see the [current Gateway dependency pins](../../../apps/platform/config/ai-mcp-gateway/provider-versions.env). A historical fix or successful test does not establish the result on a newer version.
+
 ## 2026-09-17 local validation
 
 ### Gateway restart can leave an old Envoy process serving traffic — fixed
@@ -70,9 +72,9 @@ Follow-up: make the reconnect boundary explicit in the Bot UI, recover a closed 
 
 ### Pinned Gateway dependency download needs a clear network prerequisite
 
-Installing the pinned local AI Gateway binary was blocked once by sandbox DNS access to `archive.tetratelabs.io`. The install path succeeded after the development machine was allowed to reach the dependency host and the downloaded artifact passed its digest check.
+During this validation run, installing the local AI Gateway binary was blocked by sandbox DNS access to `archive.tetratelabs.io`. The install path succeeded after the development machine could reach the dependency host and the downloaded artifact passed its digest check.
 
-Follow-up: document the network prerequisite, retain checksum verification, and provide a precise diagnostic when the archive host cannot be resolved.
+The [current installer](../../../apps/platform/scripts/install-local-aigw.mjs) queries `api.github.com` for the pinned Envoy AI Gateway release, then downloads its GitHub release asset and verifies the SHA-256 digest before installation. Allow access to the GitHub API and release download hosts for this step. The historical archive hostname is not the current installer's download source.
 
 ### CE Bot MCP targets must match the published endpoint shape
 
@@ -92,8 +94,8 @@ The former `GENIO_ONE_MCP_ORIGIN` override targeted a single publication hostnam
 
 Resolved: the override is gone. Each authorized Resource is resolved from the tenant catalog to its own published hostname and base path, validated against transport data smuggled through either field, and mounted only when the Bot also holds an installed MCP binding for it. Missing or unauthorized publication endpoints stay fail-closed. Archify still needs its own routing check, because it is only provisioned when an Archify credential is configured.
 
-### Envoy rejects the current Context7 certificate — TLS fix implemented
+### Context7 TLS failure in the recorded validation run — fix implemented
 
-The real Context7 MCP endpoint completes a TLS handshake and returns MCP tools when called directly from the development host. The local Envoy AI Gateway data plane nevertheless fails while proxying the same endpoint with `BAD_ECC_CERT` and returns `503` before the upstream MCP session is created. The generated Backend uses the system CA store and the correct SNI, so disabling certificate verification is not an acceptable workaround. Envoy AI Gateway's upstream MCP example currently records the same Context7 certificate failure.
+During this validation run, the Context7 MCP endpoint completed a TLS handshake and returned MCP tools when called directly from the development host. The local Envoy AI Gateway data plane nevertheless failed while proxying the same endpoint with `BAD_ECC_CERT` and returned `503` before the upstream MCP session was created. The generated Backend used the system CA store and the correct SNI, so certificate verification remained enabled during the fix.
 
-The upstream TLS projection now explicitly includes `X25519`, `P-256`, and `P-384`. With native Envoy 1.38.1, an isolated proxy test reproduced HTTP 503 with the default curves, then completed MCP initialization and `resolve-library-id` with HTTP 200 after adding P-384. System CA validation, SNI, and the expected DNS SAN remain enabled. The CE Connection has been restored to the official HTTPS endpoint and verified. A complete Bot and correlated Activity rerun is still required before claiming that the whole demo path passes.
+The upstream TLS projection now explicitly includes `X25519`, `P-256`, and `P-384`. With native Envoy 1.38.1, the recorded isolated proxy test reproduced HTTP 503 with the default curves, then completed MCP initialization and `resolve-library-id` with HTTP 200 after adding P-384. System CA validation, SNI, and the expected DNS SAN remained enabled. The CE Connection was restored to the official HTTPS endpoint and verified in that run. A complete Bot and correlated Activity rerun is still required before claiming that the whole demo path passes on the currently pinned version.

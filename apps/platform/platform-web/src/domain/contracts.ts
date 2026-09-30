@@ -151,6 +151,8 @@ export interface McpDiscoveryOperation {
       name: string
       title: string | null
       description: string | null
+      input_schema?: Record<string, unknown>
+      read_only_hint?: boolean
     }>
   } | null
   candidates: Array<{
@@ -268,6 +270,7 @@ export interface ConnectionSummary {
   mcp_tool_namespace?: string | null
   mcp_selected_tools: string[]
   mcp_tool_selection_operation_id: string | null
+  mcp_tool_reviews: McpToolReview[]
   credential_configured: boolean
   provider_credential_profile?: {
     profile_id: string
@@ -295,6 +298,18 @@ export interface ConnectionSummary {
   routing_priority: number
   region: string | null
   supported_obligations: string[]
+}
+
+export interface McpToolReview {
+  tool_name: string
+  source_revision_digest: string
+  execution_mode: "AUTO_READ_ONLY"
+  source_read_only_hint: boolean
+  title: string | null
+  description: string | null
+  input_schema: Record<string, unknown>
+  approved_by_subject_id: string
+  approved_at: number
 }
 
 export interface ConnectionPage {
@@ -468,7 +483,7 @@ export interface OnePolicyBotSeed {
 }
 
 type ApiAuditEvent = Extract<import("@/generated/management-api").ListGatewayAuthorizationAuditEvents200, unknown[]>[number]
-export type GovernanceAuditEvent = Extract<ApiAuditEvent, { kind: "POLICY_CHANGE" | "ACCESS_GROUP_CHANGE" }>
+export type GovernanceAuditEvent = Extract<ApiAuditEvent, { kind: "POLICY_CHANGE" | "ACCESS_GROUP_CHANGE" | "ACCESS_GOVERNANCE_CHANGE" }>
 
 export type AuditEvent = DecisionAuditEvent | GovernanceAuditEvent
 
@@ -535,6 +550,17 @@ export interface SiemDestination {
   enabled: boolean
   configured_by: { subject_id: string; evidence_level: "VERIFIED" }
   configured_at: number
+}
+
+export type PostHogIngestHost = "https://us.i.posthog.com" | "https://eu.i.posthog.com"
+
+export interface PostHogTelemetrySettings {
+  enabled: boolean
+  host: PostHogIngestHost | null
+  project_id: number | null
+  project_token: string | null
+  configured_by: string | null
+  configured_at: number | null
 }
 
 export interface SiemDelivery {
@@ -788,6 +814,8 @@ export interface ClassifyDiscoveredResourcesInput {
 
 export interface AccessRequest {
   access_request_id: string
+  request_correlation_id: string | null
+  decision_correlation_id: string | null
   requester: string
   target_subject: string
   acting_client: {
@@ -835,7 +863,7 @@ export interface Entitlement {
   capability_id: string
   state: "ACTIVE" | "REVOKED" | "EXPIRED"
   valid_from: number
-  valid_until: number
+  valid_until: number | null
   revocation_reason: string | null
 }
 
@@ -1086,6 +1114,7 @@ export interface IdentitySession {
   acting_client_id: string
   role?: "USER" | "ORGANIZATION_ADMINISTRATOR" | "TENANT_ADMINISTRATOR"
   organization_ids?: string[]
+  administrator_organization_ids: string[]
   scopes: string[]
   acr: string | null
   amr: string[]

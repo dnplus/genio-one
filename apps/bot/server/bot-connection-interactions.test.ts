@@ -17,6 +17,7 @@ test("delivers a personal connection request only to its source runtime and resu
     botId: "source",
     targetBotId: "target",
     threadId: "thread",
+    turnId: "turn",
     resourceId: "notion",
     resourceName: "Notion",
     capabilityId: "notion.write",
@@ -28,8 +29,8 @@ test("delivers a personal connection request only to its source runtime and resu
     },
   })
   expect(delivered).toHaveLength(1)
-  const request = delivered[0] as { requestToken: string; botId: string; targetBotId: string; threadId: string }
-  expect(request).toMatchObject({ botId: "source", targetBotId: "target", threadId: "thread" })
+  const request = delivered[0] as { requestToken: string; botId: string; targetBotId: string; threadId: string; turnId: string }
+  expect(request).toMatchObject({ botId: "source", targetBotId: "target", threadId: "thread", turnId: "turn" })
   const originalFetch = globalThis.fetch
   globalThis.fetch = (async () => Response.json([{ connection_id: "connection", status: "CONNECTED" }])) as unknown as typeof fetch
   try {
@@ -39,6 +40,7 @@ test("delivers a personal connection request only to its source runtime and resu
       requestToken: request.requestToken,
       botId: "source",
       threadId: "thread",
+      turnId: "turn",
       resourceId: "notion",
       connectionId: "connection",
       status: "CONNECTED",
@@ -60,6 +62,7 @@ test("rejects a completion from another runtime or an unconnected account", asyn
     botId: "source",
     targetBotId: "target",
     threadId: "thread",
+    turnId: "turn",
     resourceId: "mail",
     resourceName: "Mail",
     capabilityId: "mail.read",
@@ -73,6 +76,7 @@ test("rejects a completion from another runtime or an unconnected account", asyn
     requestToken: pending.request.requestToken,
     botId: "source",
     threadId: "thread",
+    turnId: "turn",
     resourceId: "mail",
     connectionId: "connection",
     status: "CONNECTED",
@@ -87,6 +91,7 @@ test("rejects a completion from another runtime or an unconnected account", asyn
       requestToken: pending.request.requestToken,
       botId: "source",
       threadId: "thread",
+      turnId: "turn",
       resourceId: "mail",
       connectionId: "connection",
       status: "CONNECTED",
@@ -95,7 +100,7 @@ test("rejects a completion from another runtime or an unconnected account", asyn
   } finally {
     globalThis.fetch = originalFetch
   }
-  interactions.cancel({ principal, runtimeSessionId: "runtime-source", requestToken: pending.request.requestToken, botId: "source", threadId: "thread" })
+  interactions.cancel({ principal, runtimeSessionId: "runtime-source", requestToken: pending.request.requestToken, botId: "source", threadId: "thread", turnId: "turn" })
   await expect(pending.wait).rejects.toThrow("BOT_CONNECTION_REQUEST_CANCELLED")
 })
 
@@ -107,6 +112,7 @@ test("accepts a saved password credential but never accepts a saved OAuth creden
     botId: "source",
     targetBotId: "target",
     threadId: "thread-password",
+    turnId: "turn-password",
     resourceId: "mail",
     resourceName: "Mail",
     capabilityId: "mail.read",
@@ -123,6 +129,7 @@ test("accepts a saved password credential but never accepts a saved OAuth creden
       requestToken: password.request.requestToken,
       botId: "source",
       threadId: "thread-password",
+      turnId: "turn-password",
       resourceId: "mail",
       connectionId: "password",
       status: "SAVED",
@@ -140,6 +147,7 @@ test("accepts a saved password credential but never accepts a saved OAuth creden
     botId: "source",
     targetBotId: "target",
     threadId: "thread-oauth",
+    turnId: "turn-oauth",
     resourceId: "mail",
     resourceName: "Mail",
     capabilityId: "mail.read",
@@ -155,6 +163,7 @@ test("accepts a saved password credential but never accepts a saved OAuth creden
       requestToken: oauth.request.requestToken,
       botId: "source",
       threadId: "thread-oauth",
+      turnId: "turn-oauth",
       resourceId: "mail",
       connectionId: "oauth",
       status: "SAVED",
@@ -163,7 +172,7 @@ test("accepts a saved password credential but never accepts a saved OAuth creden
   } finally {
     globalThis.fetch = originalFetch
   }
-  interactions.cancel({ principal, runtimeSessionId: "runtime-source", requestToken: oauth.request.requestToken, botId: "source", threadId: "thread-oauth" })
+  interactions.cancel({ principal, runtimeSessionId: "runtime-source", requestToken: oauth.request.requestToken, botId: "source", threadId: "thread-oauth", turnId: "turn-oauth" })
   await expect(oauth.wait).rejects.toThrow("BOT_CONNECTION_REQUEST_CANCELLED")
 })
 
@@ -176,6 +185,7 @@ test("does not retry after the request is cancelled while connection verificatio
     botId: "source",
     targetBotId: "target",
     threadId: "thread",
+    turnId: "turn",
     resourceId: "mail",
     resourceName: "Mail",
     capabilityId: "mail.read",
@@ -200,6 +210,7 @@ test("does not retry after the request is cancelled while connection verificatio
     requestToken: pending.request.requestToken,
     botId: "source",
     threadId: "thread",
+    turnId: "turn",
     resourceId: "mail",
     connectionId: "connection",
     status: "CONNECTED",
@@ -207,7 +218,7 @@ test("does not retry after the request is cancelled while connection verificatio
   })
   await verificationStarted
   const wait = pending.wait.catch((error) => error)
-  interactions.cancel({ principal, runtimeSessionId: "runtime-source", requestToken: pending.request.requestToken, botId: "source", threadId: "thread" })
+  interactions.cancel({ principal, runtimeSessionId: "runtime-source", requestToken: pending.request.requestToken, botId: "source", threadId: "thread", turnId: "turn" })
   resolveFetch(Response.json([{ connection_id: "connection", status: "CONNECTED" }]))
   try {
     await expect(completion).rejects.toThrow("BOT_CONNECTION_REQUEST_CANCELLED")
@@ -231,6 +242,7 @@ test("claims a verified request before retry so parallel completions cannot exec
     botId: "source",
     targetBotId: "target",
     threadId: "thread",
+    turnId: "turn",
     resourceId: "mail",
     resourceName: "Mail",
     capabilityId: "mail.read",
@@ -256,6 +268,7 @@ test("claims a verified request before retry so parallel completions cannot exec
     requestToken: pending.request.requestToken,
     botId: "source",
     threadId: "thread",
+    turnId: "turn",
     resourceId: "mail",
     connectionId: "connection",
     status: "CONNECTED",
@@ -278,13 +291,86 @@ test("claims a verified request before retry so parallel completions cannot exec
   }
 })
 
-function beginMail(interactions: BotConnectionInteractions, threadId = "thread") {
+test("does not let a completed OAuth request from an interrupted turn attach to a newer turn in the same thread", async () => {
+  const interactions = new BotConnectionInteractions()
+  let activeTurnId = "turn-1"
+  let retries = 0
+  const pending = interactions.begin({
+    principal,
+    runtimeSessionId: "runtime-source",
+    botId: "source",
+    targetBotId: "target",
+    threadId: "thread",
+    turnId: "turn-1",
+    resourceId: "mail",
+    resourceName: "Mail",
+    capabilityId: "mail.read",
+    reason: "connection_required",
+    resume: { tool: "add_enterprise_resource", arguments: { botId: "target", resourceId: "mail", capabilityId: "mail.read" } },
+    isCurrent: () => activeTurnId === "turn-1",
+    retry: async () => {
+      retries += 1
+      return botToolText({ addState: "INSTALLED" })
+    },
+  })
+  const input = {
+    principal,
+    runtimeSessionId: "runtime-source",
+    requestToken: pending.request.requestToken,
+    botId: "source",
+    threadId: "thread",
+    turnId: "turn-1",
+    resourceId: "mail",
+    connectionId: "connection",
+    status: "CONNECTED",
+    accessToken: "access-token",
+  }
+  await expect(interactions.complete({ ...input, turnId: "turn-2" })).rejects.toThrow("BOT_CONNECTION_REQUEST_FORBIDDEN")
+  activeTurnId = "turn-2"
+  const wait = pending.wait.catch((error) => error)
+  await expect(interactions.complete(input)).rejects.toThrow("BOT_CONNECTION_REQUEST_STALE")
+  expect(await wait).toEqual(expect.objectContaining({ message: "BOT_CONNECTION_REQUEST_STALE" }))
+  expect(retries).toBe(0)
+  expect(interactions.pendingRequests({ principal, botId: "source", runtimeSessionId: "runtime-source", threadId: "thread", turnId: "turn-2" })).toEqual([])
+})
+
+test("does not redeliver a pending request from a superseded turn when the browser reconnects", async () => {
+  const interactions = new BotConnectionInteractions()
+  const pending = interactions.begin({
+    principal,
+    runtimeSessionId: "runtime-source",
+    botId: "source",
+    targetBotId: "target",
+    threadId: "thread",
+    turnId: "turn-1",
+    resourceId: "mail",
+    resourceName: "Mail",
+    capabilityId: "mail.read",
+    reason: "connection_required",
+    resume: { tool: "add_enterprise_resource", arguments: { botId: "target", resourceId: "mail", capabilityId: "mail.read" } },
+    retry: async () => botToolText({ addState: "INSTALLED" }),
+  })
+  const delivered: unknown[] = []
+  interactions.subscribe({
+    principal,
+    botId: "source",
+    runtimeSessionId: "runtime-source",
+    isCurrent: (request) => request.turnId === "turn-2",
+    send: (request) => delivered.push(request),
+  })
+  expect(delivered).toEqual([])
+  interactions.cancel({ principal, runtimeSessionId: "runtime-source", requestToken: pending.request.requestToken, botId: "source", threadId: "thread", turnId: "turn-1" })
+  await expect(pending.wait).rejects.toThrow("BOT_CONNECTION_REQUEST_CANCELLED")
+})
+
+function beginMail(interactions: BotConnectionInteractions, threadId = "thread", turnId = `turn:${threadId}`) {
   return interactions.begin({
     principal,
     runtimeSessionId: "runtime-source",
     botId: "source",
     targetBotId: "target",
     threadId,
+    turnId,
     resourceId: "mail",
     resourceName: "Mail",
     capabilityId: "mail.read",
@@ -302,19 +388,20 @@ test("tells the source browser when a slow OAuth setup outlives the wait window 
   const pending = beginMail(interactions)
   await expect(pending.wait).rejects.toThrow("BOT_CONNECTION_REQUEST_EXPIRED")
   expect(expired).toEqual([expect.objectContaining({ requestToken: pending.request.requestToken, botId: "source", threadId: "thread" })])
-  expect(() => interactions.cancel({ principal, runtimeSessionId: "runtime-source", requestToken: pending.request.requestToken, botId: "source", threadId: "thread" })).toThrow("BOT_CONNECTION_REQUEST_EXPIRED")
+  expect(() => interactions.cancel({ principal, runtimeSessionId: "runtime-source", requestToken: pending.request.requestToken, botId: "source", threadId: "thread", turnId: "turn:thread" })).toThrow("BOT_CONNECTION_REQUEST_EXPIRED")
 })
 
 test("lists waiting connection requests per thread so pending reloads can recreate the card", async () => {
   const interactions = new BotConnectionInteractions()
   const current = beginMail(interactions, "thread")
   const otherThread = beginMail(interactions, "thread-other")
-  expect(interactions.pendingRequests({ principal, botId: "source", runtimeSessionId: "runtime-source", threadId: "thread" }).map((request) => request.requestToken)).toEqual([current.request.requestToken])
-  expect(interactions.pendingRequests({ principal, botId: "source", runtimeSessionId: "runtime-other", threadId: "thread" })).toEqual([])
-  expect(interactions.pendingRequests({ principal: { ...principal, subject_id: "someone-else" }, botId: "source", runtimeSessionId: "runtime-source", threadId: "thread" })).toEqual([])
-  interactions.cancel({ principal, runtimeSessionId: "runtime-source", requestToken: current.request.requestToken, botId: "source", threadId: "thread" })
-  interactions.cancel({ principal, runtimeSessionId: "runtime-source", requestToken: otherThread.request.requestToken, botId: "source", threadId: "thread-other" })
+  expect(interactions.pendingRequests({ principal, botId: "source", runtimeSessionId: "runtime-source", threadId: "thread", turnId: "turn:thread" }).map((request) => request.requestToken)).toEqual([current.request.requestToken])
+  expect(interactions.pendingRequests({ principal, botId: "source", runtimeSessionId: "runtime-other", threadId: "thread", turnId: "turn:thread" })).toEqual([])
+  expect(interactions.pendingRequests({ principal: { ...principal, subject_id: "someone-else" }, botId: "source", runtimeSessionId: "runtime-source", threadId: "thread", turnId: "turn:thread" })).toEqual([])
+  expect(interactions.pendingRequests({ principal, botId: "source", runtimeSessionId: "runtime-source", threadId: "thread", turnId: "turn:other" })).toEqual([])
+  interactions.cancel({ principal, runtimeSessionId: "runtime-source", requestToken: current.request.requestToken, botId: "source", threadId: "thread", turnId: "turn:thread" })
+  interactions.cancel({ principal, runtimeSessionId: "runtime-source", requestToken: otherThread.request.requestToken, botId: "source", threadId: "thread-other", turnId: "turn:thread-other" })
   await expect(current.wait).rejects.toThrow("BOT_CONNECTION_REQUEST_CANCELLED")
   await expect(otherThread.wait).rejects.toThrow("BOT_CONNECTION_REQUEST_CANCELLED")
-  expect(interactions.pendingRequests({ principal, botId: "source", runtimeSessionId: "runtime-source", threadId: "thread" })).toEqual([])
+  expect(interactions.pendingRequests({ principal, botId: "source", runtimeSessionId: "runtime-source", threadId: "thread", turnId: "turn:thread" })).toEqual([])
 })

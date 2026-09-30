@@ -49,6 +49,7 @@ import {
 } from "./lib/bot-api"
 import { replaceResourceBindings } from "./lib/catalog-surface"
 import { botCopy } from "./lib/ui-copy"
+import { initializePosthogAnalytics, resetPosthogAnalytics } from "./lib/posthog-analytics"
 
 import {
   demoCatalog,
@@ -118,6 +119,7 @@ export function App() {
   const [ceDemoAttempt, setCeDemoAttempt] = useState(0)
 
   const handleSignOut = useCallback(() => {
+    resetPosthogAnalytics()
     clearGenioTokens()
     sessionStorage.removeItem("genio.bot.thread_id")
     setToken("")
@@ -204,6 +206,18 @@ export function App() {
       }
     })().finally(() => setLoading(false))
   }, [demo, loadAttempt])
+
+  useEffect(() => {
+    if (demo || !token || !identity?.tenant_id) return
+    const controller = new AbortController()
+    void initializePosthogAnalytics({
+      accessToken: token,
+      role: identity.role,
+      signal: controller.signal,
+      tenantId: identity.tenant_id,
+    })
+    return () => controller.abort()
+  }, [demo, identity?.role, identity?.tenant_id, token])
 
   useEffect(() => {
     if (demo || !token) return

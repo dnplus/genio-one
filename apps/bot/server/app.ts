@@ -33,6 +33,7 @@ import { handoffRoutes } from "./routes/handoffs"
 import { groupRoutes } from "./routes/groups"
 import { codexRoutes } from "./routes/codex"
 import { continueCallers } from "./caller-continuation"
+import { continuePersonalConnections } from "./connection-continuation"
 import { reconcileTerminalInvocations, recoverApprovedInvocations, recoverNativeInvocationResults } from "./invocation-recovery"
 import { BotToolSessions } from "./bot-tool-sessions"
 import { botToolRoutes } from "./routes/bot-tools"
@@ -141,6 +142,7 @@ export async function createBotApp(
     catch { console.warn(JSON.stringify({ event: "bot.invocation.recovery_deferred" })) }
     void deliverQuestionAnswers(context)
     void continueCallers(context)
+    void continuePersonalConnections(context)
     void recoverApprovedInvocations(context)
     void recoverNativeInvocationResults(context)
     void botDeletionReconciler.reconcile()

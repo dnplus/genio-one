@@ -78,6 +78,7 @@ test("custom connection trust material is passed to the HTTPS verifier without e
       endpoint: "http://127.0.0.1:19090/v1",
       mcp_selected_tools: [],
       mcp_tool_selection_operation_id: null,
+      mcp_tool_reviews: [],
       credential_ref: null,
       provider_credential_profile: null,
       downstream_identity: { mode: "NONE" },

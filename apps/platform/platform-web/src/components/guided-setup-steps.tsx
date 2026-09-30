@@ -37,7 +37,8 @@ export function GuidedSetupSteps({
               <TooltipTrigger asChild>
                 <button
                   aria-current={step.id === activeStepId ? "step" : undefined}
-                  className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                  aria-label={`${index + 1}. ${step.label}`}
+                  className="flex min-w-0 flex-1 items-center gap-2.5 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring rounded-md"
                   onClick={() => onSelect(step.id)}
                   type="button"
                 >
@@ -49,12 +50,14 @@ export function GuidedSetupSteps({
                       {step.status === "complete" ? <CheckIcon /> : index + 1}
                     </Badge>
                   </ItemMedia>
-                  <ItemContent className="hidden sm:flex">
-                    <ItemTitle>{step.label}</ItemTitle>
+                  <ItemContent className="flex min-w-0">
+                    <ItemTitle className="w-full text-xs sm:text-sm">{step.label}</ItemTitle>
                   </ItemContent>
                 </button>
               </TooltipTrigger>
-              {step.description ? <TooltipContent side="bottom" sideOffset={6}>{step.description}</TooltipContent> : null}
+              <TooltipContent side="bottom" sideOffset={6}>
+                {step.description ?? step.label}
+              </TooltipContent>
             </Tooltip>
           </Item>
         </div>

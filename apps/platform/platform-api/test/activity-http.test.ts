@@ -4,11 +4,12 @@ import test from "node:test"
 import Fastify from "fastify"
 
 import { gatewayActivityHttp } from "../src/capabilities/activities/http"
-import type { GatewayActivityIngest } from "../src/capabilities/activities/contract"
+import type { GatewayActivityEvent, GatewayActivityIngest } from "../src/capabilities/activities/contract"
 import { createInMemoryGatewayActivityStore } from "../src/capabilities/activities/memory"
 
 test("Activity HTTP ingest preserves false and null Session Lease reused values", async () => {
   const received: GatewayActivityIngest[] = []
+  const projected: GatewayActivityEvent[] = []
   const app = Fastify()
   await app.register(gatewayActivityHttp, {
     authorizeRuntime: async () => {},
@@ -25,6 +26,11 @@ test("Activity HTTP ingest preserves false and null Session Lease reused values"
           estimated_cost_micros: null,
           pricing_source: null,
           pricing_version: null,
+          effective_model_id: event.effective_model_id ?? "gpt-4.1",
+          provider_id: event.provider_id ?? "OPENAI",
+          input_tokens: event.input_tokens ?? 12,
+          output_tokens: event.output_tokens ?? 7,
+          total_tokens: event.total_tokens ?? 19,
         }
       },
       async list() {
@@ -72,6 +78,11 @@ test("Activity HTTP ingest preserves false and null Session Lease reused values"
           priced_record_count: 0,
           unpriced_record_count: 0,
         }
+      },
+    },
+    postHog: {
+      async capture({ event }) {
+        projected.push(event)
       },
     },
   })
@@ -163,6 +174,10 @@ test("Activity HTTP ingest preserves false and null Session Lease reused values"
   assert.equal(response.json().consumer_organization_id, "organization-consumer")
   assert.deepEqual(response.json().data_classifications, payload.data_classifications)
   assert.deepEqual(response.json().safety_decisions, payload.safety_decisions)
+  assert.equal(projected.length, 1)
+  assert.equal(projected[0]?.tenant_id, "tenant-1")
+  assert.equal(projected[0]?.effective_model_id, "gpt-4.1")
+  assert.equal(projected[0]?.provider_id, "OPENAI")
 
   const nullResponse = await app.inject({
     method: "POST",

@@ -13,6 +13,7 @@ export interface PersonalConnectionRequest extends PersonalConnectionPrompt {
   requestToken: string
   botId: string
   threadId: string
+  turnId: string
 }
 
 export function PersonalConnectionElicitationCards({

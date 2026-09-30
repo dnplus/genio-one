@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { render, screen, waitFor } from "@testing-library/react"
+import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { createInstance } from "i18next"
 import { I18nextProvider } from "react-i18next"
@@ -16,6 +16,7 @@ const organizationIdentity: IdentitySession = {
   acting_client_id: "management-ui",
   role: "ORGANIZATION_ADMINISTRATOR",
   organization_ids: ["org-ai"],
+  administrator_organization_ids: ["org-ai"],
   scopes: ["genioone-management"],
   acr: "oidc",
   amr: ["oidc"],
@@ -68,14 +69,41 @@ async function withI18n(ui: React.ReactNode) {
   render(<I18nextProvider i18n={i18n}><SheetWorkspaceRoot>{ui}</SheetWorkspaceRoot></I18nextProvider>)
 }
 
-test("Organization Administrator sees Manage only for organizations in canonical scope", async () => {
-  await withI18n(<OrganizationPage tenantId="tenant-acme" identity={organizationIdentity} data={{ ...data(), auditEvents: [], failures: [] } as OverviewSnapshot} onReload={async () => {}} />)
+test("Kevin can manage only UAT Access even though Sales membership remains visible", async () => {
+  const kevinIdentity: IdentitySession = {
+    ...organizationIdentity,
+    subject_id: "person-uat-kevin",
+    organization_ids: ["org-sales", "org-uat-access"],
+    administrator_organization_ids: ["org-uat-access"],
+  }
+  const kevinOrganizations = [
+    { tenant_id: "tenant-acme", organization_id: "org-sales", display_name: "Sales", slug: "sales", member_subject_ids: ["person-uat-kevin"], organization_administrator_subject_ids: [], membership_sources: [{ kind: "MANUAL" as const, reference: "console", status: "SYNCED" as const }], created_at: 1 },
+    { tenant_id: "tenant-acme", organization_id: "org-uat-access", display_name: "UAT Access", slug: "uat-access", member_subject_ids: ["person-uat-kevin"], organization_administrator_subject_ids: ["person-uat-kevin"], membership_sources: [{ kind: "MANUAL" as const, reference: "console", status: "SYNCED" as const }], created_at: 1 },
+  ]
 
-  expect(screen.getAllByRole("button", { name: "Manage" })).toHaveLength(1)
-  expect(screen.queryByRole("button", { name: "Create Organization" })).toBeNull()
-  expect(screen.queryByText("Administrators")).toBeNull()
-  expect(screen.getByText("AI Platform")).toBeTruthy()
-  expect(screen.getByText("Security")).toBeTruthy()
+  await withI18n(<OrganizationPage tenantId="tenant-acme" identity={kevinIdentity} data={{ ...data(), organizations: kevinOrganizations, auditEvents: [], failures: [] } as OverviewSnapshot} onReload={async () => {}} />)
+
+  expect(within(screen.getByRole("row", { name: /Sales/ })).queryByRole("button", { name: "Manage" })).toBeNull()
+  expect(within(screen.getByRole("row", { name: /UAT Access/ })).getByRole("button", { name: "Manage" })).toBeTruthy()
+  expect(screen.getByText("Sales")).toBeTruthy()
+  expect(screen.getByText("UAT Access")).toBeTruthy()
+})
+
+test("Tenant Administrator can manage every visible organization", async () => {
+  const tenantAdministrator: IdentitySession = {
+    ...organizationIdentity,
+    subject_id: "tenant-admin",
+    role: "TENANT_ADMINISTRATOR",
+    organization_ids: [],
+    administrator_organization_ids: [],
+  }
+
+  await withI18n(<OrganizationPage tenantId="tenant-acme" identity={tenantAdministrator} data={{ ...data(), auditEvents: [], failures: [] } as OverviewSnapshot} onReload={async () => {}} />)
+
+  expect(within(screen.getByRole("row", { name: /AI Platform/ })).getByRole("button", { name: "Manage" })).toBeTruthy()
+  expect(within(screen.getByRole("row", { name: /Security/ })).getByRole("button", { name: "Manage" })).toBeTruthy()
+  expect(screen.getByRole("button", { name: "Create Organization" })).toBeTruthy()
+  expect(screen.getByText("Administrators")).toBeTruthy()
 })
 
 test("Organization-owned Access Group editor limits members and owner choices to canonical scope", async () => {

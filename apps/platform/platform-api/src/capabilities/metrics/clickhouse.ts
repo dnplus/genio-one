@@ -16,6 +16,13 @@ interface HistogramRow {
   response_bytes: number
 }
 
+function databaseIdentifier(value: string): string {
+  if (!/^[a-zA-Z0-9_]+$/.test(value)) {
+    throw new Error(`INVALID_CLICKHOUSE_DATABASE_NAME:${value}`)
+  }
+  return value
+}
+
 function quote(value: string): string {
   return `'${value.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`
 }
@@ -57,6 +64,7 @@ export function createClickHouseGatewayMetricsStore(options: {
 }): GatewayMetricsStore {
   const request = options.fetch ?? fetch
   const origin = options.origin.replace(/\/$/, "")
+  const database = databaseIdentifier(options.database)
   const authorization = `Basic ${Buffer.from(`${options.username}:${options.password}`).toString("base64")}`
   return {
     async summarize({ tenantId, windowSeconds }) {
@@ -79,7 +87,7 @@ export function createClickHouseGatewayMetricsStore(options: {
             if(count() = 0, null, toUnixTimestamp(max(TimeUnix))) as sampled_at
           from (
             select distinct ResourceAttributes, MetricName, Attributes, TimeUnix, StartTimeUnix, Value
-            from ${options.database}.otel_metrics_sum
+            from ${database}.otel_metrics_sum
             where ResourceAttributes['genio.tenant.id'] = ${tenant}
               and TimeUnix >= now() - interval ${window} second
               and ((MetricName in ('listener.http.downstream_rq_completed', 'listener.http.downstream_rq_xx') and match(Attributes['envoy.http_conn_manager_prefix'], '^http-[0-9]+$'))
@@ -97,7 +105,7 @@ export function createClickHouseGatewayMetricsStore(options: {
               and Attributes['envoy.cluster_name'] like '%-aigw/%'))) as response_bytes
           from (
             select distinct ResourceAttributes, MetricName, Attributes, TimeUnix, StartTimeUnix, Count, Sum
-            from ${options.database}.otel_metrics_histogram
+            from ${database}.otel_metrics_histogram
             where ResourceAttributes['genio.tenant.id'] = ${tenant}
               and TimeUnix >= now() - interval ${window} second
           )`),

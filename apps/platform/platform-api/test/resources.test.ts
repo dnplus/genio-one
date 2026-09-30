@@ -192,6 +192,76 @@ test("Bot packages use the existing EXTENSION Resource contract", async () => {
   )
 })
 
+test("Resource lifecycle HTTP permits EXTENSION publication and guards other kinds", async () => {
+  const modules = createInMemoryPlatformModules()
+  const organization = await modules.organizations.create({
+    tenantId: "tenant-acme",
+    display_name: "Platform",
+  })
+  const extension = await modules.resources.createResource({
+    tenantId: "tenant-acme",
+    value: {
+      display_name: "Service Desk Bot",
+      kind: "EXTENSION",
+      owner_organization_id: organization.organization_id,
+      authentication_strategy: "NONE",
+      environment_id: "development",
+      version: "1.0.0",
+      enforcement_point_id: "genio-agent-runtime",
+    },
+  })
+  const mcp = await modules.resources.createResource({
+    tenantId: "tenant-acme",
+    value: {
+      display_name: "Knowledge Search",
+      kind: "MCP",
+      owner_organization_id: organization.organization_id,
+      authentication_strategy: "NONE",
+      environment_id: "development",
+      version: "1.0.0",
+      enforcement_point_id: "genio-agent-runtime",
+    },
+  })
+  const app = await createManagementApi({
+    modules,
+    resourceCatalog: modules.resources,
+    principalAuthenticator: createStaticPrincipalAuthenticator({
+      "test-token": {
+        tenant_id: "tenant-acme",
+        subject_id: "person-owner",
+        role: "TENANT_ADMINISTRATOR",
+        organization_ids: [],
+        client_id: "application-1",
+      },
+    }),
+  })
+  try {
+    const published = await app.inject({
+      method: "POST",
+      url: `/v1/tenants/tenant-acme/resources/${extension.resource_id}/lifecycle`,
+      headers: { authorization: "Bearer test-token" },
+      payload: { lifecycle: "PUBLISHED" },
+    })
+    assert.equal(published.statusCode, 200)
+    assert.equal(published.json().lifecycle, "PUBLISHED")
+
+    const guarded = await app.inject({
+      method: "POST",
+      url: `/v1/tenants/tenant-acme/resources/${mcp.resource_id}/lifecycle`,
+      headers: { authorization: "Bearer test-token" },
+      payload: { lifecycle: "PUBLISHED" },
+    })
+    assert.equal(guarded.statusCode, 409)
+    assert.equal(guarded.json().code, "PUBLICATION_REQUIRES_APPROVAL")
+    assert.equal(
+      (await modules.resources.getResource({ tenantId: "tenant-acme", resourceId: mcp.resource_id })).lifecycle,
+      "DRAFT",
+    )
+  } finally {
+    await app.close()
+  }
+})
+
 
 test("publication endpoint rejects invalid hostnames and paths before persistence", async () => {
   const modules = createInMemoryPlatformModules()

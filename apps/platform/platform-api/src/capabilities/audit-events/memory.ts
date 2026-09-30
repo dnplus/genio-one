@@ -19,6 +19,10 @@ export function createInMemoryGatewayAuthorizationAuditStore(): GatewayAuthoriza
       events.set(key, value)
       return structuredClone(value)
     },
+    async findById({ tenantId, auditEventId }) {
+      const event = events.get(`${tenantId}\0${auditEventId}`)
+      return event ? structuredClone(event) : null
+    },
     async query(input) {
       const matching = [...events.values()]
         .filter((event) => event.tenant_id === input.tenantId)

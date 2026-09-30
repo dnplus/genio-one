@@ -6,6 +6,9 @@
 !apps/platform/
 !apps/platform/scripts/
 !apps/platform/scripts/build-gateway-services.mjs
+!apps/connectors/
+!apps/connectors/mail2000/
+!apps/connectors/mail2000/metadata.ts
 !packages/
 !packages/**
 !runtimes/

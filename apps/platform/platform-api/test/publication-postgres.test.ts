@@ -83,6 +83,7 @@ const connection = {
   mcp_tool_namespace: "mail2000",
   mcp_selected_tools: ["list_mailboxes"],
   mcp_tool_selection_operation_id: null,
+  mcp_tool_reviews: [],
   credential_ref: null,
   provider_credential_profile: null,
   downstream_identity: { mode: "USER_PASSWORD" as const },
@@ -235,6 +236,7 @@ const connectionRow: Row = {
   mcp_tool_namespace: connection.mcp_tool_namespace,
   mcp_selected_tools: connection.mcp_selected_tools,
   mcp_tool_selection_operation_id: null,
+  mcp_tool_reviews: connection.mcp_tool_reviews,
   credential_ref: null,
   provider_credential_profile_id: null,
   provider_credential_profile_revision: null,
@@ -777,6 +779,157 @@ test(
         [integrationTenantId, integrationResourceId, publicationReference.publicationId],
       )
       assert.deepEqual(state.rows[0], { lifecycle: "PUBLISHED", publication_state: "PUBLISHED", publication_build_state: "READY" })
+      const publishedSnapshot = await store.getPublishedSnapshot({
+        tenantId: integrationTenantId,
+        resourceId: integrationResourceId,
+      })
+      assert.equal(publishedSnapshot?.publication_id, publicationReference.publicationId)
+      const visibilityResourceId = `resource-publication-visibility-${randomUUID()}`
+      const visibilityPublicationId = `publication-visibility-${randomUUID()}`
+      const visibilityResource: ResourceRegistration = {
+        ...integrationResource,
+        resource_id: visibilityResourceId,
+        lifecycle: "PUBLISHED",
+        installation_owned: false,
+        service_kind: null,
+      }
+      const visibilitySnapshotWithoutDigest: Omit<GatewayProjectionSnapshot, "snapshot_digest"> = {
+        ...integrationSnapshot,
+        publication_id: visibilityPublicationId,
+        resource_id: visibilityResourceId,
+        resource_digest: resourceContentDigest(visibilityResource),
+        resource: { ...visibilityResource, lifecycle: "DRAFT" },
+        one_policy_chain: { ...integrationChain, resource_id: visibilityResourceId },
+        connections: [{ ...integrationConnection, resource_id: visibilityResourceId }],
+      }
+      const visibilitySnapshot: GatewayProjectionSnapshot = {
+        ...visibilitySnapshotWithoutDigest,
+        snapshot_digest: snapshotDigest(visibilitySnapshotWithoutDigest),
+      }
+      await sql.query(
+        `insert into genio_one_resources
+           (tenant_id, resource_id, display_name, kind, owner_organization_id,
+            authentication_strategy, environment_id, version, lifecycle,
+            operational_state, capabilities, enforcement_point_id,
+            builtin_service, installation_owned, service_kind, documentation, row_revision)
+         values ($1, $2, $3, 'MCP', $4, 'OAUTH', 'uat', '1.0.0', 'PUBLISHED',
+                 'UNKNOWN', $5::text::jsonb, 'genio-ai-mcp-gateway',
+                 null, false, null, '', 1)`,
+        [
+          integrationTenantId,
+          visibilityResourceId,
+          "Publication visibility",
+          integrationOrganizationId,
+          JSON.stringify(visibilityResource.capabilities),
+        ],
+      )
+      await sql.query(
+        `insert into genio_one_publications
+           (tenant_id, publication_id, resource_id, endpoint_revision,
+            resource_revision, resource_digest, policy_revision, gateway_id,
+            hostname, base_path, visibility, publication_state, dns_management,
+            dns_proof_status, dns_proof, request_snapshot, review_snapshot,
+            publication_snapshot, publication_build_state, build_attempt_id)
+         values ($1, $2, $3, 1, 1, $4, 1, $5, $6, $7, 'PUBLIC',
+                 'PUBLISHED', 'EXTERNAL', 'VERIFIED', '{}'::jsonb,
+                 $8::text::jsonb, $9::text::jsonb, $10::text::jsonb, 'READY', $11)`,
+        [
+          integrationTenantId,
+          visibilityPublicationId,
+          visibilityResourceId,
+          visibilitySnapshot.resource_digest,
+          endpoint.gateway_id,
+          endpoint.hostname,
+          endpoint.base_path,
+          JSON.stringify({
+            request_id: `request-visibility-${randomUUID()}`,
+            state: "APPROVED",
+            requested_by: "platform-admin",
+            requested_at: 1_700_000_003,
+          }),
+          JSON.stringify({ reviewed_by: "platform-admin", reviewed_at: 1_700_000_003 }),
+          JSON.stringify(visibilitySnapshot),
+          `attempt-visibility-${randomUUID()}`,
+        ],
+      )
+      assert.equal(
+        (await store.getPublishedSnapshot({
+          tenantId: integrationTenantId,
+          resourceId: visibilityResourceId,
+        }))?.publication_id,
+        visibilityPublicationId,
+      )
+      assert.equal(
+        await store.getPublishedSnapshot({
+          tenantId: `${integrationTenantId}-other`,
+          resourceId: visibilityResourceId,
+        }),
+        null,
+      )
+      await sql.query(
+        `update genio_one_publications
+            set publication_build_state = 'FAILED'
+          where tenant_id = $1 and publication_id = $2`,
+        [integrationTenantId, visibilityPublicationId],
+      )
+      assert.equal(
+        await store.getPublishedSnapshot({
+          tenantId: integrationTenantId,
+          resourceId: visibilityResourceId,
+        }),
+        null,
+      )
+      await sql.query(
+        `update genio_one_publications
+            set publication_build_state = 'READY'
+          where tenant_id = $1 and publication_id = $2`,
+        [integrationTenantId, visibilityPublicationId],
+      )
+      await sql.query(
+        `update genio_one_resources
+            set lifecycle = 'DEPRECATED'
+          where tenant_id = $1 and resource_id = $2`,
+        [integrationTenantId, visibilityResourceId],
+      )
+      assert.equal(
+        await store.getPublishedSnapshot({
+          tenantId: integrationTenantId,
+          resourceId: visibilityResourceId,
+        }),
+        null,
+      )
+      await sql.query(
+        `update genio_one_resources
+            set lifecycle = 'PUBLISHED'
+          where tenant_id = $1 and resource_id = $2`,
+        [integrationTenantId, visibilityResourceId],
+      )
+      await sql.query(
+        `update genio_one_publications
+            set publication_state = 'RETIRED'
+          where tenant_id = $1 and publication_id = $2`,
+        [integrationTenantId, visibilityPublicationId],
+      )
+      assert.equal(
+        await store.getPublishedSnapshot({
+          tenantId: integrationTenantId,
+          resourceId: visibilityResourceId,
+        }),
+        null,
+      )
+      await sql.query(
+        `update genio_one_publications
+            set publication_state = 'RETIRED'
+          where tenant_id = $1 and publication_id = $2`,
+        [integrationTenantId, publicationReference.publicationId],
+      )
+      assert.equal(
+        await store.getPublishedSnapshot({
+          tenantId: integrationTenantId,
+          resourceId: integrationResourceId,
+        }),
+        null,
+      )
     } finally {
       await sql.end({ timeout: 1 })
       await setup.query(`drop schema ${schema} cascade`)

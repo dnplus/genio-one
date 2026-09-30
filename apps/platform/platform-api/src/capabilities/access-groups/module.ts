@@ -34,7 +34,7 @@ function canManageGroup(actor: Principal, group: AccessGroup): boolean {
   return actor.role === "TENANT_ADMINISTRATOR" || (
     actor.role === "ORGANIZATION_ADMINISTRATOR" &&
     group.organization_id !== null &&
-    actor.organization_ids.includes(group.organization_id)
+    actor.administrator_organization_ids?.includes(group.organization_id) === true
   )
 }
 
@@ -60,7 +60,13 @@ async function validateOwnerOrganization(options: {
     }
     return
   }
-  if (actor.role !== "TENANT_ADMINISTRATOR" && !actor.organization_ids.includes(organizationId)) {
+  if (
+    actor.role !== "TENANT_ADMINISTRATOR" &&
+    (
+      actor.role !== "ORGANIZATION_ADMINISTRATOR" ||
+      !actor.administrator_organization_ids?.includes(organizationId)
+    )
+  ) {
     throw new PlatformApiError("ACCESS_GROUP_SCOPE_REQUIRED", 403)
   }
   await options.organizations.get({ tenantId: actor.tenant_id, organizationId })

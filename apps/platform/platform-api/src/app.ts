@@ -15,6 +15,8 @@ import { Type } from "typebox"
 
 import { resourceHttp } from "./capabilities/resources/http"
 import type { ResourceCatalog } from "./capabilities/resources/module"
+import { ardPublisherHttp } from "./capabilities/ard-publisher/http"
+import type { ArdPublisher } from "./capabilities/ard-publisher/module"
 import { organizationHttp } from "./capabilities/organizations/http"
 import { connectionHttp } from "./capabilities/connections/http"
 import { providerHttp } from "./capabilities/providers/http"
@@ -40,6 +42,7 @@ import { mcpDiscoveryHttp } from "./capabilities/mcp-discovery/http"
 import { mcpOAuthHttp } from "./capabilities/mcp-oauth/http"
 import { personalConnectionHttp } from "./capabilities/mcp-oauth/personal-http"
 import { gatewayActivityHttp } from "./capabilities/activities/http"
+import { createPostHogGatewayActivitySink } from "./capabilities/activities/posthog"
 import { endpointActivityHttp } from "./capabilities/endpoint-activities/http"
 import { endpointRuntimeHttp } from "./capabilities/endpoint-runtime/http"
 import { traceHttp } from "./capabilities/traces/http"
@@ -62,6 +65,7 @@ import {
 import { publicLoginBrandingFromConfiguration } from "./capabilities/configuration/branding"
 import { accessHttp } from "./capabilities/access/http"
 import { gatewayDiagnosticSettingsHttp } from "./capabilities/gateway-settings/http"
+import { postHogIntegrationHttp } from "./capabilities/posthog-integration/http"
 import { gatewayRegistrationHttp } from "./capabilities/gateway-registration/http"
 import { usageGovernanceHttp } from "./capabilities/usage-governance/http"
 import { agentDelegationHttp } from "./capabilities/agent-delegations/http"
@@ -81,6 +85,7 @@ export interface ManagementApiDependencies {
   /** One coherent graph; production must never compose implicit memory fallbacks. */
   modules: PlatformModuleGraph
   resourceCatalog: ResourceCatalog
+  ardPublisher?: ArdPublisher
   /** The only trust boundary for Management API caller identity. */
   principalAuthenticator: PrincipalAuthenticator
   /** Resolves effective model entitlements; absence fails model routing closed. */
@@ -364,6 +369,7 @@ export async function createManagementApi(dependencies: ManagementApiDependencie
         acting_client_id: principal.client_id,
         role: principal.role,
         organization_ids: principal.organization_ids,
+        administrator_organization_ids: principal.administrator_organization_ids ?? [],
         scopes: principal.scopes ?? browserIdentity.management_scopes,
         acr: "oidc",
         amr: ["oidc"],
@@ -420,6 +426,10 @@ export async function createManagementApi(dependencies: ManagementApiDependencie
     reply.header("referrer-policy", "strict-origin-when-cross-origin")
     reply.header("x-xss-protection", "0")
   })
+
+  if (dependencies.ardPublisher) {
+    await app.register(ardPublisherHttp, { publisher: dependencies.ardPublisher })
+  }
 
   app.addHook("onRequest", authorization.authenticate)
 
@@ -488,6 +498,7 @@ export async function createManagementApi(dependencies: ManagementApiDependencie
     access: dependencies.modules.access,
     connections: dependencies.modules.connections,
     oauth: dependencies.modules.mcpOAuth,
+    discovery: dependencies.modules.mcpDiscovery,
   })
   await app.register(providerHttp, {
     catalog: dependencies.modules.providers,
@@ -545,6 +556,8 @@ export async function createManagementApi(dependencies: ManagementApiDependencie
     detail: dependencies.modules.activityDetails,
     materializer: dependencies.modules.activityMaterializer,
     metrics: dependencies.modules.metrics,
+    postHog: dependencies.modules.postHogGatewayActivitySink ??
+      createPostHogGatewayActivitySink({ integrations: dependencies.modules.postHogIntegration }),
     authorizeRuntime: authorizeGatewayRuntime,
   })
   await app.register(usageGovernanceHttp, {
@@ -587,6 +600,9 @@ export async function createManagementApi(dependencies: ManagementApiDependencie
   await app.register(configurationHttp, { store: dependencies.modules.configuration })
   await app.register(gatewayDiagnosticSettingsHttp, {
     store: dependencies.modules.gatewayDiagnosticSettings,
+  })
+  await app.register(postHogIntegrationHttp, {
+    store: dependencies.modules.postHogIntegration,
   })
   await app.register(gatewayRegistrationHttp, {
     lifecycle: dependencies.modules.gatewayRegistrations,

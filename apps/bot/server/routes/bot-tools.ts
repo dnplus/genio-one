@@ -7,6 +7,7 @@ import { readBotHistory, searchBotHistory } from "../bot-history-reader"
 import { BOT_WORK_SUMMARY_STATUS_GUIDANCE } from "../../shared/bot-work-summary"
 import { listBotDefaultTools, executeBotDefaultTool, isBotDefaultTool } from "../bot-default-tools"
 import { BotConnectionInteractions } from "../bot-connection-interactions"
+import type { BotToolResponse } from "../bot-tool-contract"
 
 const tools = [
   { name: "request_user_input_async", description: "Ask the user 1-3 clarification questions while continuing independent work. Each question uses title (string) and optional options (array of plain strings). Do not use the blocking tool fields id, header, question, or option objects. This returns saved question IDs immediately; it does not wait for answers. Answers will be delivered later. Use for missing information or preferences, never as a substitute for tool approval. Do not repeat a pending question. To explicitly replace a pending question, pass its saved ID in replaceQuestionIds. Continue work that does not depend on the answer; do not assume an unanswered question is permission.", inputSchema: { type: "object", properties: { replaceQuestionIds: { type: "array", maxItems: 3, items: { type: "string" } }, questions: { type: "array", minItems: 1, maxItems: 3, items: { type: "object", properties: { title: { type: "string", maxLength: 1000 }, options: { type: "array", maxItems: 6, items: { type: "string", maxLength: 300 } } }, required: ["title"], additionalProperties: false } } }, required: ["questions"], additionalProperties: false }, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false } },
@@ -59,6 +60,39 @@ function responseValue(response: { content: Array<{ type: string; text?: string 
   try { return JSON.parse(text) } catch { return null }
 }
 
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null
+}
+
+function installedEnterpriseResource(value: unknown, requested: { resourceId: string; capabilityId: string }) {
+  const result = record(value)
+  const binding = record(result?.binding)
+  return result?.resourceId === requested.resourceId &&
+    result.capabilityId === requested.capabilityId &&
+    binding?.resourceId === requested.resourceId &&
+    binding.capabilityId === requested.capabilityId &&
+    binding.state === "INSTALLED"
+}
+
+const automaticContinuationResources = new Set(["mail2000", "notion"])
+
+function isReadOnlyTool(tool: { annotations?: { readOnlyHint?: boolean } }) {
+  return tool.annotations?.readOnlyHint === true
+}
+
+function pendingNewTurnResponse(response: BotToolResponse, continuationState: "PENDING_NEW_TURN" | "AUTOMATIC_CONTINUATION_QUEUED" = "PENDING_NEW_TURN"): BotToolResponse {
+  return {
+    ...response,
+    content: response.content.map((entry) => {
+      if (entry.type !== "text") return entry
+      const value = record(responseValue({ content: [entry] }))
+      return value
+        ? { ...entry, text: JSON.stringify({ ...value, pendingApply: true, applyState: "PENDING_NEW_TURN", continuationState }) }
+        : entry
+    }),
+  }
+}
+
 export async function botToolRoutes(app: FastifyInstance, context: BotServerContext) {
   app.route({ method: ["GET", "DELETE"], url: "/api/bot-tools", handler: async (_request, reply) => reply.header("allow", "POST").code(405).send() })
   app.post("/api/bot-tools", async (request, reply) => {
@@ -77,10 +111,18 @@ export async function botToolRoutes(app: FastifyInstance, context: BotServerCont
     const send = (result: unknown) => reply.send({ jsonrpc: "2.0", id: body.id, result })
     try {
       await assertCapability(context.capabilityGate, session.principal, PERSONAL_BOT_USE, accessToken)
+      const connectionReadOnly = context.botRegistry.connectionContinuations.isReadOnlyBotTurn(session.botId)
       if (body.method === "initialize") return send({ protocolVersion: body.params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "genio-bot", version: "1.0.0" } })
       if (body.method === "ping") return send({})
-      if (body.method === "tools/list") return send({ tools: [...tools, ...await listBotDefaultTools({ context, botId: session.botId, principal: session.principal, accessToken })] })
+      if (body.method === "tools/list") {
+        const availableTools = [...tools, ...await listBotDefaultTools({ context, botId: session.botId, principal: session.principal, accessToken })]
+        return send({ tools: connectionReadOnly ? availableTools.filter(isReadOnlyTool) : availableTools })
+      }
       if (body.method !== "tools/call") return reply.send({ jsonrpc: "2.0", id: body.id, error: { code: -32601, message: "Method not found" } })
+      if (connectionReadOnly) {
+        const availableTools = [...tools, ...await listBotDefaultTools({ context, botId: session.botId, principal: session.principal, accessToken })]
+        if (!availableTools.some((tool) => tool.name === body.params?.name && isReadOnlyTool(tool))) throw new Error("CONNECTION_CONTINUATION_READ_ONLY")
+      }
       if (isBotDefaultTool(body.params?.name)) {
         const name = body.params.name
         const args = body.params.arguments ?? {}
@@ -91,14 +133,46 @@ export async function botToolRoutes(app: FastifyInstance, context: BotServerCont
         if (!requested) return send(defaultResponse)
         const active = context.botRegistry.timeline.activeTurns(session.botId)
         if (active.length !== 1) throw new Error("BOT_CONNECTION_ACTIVE_TURN_REQUIRED")
+        const activeTurn = active[0]!
+        const isSourceTurnCurrent = () => {
+          const current = context.botRegistry.timeline.activeTurns(session.botId)
+          return context.runtimeBroker.get(session.runtimeSessionId) === runtime && runtime.selectedBotId === session.botId &&
+            current.length === 1 && current[0]?.threadId === activeTurn.threadId && current[0]?.turnId === activeTurn.turnId
+        }
         const interactions = context.connectionInteractions ??= new BotConnectionInteractions()
         const pending = interactions.begin({
           principal: session.principal,
           runtimeSessionId: session.runtimeSessionId,
           botId: session.botId,
-          threadId: active[0]!.threadId,
+          threadId: activeTurn.threadId,
+          turnId: activeTurn.turnId,
           ...requested,
-          retry: () => executeBotDefaultTool(name, requested.resume.arguments, execution),
+          isCurrent: isSourceTurnCurrent,
+          retry: async () => {
+            if (!isSourceTurnCurrent()) throw new Error("BOT_CONNECTION_REQUEST_STALE")
+            const retried = await executeBotDefaultTool(name, requested.resume.arguments, execution)
+            if (!isSourceTurnCurrent()) throw new Error("BOT_CONNECTION_REQUEST_STALE")
+            if (retried.isError || !installedEnterpriseResource(responseValue(retried), requested)) return retried
+            return retried
+          },
+          onCompleted: async (connection, retried) => {
+            if (retried.isError || !installedEnterpriseResource(responseValue(retried), requested) || requested.targetBotId !== session.botId) return retried
+            if (automaticContinuationResources.has(requested.resourceId)) {
+              context.botRegistry.connectionContinuations.enqueue({
+                requestToken: connection.requestToken,
+                botId: session.botId,
+                tenantId: session.principal.tenant_id,
+                ownerSubjectId: session.principal.subject_id,
+                sourceThreadId: activeTurn.threadId,
+                sourceTurnId: activeTurn.turnId,
+                resourceId: requested.resourceId,
+                resourceName: requested.resourceName,
+                capabilityId: requested.capabilityId,
+              })
+              return pendingNewTurnResponse(retried, "AUTOMATIC_CONTINUATION_QUEUED")
+            }
+            return pendingNewTurnResponse(retried)
+          },
         })
         return send(await pending.wait)
       }

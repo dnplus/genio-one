@@ -227,6 +227,21 @@ describe("RuntimeBroker", () => {
     await broker.stop(session.id)
   })
 
+  test("serializes Bot turn claims that share one runtime session", async () => {
+    const broker = new RuntimeBroker({ provision: async () => execDesktop("shared-turn-claim") })
+    const session = await broker.start(principal, { onMessage() {}, onExit() {} })
+    const releaseA = broker.claimBotTurn("bot-a", session.id)
+
+    expect(releaseA).toBeTypeOf("function")
+    expect(broker.claimBotTurn("bot-b", session.id)).toBeNull()
+
+    releaseA!()
+    const releaseB = broker.claimBotTurn("bot-b", session.id)
+    expect(releaseB).toBeTypeOf("function")
+    releaseB!()
+    await broker.stop(session.id)
+  })
+
   test("shutdown awaits runtime closure and rejects new work", async () => {
     const broker = new RuntimeBroker({ provision: async () => execDesktop("shutdown") })
     let finishClose!: () => void

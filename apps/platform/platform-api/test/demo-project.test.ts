@@ -73,6 +73,7 @@ async function createApi(options: { geminiCredentialRef?: string; runtimeConnect
         client_id: "console",
         role: "ORGANIZATION_ADMINISTRATOR",
         organization_ids: [organization.organization_id],
+        administrator_organization_ids: [organization.organization_id],
       },
       user: {
         tenant_id: tenantId,

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
+import { createClickHouseGatewayActivityDetailStore } from "../src/capabilities/activities/detail-clickhouse"
+import { createClickHouseGatewayActivityMaterializer } from "../src/capabilities/activities/otel-clickhouse"
 import { createClickHouseGatewayMetricsStore } from "../src/capabilities/metrics/clickhouse"
 import { createClickHouseTraceStore } from "../src/capabilities/traces/clickhouse"
 
@@ -63,6 +65,30 @@ test("ClickHouse generic trace search remains separate from exact correlation fi
 
   assert.match(query, /positionCaseInsensitiveUTF8\(concat\(TraceId, ServiceName, SpanName, toJSONString\(SpanAttributes\)\)/)
   assert.doesNotMatch(query, /countIf\(SpanAttributes\['genio\.correlation\.id'\]/)
+})
+
+test("ClickHouse trace list requires limit and rejects omitted values instead of defaulting to 20", async () => {
+  let query = ""
+  const store = createClickHouseTraceStore({
+    ...clickhouse,
+    fetch: async (_input, init) => {
+      query = String(init?.body)
+      return new Response("", { status: 200 })
+    },
+  })
+
+  await store.list({ tenantId: "tenant-1", limit: 20 })
+  assert.doesNotMatch(query, /NaN/)
+  assert.match(query, /limit 20\b/)
+
+  // Store callers that skip the HTTP schema must not get a silent rewrite to 20
+  // (which would also turn an omitted bound into SQL NaN).
+  await assert.rejects(
+    () => store.list({ tenantId: "tenant-1", limit: undefined as unknown as number }),
+    (error: Error & { statusCode?: number }) =>
+      error.message === "INVALID_TRACE_QUERY_PARAMETER:limit" && error.statusCode === 400,
+  )
+  assert.equal(query.includes("NaN"), false)
 })
 
 test("ClickHouse metrics summarize only the public listener and provider hop", async () => {
@@ -154,6 +180,10 @@ test("ClickHouse trace store rejects non-integer numeric parameters instead of i
   assert.match(queries[1]!, /< \(1500, 'ffffffffffffffffffffffffffffffff'\)/)
   assert.match(queries[1]!, /limit 10\n/)
 
+  const cursor = "a".repeat(32)
+  await store.list({ tenantId: "tenant-1", limit: 20, before: 1500, beforeTraceId: cursor })
+  assert.match(queries[2]!, new RegExp(`< \\(1500, '${cursor}'\\)`))
+
   for (const call of [
     () => store.logs({ tenantId: "tenant-1", from: injected }),
     () => store.logs({ tenantId: "tenant-1", until: 1.5 }),
@@ -161,6 +191,9 @@ test("ClickHouse trace store rejects non-integer numeric parameters instead of i
     () => store.list({ tenantId: "tenant-1", limit: 10, before: injected }),
     () => store.list({ tenantId: "tenant-1", limit: 10, from: -1 }),
     () => store.list({ tenantId: "tenant-1", limit: Number.NaN }),
+    () => store.list({ tenantId: "tenant-1", limit: 10, beforeTraceId: "A".repeat(32) }),
+    () => store.list({ tenantId: "tenant-1", limit: 10, beforeTraceId: "not-a-trace-id" }),
+    () => store.list({ tenantId: "tenant-1", limit: 10, beforeTraceId: null as unknown as string }),
     () => store.spans({ tenantId: "tenant-1", traceId: "1".repeat(32), limit: injected }),
   ]) {
     await assert.rejects(call, (error: Error & { statusCode?: number }) =>
@@ -171,7 +204,7 @@ test("ClickHouse trace store rejects non-integer numeric parameters instead of i
     store.logs({ tenantId: "tenant-1", record_id: "A".repeat(32), timestamp_nanos: "100) OR 1=1--" }),
     (error: Error & { statusCode?: number }) => error.message === "INVALID_LOG_TIMESTAMP" && error.statusCode === 400,
   )
-  assert.equal(queries.length, 2)
+  assert.equal(queries.length, 3)
 })
 
 test("ClickHouse metrics store rejects non-integer windowSeconds parameter", async () => {
@@ -186,6 +219,48 @@ test("ClickHouse metrics store rejects non-integer windowSeconds parameter", asy
       store.summarize({ tenantId: "tenant-1", windowSeconds: invalidWindow }),
       (error: Error & { statusCode?: number }) =>
         error.message === "INVALID_METRICS_QUERY_PARAMETER:windowSeconds" && error.statusCode === 400,
+    )
+  }
+})
+
+test("ClickHouse store constructors reject invalid database names", () => {
+  const invalidNames = ["analytics; DROP TABLE otel_logs--", "db-with-dash", "db name", "db'name"]
+  for (const db of invalidNames) {
+    assert.throws(
+      () => createClickHouseTraceStore({ ...clickhouse, database: db }),
+      /INVALID_CLICKHOUSE_DATABASE_NAME/,
+    )
+    assert.throws(
+      () => createClickHouseGatewayMetricsStore({ ...clickhouse, database: db }),
+      /INVALID_CLICKHOUSE_DATABASE_NAME/,
+    )
+    assert.throws(
+      () => createClickHouseGatewayActivityDetailStore({ ...clickhouse, database: db }),
+      /INVALID_CLICKHOUSE_DATABASE_NAME/,
+    )
+    assert.throws(
+      () =>
+        createClickHouseGatewayActivityMaterializer({
+          ...clickhouse,
+          database: db,
+          activities: {
+            record: async ({ tenantId, event }) => ({
+              ...event,
+              tenant_id: tenantId,
+              subject_display: null,
+              cost_estimation_status: "NOT_APPLICABLE",
+              estimated_cost_currency: null,
+              estimated_cost_micros: null,
+              pricing_source: null,
+              pricing_version: null,
+              downstream_identity_mode: null,
+            }),
+            recordAttempt: async ({ tenantId, event }) => ({ ...event, tenant_id: tenantId }),
+          },
+          audits: { query: async () => ({ events: [], hasMore: false, sourceRevision: 0 }) },
+          connections: { list: async () => [] },
+        }),
+      /INVALID_CLICKHOUSE_DATABASE_NAME/,
     )
   }
 })

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { codexRoutes } from "./codex"
+import { codexRoutes, refreshManagedMcpConfiguration } from "./codex"
 import { BotConnectionInteractions } from "../bot-connection-interactions"
 import { botToolText } from "../bot-tool-contract"
 
@@ -98,6 +98,7 @@ function createContext(
   constrainedExposure: readonly string[] = [],
   modelRoute: "codex-subscription" | "genio-gateway" = "codex-subscription",
   modelError?: string,
+  turnRunning = false,
 ) {
   let callbacks: { onMessage(line: string): void; onExit(reason: string): void } | null = null
   const runtimeMessages: Record<string, unknown>[] = []
@@ -122,7 +123,7 @@ function createContext(
     getOwned: () => bot,
     ownsThread: () => true,
     materialize: () => ({ skillRoots: [], plugins: [] }),
-    timeline: { hasRunningTurns: () => false, revision: () => 1, readTurn: () => [], workContext: () => ({}) },
+    timeline: { hasRunningTurns: () => turnRunning, activeTurns: () => [], revision: () => 1, readTurn: () => [], workContext: () => ({}) },
     memory: { recall: () => ({ memories: [] }), workSummary: () => ({}) },
     recordRuntimeEvent() {},
     saveSession() {},
@@ -134,6 +135,7 @@ function createContext(
   const runtimeBroker = {
     get: (id: string) => id === session.id ? session : undefined,
     refreshWorkspaceDetails() {},
+    hasOtherBotTurn: () => false,
     claimBotTurn: () => () => {},
     async start(_principal: unknown, nextCallbacks: typeof callbacks) {
       callbacks = nextCallbacks
@@ -397,6 +399,8 @@ describe("Codex runtime policy route", () => {
       await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
       socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: "bot-dylan" } }))
       await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
+      const selected = socket.sent.map((line) => JSON.parse(line)).find((message) => message.id === 2)
+      expect(selected.result.managedMcpServerNames).toEqual(["genio_mcp_context7", "genio_mcp_archify"])
       socket.emit("message", JSON.stringify({
         id: 3,
         method: "thread/start",
@@ -412,7 +416,7 @@ describe("Codex runtime policy route", () => {
       })
       expect(catalogRequests).toBe(2)
       expect(calls.filter((call) => call.capability_id === "mcp.invoke" && call.action === "expose")).toHaveLength(4)
-      expect(reports.filter((report) => report.capabilityId === "mcp.invoke" && report.action === "expose").map((report) => report.outcome)).toEqual(["ALLOW", "ALLOW", "COMPLETED", "COMPLETED"])
+      expect(reports.filter((report) => report.capabilityId === "mcp.invoke" && report.action === "expose").map((report) => report.outcome)).toEqual(["ALLOW", "ALLOW", "ALLOW", "ALLOW"])
       expect(context.session.managedMcpMountsByBot).toEqual({
         "bot-dylan": {
           "genio.demo.context7": { resourceId: "genio.demo.context7", capabilityId: "context7", serverName: "genio_mcp_context7", hostname: "context7.stellar-freight.localhost", basePath: "/" },
@@ -545,6 +549,431 @@ describe("Codex runtime policy route", () => {
       else process.env.GENIO_ONE_MCP_URL = originalUrl
       if (originalRelay === undefined) delete process.env.GENIO_ONE_MCP_RELAY_ORIGIN
       else process.env.GENIO_ONE_MCP_RELAY_ORIGIN = originalRelay
+      socket.close()
+    }
+  })
+
+  test("replaces dynamic managed MCP configuration for the current idle Bot and preserves user MCP servers", async () => {
+    const reports: Array<Record<string, unknown>> = []
+    const context = createContext([], reports)
+    const events: string[] = []
+    const report = context.runtimePolicy.report
+    context.runtimePolicy.report = async (input: Record<string, unknown>) => {
+      events.push(`audit:${String(input.outcome)}`)
+      return report(input)
+    }
+    const baseBot = context.botRegistry.getOwned()
+    const mailBot = { ...baseBot, id: "bot-mail", bindings: [{ resourceId: "mail2000", capabilityId: "mail.search", state: "INSTALLED", kind: "MCP" }] }
+    const notionBot = { ...baseBot, id: "bot-notion", bindings: [{ resourceId: "notion", capabilityId: "notion.search", state: "INSTALLED", kind: "MCP" }] }
+    const botRegistry = context.botRegistry as unknown as { getOwned: (botId?: string) => typeof mailBot | typeof notionBot | null }
+    botRegistry.getOwned = (botId?: string) => botId === "bot-mail" ? mailBot : botId === "bot-notion" ? notionBot : null
+    let userMcpServers: Record<string, unknown> = {
+      external: { command: "external-mcp" },
+      genio_discovery: { command: "built-in-discovery" },
+      genio_mcp_stale: { url: "http://stale.example/mcp" },
+    }
+    let version = "sha256:one"
+    context.runtimeBroker.request = async (_sessionId: string, method: string, params: unknown) => {
+      events.push(method)
+      context.runtimeMessages.push({ method, params: params as Record<string, unknown> })
+      if (method === "config/read") {
+        return {
+          layers: [{
+            name: { type: "user" },
+            version,
+            config: { mcp_servers: userMcpServers },
+          }],
+        }
+      }
+      if (method === "config/value/write") {
+        userMcpServers = (params as { value: Record<string, unknown> }).value
+        version = version === "sha256:one" ? "sha256:two" : "sha256:three"
+      }
+      return {}
+    }
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalUrl = process.env.GENIO_ONE_MCP_URL
+    const originalRelay = process.env.GENIO_ONE_MCP_RELAY_ORIGIN
+    const originalFetch = globalThis.fetch
+    process.env.GENIO_ONE_MCP_URL = "http://one.localhost:1975/mcp"
+    process.env.GENIO_ONE_MCP_RELAY_ORIGIN = "https://bot.example.test"
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (new URL(String(input)).pathname.endsWith("/catalog")) return Response.json({ capabilities: [
+        { resource_id: "mail2000", capability_id: "mail.search", access: "ENTITLED", publication_endpoint: { hostname: "mail2000.stellar-freight.localhost", base_path: "/mcp" } },
+        { resource_id: "notion", capability_id: "notion.search", access: "ENTITLED", publication_endpoint: { hostname: "notion.stellar-freight.localhost", base_path: "/mcp" } },
+      ] })
+      return Response.json(principal)
+    }) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: "bot-mail" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
+      socket.emit("message", JSON.stringify({ id: 3, method: "genio/mcp/refresh", params: { threadId: "thread-mail" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 3))
+      const writes = () => context.runtimeMessages.filter((message) => message.method === "config/value/write") as Array<{ params: { keyPath: string; value: Record<string, unknown>; expectedVersion?: string } }>
+      expect(writes()).toHaveLength(1)
+      expect(writes()[0]!.params).toMatchObject({ keyPath: "mcp_servers", expectedVersion: "sha256:one" })
+      expect(writes()[0]!.params.value.external).toEqual({ command: "external-mcp" })
+      expect(writes()[0]!.params.value.genio_discovery).toEqual({ command: "built-in-discovery" })
+      expect(writes()[0]!.params.value.genio_mcp_stale).toBeUndefined()
+      expect(writes()[0]!.params.value.genio_mcp_mail2000).toMatchObject({
+        url: "https://bot.example.test/api/mcp-gateway/runtime-session/bots/bot-mail/mail2000/mcp",
+        bearer_token_env_var: "GENIO_ONE_MCP_BEARER_TOKEN",
+      })
+      expect(JSON.stringify(writes()[0]!.params.value)).not.toContain("private-relay-secret")
+      expect(socket.sent.map((line) => JSON.parse(line)).find((message) => message.id === 3)?.result).toEqual({ managedMcpServerNames: ["genio_mcp_mail2000"] })
+
+      socket.emit("message", JSON.stringify({ id: 4, method: "genio/bot/select", params: { botId: "bot-notion" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 4))
+      socket.emit("message", JSON.stringify({ id: 5, method: "genio/mcp/refresh", params: { threadId: "thread-notion" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 5))
+      expect(socket.sent.map((line) => JSON.parse(line)).find((message) => message.id === 5)?.error).toBeUndefined()
+      expect(socket.sent.map((line) => JSON.parse(line)).find((message) => message.id === 5)?.result).toEqual({ managedMcpServerNames: ["genio_mcp_notion"] })
+      expect(writes()).toHaveLength(2)
+      expect(writes()[1]!.params).toMatchObject({ keyPath: "mcp_servers", expectedVersion: "sha256:two" })
+      expect(writes()[1]!.params.value.external).toEqual({ command: "external-mcp" })
+      expect(writes()[1]!.params.value.genio_discovery).toEqual({ command: "built-in-discovery" })
+      expect(writes()[1]!.params.value.genio_mcp_mail2000).toBeUndefined()
+      expect(writes()[1]!.params.value.genio_mcp_notion).toMatchObject({
+        url: "https://bot.example.test/api/mcp-gateway/runtime-session/bots/bot-notion/notion/mcp",
+        bearer_token_env_var: "GENIO_ONE_MCP_BEARER_TOKEN",
+      })
+      expect(context.runtimeMessages.map((message) => typeof message.method === "string" ? message.method : "").filter((method) => method.startsWith("config/"))).toEqual([
+        "config/read",
+        "config/value/write",
+        "config/mcpServer/reload",
+        "config/read",
+        "config/value/write",
+        "config/mcpServer/reload",
+      ])
+      expect(context.session.managedMcpMountsByBot).toEqual({
+        "bot-notion": {
+          notion: { resourceId: "notion", capabilityId: "notion.search", serverName: "genio_mcp_notion", hostname: "notion.stellar-freight.localhost", basePath: "/mcp" },
+        },
+      })
+      expect(socket.sent.map((line) => JSON.parse(line)).find((message) => message.id === 5)?.result).toEqual({ managedMcpServerNames: ["genio_mcp_notion"] })
+      const completed = events.map((event, index) => event === "audit:COMPLETED" ? index : -1).filter((index) => index >= 0)
+      const reloads = events.map((event, index) => event === "config/mcpServer/reload" ? index : -1).filter((index) => index >= 0)
+      expect(completed).toHaveLength(2)
+      expect(completed[0]).toBeGreaterThan(reloads[0]!)
+      expect(completed[1]).toBeGreaterThan(reloads[1]!)
+    } finally {
+      globalThis.fetch = originalFetch
+      if (originalUrl === undefined) delete process.env.GENIO_ONE_MCP_URL
+      else process.env.GENIO_ONE_MCP_URL = originalUrl
+      if (originalRelay === undefined) delete process.env.GENIO_ONE_MCP_RELAY_ORIGIN
+      else process.env.GENIO_ONE_MCP_RELAY_ORIGIN = originalRelay
+      socket.close()
+    }
+  })
+
+  test("fails closed before rewriting managed MCP configuration without a versioned user snapshot", async () => {
+    const reports: Array<Record<string, unknown>> = []
+    const context = createContext([], reports)
+    const bot = context.botRegistry.getOwned()
+    context.botRegistry.getOwned = () => ({
+      ...bot,
+      bindings: [{ resourceId: "mail2000", capabilityId: "mail.search", state: "INSTALLED", kind: "MCP" }],
+    })
+    context.runtimeBroker.request = async (_sessionId: string, method: string, params: unknown) => {
+      context.runtimeMessages.push({ method, params: params as Record<string, unknown> })
+      if (method === "config/read") {
+        return {
+          layers: [{
+            name: { type: "user" },
+            config: { mcp_servers: { external: { command: "external-mcp" } } },
+          }],
+        }
+      }
+      return {}
+    }
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalUrl = process.env.GENIO_ONE_MCP_URL
+    const originalFetch = globalThis.fetch
+    process.env.GENIO_ONE_MCP_URL = "http://one.localhost:1975/mcp"
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (new URL(String(input)).pathname.endsWith("/catalog")) return Response.json({ capabilities: [
+        { resource_id: "mail2000", capability_id: "mail.search", access: "ENTITLED", publication_endpoint: { hostname: "mail2000.stellar-freight.localhost", base_path: "/mcp" } },
+      ] })
+      return Response.json(principal)
+    }) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: "bot-dylan" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
+      socket.emit("message", JSON.stringify({ id: 3, method: "genio/mcp/refresh", params: { threadId: "thread-dylan" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 3))
+      const rejected = socket.sent.map((line) => JSON.parse(line)).find((message) => message.id === 3)
+      expect(rejected.error.code).toBe("MANAGED_MCP_CONFIG_SNAPSHOT_UNAVAILABLE")
+      expect(context.runtimeMessages.some((message) => message.method === "config/value/write")).toBe(false)
+      expect(context.runtimeMessages.some((message) => message.method === "config/mcpServer/reload")).toBe(false)
+      const mcpReports = reports.filter((report) => report.capabilityId === "mcp.invoke" && report.action === "expose")
+      expect(mcpReports.some((report) => report.outcome === "FAILED")).toBe(true)
+      expect(mcpReports.some((report) => report.outcome === "COMPLETED")).toBe(false)
+    } finally {
+      globalThis.fetch = originalFetch
+      if (originalUrl === undefined) delete process.env.GENIO_ONE_MCP_URL
+      else process.env.GENIO_ONE_MCP_URL = originalUrl
+      socket.close()
+    }
+  })
+
+  test("does not reload managed MCP after a stale source turn writes its configuration", async () => {
+    const context = createContext([], [])
+    const bot = context.botRegistry.getOwned()
+    context.botRegistry.getOwned = () => ({
+      ...bot,
+      bindings: [{ resourceId: "notion", capabilityId: "notion.search", state: "INSTALLED", kind: "MCP" }],
+    })
+    let current = true
+    context.runtimeBroker.request = async (_sessionId: string, method: string, params: unknown) => {
+      context.runtimeMessages.push({ method, params: params as Record<string, unknown> })
+      if (method === "config/read") {
+        return { layers: [{ name: { type: "user" }, version: "sha256:one", config: { mcp_servers: {} } }] }
+      }
+      if (method === "config/value/write") current = false
+      return {}
+    }
+    const originalUrl = process.env.GENIO_ONE_MCP_URL
+    const originalRelay = process.env.GENIO_ONE_MCP_RELAY_ORIGIN
+    const originalFetch = globalThis.fetch
+    process.env.GENIO_ONE_MCP_URL = "http://one.localhost:1975/mcp"
+    process.env.GENIO_ONE_MCP_RELAY_ORIGIN = "https://bot.example.test"
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (new URL(String(input)).pathname.endsWith("/catalog")) return Response.json({ capabilities: [
+        { resource_id: "notion", capability_id: "notion.search", access: "ENTITLED", publication_endpoint: { hostname: "notion.stellar-freight.localhost", base_path: "/mcp" } },
+      ] })
+      return Response.json(principal)
+    }) as unknown as typeof fetch
+    try {
+      await expect(refreshManagedMcpConfiguration({
+        context: context as never,
+        session: context.session,
+        botId: "bot-dylan",
+        accessToken: "token",
+        isCurrent: () => current,
+      })).rejects.toThrow("MCP_REFRESH_SUPERSEDED")
+      expect(context.runtimeMessages.map((message) => message.method)).toEqual(["config/read", "config/value/write"])
+    } finally {
+      globalThis.fetch = originalFetch
+      if (originalUrl === undefined) delete process.env.GENIO_ONE_MCP_URL
+      else process.env.GENIO_ONE_MCP_URL = originalUrl
+      if (originalRelay === undefined) delete process.env.GENIO_ONE_MCP_RELAY_ORIGIN
+      else process.env.GENIO_ONE_MCP_RELAY_ORIGIN = originalRelay
+    }
+  })
+
+  test("revokes managed MCP relay mounts when refresh completion audit fails", async () => {
+    const reports: Array<Record<string, unknown>> = []
+    const context = createContext([], reports)
+    const bot = context.botRegistry.getOwned()
+    context.botRegistry.getOwned = () => ({
+      ...bot,
+      bindings: [{ resourceId: "mail2000", capabilityId: "mail.search", state: "INSTALLED", kind: "MCP" }],
+    })
+    const report = context.runtimePolicy.report
+    context.runtimePolicy.report = async (input: Record<string, unknown>) => {
+      if (input.outcome === "COMPLETED") throw new Error("AUDIT_OFFLINE")
+      return report(input)
+    }
+    context.runtimeBroker.request = async (_sessionId: string, method: string, params: unknown) => {
+      context.runtimeMessages.push({ method, params: params as Record<string, unknown> })
+      if (method === "config/read") {
+        return {
+          layers: [{
+            name: { type: "user" },
+            version: "sha256:one",
+            config: { mcp_servers: { external: { command: "external-mcp" } } },
+          }],
+        }
+      }
+      return {}
+    }
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalUrl = process.env.GENIO_ONE_MCP_URL
+    const originalFetch = globalThis.fetch
+    process.env.GENIO_ONE_MCP_URL = "http://one.localhost:1975/mcp"
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (new URL(String(input)).pathname.endsWith("/catalog")) return Response.json({ capabilities: [
+        { resource_id: "mail2000", capability_id: "mail.search", access: "ENTITLED", publication_endpoint: { hostname: "mail2000.stellar-freight.localhost", base_path: "/mcp" } },
+      ] })
+      return Response.json(principal)
+    }) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: "bot-dylan" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
+      context.session.managedMcpMountsByBot = {
+        ...context.session.managedMcpMountsByBot,
+        "bot-other": {
+          other: { resourceId: "other", capabilityId: "other.search", serverName: "genio_mcp_other", hostname: "other.stellar-freight.localhost", basePath: "/mcp" },
+        },
+      }
+      socket.emit("message", JSON.stringify({ id: 3, method: "genio/mcp/refresh", params: { threadId: "thread-dylan" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 3))
+      const rejected = socket.sent.map((line) => JSON.parse(line)).find((message) => message.id === 3)
+      expect(rejected.error.code).toBe("RUNTIME_POLICY_REPORT_UNAVAILABLE")
+      expect(context.runtimeMessages.some((message) => message.method === "config/value/write")).toBe(true)
+      expect(context.runtimeMessages.some((message) => message.method === "config/mcpServer/reload")).toBe(true)
+      expect(context.session.managedMcpMountsByBot).toEqual({})
+      expect(reports.some((report) => report.outcome === "COMPLETED")).toBe(false)
+      expect(reports.some((report) => report.outcome === "FAILED")).toBe(true)
+    } finally {
+      globalThis.fetch = originalFetch
+      if (originalUrl === undefined) delete process.env.GENIO_ONE_MCP_URL
+      else process.env.GENIO_ONE_MCP_URL = originalUrl
+      socket.close()
+    }
+  })
+
+  test("blocks a turn while a managed MCP configuration reload holds the Bot claim", async () => {
+    const context = createContext([], [])
+    const runtimeBroker = context.runtimeBroker as unknown as {
+      claimBotTurn: (botId: string, sessionId?: string) => (() => void) | null
+      request: (sessionId: string, method: string, params: unknown) => Promise<unknown>
+    }
+    let claimed = false
+    let resolveRead!: (value: unknown) => void
+    const configRead = new Promise<unknown>((resolve) => { resolveRead = resolve })
+    runtimeBroker.claimBotTurn = () => {
+      if (claimed) return null
+      claimed = true
+      return () => { claimed = false }
+    }
+    runtimeBroker.request = async (_sessionId: string, method: string, params: unknown) => {
+      context.runtimeMessages.push({ method, params: params as Record<string, unknown> })
+      if (method === "config/read") return configRead
+      return {}
+    }
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => Response.json(principal)) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: "bot-dylan" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
+      socket.emit("message", JSON.stringify({ id: 3, method: "genio/mcp/refresh", params: { threadId: "thread-dylan" } }))
+      await waitFor(() => context.runtimeMessages.some((message) => message.method === "config/read"))
+      socket.emit("message", JSON.stringify({
+        id: 4,
+        method: "turn/start",
+        params: { threadId: "thread-dylan", input: [{ type: "text", text: "Continue" }], environments: [] },
+      }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 4))
+      const blocked = socket.sent.map((line) => JSON.parse(line)).find((message) => message.id === 4)
+      expect(blocked.error.code).toBe("BOT_TURN_BUSY")
+      expect(context.runtimeMessages.some((message) => message.id === 4)).toBe(false)
+      resolveRead({
+        layers: [{
+          name: { type: "user" },
+          version: "sha256:one",
+          config: { mcp_servers: { external: { command: "external-mcp" } } },
+        }],
+      })
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 3))
+      expect(socket.sent.map((line) => JSON.parse(line)).find((message) => message.id === 3)?.error).toBeUndefined()
+    } finally {
+      globalThis.fetch = originalFetch
+      socket.close()
+    }
+  })
+
+  test("keeps an active Bot mount when a legacy resume refresh selects another Bot", async () => {
+    const context = createContext([], [])
+    const runtimeBroker = context.runtimeBroker as unknown as {
+      claimBotTurn: (botId: string, sessionId?: string) => (() => void) | null
+      hasOtherBotTurn: (sessionId: string, botId: string) => boolean
+    }
+    const baseBot = context.botRegistry.getOwned()
+    const mailBot = { ...baseBot, id: "bot-mail", bindings: [{ resourceId: "mail2000", capabilityId: "mail.search", state: "INSTALLED", kind: "MCP" }] }
+    const notionBot = { ...baseBot, id: "bot-notion", bindings: [{ resourceId: "notion", capabilityId: "notion.search", state: "INSTALLED", kind: "MCP" }] }
+    const botRegistry = context.botRegistry as unknown as { getOwned: (botId?: string) => typeof mailBot | typeof notionBot | null }
+    botRegistry.getOwned = (botId?: string) => botId === "bot-mail" ? mailBot : botId === "bot-notion" ? notionBot : null
+    let activeBotId: string | null = null
+    runtimeBroker.claimBotTurn = (botId: string) => {
+      if (activeBotId) return null
+      activeBotId = botId
+      return () => { activeBotId = null }
+    }
+    runtimeBroker.hasOtherBotTurn = (_sessionId: string, botId: string) => activeBotId !== null && activeBotId !== botId
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalUrl = process.env.GENIO_ONE_MCP_URL
+    const originalFetch = globalThis.fetch
+    process.env.GENIO_ONE_MCP_URL = "http://one.localhost:1975/mcp"
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (new URL(String(input)).pathname.endsWith("/catalog")) return Response.json({ capabilities: [
+        { resource_id: "mail2000", capability_id: "mail.search", access: "ENTITLED", publication_endpoint: { hostname: "mail2000.stellar-freight.localhost", base_path: "/mcp" } },
+        { resource_id: "notion", capability_id: "notion.search", access: "ENTITLED", publication_endpoint: { hostname: "notion.stellar-freight.localhost", base_path: "/mcp" } },
+      ] })
+      return Response.json(principal)
+    }) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: "bot-mail" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
+      const activeMount = context.session.managedMcpMountsByBot["bot-mail"]
+      activeBotId = "bot-mail"
+      socket.emit("message", JSON.stringify({ id: 3, method: "genio/bot/select", params: { botId: "bot-notion" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 3))
+      socket.emit("message", JSON.stringify({
+        id: 4,
+        method: "thread/resume",
+        params: { threadId: "thread-notion", excludeTurns: true, genioRefreshManagedMcp: true, environments: [] },
+      }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 4))
+      const rejected = socket.sent.map((line) => JSON.parse(line)).find((message) => message.id === 4)
+      expect(rejected.error.code).toBe("MCP_REFRESH_TURN_ACTIVE")
+      expect(context.runtimeMessages.some((message) => message.id === 4)).toBe(false)
+      expect(context.runtimeMessages.some((message) => message.method === "config/value/write")).toBe(false)
+      expect(context.session.managedMcpMountsByBot["bot-mail"]).toEqual(activeMount)
+    } finally {
+      globalThis.fetch = originalFetch
+      if (originalUrl === undefined) delete process.env.GENIO_ONE_MCP_URL
+      else process.env.GENIO_ONE_MCP_URL = originalUrl
+      socket.close()
+    }
+  })
+
+  test("does not refresh managed MCP configuration while this Bot has a running turn", async () => {
+    const context = createContext([], [], false, [], [], "codex-subscription", undefined, true)
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => Response.json(principal)) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: "bot-dylan" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
+      socket.emit("message", JSON.stringify({ id: 3, method: "genio/mcp/refresh", params: { threadId: "thread-dylan" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 3))
+      const rejected = socket.sent.map((line) => JSON.parse(line)).find((message) => message.id === 3)
+      expect(rejected.error.code).toBe("MCP_REFRESH_TURN_ACTIVE")
+      expect(context.runtimeMessages.some((message) => message.method === "config/value/write")).toBe(false)
+    } finally {
+      globalThis.fetch = originalFetch
       socket.close()
     }
   })
@@ -1352,6 +1781,7 @@ describe("Codex runtime policy route", () => {
     const context = createContext(calls, reports)
     const interactions = new BotConnectionInteractions()
     ;(context as { connectionInteractions?: BotConnectionInteractions }).connectionInteractions = interactions
+    ;(context.botRegistry.timeline as { activeTurns: () => Array<{ threadId: string; turnId: string }> }).activeTurns = () => [{ threadId: "thread-connection", turnId: "turn-connection" }]
     let handler: ((socket: FakeSocket) => void) | null = null
     await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
     const socket = new FakeSocket()
@@ -1370,6 +1800,7 @@ describe("Codex runtime policy route", () => {
         botId: "bot-dylan",
         targetBotId: "new-bot",
         threadId: "thread-connection",
+        turnId: "turn-connection",
         resourceId: "notion",
         resourceName: "Notion",
         capabilityId: "notion.write",
@@ -1382,15 +1813,15 @@ describe("Codex runtime policy route", () => {
       })
       await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/personalConnection/request"))
       const request = socket.sent.map((line) => JSON.parse(line)).find((message) => message.method === "genio/personalConnection/request")
-      expect(request.params).toMatchObject({ botId: "bot-dylan", targetBotId: "new-bot", threadId: "thread-connection", resourceId: "notion" })
+      expect(request.params).toMatchObject({ botId: "bot-dylan", targetBotId: "new-bot", threadId: "thread-connection", turnId: "turn-connection", resourceId: "notion" })
       globalThis.fetch = (async () => Response.json([{ connection_id: "connection", status: "CONNECTED" }])) as unknown as typeof fetch
       socket.emit("message", JSON.stringify({
         id: 3,
         method: "genio/personalConnection/complete",
-        params: { requestToken: request.params.requestToken, botId: "bot-dylan", threadId: "thread-connection", resourceId: "notion", connectionId: "connection", status: "CONNECTED" },
+        params: { requestToken: request.params.requestToken, botId: "bot-dylan", threadId: "thread-connection", turnId: "turn-connection", resourceId: "notion", connectionId: "connection", status: "CONNECTED" },
       }))
       await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 3))
-      expect(socket.sent.map((line) => JSON.parse(line)).find((message) => message.id === 3).result).toEqual({ completed: true })
+      expect(socket.sent.map((line) => JSON.parse(line)).find((message) => message.id === 3).result).toEqual({ completed: true, managedMcpServerNames: [] })
       expect(await pending.wait).toEqual(botToolText({ addState: "INSTALLED" }))
       expect(retries).toBe(1)
     } finally {
@@ -1405,6 +1836,7 @@ describe("Codex runtime policy route", () => {
     const context = createContext(calls, reports)
     const interactions = new BotConnectionInteractions(200)
     ;(context as { connectionInteractions?: BotConnectionInteractions }).connectionInteractions = interactions
+    ;(context.botRegistry.timeline as { activeTurns: () => Array<{ threadId: string; turnId: string }> }).activeTurns = () => [{ threadId: "thread-connection", turnId: "turn-connection" }]
     let handler: ((socket: FakeSocket) => void) | null = null
     await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
     const socket = new FakeSocket()
@@ -1422,6 +1854,7 @@ describe("Codex runtime policy route", () => {
         botId: "bot-dylan",
         targetBotId: "new-bot",
         threadId: "thread-connection",
+        turnId: "turn-connection",
         resourceId: "notion",
         resourceName: "Notion",
         capabilityId: "notion.write",
@@ -1432,7 +1865,7 @@ describe("Codex runtime policy route", () => {
       socket.emit("message", JSON.stringify({ id: 3, method: "genio/thread/pending", params: { threadId: "thread-connection" } }))
       await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 3))
       expect(socket.sent.map((line) => JSON.parse(line)).find((message) => message.id === 3).result).toEqual([
-        { method: "genio/personalConnection/request", params: expect.objectContaining({ requestToken: pending.request.requestToken, threadId: "thread-connection", resourceId: "notion" }) },
+        { method: "genio/personalConnection/request", params: expect.objectContaining({ requestToken: pending.request.requestToken, threadId: "thread-connection", turnId: "turn-connection", resourceId: "notion" }) },
       ])
 
       await expect(pending.wait).rejects.toThrow("BOT_CONNECTION_REQUEST_EXPIRED")

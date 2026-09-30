@@ -36,6 +36,7 @@ import {
 import { useOverview } from "@/hooks/use-overview"
 import { useDemoMode } from "@/hooks/use-demo-mode"
 import { useManagementNavigation } from "@/hooks/use-management-navigation"
+import { canAccessManagementPage } from "@/components/management-navigation"
 import type { IdentitySession } from "@/domain/contracts"
 import { isMockMode } from "@/lib/runtime-mode"
 import {
@@ -48,11 +49,14 @@ import {
   refreshBrowserSession,
 } from "@/lib/browser-oidc"
 import { activatePersonalPreferences } from "@/lib/personal-preferences"
+import { initializePosthogAnalytics, resetPosthogAnalytics } from "@/lib/posthog-analytics"
 
 const mockIdentity: IdentitySession = {
   tenant_id: "tenant-design-preview",
   subject_id: "platform-admin",
   acting_client_id: "genio-one-design-preview",
+  role: "TENANT_ADMINISTRATOR",
+  administrator_organization_ids: [],
   scopes: ["genioone-management"],
   acr: "mock",
   amr: ["mock"],
@@ -66,7 +70,9 @@ export function App() {
   const demo = useDemoMode()
   const { activePage, search, focusedResourceId, navigate, setSearch } = useManagementNavigation()
   const tenantId = identity?.tenant_id?.trim() ?? ""
-  const overviewEnabled = authState === "signed_in" && tenantId.length > 0
+  const canUseManagement = isMockMode || identity?.role === "TENANT_ADMINISTRATOR" || identity?.role === "ORGANIZATION_ADMINISTRATOR"
+  const visiblePage = identity && !canAccessManagementPage(activePage, identity.role) ? "overview" : activePage
+  const overviewEnabled = authState === "signed_in" && canUseManagement && tenantId.length > 0
   const { data, loading, refreshing, refresh } = useOverview(tenantId, overviewEnabled, isMockMode, identity?.role)
 
   useEffect(() => {
@@ -119,6 +125,7 @@ export function App() {
           if (!cancelled) { setAuthState("unavailable"); setAuthNotice("The Platform is temporarily unavailable. Your login is preserved; retry when it is ready.") }
           return
         }
+        resetPosthogAnalytics()
         clearBrowserSession("/management")
         if (!cancelled) {
           setIdentity(null)
@@ -133,10 +140,30 @@ export function App() {
   }, [])
 
   useEffect(() => {
+    if (authState === "signed_in" && identity && visiblePage !== activePage) {
+      navigate("overview", { replace: true })
+    }
+  }, [activePage, authState, identity, navigate, visiblePage])
+
+  useEffect(() => {
+    if (isMockMode || !canUseManagement || authState !== "signed_in" || !identity || !tenantId) return
+    const controller = new AbortController()
+    void initializePosthogAnalytics({
+      accessToken: loadBrowserAccessToken("/management"),
+      role: identity.role,
+      signal: controller.signal,
+      surface: "management",
+      tenantId,
+    })
+    return () => controller.abort()
+  }, [authState, canUseManagement, identity, tenantId])
+
+  useEffect(() => {
     if (isMockMode) return
     const onExpired = (event: Event) => {
       const detail = (event as CustomEvent<{ redirectPath?: string }>).detail
       if (detail?.redirectPath !== "/management") return
+      resetPosthogAnalytics()
       setIdentity(null)
       setAuthState("signed_out")
       setAuthNotice("OIDC_SESSION_EXPIRED")
@@ -156,6 +183,7 @@ export function App() {
 
   function signOut() {
     if (isMockMode) return
+    resetPosthogAnalytics()
     sessionStorage.setItem("genioone.signed_out:/management", "true")
     clearBrowserSession("/management")
     setIdentity(null)
@@ -164,14 +192,14 @@ export function App() {
   }
 
   function page() {
-    if (activePage === "product-docs") {
+    if (visiblePage === "product-docs") {
       return <ProductDocumentationPage />
     }
-    if (activePage === "api-docs") {
+    if (visiblePage === "api-docs") {
       return <ProductApiReferencePage />
     }
     if (!data) return <div role="status" className="flex items-center gap-3 py-12"><LoaderCircleIcon className="animate-spin" />{t("Loading management data…")}</div>
-    if (activePage === "overview") {
+    if (visiblePage === "overview") {
       return (
         <OverviewPage
           accessTier={demo.tier}
@@ -185,7 +213,7 @@ export function App() {
         />
       )
     }
-    switch (activePage) {
+    switch (visiblePage) {
       case "resources":
         return (
           <ResourcesPage
@@ -207,6 +235,7 @@ export function App() {
             resources={data.resources}
             connections={data.connections}
             runtimes={data.runtimes}
+            canApproveMcpReadOnly={identity?.role === "TENANT_ADMINISTRATOR"}
             focusedResourceId={focusedResourceId}
             onRefresh={refresh}
             onOpenResource={(resourceId) => {
@@ -219,7 +248,7 @@ export function App() {
           <ApplicationsPage tenantId={tenantId} data={data} onRefresh={refresh} />
         )
       case "access":
-        return <AccessPage tenantId={tenantId} data={data} onRefresh={refresh} />
+        return <AccessPage tenantId={tenantId} actorIdentity={identity!} data={data} onRefresh={refresh} />
       case "policy":
         return (
           <OnePolicyPage
@@ -320,6 +349,38 @@ export function App() {
     )
   }
 
+  if (!canUseManagement) {
+    return (
+      <TooltipProvider>
+        <main className="flex min-h-screen items-center justify-center bg-muted/20 p-6">
+          <Card className="w-full max-w-xl">
+            <CardHeader className="border-b">
+              <CardTitle className="flex items-center gap-2 text-2xl">
+                <ShieldCheckIcon className="size-5 text-primary" />
+                {t("Management access required")}
+              </CardTitle>
+              <CardDescription>
+                {t("This account does not have an Organization Administrator or Tenant Administrator role. Use Self-service to view and request access to available capabilities.")}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-3 py-8">
+              <Button asChild size="lg">
+                <a href="/self-service">
+                  <UserRoundIcon data-icon="inline-start" />
+                  {t("Open Self-service")}
+                </a>
+              </Button>
+              <Button size="lg" variant="outline" onClick={() => signIn(true)}>
+                <LogInIcon data-icon="inline-start" />
+                {t("Use another account")}
+              </Button>
+            </CardContent>
+          </Card>
+        </main>
+      </TooltipProvider>
+    )
+  }
+
   return (
     <TooltipProvider>
       <SidebarProvider style={{ "--sidebar-width-icon": "4rem" } as React.CSSProperties}>
@@ -330,7 +391,7 @@ export function App() {
           {t("Skip to main content")}
         </a>
         <AppSidebar
-          activePage={activePage}
+          activePage={visiblePage}
           data={data}
           identity={identity}
           mockMode={isMockMode}
@@ -352,7 +413,7 @@ export function App() {
             <div className="mx-auto w-full min-w-0 max-w-[var(--go-content-max)]">
               {isMockMode && demo.guideVisible ? (
                 <DemoPageGuide
-                  activePage={activePage}
+                  activePage={visiblePage}
                   tier={demo.tier}
                   onDismiss={() => demo.setGuideVisible(false)}
                   onNavigate={(nextPage) => navigate(nextPage)}

@@ -2,7 +2,8 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { parseLiteLlmPriceCatalog } from "../src/capabilities/pricing-catalog/litellm"
-import { createPostgresModelPriceCatalog } from "../src/capabilities/pricing-catalog/postgres"
+import { ifStaleMaxAgeSeconds, priceCatalogIsFresh } from "../src/capabilities/pricing-catalog/freshness"
+import { createPostgresModelPriceCatalog, readCurrentPriceCatalogFetchedAt } from "../src/capabilities/pricing-catalog/postgres"
 import type { SqlAdapter } from "../src/persistence/sql-adapter"
 
 function estimatorSql(row: Record<string, unknown>): SqlAdapter {
@@ -179,4 +180,32 @@ test("matches an explicit LiteLLM zero-cost Ollama model without guessing", asyn
     pricingVersion: version,
   })
   assert.match(query, /right\(lower\(\$2\), 7\) = ':latest'/)
+})
+
+test("a stored catalog is fresh only inside the requested window", () => {
+  assert.equal(priceCatalogIsFresh(null, 1_000, 60), false)
+  assert.equal(priceCatalogIsFresh(950, 1_000, 60), true)
+  assert.equal(priceCatalogIsFresh(940, 1_000, 60), false)
+})
+
+test("--if-stale defaults to a day and accepts an explicit number of hours", () => {
+  assert.equal(ifStaleMaxAgeSeconds([]), null)
+  assert.equal(ifStaleMaxAgeSeconds(["--if-stale"]), 86_400)
+  assert.equal(ifStaleMaxAgeSeconds(["--if-stale=6"]), 21_600)
+  assert.throws(() => ifStaleMaxAgeSeconds(["--if-stale=0"]), /positive number of hours/)
+  assert.throws(() => ifStaleMaxAgeSeconds(["--if-stale=soon"]), /positive number of hours/)
+})
+
+test("reads when the current LiteLLM catalog was fetched, or null when none exists", async () => {
+  const sqlWith = (rows: Record<string, unknown>[]): SqlAdapter => ({
+    async query<Row extends Record<string, unknown>>() {
+      return { rows: rows as Row[], rowCount: rows.length }
+    },
+    async transaction() {
+      throw new Error("transaction is not used by the freshness read")
+    },
+  })
+
+  assert.equal(await readCurrentPriceCatalogFetchedAt(sqlWith([{ fetched_at: "1790000000" }]), "LITELLM"), 1_790_000_000)
+  assert.equal(await readCurrentPriceCatalogFetchedAt(sqlWith([]), "LITELLM"), null)
 })

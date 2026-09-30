@@ -6,8 +6,9 @@ import type { FastifyInstance } from "fastify"
 
 import type { BotServerContext } from "./context"
 import type { BotRecord } from "./bot-registry"
+import { BotConnectionInteractions } from "./bot-connection-interactions"
 import { checkHandsMcpRequest, filterHandsToolList, handsMcpGrantFor, type HandsMcpRequestCheck } from "./hands-mcp-grant"
-import { authorizedManagedMcpMount, managedMcpTarget, resolveManagedMcpMounts } from "./managed-mcp"
+import { authorizedManagedMcpMount, managedMcpTarget, resolveManagedMcpMounts, type ManagedMcpTarget } from "./managed-mcp"
 import { managedMcpMountsForBot, type RuntimeSession } from "./runtime-broker"
 import { requireRuntimePolicyDecision } from "./runtime-policy"
 import { runtimePolicyDecisionTarget, type RuntimePolicyDecision } from "./runtime-policy-contract"
@@ -22,12 +23,64 @@ import {
 
 type JsonRecord = Record<string, unknown>
 
+const MCP_HOP_BY_HOP_HEADERS = new Set([
+  "connection",
+  "content-length",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+])
+
 function relayAuthorized(request: any, session: RuntimeSession) {
   const authorization = request.headers?.authorization
   if (typeof authorization !== "string") return false
   const actual = Buffer.from(authorization)
   const expected = Buffer.from(`Bearer ${session.relaySecret}`)
   return actual.length === expected.length && timingSafeEqual(actual, expected)
+}
+
+const CONNECTION_CONTINUATION_READ_ONLY_TOOLS: Readonly<Record<string, ReadonlySet<string>>> = {
+  mail2000: new Set([
+    "mail2000__list_mailboxes",
+    "mail2000__search_mail",
+    "mail2000__read_mail",
+    "mail2000__caldav_list_collections",
+    "mail2000__caldav_read_objects",
+    "mail2000__carddav_list_collections",
+    "mail2000__carddav_read_objects",
+    "mail2000__carddav_search_directory",
+    "mail2000__carddav_get_self_context",
+  ]),
+  notion: new Set(["notion__notion-search", "notion__notion-fetch"]),
+}
+
+type ConnectionReadOnlyEntry = { resourceId: string }
+
+export function connectionReadOnlyMcpRequest(entry: ConnectionReadOnlyEntry, method: unknown, body: unknown) {
+  if (method !== "POST" || !body || typeof body !== "object" || Array.isArray(body)) return "CONNECTION_CONTINUATION_MCP_REQUEST_NOT_ALLOWED"
+  const rpc = body as { method?: unknown; params?: unknown }
+  if (!(["initialize", "notifications/initialized", "ping", "tools/list", "tools/call"] as unknown[]).includes(rpc.method)) return "CONNECTION_CONTINUATION_MCP_METHOD_NOT_ALLOWED"
+  if (rpc.method !== "tools/call") return null
+  const name = rpc.params && typeof rpc.params === "object" ? (rpc.params as { name?: unknown }).name : undefined
+  return typeof name === "string" && CONNECTION_CONTINUATION_READ_ONLY_TOOLS[entry.resourceId]?.has(name) ? null : "CONNECTION_CONTINUATION_MCP_TOOL_NOT_READ_ONLY"
+}
+
+function filterConnectionReadOnlyTools(entry: ConnectionReadOnlyEntry, contentType: string | null, text: string) {
+  const allowed = CONNECTION_CONTINUATION_READ_ONLY_TOOLS[entry.resourceId] ?? new Set<string>()
+  const filter = (message: { result?: { tools?: Array<{ name?: unknown }> } }) => {
+    const tools = message.result?.tools
+    if (!Array.isArray(tools)) return message
+    return { ...message, result: { ...message.result, tools: tools.filter((tool) => typeof tool?.name === "string" && allowed.has(tool.name)) } }
+  }
+  if (contentType?.includes("text/event-stream")) return text.split("\n").map((line) => {
+    if (!line.startsWith("data:")) return line
+    try { return `data: ${JSON.stringify(filter(JSON.parse(line.slice(5))))}` } catch { return line }
+  }).join("\n")
+  return JSON.stringify(filter(JSON.parse(text)))
 }
 
 function textValue(value: unknown): string {
@@ -104,6 +157,196 @@ function isCatalogDiscoveryRequest(request: any): boolean {
   if (body.method !== "tools/call" || !body.params || typeof body.params !== "object" || Array.isArray(body.params)) return false
   const name = (body.params as JsonRecord).name
   return name === "search_resources" || name === "get_resource"
+}
+
+function isMcpToolCall(request: any): boolean {
+  return request.method === "POST" && Boolean(request.body && typeof request.body === "object" && !Array.isArray(request.body) &&
+    (request.body as JsonRecord).method === "tools/call" && (request.body as JsonRecord).params &&
+    typeof (request.body as JsonRecord).params === "object" && !Array.isArray((request.body as JsonRecord).params))
+}
+
+type PersonalConnectionStatus = {
+  state: "CONNECTED" | "SAVED" | "REQUIRED" | "UNAVAILABLE" | "NOT_PERSONAL"
+  resourceName: string
+}
+
+type PersonalConnectionNeed = {
+  resourceId: string
+  resourceName: string
+  capabilityId: string
+  reason: string
+}
+
+type DiscoveryPersonalConnectionResult = {
+  response: Response
+  needs: PersonalConnectionNeed[]
+}
+
+function record(value: unknown): JsonRecord | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : null
+}
+
+function personalConnectionName(rows: JsonRecord[], fallback: string) {
+  return rows.map((row) => typeof row.display_name === "string" ? row.display_name.trim() : "").find(Boolean) || fallback
+}
+
+async function personalConnectionStatus(
+  session: RuntimeSession,
+  accessToken: string,
+  resourceId: string,
+  fallbackName: string,
+): Promise<PersonalConnectionStatus> {
+  const origin = process.env.GENIO_ONE_PLATFORM_ORIGIN?.trim() || "http://127.0.0.1:58082"
+  let response: Response
+  try {
+    response = await fetch(new URL(`/v1/tenants/${encodeURIComponent(session.principal.tenant_id)}/me/resource-connections/${encodeURIComponent(resourceId)}`, origin), {
+      headers: { authorization: `Bearer ${accessToken}`, accept: "application/json" },
+      signal: AbortSignal.timeout(2_000),
+    })
+  } catch {
+    return { state: "UNAVAILABLE", resourceName: fallbackName }
+  }
+  if (!response.ok) return { state: "UNAVAILABLE", resourceName: fallbackName }
+  let value: unknown
+  try { value = await response.json() } catch { return { state: "UNAVAILABLE", resourceName: fallbackName } }
+  if (!Array.isArray(value)) return { state: "UNAVAILABLE", resourceName: fallbackName }
+  const rows = value.flatMap((candidate) => {
+    const row = record(candidate)
+    return row ? [row] : []
+  })
+  const resourceName = personalConnectionName(rows, fallbackName)
+  if (rows.some((row) => row.status === "CONNECTED")) return { state: "CONNECTED", resourceName }
+  if (rows.some((row) => row.status === "SAVED" && row.authentication === "PASSWORD")) return { state: "SAVED", resourceName }
+  if (rows.some((row) => row.status === "NEEDS_CONNECTION" && (row.authentication === "OAUTH" || row.authentication === "PASSWORD"))) {
+    return { state: "REQUIRED", resourceName }
+  }
+  return { state: "NOT_PERSONAL", resourceName }
+}
+
+function installedMcpBinding(bot: BotRecord, resourceId: string, capabilityId: string) {
+  return bot.bindings.some((binding) => binding.resourceId === resourceId && binding.capabilityId === capabilityId && binding.state === "INSTALLED" && binding.kind === "MCP")
+}
+
+function discoveryResources(value: JsonRecord) {
+  const resources = Array.isArray(value.resources) ? value.resources : value.resource ? [value.resource] : []
+  return resources.flatMap((candidate) => {
+    const resource = record(candidate)
+    if (!resource) return []
+    const resourceId = typeof resource.resource_id === "string" ? resource.resource_id.trim() : ""
+    if (!resourceId) return []
+    const resourceName = typeof resource.display_name === "string" && resource.display_name.trim() ? resource.display_name.trim() : resourceId
+    const tools = Array.isArray(resource.tools) ? resource.tools : []
+    return [{ resource, resourceId, resourceName, tools }]
+  })
+}
+
+function applyPersonalConnectionStatus(tool: JsonRecord, status: PersonalConnectionStatus) {
+  if (status.state === "CONNECTED") return { ...tool, connection_status: "READY", hub_status: "CONNECTED" }
+  if (status.state === "SAVED") return { ...tool, connection_status: "SAVED", hub_status: "AVAILABLE" }
+  if (status.state === "REQUIRED") return { ...tool, connection_status: "UNAVAILABLE", hub_status: "AVAILABLE", personal_connection_required: true }
+  if (status.state === "UNAVAILABLE") return { ...tool, connection_status: "UNAVAILABLE", hub_status: "AVAILABLE" }
+  return tool
+}
+
+function responseWithJsonBody(upstream: Response, body: unknown) {
+  const headers = new Headers(upstream.headers)
+  headers.set("content-type", "application/json")
+  headers.delete("content-length")
+  headers.delete("content-encoding")
+  return new Response(JSON.stringify(body), { status: upstream.status, statusText: upstream.statusText, headers })
+}
+
+async function discoveryResponseWithPersonalConnections(
+  request: any,
+  session: RuntimeSession,
+  bot: BotRecord,
+  configured: string,
+  authority: McpRelayAuthority,
+): Promise<DiscoveryPersonalConnectionResult> {
+  const upstream = await fetchMcpResponse(request, session, configured, authority)
+  if (!isMcpToolCall(request) || !upstream.ok) return { response: upstream, needs: [] as PersonalConnectionNeed[] }
+  let body: JsonRecord
+  try {
+    const parsed = await upstream.clone().json()
+    const result = record(parsed)
+    if (!result) return { response: upstream, needs: [] as PersonalConnectionNeed[] }
+    body = result
+  } catch {
+    return { response: upstream, needs: [] as PersonalConnectionNeed[] }
+  }
+  const result = record(body.result)
+  const structuredContent = result ? record(result.structuredContent) : null
+  if (!result || !structuredContent) return { response: upstream, needs: [] as PersonalConnectionNeed[] }
+  const resources = discoveryResources(structuredContent)
+  const candidates = new Map<string, { resourceName: string; capabilityIds: Set<string> }>()
+  for (const { resourceId, resourceName, tools } of resources) {
+    for (const candidate of tools) {
+      const tool = record(candidate)
+      const capabilityId = typeof tool?.capability_id === "string" ? tool.capability_id.trim() : ""
+      if (capabilityId && (tool?.access === "ENTITLED" || tool?.access === "AUTO_GRANT") && installedMcpBinding(bot, resourceId, capabilityId)) {
+        const current = candidates.get(resourceId)
+        if (current) current.capabilityIds.add(capabilityId)
+        else candidates.set(resourceId, { resourceName, capabilityIds: new Set([capabilityId]) })
+      }
+    }
+  }
+  if (candidates.size === 0) return { response: upstream, needs: [] as PersonalConnectionNeed[] }
+  const statuses = new Map(await Promise.all([...candidates].map(async ([resourceId, candidate]) => [
+    resourceId,
+    await personalConnectionStatus(session, authority.accessToken, resourceId, candidate.resourceName),
+  ] as const)))
+  const needs: PersonalConnectionNeed[] = []
+  let changed = false
+  const updateResource = (candidate: unknown) => {
+    const resource = record(candidate)
+    const resourceId = typeof resource?.resource_id === "string" ? resource.resource_id.trim() : ""
+    const status = resourceId ? statuses.get(resourceId) : undefined
+    if (!resource || !status || !Array.isArray(resource.tools)) return candidate
+    const tools = resource.tools.map((toolCandidate) => {
+      const tool = record(toolCandidate)
+      const capabilityId = typeof tool?.capability_id === "string" ? tool.capability_id.trim() : ""
+      const resourceCandidate = candidates.get(resourceId)
+      if (!tool || !capabilityId || !resourceCandidate?.capabilityIds.has(capabilityId)) return toolCandidate
+      const next = applyPersonalConnectionStatus(tool, status)
+      changed ||= next !== tool
+      return next
+    })
+    if (status.state === "REQUIRED") {
+      const candidate = candidates.get(resourceId)!
+      needs.push({ resourceId, resourceName: status.resourceName, capabilityId: candidate.capabilityIds.values().next().value!, reason: "需要先完成你的帳號授權，才能繼續這項工作。" })
+    }
+    return { ...resource, tools }
+  }
+  if (Array.isArray(structuredContent.resources)) structuredContent.resources = structuredContent.resources.map(updateResource)
+  if (structuredContent.resource) structuredContent.resource = updateResource(structuredContent.resource)
+  if (!changed) return { response: upstream, needs }
+  const content = Array.isArray(result.content) ? result.content : []
+  result.content = content.map((entry) => {
+    const item = record(entry)
+    if (!item || item.type !== "text" || typeof item.text !== "string") return entry
+    try {
+      const parsed = record(JSON.parse(item.text))
+      if (!parsed || (!Array.isArray(parsed.resources) && !parsed.resource)) return entry
+      return { ...item, text: JSON.stringify(structuredContent) }
+    } catch {
+      return entry
+    }
+  })
+  return { response: responseWithJsonBody(upstream, body), needs }
+}
+
+function activeConnectionTurn(context: BotServerContext, botId: string) {
+  const active = context.botRegistry.timeline.activeTurns(botId)
+  return active.length === 1 ? active[0]! : null
+}
+
+function personalConnectionRequiredReply(request: any, reply: any, need: PersonalConnectionNeed) {
+  const body = record(request.body)
+  return reply.code(409).send({
+    jsonrpc: typeof body?.jsonrpc === "string" ? body.jsonrpc : "2.0",
+    id: body?.id ?? null,
+    error: { code: -32001, message: "PERSONAL_CONNECTION_REQUIRED", data: { resource_id: need.resourceId, resource_name: need.resourceName, recoverable: true } },
+  })
 }
 
 function responseInputToMessages(input: unknown, instructions: unknown): Array<JsonRecord> {
@@ -301,18 +544,38 @@ function accessTokenForBot(context: BotServerContext, session: RuntimeSession, b
 
 function forwardableMcpHeader(name: string, value: unknown): value is string | string[] {
   const lower = name.toLowerCase()
-  return lower !== "authorization" && lower !== "host" && lower !== "content-length" && lower !== "connection" &&
+  return lower !== "authorization" && lower !== "host" && !MCP_HOP_BY_HOP_HEADERS.has(lower) &&
     lower !== REQUEST_ID_HEADER && !lower.startsWith("x-genio-") &&
     (typeof value === "string" || Array.isArray(value))
+}
+
+function mcpUpstreamFailure(error: unknown, configured: ManagedMcpTarget, resourceId: string) {
+  const target = new URL(configured.url)
+  const value = error && typeof error === "object" ? error as { name?: unknown, code?: unknown, cause?: { code?: unknown } } : {}
+  const code = typeof value.code === "string"
+    ? value.code
+    : typeof value.cause?.code === "string"
+      ? value.cause.code
+      : null
+  console.warn(JSON.stringify({
+    event: "mcp.relay.upstream_failed",
+    resource_id: resourceId,
+    upstream_hostname: target.hostname,
+    upstream_port: target.port || null,
+    publication_hostname: configured.host,
+    error_name: typeof value.name === "string" ? value.name : null,
+    error_code: code,
+  }))
 }
 
 async function fetchMcpResponse(
   request: any,
   session: RuntimeSession,
-  configured: string,
+  configured: string | ManagedMcpTarget,
   authority: McpRelayAuthority,
 ): Promise<Response> {
-  const configuredTarget = new URL(configured)
+  const target = typeof configured === "string" ? { url: configured, host: null } : configured
+  const configuredTarget = new URL(target.url)
   const requestUrl = new URL(request.url, "http://127.0.0.1")
   configuredTarget.search = requestUrl.search
   const resolvedTarget = loopbackTarget(configuredTarget)
@@ -329,7 +592,8 @@ async function fetchMcpResponse(
     headers.set(CONSUMER_ORGANIZATION_HEADER, authority.usageContext.consumerOrganizationId)
     headers.set(USE_CASE_HEADER, authority.usageContext.useCaseId)
   }
-  if (resolvedTarget.host) headers.set("host", resolvedTarget.host)
+  const requestHost = target.host ?? resolvedTarget.host
+  if (requestHost) headers.set("host", requestHost)
   const method = request.method
   const body = method === "GET" || method === "HEAD"
     ? undefined
@@ -556,6 +820,11 @@ export async function modelGatewayRelayRoutes(app: FastifyInstance, context: Bot
     if (!appServer && !handsGrant) return reply.code(401).send({ error: "RELAY_AUTHORIZATION_REQUIRED" })
     const bot = context.botRegistry.getOwned(botId, session.principal)
     if (!bot) return reply.code(403).send({ error: "MCP_RESOURCE_NOT_ALLOWED" })
+    const connectionReadOnly = context.botRegistry.connectionContinuations?.readOnlyGuard(botId, resourceId)
+    if (connectionReadOnly) {
+      const error = connectionReadOnlyMcpRequest(connectionReadOnly, request.method, request.body)
+      if (error) return reply.code(403).send({ error })
+    }
     let handsCheck: HandsMcpRequestCheck | undefined
     if (handsGrant) {
       if (handsGrant.botId !== botId || session.selectedBotId !== botId) return reply.code(403).send({ error: "HANDS_MCP_BOT_MISMATCH" })
@@ -647,7 +916,8 @@ export async function modelGatewayRelayRoutes(app: FastifyInstance, context: Bot
     let upstream: Response
     try {
       upstream = await fetchMcpResponse(request, session, configured, { accessToken, correlationId, usageContext })
-    } catch {
+    } catch (error) {
+      mcpUpstreamFailure(error, configured, resourceId)
       try {
         await report("FAILED", "MCP_GATEWAY_UPSTREAM_UNAVAILABLE")
       } catch {
@@ -664,10 +934,15 @@ export async function modelGatewayRelayRoutes(app: FastifyInstance, context: Bot
       }
       return sendMcpResponse(reply, upstream)
     }
-    if (handsGrant && handsCheck?.allowed && handsCheck.method === "tools/list" && upstream.body) {
+    const mcpRequest = request.body as { method?: unknown } | undefined
+    if ((handsGrant && handsCheck?.allowed || connectionReadOnly) && mcpRequest?.method === "tools/list" && upstream.body) {
       let filtered: string
       try {
-        filtered = filterHandsToolList(handsGrant, resourceId, upstream.headers.get("content-type"), await upstream.text())
+        const source = await upstream.text()
+        if (handsGrant && handsCheck?.allowed) filtered = filterHandsToolList(handsGrant, resourceId, upstream.headers.get("content-type"), source)
+        else {
+          filtered = filterConnectionReadOnlyTools(connectionReadOnly!, upstream.headers.get("content-type"), source)
+        }
       } catch {
         try {
           await report("FAILED", "HANDS_MCP_TOOL_LIST_INVALID")
@@ -707,12 +982,43 @@ export async function modelGatewayRelayRoutes(app: FastifyInstance, context: Bot
     const session = context.runtimeBroker.get(runtimeSessionId)
     if (!session) return reply.code(404).send({ error: "MCP_RUNTIME_SESSION_NOT_FOUND" })
     if (!relayAuthorized(request, session)) return reply.code(401).send({ error: "RELAY_AUTHORIZATION_REQUIRED" })
-    if (!context.botRegistry.getOwned(botId, session.principal)) return reply.code(403).send({ error: "DISCOVERY_BOT_NOT_ALLOWED" })
+    const bot = context.botRegistry.getOwned(botId, session.principal)
+    if (!bot) return reply.code(403).send({ error: "DISCOVERY_BOT_NOT_ALLOWED" })
     const accessToken = accessTokenForBot(context, session, botId)
     if (!accessToken) return reply.code(404).send({ error: "MCP_RUNTIME_SESSION_NOT_FOUND" })
     if (!isCatalogDiscoveryRequest(request)) return reply.code(403).send({ error: "DISCOVERY_CATALOG_EXPOSE_ONLY" })
     const configured = new URL(`/v1/tenants/${encodeURIComponent(session.principal.tenant_id)}/discovery/mcp`, process.env.GENIO_ONE_PLATFORM_ORIGIN || "http://127.0.0.1:58082").toString()
-    return forwardMcpRequest(request, reply, session, configured, { accessToken, correlationId: randomUUID() })
+    const discover = () => discoveryResponseWithPersonalConnections(request, session, bot, configured, { accessToken, correlationId: randomUUID() })
+    let discovered = await discover()
+    if (discovered.needs.length === 0) return sendMcpResponse(reply, discovered.response)
+    const sourceTurn = activeConnectionTurn(context, botId)
+    if (!sourceTurn) return sendMcpResponse(reply, discovered.response)
+    const interactions = context.connectionInteractions ??= new BotConnectionInteractions()
+    const requestedResources = new Set<string>()
+    for (;;) {
+      const need = discovered.needs.find((candidate) => !requestedResources.has(candidate.resourceId))
+      if (!need) return sendMcpResponse(reply, discovered.response)
+      requestedResources.add(need.resourceId)
+      const pending = interactions.begin<DiscoveryPersonalConnectionResult>({
+        principal: session.principal,
+        runtimeSessionId,
+        botId,
+        targetBotId: botId,
+        threadId: sourceTurn.threadId,
+        turnId: sourceTurn.turnId,
+        ...need,
+        isCurrent: () => {
+          const active = context.botRegistry.timeline.activeTurns(botId)
+          return active.length === 1 && active[0]?.threadId === sourceTurn.threadId && active[0]?.turnId === sourceTurn.turnId
+        },
+        retry: discover,
+      })
+      try {
+        discovered = await pending.wait
+      } catch {
+        return personalConnectionRequiredReply(request, reply, need)
+      }
+    }
   })
 
   app.all("/api/discovery-mcp/:runtimeSessionId/mcp", async (request, reply) => {

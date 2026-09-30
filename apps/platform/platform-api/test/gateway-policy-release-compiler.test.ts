@@ -406,15 +406,41 @@ test("compiles Subject-specific MCP tool Capabilities on one MCP route", () => {
   const resourceId = "resource-mcp"
   const mcpChain = chain(resourceId, routeCapability, [])
   const mcpProjection = projection(resourceId, routeCapability, mcpChain)
-  mcpProjection.resources = [{
-    apiVersion: "aigateway.envoyproxy.io/v1beta1",
-    kind: "MCPRoute",
-    metadata: { name: "resource-mcp" },
-    spec: {
-      backendRefs: [{ name: "engineering", toolSelector: { include: ["issues.search", "issues.delete"] } }],
+  mcpProjection.resources = [
+    {
+      apiVersion: "aigateway.envoyproxy.io/v1beta1",
+      kind: "MCPRoute",
+      metadata: { name: "resource-mcp" },
+      spec: {
+        backendRefs: [{ name: "engineering", toolSelector: { include: ["issues.search", "issues.delete"] } }],
+      },
     },
+    {
+      apiVersion: "gateway.envoyproxy.io/v1alpha1",
+      kind: "Backend",
+      metadata: {
+        name: "engineering",
+        annotations: { "genio.one/connection-id": "connection-resource-mcp" },
+      },
+      spec: {},
+    },
+  ]
+  mcpProjection.mcp_tool_definitions = [{
+    resource_id: resourceId,
+    connection_id: "connection-resource-mcp",
+    canonical_tool_name: "issues.search",
+    exposed_tool_name: "engineering__issues.search",
+    source_revision_digest: "c".repeat(64),
+    description: "Search approved engineering issues.",
+    input_schema: {
+      type: "object",
+      properties: { query: { type: "string" } },
+      required: ["query"],
+      additionalProperties: false,
+    },
+    read_only: true,
   }]
-  const result = compileGatewayPolicyArtifacts({
+  const compilerInput = {
     tenant_id: TENANT_ID,
     gateway_id: "ai-gateway",
     revision: "gateway-revision-mcp",
@@ -452,7 +478,8 @@ test("compiles Subject-specific MCP tool Capabilities on one MCP route", () => {
         created_at: 1,
       },
     ],
-  })
+  } satisfies GatewayPolicyArtifactCompilerInput
+  const result = compileGatewayPolicyArtifacts(compilerInput)
   assert.deepEqual(result.authorization_bundle.rules.map((rule) => ({
     subject: rule.subject_ids[0],
     capability: rule.capability_id,
@@ -469,6 +496,34 @@ test("compiles Subject-specific MCP tool Capabilities on one MCP route", () => {
       tools: ["engineering__issues.search"],
     },
   ])
+  assert.deepEqual(result.authorization_bundle.mcp_tool_definitions, [{
+    resource_id: resourceId,
+    connection_id: "connection-resource-mcp",
+    canonical_tool_name: "issues.search",
+    exposed_tool_name: "engineering__issues.search",
+    source_revision_digest: "c".repeat(64),
+    description: "Search approved engineering issues.",
+    input_schema: {
+      type: "object",
+      properties: { query: { type: "string" } },
+      required: ["query"],
+      additionalProperties: false,
+    },
+    read_only: true,
+  }])
+  assert.throws(
+    () => compileGatewayPolicyArtifacts({
+      ...compilerInput,
+      projections: [{
+        ...mcpProjection,
+        mcp_tool_definitions: [{
+          ...mcpProjection.mcp_tool_definitions![0]!,
+          connection_id: "connection-other",
+        }],
+      }],
+    }),
+    /is not published/,
+  )
 })
 
 test("turns null principals into wildcard entries and exposes only the stable model name", () => {

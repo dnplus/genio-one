@@ -60,6 +60,13 @@ export function normalizePrincipal(value: unknown): Principal | null {
   ) {
     return null
   }
+  if (
+    value.administrator_organization_ids !== undefined &&
+    (!Array.isArray(value.administrator_organization_ids) ||
+      !value.administrator_organization_ids.every(isNonEmptyString))
+  ) {
+    return null
+  }
   if (!isNonEmptyString(value.client_id)) return null
   if (
     value.scopes !== undefined &&
@@ -74,6 +81,13 @@ export function normalizePrincipal(value: unknown): Principal | null {
     ...(isNonEmptyString(value.email) ? { email: value.email.trim() } : {}),
     role: value.role,
     organization_ids: value.organization_ids.map((organizationId) => organizationId.trim()),
+    ...(value.administrator_organization_ids === undefined
+      ? {}
+      : {
+          administrator_organization_ids: value.administrator_organization_ids.map(
+            (organizationId) => organizationId.trim(),
+          ),
+        }),
     client_id: value.client_id.trim(),
     ...(value.scopes === undefined
       ? {}
@@ -117,6 +131,9 @@ export function createStaticPrincipalAuthenticator(
         ? {
             ...principal,
             organization_ids: [...principal.organization_ids],
+            ...(principal.administrator_organization_ids
+              ? { administrator_organization_ids: [...principal.administrator_organization_ids] }
+              : {}),
             ...(principal.scopes ? { scopes: [...principal.scopes] } : {}),
           }
         : null

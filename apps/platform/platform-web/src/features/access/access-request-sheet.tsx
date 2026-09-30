@@ -21,6 +21,7 @@ import { Textarea } from "@/components/ui/textarea"
 import type { AccessRequest } from "@/domain/contracts"
 import { relativeTime } from "@/lib/format"
 import { formatEpochSeconds } from "@/lib/personal-preferences"
+import { captureProductEvent } from "@/lib/posthog-analytics"
 import { decideAccessRequest } from "@/lib/product-api"
 
 function initialExpiry() {
@@ -83,6 +84,9 @@ export function AccessRequestSheet({
           ? { APPROVE: { valid_until: Math.floor(new Date(expiry).getTime() / 1000) } }
           : { DENY: { reason: reason.trim() } }
       await decideAccessRequest(tenantId, currentRequest.access_request_id, decision)
+      captureProductEvent("genioone_journey_action", {
+        action: kind === "approve" ? "access_request_approved" : "access_request_denied",
+      })
       await onDecided()
       onOpenChange(false)
     } catch (caught) {

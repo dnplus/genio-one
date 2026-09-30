@@ -7,7 +7,7 @@
 切片 1 起，WebSocket 連線只驗證 Personal Bot Entitlement 並啟動 server-side app-server，**不再**於連線當下開 E2B execution lease。遠端執行環境由 `RuntimeBroker.ensureExec()` / `genio/runtime/ensureExec` 在明確的執行意圖下按需啟動。
 
 先前痛點（目前仍用作 sizing 基線）：
-- **資源規格過重**：現有模板（`scripts/build-e2b-template.ts`）配置為 `cpuCount: 8, memoryMB: 8192`。
+- **資源規格過重**：現有模板（`apps/bot/scripts/build-e2b-template.ts`）配置為 `cpuCount: 8, memoryMB: 8192`。
 - **無差別啟動**：舊流程即使使用者僅進行純文字對話、或透過 GenioOne MCP 調用 ServiceNow Case 查詢，後端仍會即時開出一台完整虛擬機，並常駐啟動 X11/Xvfb 與 noVNC（port 6080）串流；目前連線先保持 `none`，只在明確執行意圖時開 `headless` 或 `desktop`。
 - **並發瓶頸**：在多用戶環境下，10 個並發用戶即需消耗 80 vCPU 與 80GB 記憶體，且絕大多數圖形計算資源處於閒置浪費狀態。
 - **冷啟動延遲過長**：因為 Desktop 包含視窗管理員、noVNC 與桌面環境，冷啟動需 3～8 秒，導致目前架構無法做到順暢的「按需即開即用」。
@@ -77,7 +77,7 @@ Tier 0 不是把 command/file execution 放到 Bot host。若該輪沒有 remote
 接續工作可依照以下步驟分階段進行：
 
 ### 階段一：新增 Headless E2B 模板 (Template Preparation)
-- [x] `scripts/build-e2b-template.ts` 同時建置獨立 headless template：
+- [x] `apps/bot/scripts/build-e2b-template.ts` 同時建置獨立 headless template：
   - 基礎映像檔改用官方極簡 Debian/Ubuntu 映像（無需 X11 / noVNC / Desktop 相關依賴）。
   - 僅安裝 Node.js、Codex CLI (`@openai/codex`) 與基礎工具（curl, git, jq）。
   - headless template 構建規格預設為：`cpuCount: 2, memoryMB: 2048`。

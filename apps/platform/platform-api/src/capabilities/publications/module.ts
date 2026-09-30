@@ -37,6 +37,11 @@ export interface PublicationWorkflowStore
     resourceId: string
   }): Promise<PublicationReference | null>
 
+  getPublishedSnapshot(input: {
+    tenantId: string
+    resourceId: string
+  }): Promise<GatewayProjectionSnapshot | null>
+
   getRequest(input: {
     tenantId: string
     resourceId: string
@@ -120,6 +125,11 @@ export interface AiResourcePublicationWorkflow {
     reviewerId: string
     decision: PublicationReviewDecision
   }): Promise<ResourceRegistration>
+
+  getPublishedSnapshot(input: {
+    tenantId: string
+    resourceId: string
+  }): Promise<GatewayProjectionSnapshot | null>
 
   /** The compiler uses the same persisted snapshot source as the workflow. */
   readonly projectionSource: GatewayProjectionSource

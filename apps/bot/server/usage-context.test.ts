@@ -98,9 +98,9 @@ describe("Bot usage context", () => {
       accessToken: "token",
       useCaseId: CE_DEMO_USE_CASE_ID,
     })).resolves.toEqual({ consumerOrganizationId: "org-ce-demo", useCaseId: CE_DEMO_USE_CASE_ID })
-    expect(seen).toEqual([
-      "http://127.0.0.1:58082/v1/tenants/tenant-uat/demo-project",
-      "http://127.0.0.1:58082/v1/tenants/tenant-uat/organizations/org-ce-demo/use-cases",
+    expect(seen.map((url) => new URL(url).pathname)).toEqual([
+      "/v1/tenants/tenant-uat/demo-project",
+      "/v1/tenants/tenant-uat/organizations/org-ce-demo/use-cases",
     ])
   })
 

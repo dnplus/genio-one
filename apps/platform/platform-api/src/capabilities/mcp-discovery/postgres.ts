@@ -3,6 +3,7 @@ import { Check } from "typebox/value"
 import type { SqlAdapter, SqlTransaction } from "../../persistence/sql-adapter"
 import {
   canonicalizeDownstreamIdentity,
+  canonicalizeMcpToolReviews,
   type DownstreamIdentityProjection,
 } from "../connections/contract"
 import { PlatformApiError } from "../errors"
@@ -18,6 +19,7 @@ import { discoveryCandidates } from "./candidates"
 import { mcpToolCapabilityId } from "../../../../../../runtimes/gateway/services/shared/mcp-tool-capability"
 import { ensurePublicationSuccessorInTransaction } from "../publications/successor"
 import { lockGatewayPolicyRelease } from "../gateway-policy-release/transaction-lock"
+import { mcpToolReviewForCandidate, pruneMcpToolReviews, replaceMcpToolReview } from "./reviews"
 
 type DatabaseRow = Record<string, unknown>
 
@@ -124,6 +126,13 @@ function candidates(row: DatabaseRow): McpDiscoveryOperation["candidates"] {
   return normalized as McpDiscoveryOperation["candidates"]
 }
 
+function mcpToolReviews(row: DatabaseRow) {
+  if (row.mcp_tool_reviews === null || row.mcp_tool_reviews === undefined) return []
+  const reviews = canonicalizeMcpToolReviews(value(row.mcp_tool_reviews))
+  if (!reviews) throw new PlatformApiError("MCP_DISCOVERY_DATA_INVALID", 500)
+  return reviews
+}
+
 function map(row: DatabaseRow): McpDiscoveryOperation {
   const result: McpDiscoveryOperation = {
     tenant_id: string(row, "tenant_id"),
@@ -176,9 +185,11 @@ export function createPostgresMcpDiscoveryStore(options: {
   sql: SqlAdapter
   idFactory?: () => string
   publicationIdFactory?: (prefix: string) => string
+  now?: () => number
 }): McpDiscoveryStore {
   const idFactory = options.idFactory ?? (() => `mcp-discovery-${crypto.randomUUID()}`)
   const publicationIdFactory = options.publicationIdFactory ?? ((prefix) => `${prefix}-${crypto.randomUUID()}`)
+  const now = options.now ?? (() => Math.floor(Date.now() / 1000))
   return {
     async request(input) {
       return options.sql.transaction(async (transaction) => {
@@ -283,68 +294,121 @@ export function createPostgresMcpDiscoveryStore(options: {
     },
 
     async complete(input) {
-      const source = await options.sql.query<DatabaseRow>(
-        `select operation.resource_id, operation.connection_id,
-                connection.mcp_selected_tools,
-                coalesce(previous.candidates, '[]'::jsonb) as previous_candidates
-           from genio_one_mcp_discovery_operations operation
-           join genio_one_resource_connections connection
-             on connection.tenant_id = operation.tenant_id
-            and connection.resource_id = operation.resource_id
-            and connection.connection_id = operation.connection_id
-           left join lateral (
-             select candidates from genio_one_mcp_discovery_operations
-              where tenant_id = operation.tenant_id
-                and connection_id = operation.connection_id
-                and operation_id <> operation.operation_id
-                and state = 'SUCCEEDED'
-              order by completed_at desc limit 1
-           ) previous on true
-          where operation.tenant_id = $1 and operation.operation_id = $2`,
-        [input.tenantId, input.operationId],
-      )
-      const sourceRow = source.rows[0]
-      if (!sourceRow) throw new PlatformApiError("MCP_DISCOVERY_OPERATION_NOT_RUNNING", 409)
-      const candidateValue = input.result.state === "SUCCEEDED"
-        ? discoveryCandidates(
-            String(sourceRow.connection_id),
-            input.result.observation,
-            Array.isArray(sourceRow.mcp_selected_tools) ? sourceRow.mcp_selected_tools as string[] : [],
-            candidates({ candidates: sourceRow.previous_candidates }),
+      return options.sql.transaction(async (transaction) => {
+        const identityResult = await transaction.query<DatabaseRow>(
+          `select enforcement_point_id
+             from genio_one_resources resource
+             join genio_one_mcp_discovery_operations operation
+               on operation.tenant_id = resource.tenant_id
+              and operation.resource_id = resource.resource_id
+            where operation.tenant_id = $1 and operation.operation_id = $2`,
+          [input.tenantId, input.operationId],
+        )
+        const gatewayId = identityResult.rows[0]
+          ? string(identityResult.rows[0], "enforcement_point_id")
+          : null
+        if (!gatewayId) throw new PlatformApiError("MCP_DISCOVERY_OPERATION_NOT_RUNNING", 409)
+        await lockGatewayPolicyRelease({ transaction, tenantId: input.tenantId, gatewayId })
+        const source = await transaction.query<DatabaseRow>(
+          `select operation.resource_id, operation.connection_id,
+                  resource.enforcement_point_id as gateway_id,
+                  connection.mcp_selected_tools, connection.mcp_tool_reviews,
+                  coalesce(previous.candidates, '[]'::jsonb) as previous_candidates
+             from genio_one_mcp_discovery_operations operation
+             join genio_one_resources resource
+               on resource.tenant_id = operation.tenant_id
+              and resource.resource_id = operation.resource_id
+             join genio_one_resource_connections connection
+               on connection.tenant_id = operation.tenant_id
+              and connection.resource_id = operation.resource_id
+              and connection.connection_id = operation.connection_id
+             left join lateral (
+               select candidates from genio_one_mcp_discovery_operations
+                where tenant_id = operation.tenant_id
+                  and connection_id = operation.connection_id
+                  and operation_id <> operation.operation_id
+                  and state = 'SUCCEEDED'
+                order by completed_at desc limit 1
+             ) previous on true
+            where operation.tenant_id = $1
+              and operation.runtime_id = $2
+              and operation.operation_id = $3
+              and operation.state = 'RUNNING'
+            for update of operation, resource, connection`,
+          [input.tenantId, input.runtimeId, input.operationId],
+        )
+        const sourceRow = source.rows[0]
+        if (!sourceRow || string(sourceRow, "gateway_id") !== gatewayId) {
+          throw new PlatformApiError("MCP_DISCOVERY_OPERATION_NOT_RUNNING", 409)
+        }
+        const selectedTools = sourceRow.mcp_selected_tools
+        if (!Array.isArray(selectedTools) || selectedTools.some((tool) => typeof tool !== "string")) {
+          throw new PlatformApiError("MCP_DISCOVERY_DATA_INVALID", 500)
+        }
+        const candidateValue = input.result.state === "SUCCEEDED"
+          ? discoveryCandidates(
+              string(sourceRow, "connection_id"),
+              input.result.observation,
+              selectedTools,
+              candidates({ candidates: sourceRow.previous_candidates }),
+            )
+          : []
+        const nextReviews = input.result.state === "SUCCEEDED"
+          ? pruneMcpToolReviews(mcpToolReviews(sourceRow), candidateValue)
+          : mcpToolReviews(sourceRow)
+        const reviewsChanged = JSON.stringify(nextReviews) !== JSON.stringify(mcpToolReviews(sourceRow))
+        if (reviewsChanged) {
+          await transaction.query(
+            `update genio_one_resource_connections
+                set mcp_tool_reviews = $4::text::jsonb,
+                    configuration_revision = configuration_revision + 1,
+                    row_revision = row_revision + 1,
+                    updated_at = now()
+              where tenant_id = $1 and resource_id = $2 and connection_id = $3`,
+            [input.tenantId, string(sourceRow, "resource_id"), string(sourceRow, "connection_id"), JSON.stringify(nextReviews)],
           )
-        : []
-      const observationValue = input.result.state === "SUCCEEDED"
-        ? JSON.stringify(input.result.observation)
-        : null
-      const errorCode = input.result.state === "FAILED" ? input.result.error_code : null
-      const errorMessage = input.result.state === "FAILED" ? input.result.error_message : null
-      const completed = await options.sql.query<DatabaseRow>(
-        `update genio_one_mcp_discovery_operations
-            set state = $4,
-                observation = $5::text::jsonb,
-                error_code = $6,
-                error_message = $7,
-                candidates = $8::text::jsonb,
-                completed_at = now(),
-                updated_at = now()
-          where tenant_id = $1
-            and runtime_id = $2
-            and operation_id = $3
-            and state = 'RUNNING'
-          returning ${COLUMNS}`,
-        [
-          input.tenantId,
-          input.runtimeId,
-          input.operationId,
-          input.result.state,
-          observationValue,
-          errorCode,
-          errorMessage,
-          JSON.stringify(candidateValue),
-        ],
-      )
-      if (!completed.rows[0]) throw new PlatformApiError("MCP_DISCOVERY_OPERATION_NOT_RUNNING", 409)
-      return map(completed.rows[0])
+        }
+        const observationValue = input.result.state === "SUCCEEDED"
+          ? JSON.stringify(input.result.observation)
+          : null
+        const errorCode = input.result.state === "FAILED" ? input.result.error_code : null
+        const errorMessage = input.result.state === "FAILED" ? input.result.error_message : null
+        const completed = await transaction.query<DatabaseRow>(
+          `update genio_one_mcp_discovery_operations
+              set state = $4,
+                  observation = $5::text::jsonb,
+                  error_code = $6,
+                  error_message = $7,
+                  candidates = $8::text::jsonb,
+                  completed_at = now(),
+                  updated_at = now()
+            where tenant_id = $1
+              and runtime_id = $2
+              and operation_id = $3
+              and state = 'RUNNING'
+            returning ${COLUMNS}`,
+          [
+            input.tenantId,
+            input.runtimeId,
+            input.operationId,
+            input.result.state,
+            observationValue,
+            errorCode,
+            errorMessage,
+            JSON.stringify(candidateValue),
+          ],
+        )
+        if (!completed.rows[0]) throw new PlatformApiError("MCP_DISCOVERY_OPERATION_NOT_RUNNING", 409)
+        if (reviewsChanged) {
+          await ensurePublicationSuccessorInTransaction({
+            transaction,
+            tenantId: input.tenantId,
+            resourceId: string(sourceRow, "resource_id"),
+            idFactory: publicationIdFactory,
+          })
+        }
+        return map(completed.rows[0])
+      })
     },
 
     async decideCandidate(input) {
@@ -403,7 +467,7 @@ export function createPostgresMcpDiscoveryStore(options: {
           throw new PlatformApiError("MCP_TOOL_SELECTION_LOCKED", 409)
         }
         const connectionResult = await transaction.query<DatabaseRow>(
-          `select mcp_selected_tools
+          `select mcp_selected_tools, mcp_tool_reviews
              from genio_one_resource_connections
             where tenant_id = $1 and resource_id = $2 and connection_id = $3
             for update`,
@@ -417,7 +481,12 @@ export function createPostgresMcpDiscoveryStore(options: {
           ? [...new Set([...selectedTools, candidate.tool_name])]
           : selectedTools.filter((tool) => tool !== candidate.tool_name))
           .sort((left, right) => left.localeCompare(right))
+        const currentReviews = mcpToolReviews(connectionResult.rows[0]!)
+        const nextReviews = input.state === "PUBLISHED"
+          ? currentReviews
+          : replaceMcpToolReview(currentReviews, null, candidate.tool_name)
         const surfaceChanged = JSON.stringify(selectedTools) !== JSON.stringify(nextSelectedTools)
+        const reviewsChanged = JSON.stringify(currentReviews) !== JSON.stringify(nextReviews)
         if (input.state === "PUBLISHED") {
           for (const toolName of nextSelectedTools) {
             await transaction.query(
@@ -434,16 +503,17 @@ export function createPostgresMcpDiscoveryStore(options: {
             )
           }
         }
-        if (surfaceChanged) {
+        if (surfaceChanged || reviewsChanged) {
           await transaction.query(
             `update genio_one_resource_connections
                 set mcp_selected_tools = $4::text[],
                     mcp_tool_selection_operation_id = $5,
+                    mcp_tool_reviews = $6::text::jsonb,
                     configuration_revision = configuration_revision + 1,
                     row_revision = row_revision + 1,
                     updated_at = now()
               where tenant_id = $1 and resource_id = $2 and connection_id = $3`,
-            [input.tenantId, input.resourceId, input.connectionId, nextSelectedTools, operation.operation_id],
+            [input.tenantId, input.resourceId, input.connectionId, nextSelectedTools, operation.operation_id, JSON.stringify(nextReviews)],
           )
           await ensurePublicationSuccessorInTransaction({
             transaction,
@@ -460,6 +530,104 @@ export function createPostgresMcpDiscoveryStore(options: {
           [input.tenantId, operation.operation_id, JSON.stringify(nextCandidates)],
         )
         return map(updated.rows[0]!)
+      })
+    },
+
+    async decideReadOnlyApproval(input) {
+      return options.sql.transaction(async (transaction) => {
+        const identityResult = await transaction.query<DatabaseRow>(
+          `select enforcement_point_id
+             from genio_one_resources
+            where tenant_id = $1 and resource_id = $2`,
+          [input.tenantId, input.resourceId],
+        )
+        const gatewayId = identityResult.rows[0]
+          ? string(identityResult.rows[0], "enforcement_point_id")
+          : null
+        if (!gatewayId) throw new PlatformApiError("MCP_CONNECTION_NOT_FOUND", 404)
+        await lockGatewayPolicyRelease({ transaction, tenantId: input.tenantId, gatewayId })
+        const found = await transaction.query<DatabaseRow>(
+          `select ${COLUMNS}
+             from genio_one_mcp_discovery_operations
+            where tenant_id = $1 and resource_id = $2 and connection_id = $3 and state = 'SUCCEEDED'
+            order by completed_at desc limit 1 for update`,
+          [input.tenantId, input.resourceId, input.connectionId],
+        )
+        const operation = found.rows[0] ? map(found.rows[0]) : null
+        if (!operation) throw new PlatformApiError("MCP_DISCOVERY_NOT_FOUND", 404)
+        const candidate = operation.candidates.find((value) => value.candidate_id === input.candidateId)
+        if (!candidate) throw new PlatformApiError("MCP_DISCOVERY_CANDIDATE_NOT_FOUND", 404)
+        if (candidate.revision_digest !== input.expectedRevisionDigest) {
+          throw new PlatformApiError("MCP_DISCOVERY_CANDIDATE_REVISION_CONFLICT", 409)
+        }
+        const resourceResult = await transaction.query<DatabaseRow>(
+          `select resource_id, enforcement_point_id
+             from genio_one_resources
+            where tenant_id = $1 and resource_id = $2
+            for update`,
+          [input.tenantId, input.resourceId],
+        )
+        if (!resourceResult.rows[0] || string(resourceResult.rows[0], "enforcement_point_id") !== gatewayId) {
+          throw new PlatformApiError("MCP_CONNECTION_NOT_FOUND", 409)
+        }
+        const publicationResult = await transaction.query<DatabaseRow>(
+          `select request_snapshot, publication_build_state
+             from genio_one_publications
+            where tenant_id = $1 and resource_id = $2
+            order by endpoint_revision desc
+            limit 1
+            for update`,
+          [input.tenantId, input.resourceId],
+        )
+        if (publicationResult.rows[0] && publicationLocksToolSelection(publicationResult.rows[0])) {
+          throw new PlatformApiError("MCP_TOOL_REVIEW_LOCKED", 409)
+        }
+        const connectionResult = await transaction.query<DatabaseRow>(
+          `select mcp_selected_tools, mcp_tool_reviews
+             from genio_one_resource_connections
+            where tenant_id = $1 and resource_id = $2 and connection_id = $3
+            for update`,
+          [input.tenantId, input.resourceId, input.connectionId],
+        )
+        const connection = connectionResult.rows[0]
+        const selectedTools = connection?.mcp_selected_tools
+        if (!connection || !Array.isArray(selectedTools) || selectedTools.some((tool) => typeof tool !== "string")) {
+          throw new PlatformApiError("MCP_DISCOVERY_DATA_INVALID", 500)
+        }
+        if (candidate.state !== "PUBLISHED" || !selectedTools.includes(candidate.tool_name)) {
+          throw new PlatformApiError("MCP_TOOL_REVIEW_TOOL_NOT_PUBLISHED", 409)
+        }
+        if (input.executionMode === "AUTO_READ_ONLY" && !operation.observation) {
+          throw new PlatformApiError("MCP_TOOL_REVIEW_METADATA_REQUIRED", 409)
+        }
+        const review = input.executionMode === "AUTO_READ_ONLY"
+          ? mcpToolReviewForCandidate({
+              observation: operation.observation!,
+              candidate,
+              approvedBySubjectId: input.approvedBySubjectId,
+              approvedAt: now(),
+            })
+          : null
+        const currentReviews = mcpToolReviews(connection)
+        const nextReviews = replaceMcpToolReview(currentReviews, review, candidate.tool_name)
+        if (JSON.stringify(currentReviews) !== JSON.stringify(nextReviews)) {
+          await transaction.query(
+            `update genio_one_resource_connections
+                set mcp_tool_reviews = $4::text::jsonb,
+                    configuration_revision = configuration_revision + 1,
+                    row_revision = row_revision + 1,
+                    updated_at = now()
+              where tenant_id = $1 and resource_id = $2 and connection_id = $3`,
+            [input.tenantId, input.resourceId, input.connectionId, JSON.stringify(nextReviews)],
+          )
+          await ensurePublicationSuccessorInTransaction({
+            transaction,
+            tenantId: input.tenantId,
+            resourceId: input.resourceId,
+            idFactory: publicationIdFactory,
+          })
+        }
+        return operation
       })
     },
   }

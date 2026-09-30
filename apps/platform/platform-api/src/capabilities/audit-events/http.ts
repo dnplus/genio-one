@@ -104,6 +104,7 @@ export const gatewayAuthorizationAuditHttp: FastifyPluginAsync<GatewayAuthorizat
             GatewayAuthorizationAuditQueryResponseSchema,
           ]),
           400: PlatformApiErrorResponseSchema,
+          403: PlatformApiErrorResponseSchema,
         },
       },
     },
@@ -184,6 +185,7 @@ export const gatewayAuthorizationAuditHttp: FastifyPluginAsync<GatewayAuthorizat
 
       const query = (offset: number, limit: number) => options.store.query({
         tenantId: request.params.tenant_id,
+        kind: "ONE_POLICY_DECISION",
         resourceId,
         from,
         to,

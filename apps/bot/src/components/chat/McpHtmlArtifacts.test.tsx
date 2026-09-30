@@ -15,6 +15,7 @@ test("MCP HTML artifact card exposes preview and download without rendering its 
     status: "completed",
     arguments: {},
     appContext: null,
+    mcpAppUi: null,
     pluginId: null,
     readOnlyHint: true,
     result: { content: [{ type: "text", text: "已產生架構圖" }], structuredContent: null, _meta: { "genio/artifacts": [{ name: "architecture.html", mimeType: "text/html", text, sha256 }] } },

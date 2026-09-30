@@ -4,7 +4,7 @@ Current model revision: `2026-09-08-documentation-consolidation`.
 
 ## 架構圖
 
-`docs/architecture/current-architecture.json` 是生成來源，`current.html` 由 `bun run docs:architecture` 產生。圖描述責任與實作邊界；局部測試、舊部署截圖與某次 live contract 不代表目前所有路徑或 production 已通過。
+`docs/internal/platform/architecture/current-architecture.json` 是生成來源，`current.html` 由 `bun run docs:architecture` 產生。圖描述責任與實作邊界；局部測試、舊部署截圖與某次 live contract 不代表目前所有路徑或 production 已通過。
 
 - Product API／PostgreSQL 的 canonical state 與 Gateway／Endpoint 的 applied／observed state 分開。
 - Company AI／MCP、API consumer 與 official-provider Egress 為不同資料路徑；可選 Secure Access 不取代應用層授權。
@@ -14,7 +14,7 @@ Current model revision: `2026-09-08-documentation-consolidation`.
 
 ## 產品 UI
 
-以 [管理介面互動契約](docs/design/admin-governance-refactor.md) 定義任務、狀態、可見完成條件與失敗恢復。產品內載入的 [使用指南](docs/product/README.md) 與實際 API 一起維護。
+以 [管理介面互動契約](../../docs/internal/platform/design/admin-governance-refactor.md) 定義任務、狀態、可見完成條件與失敗恢復。產品內載入的 [使用指南](../../docs/public/product/README.md) 與實際 API 一起維護。
 
 ## 檢查
 
@@ -23,4 +23,4 @@ bun run docs:architecture:check
 bun test scripts/terminology-contract.test.mjs
 ```
 
-目前正式交付的資料可靠性與恢復缺口以 [production 評估](docs/architecture/data-model-2026-09-08/production-assessment.md) 為準。
+目前正式交付的資料可靠性與恢復缺口以 [production 評估](../../docs/internal/platform/architecture/data-model-2026-09-08/production-assessment.md) 為準。

@@ -6,6 +6,7 @@ import { createMail2000Smtp } from "./mail2000/smtp"
 import { createMail2000Dav } from "./mail2000/dav"
 import { createServiceNowHandler } from "./servicenow-csm/server"
 import { MAIL2000_TOOLS } from "./mail2000/install"
+import { MAIL2000_READ_ONLY_MCP_TOOLS } from "./mail2000/metadata"
 
 (process.env.GENIO_CONNECTOR_HTTP_TEST === "1" ? test : test.skip)("Gateway Runtime client discovers standard connector HTTP endpoints before personal login", async () => {
   const mail = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: createMail2000Handler({
@@ -18,6 +19,14 @@ import { MAIL2000_TOOLS } from "./mail2000/install"
   try {
     const mailDiscovery = await discoverMcpConnection({ endpoint: `http://127.0.0.1:${mail.port}/mcp` })
     expect(mailDiscovery.tools.map((tool) => tool.name).sort()).toEqual([...MAIL2000_TOOLS].sort())
+    for (const [exposedName, metadata] of Object.entries(MAIL2000_READ_ONLY_MCP_TOOLS)) {
+      const tool = mailDiscovery.tools.find((candidate) => candidate.name === exposedName.slice("mail2000__".length))
+      expect(tool?.title).toBe(metadata.title)
+      expect(tool?.description).toBe(metadata.description)
+      expect(tool?.input_schema).toEqual(metadata.input_schema)
+      expect(tool?.read_only_hint).toBe(true)
+    }
+    expect(mailDiscovery.tools.find((tool) => tool.name === "send_mail")?.read_only_hint).toBe(false)
     const snDiscovery = await discoverMcpConnection({ endpoint: `http://127.0.0.1:${sn.port}/mcp` })
     expect(snDiscovery.tools.map((tool) => tool.name).sort()).toEqual(["list_cases", "get_case", "create_case", "update_case", "delete_case"].sort())
     for (const [port, tool, error] of [[mail.port, "list_mailboxes", "MAIL2000_CONNECTION_REQUIRED"], [sn.port, "list_cases", "SERVICENOW_AUTHORIZATION_REQUIRED"]] as const) {

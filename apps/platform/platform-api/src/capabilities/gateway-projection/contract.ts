@@ -76,6 +76,17 @@ const GatewayPolicyBundleSchema = Type.Object({
   enforcement_chain: CompiledEnforcementChainSchema,
 })
 
+const GatewayMcpToolDefinitionSchema = Type.Object({
+  resource_id: Identifier,
+  connection_id: Identifier,
+  canonical_tool_name: Identifier,
+  exposed_tool_name: Identifier,
+  source_revision_digest: Type.String({ pattern: "^[a-f0-9]{64}$" }),
+  description: Type.Union([Type.String({ maxLength: 16_384 }), Type.Null()]),
+  input_schema: Type.Record(Type.String({ minLength: 1, maxLength: 256 }), Type.Unknown()),
+  read_only: Type.Literal(true),
+}, { additionalProperties: false })
+
 const GatewayProjectionSignatureSchema = Ed25519SignatureSchema
 
 const GatewayProjectionEnvelopeSchema = Type.Object({
@@ -92,6 +103,7 @@ const GatewayProjectionEnvelopeSchema = Type.Object({
   signature: GatewayProjectionSignatureSchema,
   publication_endpoint: GatewayProjectionPublicationSchema,
   policy_bundle: GatewayPolicyBundleSchema,
+  mcp_tool_definitions: Type.Optional(Type.Array(GatewayMcpToolDefinitionSchema, { maxItems: 1024 })),
 })
 
 /**
@@ -144,6 +156,7 @@ export type GatewayProjectionRequest = Static<typeof GatewayProjectionRequestSch
 export type GatewayNativeResource = Static<typeof GatewayNativeResourceSchema>
 export type GatewayProjectionPublication = Static<typeof GatewayProjectionPublicationSchema>
 export type GatewayPolicyBundle = Static<typeof GatewayPolicyBundleSchema>
+export type GatewayMcpToolDefinition = Static<typeof GatewayMcpToolDefinitionSchema>
 export type GatewayProjectionSignature = Ed25519Signature
 export type GatewayNativeDataResource = Static<typeof GatewayNativeDataResourceSchema>
 export type GatewayProjection = Omit<Static<typeof GatewayProjectionSchema>, "resources"> & {

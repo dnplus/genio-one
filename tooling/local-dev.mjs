@@ -319,6 +319,13 @@ const services = [
       return body?.service === "genio-connector-mail2000" && body?.status !== "ready"
     },
     env: { CONNECTOR_HOST: "127.0.0.1", CONNECTOR_PORT: "58111" },
+    // Platform signs endpoint tokens with the shared key. A connector that stays up across a
+    // key rotation keeps validating with the old key and returns CONNECTOR_CONFIGURATION_UNTRUSTED.
+    launchConfiguration() {
+      return launchConfigurationDigest(serviceEnvironment(this), [
+        "GENIO_CONNECTOR_CONFIGURATION_KEY",
+      ])
+    },
   },
   {
     name: "platform-api",
@@ -801,6 +808,29 @@ async function ensureIdentity() {
   return true
 }
 
+// LiteLLM prices are only refreshed by Helm's CronJob, so a local database would otherwise keep
+// whatever snapshot was loaded first. The sync skips itself while the stored catalog is recent,
+// and a failure (offline, GitHub unreachable) must never block local development.
+export function syncPricingCatalogInBackground({
+  spawnProcess = spawn,
+  envFileExists = existsSync(resolve(platformDir, ".env.local")),
+  report = (event) => process.stderr.write(`${JSON.stringify(event)}\n`),
+  isStopping = () => stopping,
+} = {}) {
+  if (!envFileExists) return null
+  const child = spawnProcess("pnpm", ["pricing:sync:if-stale"], { cwd: platformDir, env: process.env, stdio: "inherit" })
+  children.set("pricing-sync", child)
+  child.once("error", (error) => {
+    children.delete("pricing-sync")
+    if (!isStopping()) report({ event: "local-dev.pricing-sync-failed", message: error.message })
+  })
+  child.once("exit", (code, signal) => {
+    children.delete("pricing-sync")
+    if (!isStopping() && code !== 0) report({ event: "local-dev.pricing-sync-failed", code, signal })
+  })
+  return child
+}
+
 async function shutdown(code = 0) {
   if (stopping) return
   stopping = true
@@ -841,6 +871,7 @@ async function main() {
   ))
   if (stopping || started.some((value) => !value)) return
   recordDistillationLaunchConfiguration(distillationLaunchState(configuration, serviceOwners(bot), standaloneTriageOwners()))
+  syncPricingCatalogInBackground()
   process.stdout.write(`${JSON.stringify({ event: "local-dev.ready", services: services.map((service) => service.name), origins: { platform: "http://127.0.0.1:5173/management", bot: "http://127.0.0.1:5180/" } })}\n`)
   monitorUnmanagedTriageHandoff()
   keepAlive = setInterval(monitorUnmanagedTriageHandoff, 500)

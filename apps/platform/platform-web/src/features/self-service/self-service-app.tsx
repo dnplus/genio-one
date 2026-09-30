@@ -1,16 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
-  BellIcon,
   CheckIcon,
-  Clock3Icon,
-  KeyRoundIcon,
   LanguagesIcon,
   LoaderCircleIcon,
   LogInIcon,
   LogOutIcon,
   PackagePlusIcon,
   SearchIcon,
-  ShieldCheckIcon,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
@@ -21,7 +17,6 @@ import {
   Card,
   CardAction,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
@@ -37,7 +32,6 @@ import {
   Empty,
   EmptyDescription,
   EmptyHeader,
-  EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field"
@@ -86,6 +80,7 @@ import {
   loadIdentitySession,
   refreshBrowserSession,
 } from "@/lib/browser-oidc"
+import { captureProductEvent, initializePosthogAnalytics, resetPosthogAnalytics } from "@/lib/posthog-analytics"
 
 interface SelfServiceData {
   catalog: SubjectCatalogSnapshot
@@ -113,6 +108,19 @@ function readableIdentifier(value: string): string {
       return part.toLowerCase() === "genioone" ? "GenioOne" : part.charAt(0).toUpperCase() + part.slice(1)
     })
     .join(" ")
+}
+
+const autoGrantErrorCodes = new Set([
+  "AUTO_GRANT_NOT_AVAILABLE",
+  "AUTO_GRANT_ACTOR_NOT_VERIFIED",
+  "AUTO_GRANT_RETRY_NOT_EFFECTIVE",
+  "AUTO_GRANT_CORRELATION_REUSED",
+  "AUTO_GRANT_AUDIT_REQUIRED",
+  "AUTO_GRANT_ROLLBACK_FAILED",
+])
+
+function autoGrantErrorNotice(error: unknown): string {
+  return error instanceof Error && autoGrantErrorCodes.has(error.message) ? error.message : "Activation failed"
 }
 
 function LanguageMenu() {
@@ -157,6 +165,8 @@ export function SelfServiceApp() {
   const [onboardingJustification, setOnboardingJustification] = useState("")
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const selfServiceReady = data !== null
+  const [noticeIsError, setNoticeIsError] = useState(false)
   const configuredTtlChoices = data?.configuration?.settings.ttl_options_seconds ?? [28_800]
   const configuredDefaultTtl = data?.configuration?.settings.request_form.default_ttl_seconds ?? configuredTtlChoices[0]
   const configurationRevision = data?.configuration?.revision ?? null
@@ -230,6 +240,7 @@ export function SelfServiceApp() {
               return
             } catch (error) {
               setNotice(error instanceof Error ? error.message : "OIDC_FAILED")
+              setNoticeIsError(true)
               return
             }
           }
@@ -246,7 +257,10 @@ export function SelfServiceApp() {
           sessionStorage.removeItem("genioone.signed_out:/self-service")
         }
       })
-      .catch((error) => setNotice(error instanceof Error ? error.message : "OIDC_FAILED"))
+      .catch((error) => {
+        setNotice(error instanceof Error ? error.message : "OIDC_FAILED")
+        setNoticeIsError(true)
+      })
   }, [connect])
 
   useEffect(() => {
@@ -259,10 +273,12 @@ export function SelfServiceApp() {
     const onExpired = (event: Event) => {
       const detail = (event as CustomEvent<{ redirectPath?: string }>).detail
       if (detail?.redirectPath !== "/self-service") return
+      resetPosthogAnalytics()
       setToken(null)
       setSession(null)
       setData(null)
       setNotice("OIDC_SESSION_EXPIRED")
+      setNoticeIsError(true)
     }
     window.addEventListener(BROWSER_SESSION_REFRESHED_EVENT, onRefreshed)
     window.addEventListener(BROWSER_SESSION_EXPIRED_EVENT, onExpired)
@@ -272,10 +288,24 @@ export function SelfServiceApp() {
     }
   }, [])
 
+  useEffect(() => {
+    if (!token || !session || !selfServiceReady) return
+    const controller = new AbortController()
+    void initializePosthogAnalytics({
+      accessToken: token,
+      role: session.role,
+      signal: controller.signal,
+      surface: "self_service",
+      tenantId: session.tenant_id,
+    })
+    return () => controller.abort()
+  }, [selfServiceReady, session?.role, session?.tenant_id, token])
+
   async function submitRequest() {
     if (!token || !session || !selected || !justification.trim()) return
     setBusy(true)
     setNotice(null)
+    setNoticeIsError(false)
     try {
       await requestAccess(
         token,
@@ -285,6 +315,7 @@ export function SelfServiceApp() {
         justification.trim(),
         requestedDurationSeconds,
       )
+      captureProductEvent("genioone_journey_action", { action: "access_request_submitted" })
       setSelected(null)
       setJustification("")
       setRequestedDurationSeconds(configuredDefaultTtl)
@@ -292,6 +323,7 @@ export function SelfServiceApp() {
       setNotice("Access Request submitted for Human Approval.")
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Request failed")
+      setNoticeIsError(true)
     } finally {
       setBusy(false)
     }
@@ -301,6 +333,7 @@ export function SelfServiceApp() {
     if (!token || !session) return
     setBusy(true)
     setNotice(null)
+    setNoticeIsError(false)
     try {
       await cancelAccessRequest(token, session.tenant_id, requestId)
       await refresh(token, session)
@@ -308,6 +341,7 @@ export function SelfServiceApp() {
       setNotice("Access Request cancelled.")
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Cancellation failed")
+      setNoticeIsError(true)
     } finally {
       setBusy(false)
     }
@@ -317,12 +351,20 @@ export function SelfServiceApp() {
     if (!token || !session || item.access !== "AUTO_GRANT") return
     setBusy(true)
     setNotice(null)
+    setNoticeIsError(false)
     try {
       await activateAutoGrant(token, session.tenant_id, item.resource_id, item.capability_id)
+    } catch (error) {
+      setNotice(autoGrantErrorNotice(error))
+      setNoticeIsError(true)
+      setBusy(false)
+      return
+    }
+    try {
       await refresh(token, session)
       setNotice("Resource activated and Entitlement created.")
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Activation failed")
+    } catch {
+      setNotice("Resource activated. Refresh to see your updated access.")
     } finally {
       setBusy(false)
     }
@@ -332,6 +374,7 @@ export function SelfServiceApp() {
     if (!token || !session || !catalogQuery.trim() || !onboardingJustification.trim()) return
     setBusy(true)
     setNotice(null)
+    setNoticeIsError(false)
     try {
       await requestResourceOnboarding(
         token,
@@ -346,12 +389,14 @@ export function SelfServiceApp() {
       setNotice("Resource Onboarding Request submitted.")
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Request failed")
+      setNoticeIsError(true)
     } finally {
       setBusy(false)
     }
   }
 
   function signOut() {
+    resetPosthogAnalytics()
     sessionStorage.setItem("genioone.signed_out:/self-service", "true")
     clearBrowserSession("/self-service")
     setToken(null)
@@ -363,11 +408,9 @@ export function SelfServiceApp() {
     setRequestedServiceUrl("")
     setOnboardingJustification("")
     setNotice(null)
+    setNoticeIsError(false)
   }
 
-  const activeEntitlements = data?.entitlements.filter((item) => item.state === "ACTIVE") ?? []
-  const pendingRequests = data?.requests.filter((item) => item.state === "PENDING") ?? []
-  const updateCount = data?.notifications.length ?? 0
   const normalizedCatalogQuery = catalogQuery.trim().toLowerCase()
   const catalogCapabilities =
     data?.catalog.capabilities.filter((item) =>
@@ -423,9 +466,11 @@ export function SelfServiceApp() {
                 onClick={() => {
                   sessionStorage.removeItem("genioone.signed_out:/self-service")
                   setNotice(null)
-                  void beginBrowserLogin("/self-service").catch((error) =>
-                    setNotice(error instanceof Error ? error.message : "OIDC_FAILED"),
-                  )
+                  setNoticeIsError(false)
+                  void beginBrowserLogin("/self-service").catch((error) => {
+                    setNotice(error instanceof Error ? error.message : "OIDC_FAILED")
+                    setNoticeIsError(true)
+                  })
                 }}
               >
                 <LogInIcon data-icon="inline-start" />
@@ -458,41 +503,9 @@ export function SelfServiceApp() {
               </Button>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <SummaryCard icon={ShieldCheckIcon} label={t("Available capabilities")} value={data.catalog.capabilities.length} />
-              <SummaryCard icon={KeyRoundIcon} label={t("Active Entitlements")} value={activeEntitlements.length} />
-              <SummaryCard icon={Clock3Icon} label={t("Pending Requests")} value={pendingRequests.length} />
-              <SummaryCard icon={BellIcon} label={t("Access updates")} value={updateCount} />
-            </div>
+            {notice ? <p role={noticeIsError ? "alert" : "status"} className={`text-sm font-medium ${noticeIsError ? "text-destructive" : "text-primary"}`}>{t(notice)}</p> : null}
 
-            {notice ? <p role="status" className="text-sm font-medium text-primary">{t(notice)}</p> : null}
-
-            <AccessUpdates
-              requests={data.requests}
-              notifications={data.notifications}
-              onSelectRequest={setSelectedRequest}
-              display={display}
-            />
-
-            {data.configuration ? (
-              <Card>
-                <CardHeader className="border-b">
-                  <CardTitle>{data.configuration.settings.brand_name} · {t("Tenant configuration")}</CardTitle>
-                  <CardDescription>{t("Published revision {{revision}} · observed {{observed}} · {{status}}", {
-                    revision: data.configuration.revision,
-                    observed: data.configuration.projection.observed_revision ?? t("not converged"),
-                    status: t(data.configuration.projection.status),
-                  })}</CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-4 sm:grid-cols-3">
-                  <div className="rounded-lg border p-4"><div className="text-xs text-muted-foreground">{t("Language")}</div><div className="mt-1 font-medium">{data.configuration.settings.language}</div></div>
-                  <div className="rounded-lg border p-4"><div className="text-xs text-muted-foreground">{t("Catalog visibility")}</div><div className="mt-1 font-medium">{data.configuration.settings.catalog_visibility}</div></div>
-                  <div className="rounded-lg border p-4"><div className="text-xs text-muted-foreground">{t("Request TTL choices")}</div><div className="mt-1 font-medium">{data.configuration.settings.ttl_options_seconds.map((seconds) => `${Math.round(seconds / 3600)}h`).join(", ")}</div></div>
-                </CardContent>
-              </Card>
-            ) : null}
-
-            <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(22rem,0.7fr)]">
+            <div className={`grid gap-5 ${selected ? "xl:grid-cols-[minmax(0,1.5fr)_minmax(22rem,0.7fr)]" : ""}`}>
               <Card>
                 <CardHeader className="border-b">
                   <CardTitle><TitleHelp help={t("Hidden capabilities are omitted. Requestable capabilities remain discoverable.")}>{t("Catalog")}</TitleHelp></CardTitle>
@@ -516,7 +529,7 @@ export function SelfServiceApp() {
                         <TableHead>{t("Resource")}</TableHead>
                         <TableHead>{t("Capability")}</TableHead>
                         <TableHead>{t("Owner")}</TableHead>
-                        <TableHead>{t("Status")}</TableHead>
+                        <TableHead>{t("Access status")}</TableHead>
                         <TableHead className="text-right">{t("Action")}</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -528,7 +541,7 @@ export function SelfServiceApp() {
                           <TableCell>{item.resource_owner_display_name}</TableCell>
                           <TableCell>
                             <div className="space-y-1">
-                              <Badge variant={statusVariant(item.hub_status)}>{t(item.hub_status)}</Badge>
+                              <Badge variant={statusVariant(item.hub_status)}>{t(item.hub_status === "CONNECTED" ? "ENTITLED" : item.hub_status)}</Badge>
                               {item.hub_status === "DENIED" ? (
                                 <div className="max-w-72 text-xs text-muted-foreground">
                                   <p>{t("This capability is unavailable because organizational policy denies access.")}</p>
@@ -543,12 +556,12 @@ export function SelfServiceApp() {
                             <Button
                               size="sm"
                               variant="outline"
-                              disabled={busy || (item.hub_status !== "REQUEST_ACCESS" && item.access !== "AUTO_GRANT")}
-                              onClick={() => item.access === "AUTO_GRANT" ? void activateResource(item) : setSelected(item)}
+                              disabled={busy || (item.hub_status !== "REQUEST_ACCESS" && !(item.hub_status === "AVAILABLE" && item.access === "AUTO_GRANT"))}
+                              onClick={() => item.hub_status === "AVAILABLE" && item.access === "AUTO_GRANT" ? void activateResource(item) : setSelected(item)}
                             >
                               {item.hub_status === "REQUEST_ACCESS"
                                 ? t("Request")
-                                : item.access === "AUTO_GRANT"
+                                : item.hub_status === "AVAILABLE" && item.access === "AUTO_GRANT"
                                   ? t("Activate")
                                   : item.hub_status === "DENIED"
                                     ? t("Unavailable")
@@ -597,13 +610,12 @@ export function SelfServiceApp() {
                 </CardContent>
               </Card>
 
-              <Card>
+              {selected ? <Card>
                 <CardHeader className="border-b">
                   <CardTitle><TitleHelp help={t("A Resource Owner remains accountable for the decision.")}>{t("Request access")}</TitleHelp></CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {selected ? (
-                    <FieldGroup>
+                  <FieldGroup>
                       <Field>
                         <FieldLabel>{t("Resource / Capability")}</FieldLabel>
                         <Input value={`${selected.resource_display_name} / ${selected.capability_display_name}`} readOnly />
@@ -641,19 +653,19 @@ export function SelfServiceApp() {
                         </Button>
                         <Button variant="ghost" onClick={() => setSelected(null)}>{t("Cancel")}</Button>
                       </div>
-                    </FieldGroup>
-                  ) : (
-                    <Empty>
-                      <EmptyHeader>
-                        <EmptyMedia variant="icon"><KeyRoundIcon /></EmptyMedia>
-                        <EmptyTitle>{t("Select a requestable capability")}</EmptyTitle>
-                        <EmptyDescription>{t("Only capabilities marked Request Access can create a request.")}</EmptyDescription>
-                      </EmptyHeader>
-                    </Empty>
-                  )}
+                  </FieldGroup>
                 </CardContent>
-              </Card>
+              </Card> : null}
             </div>
+
+            {data.notifications.length ? (
+              <AccessUpdates
+                requests={data.requests}
+                notifications={data.notifications}
+                onSelectRequest={setSelectedRequest}
+                display={display}
+              />
+            ) : null}
 
             {data.onboardingRequests.length ? (
               <Card>
@@ -681,7 +693,7 @@ export function SelfServiceApp() {
                     <TableHeader><TableRow><TableHead>{t("Resource / Capability")}</TableHead><TableHead>{t("Status")}</TableHead><TableHead>{t("Valid until")}</TableHead></TableRow></TableHeader>
                     <TableBody>{data.entitlements.map((item) => {
                       const capability = display.capability(item.resource_id, item.capability_id)
-                      return <TableRow id={`entitlement-${item.entitlement_id}`} key={item.entitlement_id}><TableCell><div className="font-medium">{capability.resource}</div><div className="text-xs text-muted-foreground">{capability.capability}</div></TableCell><TableCell><Badge variant={item.state === "ACTIVE" ? "secondary" : "outline"}>{t(item.state)}</Badge></TableCell><TableCell>{relativeTime(item.valid_until)}</TableCell></TableRow>
+                      return <TableRow id={`entitlement-${item.entitlement_id}`} key={item.entitlement_id}><TableCell><div className="font-medium">{capability.resource}</div><div className="text-xs text-muted-foreground">{capability.capability}</div></TableCell><TableCell><Badge variant={item.state === "ACTIVE" ? "secondary" : "outline"}>{t(item.state)}</Badge></TableCell><TableCell>{item.valid_until === null ? t("No expiration") : relativeTime(item.valid_until)}</TableCell></TableRow>
                     })}</TableBody>
                   </Table>
                 ) : <EmptyState title={t("No Entitlements yet")} description={t("Approved access will appear here.")} />}
@@ -731,10 +743,6 @@ export function SelfServiceApp() {
       </main>
     </div>
   )
-}
-
-function SummaryCard({ icon: Icon, label, value }: { icon: typeof ShieldCheckIcon; label: string; value: number }) {
-  return <Card><CardHeader><CardAction><div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary"><Icon /></div></CardAction><CardDescription>{label}</CardDescription><CardTitle className="text-2xl tabular-nums">{value}</CardTitle></CardHeader></Card>
 }
 
 function EmptyState({ title, description }: { title: string; description: string }) {

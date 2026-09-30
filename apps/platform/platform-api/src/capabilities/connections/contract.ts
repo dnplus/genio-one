@@ -1,6 +1,7 @@
 import { ConnectorConfigurationSchema, validateConnectorConfiguration } from "../../../../../connectors/configuration"
 import { Type } from "typebox"
 import type { Static } from "typebox"
+import { Check } from "typebox/value"
 
 import { PlatformApiError } from "../errors"
 import {
@@ -130,11 +131,39 @@ const McpToolNamespaceSchema = Type.String({
   pattern: "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$",
 })
 
-const McpToolNameSchema = Type.String({
+export const McpToolNameSchema = Type.String({
   minLength: 1,
   maxLength: 256,
   pattern: "^[^\\u0000\\r\\n]+$",
 })
+
+export const McpToolInputSchemaSchema = Type.Object({}, {
+  additionalProperties: true,
+  maxProperties: 256,
+})
+
+export const McpToolReviewSchema = Type.Object({
+  tool_name: McpToolNameSchema,
+  source_revision_digest: Type.String({ pattern: "^[a-f0-9]{64}$" }),
+  execution_mode: Type.Literal("AUTO_READ_ONLY"),
+  source_read_only_hint: Type.Boolean(),
+  title: Type.Union([Type.String({ maxLength: 512 }), Type.Null()]),
+  description: Type.Union([Type.String({ maxLength: 16_384 }), Type.Null()]),
+  input_schema: McpToolInputSchemaSchema,
+  approved_by_subject_id: Identifier,
+  approved_at: Timestamp,
+}, { additionalProperties: false })
+
+export type McpToolReview = Static<typeof McpToolReviewSchema>
+
+export function canonicalizeMcpToolReviews(value: unknown): McpToolReview[] | null {
+  if (!Array.isArray(value) || value.length > 1024 || value.some((review) => !Check(McpToolReviewSchema, review))) {
+    return null
+  }
+  const reviews = value as McpToolReview[]
+  if (new Set(reviews.map((review) => review.tool_name)).size !== reviews.length) return null
+  return [...reviews].sort((left, right) => left.tool_name.localeCompare(right.tool_name))
+}
 
 export const ConnectionRegistrationSchema = Type.Object({
   connector_configuration: Type.Optional(ConnectorConfigurationSchema),
@@ -149,6 +178,7 @@ export const ConnectionRegistrationSchema = Type.Object({
   mcp_tool_namespace: Type.Optional(Type.Union([McpToolNamespaceSchema, Type.Null()])),
   mcp_selected_tools: Type.Array(McpToolNameSchema, { maxItems: 1024 }),
   mcp_tool_selection_operation_id: Type.Union([Identifier, Type.Null()]),
+  mcp_tool_reviews: Type.Array(McpToolReviewSchema, { maxItems: 1024 }),
   credential_ref: Type.Optional(Type.Union([Identifier, Type.Null()])),
   provider_credential_profile: Type.Optional(Type.Union([ProviderCredentialProfileBindingSchema, Type.Null()])),
   downstream_identity: DownstreamIdentityProjectionSchema,

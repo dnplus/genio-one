@@ -185,6 +185,7 @@ export function BotSettingsModal({
         (b) => b.resourceId === cap.resource_id && b.capabilityId === cap.capability_id,
       ) ?? null
       return {
+        builtinService: cap.builtin_service ?? null,
         resourceId: cap.resource_id,
         capabilityId: cap.capability_id,
         resourceDisplayName: cap.resource_display_name,

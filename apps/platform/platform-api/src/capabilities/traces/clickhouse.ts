@@ -16,6 +16,13 @@ interface TraceRow {
   resource_attributes?: Record<string, string>
 }
 
+function databaseIdentifier(value: string): string {
+  if (!/^[a-zA-Z0-9_]+$/.test(value)) {
+    throw new Error(`INVALID_CLICKHOUSE_DATABASE_NAME:${value}`)
+  }
+  return value
+}
+
 function quote(value: string): string {
   return `'${value.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`
 }
@@ -27,6 +34,14 @@ function quote(value: string): string {
 function integerParam<T extends number | undefined>(value: T, name: string): T {
   if (value === undefined) return value
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw Object.assign(new Error(`INVALID_TRACE_QUERY_PARAMETER:${name}`), { statusCode: 400 })
+  }
+  return value
+}
+
+function traceIdParam(value: string | undefined, name: string): string | undefined {
+  if (value === undefined) return value
+  if (typeof value !== "string" || !/^[a-f0-9]{32}$/.test(value)) {
     throw Object.assign(new Error(`INVALID_TRACE_QUERY_PARAMETER:${name}`), { statusCode: 400 })
   }
   return value
@@ -60,6 +75,7 @@ export function createClickHouseTraceStore(options: {
 }): TraceStore {
   const request = options.fetch ?? fetch
   const origin = options.origin.replace(/\/$/, "")
+  const database = databaseIdentifier(options.database)
   const authorization = `Basic ${Buffer.from(`${options.username}:${options.password}`).toString("base64")}`
   return {
     async spans({ tenantId, traceId, after, limit = 200 }) {
@@ -67,7 +83,7 @@ export function createClickHouseTraceStore(options: {
       const query = `select distinct TraceId as trace_id, SpanId as span_id, ParentSpanId as parent_span_id, SpanName as span_name, ServiceName as service_name,
         toUnixTimestamp64Milli(Timestamp) as started_at_millis, Duration as duration_nanos, StatusCode as status_code,
         SpanAttributes['genio.correlation.id'] as correlation_id, SpanAttributes as attributes, ResourceAttributes as resource_attributes
-        from ${options.database}.otel_traces where TraceId = ${quote(traceId)}
+        from ${database}.otel_traces where TraceId = ${quote(traceId)}
         and (ResourceAttributes['genio.tenant.id'] = ${quote(tenantId)} or SpanAttributes['genio.tenant.id'] = ${quote(tenantId)})
         ${after ? `and SpanId > ${quote(after)}` : ""} order by SpanId limit 1 by SpanId limit ${limit + 1} settings max_block_size=128, max_threads=2 format JSONEachRow`
       const response = await request(`${origin}/`, { method: "POST", headers: { authorization, "content-type": "text/plain" }, body: query, signal: AbortSignal.timeout(30000) })
@@ -101,7 +117,7 @@ export function createClickHouseTraceStore(options: {
         toString(toUnixTimestamp64Nano(Timestamp)) as timestamp_nanos, toUnixTimestamp64Milli(Timestamp) as timestamp_millis,
         ServiceName as service, SeverityText as severity, ${record_id ? "Body" : "substringUTF8(Body, 1, 160)"} as body, ${record_id ? "true" : "false"} as details_loaded, TraceId as trace_id, SpanId as span_id,
         LogAttributes['genio.correlation.id'] as correlation_id, ${record_id ? "LogAttributes" : "NULL"} as attributes, ${record_id ? "ResourceAttributes" : "NULL"} as resource_attributes
-        from ${options.database}.otel_logs where ${conditions.join(" and ")} order by Timestamp desc, record_id desc limit ${limit + 1} settings max_block_size=128, max_threads=2 format JSONEachRow`
+        from ${database}.otel_logs where ${conditions.join(" and ")} order by Timestamp desc, record_id desc limit ${limit + 1} settings max_block_size=128, max_threads=2 format JSONEachRow`
       const response = await request(`${origin}/`, { method: "POST", headers: { authorization, "content-type": "text/plain" }, body: query, signal: AbortSignal.timeout(30000) })
       if (!response.ok) throw new Error(`CLICKHOUSE_LOG_QUERY_FAILED:${response.status}`)
       const rows = (await response.text()).split("\n").filter(Boolean).map(line => JSON.parse(line) as TelemetryLog)
@@ -110,7 +126,11 @@ export function createClickHouseTraceStore(options: {
       return { records, next_cursor: rows.length > limit && last ? Buffer.from(JSON.stringify({ timestamp: last.timestamp_nanos, id: last.record_id })).toString("base64url") : null }
     },
     async list({ tenantId, limit, before, beforeTraceId, correlationId, search, from, until }) {
-      limit = integerParam(limit, "limit")
+      // `limit` stays required. HTTP already turns an omitted query into 20;
+      // this store must not rewrite a missing or invalid value into that default,
+      // or Math.min/max would emit NaN into the SQL text.
+      limit = integerParam(limit ?? Number.NaN, "limit")
+      beforeTraceId = traceIdParam(beforeTraceId, "beforeTraceId")
       before = integerParam(before, "before")
       from = integerParam(from, "from")
       until = integerParam(until, "until")
@@ -134,11 +154,11 @@ export function createClickHouseTraceStore(options: {
           SpanAttributes['genio.correlation.id'] as correlation_id,
           SpanAttributes as attributes,
           ResourceAttributes as resource_attributes
-        from ${options.database}.otel_traces
+        from ${database}.otel_traces
         where (ResourceAttributes['genio.tenant.id'] = ${quote(tenantId)} or SpanAttributes['genio.tenant.id'] = ${quote(tenantId)})
           and TraceId in (
           select TraceId
-          from ${options.database}.otel_traces
+          from ${database}.otel_traces
           where ${conditions.join(" and ")}
           group by TraceId
           ${having.length ? `having ${having.join(" and ")}` : ""}

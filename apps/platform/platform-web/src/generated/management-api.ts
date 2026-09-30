@@ -2579,6 +2579,7 @@ export type UpdateResource200 = {
 };
 
 export const TransitionResourceLifecycleBodyLifecycle = {  DRAFT: 'DRAFT',
+  PUBLISHED: 'PUBLISHED',
   DEPRECATED: 'DEPRECATED',
   RETIRED: 'RETIRED',
 } as const
@@ -5774,6 +5775,38 @@ export const ObserveRuntimeConnectionHealthBatch200ItemConnectionKind = {  LLM: 
   MCP: 'MCP',
   API: 'API',
 } as const
+export type ObserveRuntimeConnectionHealthBatch200ItemMcpToolReviewsItemExecutionMode = typeof ObserveRuntimeConnectionHealthBatch200ItemMcpToolReviewsItemExecutionMode[keyof typeof ObserveRuntimeConnectionHealthBatch200ItemMcpToolReviewsItemExecutionMode];
+
+
+export const ObserveRuntimeConnectionHealthBatch200ItemMcpToolReviewsItemExecutionMode = {
+  AUTO_READ_ONLY: 'AUTO_READ_ONLY',
+} as const;
+
+export type ObserveRuntimeConnectionHealthBatch200ItemMcpToolReviewsItemInputSchema = { [key: string]: unknown };
+
+export type ObserveRuntimeConnectionHealthBatch200ItemMcpToolReviewsItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[^\u0000\r\n]+$
+     */
+  tool_name: string;
+  /** @pattern ^[a-f0-9]{64}$ */
+  source_revision_digest: string;
+  execution_mode: ObserveRuntimeConnectionHealthBatch200ItemMcpToolReviewsItemExecutionMode;
+  source_read_only_hint: boolean;
+  title: string | null;
+  description: string | null;
+  input_schema: ObserveRuntimeConnectionHealthBatch200ItemMcpToolReviewsItemInputSchema;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  approved_by_subject_id: string;
+  /** @minimum 0 */
+  approved_at: number;
+};
+
 export type ObserveRuntimeConnectionHealthBatch200ItemProviderCredentialProfile = {
   /**
      * @minLength 1
@@ -5959,6 +5992,8 @@ export type ObserveRuntimeConnectionHealthBatch200Item = {
      */
   mcp_selected_tools: string[];
   mcp_tool_selection_operation_id: string | null;
+  /** @maxItems 1024 */
+  mcp_tool_reviews: ObserveRuntimeConnectionHealthBatch200ItemMcpToolReviewsItem[];
   credential_ref?: string | null;
   provider_credential_profile?: ObserveRuntimeConnectionHealthBatch200ItemProviderCredentialProfile;
   downstream_identity: ObserveRuntimeConnectionHealthBatch200ItemDownstreamIdentity;
@@ -6051,6 +6086,38 @@ export const ListResourceConnections200ItemConnectionKind = {  LLM: 'LLM',
   MCP: 'MCP',
   API: 'API',
 } as const
+export type ListResourceConnections200ItemMcpToolReviewsItemExecutionMode = typeof ListResourceConnections200ItemMcpToolReviewsItemExecutionMode[keyof typeof ListResourceConnections200ItemMcpToolReviewsItemExecutionMode];
+
+
+export const ListResourceConnections200ItemMcpToolReviewsItemExecutionMode = {
+  AUTO_READ_ONLY: 'AUTO_READ_ONLY',
+} as const;
+
+export type ListResourceConnections200ItemMcpToolReviewsItemInputSchema = { [key: string]: unknown };
+
+export type ListResourceConnections200ItemMcpToolReviewsItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[^\u0000\r\n]+$
+     */
+  tool_name: string;
+  /** @pattern ^[a-f0-9]{64}$ */
+  source_revision_digest: string;
+  execution_mode: ListResourceConnections200ItemMcpToolReviewsItemExecutionMode;
+  source_read_only_hint: boolean;
+  title: string | null;
+  description: string | null;
+  input_schema: ListResourceConnections200ItemMcpToolReviewsItemInputSchema;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  approved_by_subject_id: string;
+  /** @minimum 0 */
+  approved_at: number;
+};
+
 export type ListResourceConnections200ItemProviderCredentialProfile = {
   /**
      * @minLength 1
@@ -6236,6 +6303,8 @@ export type ListResourceConnections200Item = {
      */
   mcp_selected_tools: string[];
   mcp_tool_selection_operation_id: string | null;
+  /** @maxItems 1024 */
+  mcp_tool_reviews: ListResourceConnections200ItemMcpToolReviewsItem[];
   credential_ref?: string | null;
   provider_credential_profile?: ListResourceConnections200ItemProviderCredentialProfile;
   downstream_identity: ListResourceConnections200ItemDownstreamIdentity;
@@ -6555,6 +6624,38 @@ export const CreateResourceConnection201ConnectionKind = {  LLM: 'LLM',
   MCP: 'MCP',
   API: 'API',
 } as const
+export type CreateResourceConnection201McpToolReviewsItemExecutionMode = typeof CreateResourceConnection201McpToolReviewsItemExecutionMode[keyof typeof CreateResourceConnection201McpToolReviewsItemExecutionMode];
+
+
+export const CreateResourceConnection201McpToolReviewsItemExecutionMode = {
+  AUTO_READ_ONLY: 'AUTO_READ_ONLY',
+} as const;
+
+export type CreateResourceConnection201McpToolReviewsItemInputSchema = { [key: string]: unknown };
+
+export type CreateResourceConnection201McpToolReviewsItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[^\u0000\r\n]+$
+     */
+  tool_name: string;
+  /** @pattern ^[a-f0-9]{64}$ */
+  source_revision_digest: string;
+  execution_mode: CreateResourceConnection201McpToolReviewsItemExecutionMode;
+  source_read_only_hint: boolean;
+  title: string | null;
+  description: string | null;
+  input_schema: CreateResourceConnection201McpToolReviewsItemInputSchema;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  approved_by_subject_id: string;
+  /** @minimum 0 */
+  approved_at: number;
+};
+
 export type CreateResourceConnection201ProviderCredentialProfile = {
   /**
      * @minLength 1
@@ -6740,6 +6841,8 @@ export type CreateResourceConnection201 = {
      */
   mcp_selected_tools: string[];
   mcp_tool_selection_operation_id: string | null;
+  /** @maxItems 1024 */
+  mcp_tool_reviews: CreateResourceConnection201McpToolReviewsItem[];
   credential_ref?: string | null;
   provider_credential_profile?: CreateResourceConnection201ProviderCredentialProfile;
   downstream_identity: CreateResourceConnection201DownstreamIdentity;
@@ -7025,6 +7128,38 @@ export const UpdateResourceConnection200ConnectionKind = {  LLM: 'LLM',
   MCP: 'MCP',
   API: 'API',
 } as const
+export type UpdateResourceConnection200McpToolReviewsItemExecutionMode = typeof UpdateResourceConnection200McpToolReviewsItemExecutionMode[keyof typeof UpdateResourceConnection200McpToolReviewsItemExecutionMode];
+
+
+export const UpdateResourceConnection200McpToolReviewsItemExecutionMode = {
+  AUTO_READ_ONLY: 'AUTO_READ_ONLY',
+} as const;
+
+export type UpdateResourceConnection200McpToolReviewsItemInputSchema = { [key: string]: unknown };
+
+export type UpdateResourceConnection200McpToolReviewsItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[^\u0000\r\n]+$
+     */
+  tool_name: string;
+  /** @pattern ^[a-f0-9]{64}$ */
+  source_revision_digest: string;
+  execution_mode: UpdateResourceConnection200McpToolReviewsItemExecutionMode;
+  source_read_only_hint: boolean;
+  title: string | null;
+  description: string | null;
+  input_schema: UpdateResourceConnection200McpToolReviewsItemInputSchema;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  approved_by_subject_id: string;
+  /** @minimum 0 */
+  approved_at: number;
+};
+
 export type UpdateResourceConnection200ProviderCredentialProfile = {
   /**
      * @minLength 1
@@ -7210,6 +7345,8 @@ export type UpdateResourceConnection200 = {
      */
   mcp_selected_tools: string[];
   mcp_tool_selection_operation_id: string | null;
+  /** @maxItems 1024 */
+  mcp_tool_reviews: UpdateResourceConnection200McpToolReviewsItem[];
   credential_ref?: string | null;
   provider_credential_profile?: UpdateResourceConnection200ProviderCredentialProfile;
   downstream_identity: UpdateResourceConnection200DownstreamIdentity;
@@ -7312,6 +7449,38 @@ export const UpdateResourceConnectionCertificate200ConnectionKind = {  LLM: 'LLM
   MCP: 'MCP',
   API: 'API',
 } as const
+export type UpdateResourceConnectionCertificate200McpToolReviewsItemExecutionMode = typeof UpdateResourceConnectionCertificate200McpToolReviewsItemExecutionMode[keyof typeof UpdateResourceConnectionCertificate200McpToolReviewsItemExecutionMode];
+
+
+export const UpdateResourceConnectionCertificate200McpToolReviewsItemExecutionMode = {
+  AUTO_READ_ONLY: 'AUTO_READ_ONLY',
+} as const;
+
+export type UpdateResourceConnectionCertificate200McpToolReviewsItemInputSchema = { [key: string]: unknown };
+
+export type UpdateResourceConnectionCertificate200McpToolReviewsItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[^\u0000\r\n]+$
+     */
+  tool_name: string;
+  /** @pattern ^[a-f0-9]{64}$ */
+  source_revision_digest: string;
+  execution_mode: UpdateResourceConnectionCertificate200McpToolReviewsItemExecutionMode;
+  source_read_only_hint: boolean;
+  title: string | null;
+  description: string | null;
+  input_schema: UpdateResourceConnectionCertificate200McpToolReviewsItemInputSchema;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  approved_by_subject_id: string;
+  /** @minimum 0 */
+  approved_at: number;
+};
+
 export type UpdateResourceConnectionCertificate200ProviderCredentialProfile = {
   /**
      * @minLength 1
@@ -7497,6 +7666,8 @@ export type UpdateResourceConnectionCertificate200 = {
      */
   mcp_selected_tools: string[];
   mcp_tool_selection_operation_id: string | null;
+  /** @maxItems 1024 */
+  mcp_tool_reviews: UpdateResourceConnectionCertificate200McpToolReviewsItem[];
   credential_ref?: string | null;
   provider_credential_profile?: UpdateResourceConnectionCertificate200ProviderCredentialProfile;
   downstream_identity: UpdateResourceConnectionCertificate200DownstreamIdentity;
@@ -7613,6 +7784,38 @@ export const VerifyResourceConnection200ConnectionKind = {  LLM: 'LLM',
   MCP: 'MCP',
   API: 'API',
 } as const
+export type VerifyResourceConnection200McpToolReviewsItemExecutionMode = typeof VerifyResourceConnection200McpToolReviewsItemExecutionMode[keyof typeof VerifyResourceConnection200McpToolReviewsItemExecutionMode];
+
+
+export const VerifyResourceConnection200McpToolReviewsItemExecutionMode = {
+  AUTO_READ_ONLY: 'AUTO_READ_ONLY',
+} as const;
+
+export type VerifyResourceConnection200McpToolReviewsItemInputSchema = { [key: string]: unknown };
+
+export type VerifyResourceConnection200McpToolReviewsItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[^\u0000\r\n]+$
+     */
+  tool_name: string;
+  /** @pattern ^[a-f0-9]{64}$ */
+  source_revision_digest: string;
+  execution_mode: VerifyResourceConnection200McpToolReviewsItemExecutionMode;
+  source_read_only_hint: boolean;
+  title: string | null;
+  description: string | null;
+  input_schema: VerifyResourceConnection200McpToolReviewsItemInputSchema;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  approved_by_subject_id: string;
+  /** @minimum 0 */
+  approved_at: number;
+};
+
 export type VerifyResourceConnection200ProviderCredentialProfile = {
   /**
      * @minLength 1
@@ -7798,6 +8001,8 @@ export type VerifyResourceConnection200 = {
      */
   mcp_selected_tools: string[];
   mcp_tool_selection_operation_id: string | null;
+  /** @maxItems 1024 */
+  mcp_tool_reviews: VerifyResourceConnection200McpToolReviewsItem[];
   credential_ref?: string | null;
   provider_credential_profile?: VerifyResourceConnection200ProviderCredentialProfile;
   downstream_identity: VerifyResourceConnection200DownstreamIdentity;
@@ -7901,6 +8106,38 @@ export const UpdateConnectionMcpRouting200ConnectionKind = {  LLM: 'LLM',
   MCP: 'MCP',
   API: 'API',
 } as const
+export type UpdateConnectionMcpRouting200McpToolReviewsItemExecutionMode = typeof UpdateConnectionMcpRouting200McpToolReviewsItemExecutionMode[keyof typeof UpdateConnectionMcpRouting200McpToolReviewsItemExecutionMode];
+
+
+export const UpdateConnectionMcpRouting200McpToolReviewsItemExecutionMode = {
+  AUTO_READ_ONLY: 'AUTO_READ_ONLY',
+} as const;
+
+export type UpdateConnectionMcpRouting200McpToolReviewsItemInputSchema = { [key: string]: unknown };
+
+export type UpdateConnectionMcpRouting200McpToolReviewsItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[^\u0000\r\n]+$
+     */
+  tool_name: string;
+  /** @pattern ^[a-f0-9]{64}$ */
+  source_revision_digest: string;
+  execution_mode: UpdateConnectionMcpRouting200McpToolReviewsItemExecutionMode;
+  source_read_only_hint: boolean;
+  title: string | null;
+  description: string | null;
+  input_schema: UpdateConnectionMcpRouting200McpToolReviewsItemInputSchema;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  approved_by_subject_id: string;
+  /** @minimum 0 */
+  approved_at: number;
+};
+
 export type UpdateConnectionMcpRouting200ProviderCredentialProfile = {
   /**
      * @minLength 1
@@ -8086,6 +8323,8 @@ export type UpdateConnectionMcpRouting200 = {
      */
   mcp_selected_tools: string[];
   mcp_tool_selection_operation_id: string | null;
+  /** @maxItems 1024 */
+  mcp_tool_reviews: UpdateConnectionMcpRouting200McpToolReviewsItem[];
   credential_ref?: string | null;
   provider_credential_profile?: UpdateConnectionMcpRouting200ProviderCredentialProfile;
   downstream_identity: UpdateConnectionMcpRouting200DownstreamIdentity;
@@ -8196,6 +8435,38 @@ export const TransitionResourceConnectionLifecycle200ConnectionKind = {  LLM: 'L
   MCP: 'MCP',
   API: 'API',
 } as const
+export type TransitionResourceConnectionLifecycle200McpToolReviewsItemExecutionMode = typeof TransitionResourceConnectionLifecycle200McpToolReviewsItemExecutionMode[keyof typeof TransitionResourceConnectionLifecycle200McpToolReviewsItemExecutionMode];
+
+
+export const TransitionResourceConnectionLifecycle200McpToolReviewsItemExecutionMode = {
+  AUTO_READ_ONLY: 'AUTO_READ_ONLY',
+} as const;
+
+export type TransitionResourceConnectionLifecycle200McpToolReviewsItemInputSchema = { [key: string]: unknown };
+
+export type TransitionResourceConnectionLifecycle200McpToolReviewsItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[^\u0000\r\n]+$
+     */
+  tool_name: string;
+  /** @pattern ^[a-f0-9]{64}$ */
+  source_revision_digest: string;
+  execution_mode: TransitionResourceConnectionLifecycle200McpToolReviewsItemExecutionMode;
+  source_read_only_hint: boolean;
+  title: string | null;
+  description: string | null;
+  input_schema: TransitionResourceConnectionLifecycle200McpToolReviewsItemInputSchema;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  approved_by_subject_id: string;
+  /** @minimum 0 */
+  approved_at: number;
+};
+
 export type TransitionResourceConnectionLifecycle200ProviderCredentialProfile = {
   /**
      * @minLength 1
@@ -8381,6 +8652,8 @@ export type TransitionResourceConnectionLifecycle200 = {
      */
   mcp_selected_tools: string[];
   mcp_tool_selection_operation_id: string | null;
+  /** @maxItems 1024 */
+  mcp_tool_reviews: TransitionResourceConnectionLifecycle200McpToolReviewsItem[];
   credential_ref?: string | null;
   provider_credential_profile?: TransitionResourceConnectionLifecycle200ProviderCredentialProfile;
   downstream_identity: TransitionResourceConnectionLifecycle200DownstreamIdentity;
@@ -8491,6 +8764,38 @@ export const ObserveResourceConnectionHealth200ConnectionKind = {  LLM: 'LLM',
   MCP: 'MCP',
   API: 'API',
 } as const
+export type ObserveResourceConnectionHealth200McpToolReviewsItemExecutionMode = typeof ObserveResourceConnectionHealth200McpToolReviewsItemExecutionMode[keyof typeof ObserveResourceConnectionHealth200McpToolReviewsItemExecutionMode];
+
+
+export const ObserveResourceConnectionHealth200McpToolReviewsItemExecutionMode = {
+  AUTO_READ_ONLY: 'AUTO_READ_ONLY',
+} as const;
+
+export type ObserveResourceConnectionHealth200McpToolReviewsItemInputSchema = { [key: string]: unknown };
+
+export type ObserveResourceConnectionHealth200McpToolReviewsItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[^\u0000\r\n]+$
+     */
+  tool_name: string;
+  /** @pattern ^[a-f0-9]{64}$ */
+  source_revision_digest: string;
+  execution_mode: ObserveResourceConnectionHealth200McpToolReviewsItemExecutionMode;
+  source_read_only_hint: boolean;
+  title: string | null;
+  description: string | null;
+  input_schema: ObserveResourceConnectionHealth200McpToolReviewsItemInputSchema;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  approved_by_subject_id: string;
+  /** @minimum 0 */
+  approved_at: number;
+};
+
 export type ObserveResourceConnectionHealth200ProviderCredentialProfile = {
   /**
      * @minLength 1
@@ -8676,6 +8981,8 @@ export type ObserveResourceConnectionHealth200 = {
      */
   mcp_selected_tools: string[];
   mcp_tool_selection_operation_id: string | null;
+  /** @maxItems 1024 */
+  mcp_tool_reviews: ObserveResourceConnectionHealth200McpToolReviewsItem[];
   credential_ref?: string | null;
   provider_credential_profile?: ObserveResourceConnectionHealth200ProviderCredentialProfile;
   downstream_identity: ObserveResourceConnectionHealth200DownstreamIdentity;
@@ -8779,6 +9086,8 @@ export type RequestMcpDiscovery202DownstreamIdentity = {
   oauth_client?: RequestMcpDiscovery202DownstreamIdentityOauthClient;
 };
 
+export type RequestMcpDiscovery202ObservationToolsItemInputSchema = { [key: string]: unknown };
+
 export type RequestMcpDiscovery202ObservationToolsItem = {
   /**
      * @minLength 1
@@ -8787,6 +9096,8 @@ export type RequestMcpDiscovery202ObservationToolsItem = {
   name: string;
   title: string | null;
   description: string | null;
+  input_schema?: RequestMcpDiscovery202ObservationToolsItemInputSchema;
+  read_only_hint?: boolean;
 };
 
 export type RequestMcpDiscovery202Observation = {
@@ -8963,6 +9274,8 @@ export type GetLatestMcpDiscovery200DownstreamIdentity = {
   oauth_client?: GetLatestMcpDiscovery200DownstreamIdentityOauthClient;
 };
 
+export type GetLatestMcpDiscovery200ObservationToolsItemInputSchema = { [key: string]: unknown };
+
 export type GetLatestMcpDiscovery200ObservationToolsItem = {
   /**
      * @minLength 1
@@ -8971,6 +9284,8 @@ export type GetLatestMcpDiscovery200ObservationToolsItem = {
   name: string;
   title: string | null;
   description: string | null;
+  input_schema?: GetLatestMcpDiscovery200ObservationToolsItemInputSchema;
+  read_only_hint?: boolean;
 };
 
 export type GetLatestMcpDiscovery200Observation = {
@@ -9157,6 +9472,8 @@ export type DecideMcpDiscoveryCandidate200DownstreamIdentity = {
   oauth_client?: DecideMcpDiscoveryCandidate200DownstreamIdentityOauthClient;
 };
 
+export type DecideMcpDiscoveryCandidate200ObservationToolsItemInputSchema = { [key: string]: unknown };
+
 export type DecideMcpDiscoveryCandidate200ObservationToolsItem = {
   /**
      * @minLength 1
@@ -9165,6 +9482,8 @@ export type DecideMcpDiscoveryCandidate200ObservationToolsItem = {
   name: string;
   title: string | null;
   description: string | null;
+  input_schema?: DecideMcpDiscoveryCandidate200ObservationToolsItemInputSchema;
+  read_only_hint?: boolean;
 };
 
 export type DecideMcpDiscoveryCandidate200Observation = {
@@ -9277,6 +9596,203 @@ export type DecideMcpDiscoveryCandidate200 = {
   updated_at: number;
 };
 
+export const DecideMcpReadOnlyApprovalBodyExecutionMode = {  AUTO_READ_ONLY: 'AUTO_READ_ONLY',
+  REQUIRE_CONFIRMATION: 'REQUIRE_CONFIRMATION',
+} as const
+export type DecideMcpReadOnlyApprovalBody = {
+  /** @pattern ^[a-f0-9]{64}$ */
+  expected_revision_digest: string;
+  execution_mode: typeof DecideMcpReadOnlyApprovalBodyExecutionMode[keyof typeof DecideMcpReadOnlyApprovalBodyExecutionMode];
+};
+
+export const DecideMcpReadOnlyApproval200State = {  PENDING: 'PENDING',
+  RUNNING: 'RUNNING',
+  SUCCEEDED: 'SUCCEEDED',
+  FAILED: 'FAILED',
+} as const
+export const DecideMcpReadOnlyApproval200DownstreamIdentityMode = {  NONE: 'NONE',
+  SERVICE: 'SERVICE',
+  USER_PASSTHROUGH: 'USER_PASSTHROUGH',
+  USER_OAUTH: 'USER_OAUTH',
+  USER_PASSWORD: 'USER_PASSWORD',
+} as const
+export const DecideMcpReadOnlyApproval200DownstreamIdentityAuthentication = {  API_KEY: 'API_KEY',
+  PROVIDER_CREDENTIAL_PROFILE: 'PROVIDER_CREDENTIAL_PROFILE',
+} as const
+export type DecideMcpReadOnlyApproval200DownstreamIdentityForwardHeadersItem = {
+  /**
+     * @minLength 1
+     * @maxLength 128
+     * @pattern ^[A-Za-z0-9-]+$
+     */
+  name: string;
+};
+
+export type DecideMcpReadOnlyApproval200DownstreamIdentityOauthClient = {
+  /**
+     * @minLength 1
+     * @maxLength 2048
+     */
+  issuer: string;
+  /**
+     * @minLength 1
+     * @maxLength 2048
+     */
+  authorization_endpoint: string;
+  /**
+     * @minLength 1
+     * @maxLength 2048
+     */
+  token_endpoint: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  client_id: string;
+  /**
+     * @maxItems 64
+     * @items.minLength 1
+     * @items.maxLength 256
+     * @items.pattern ^[^\s]+$
+     */
+  scopes: string[];
+};
+
+export type DecideMcpReadOnlyApproval200DownstreamIdentity = {
+  mode: typeof DecideMcpReadOnlyApproval200DownstreamIdentityMode[keyof typeof DecideMcpReadOnlyApproval200DownstreamIdentityMode];
+  authentication?: typeof DecideMcpReadOnlyApproval200DownstreamIdentityAuthentication[keyof typeof DecideMcpReadOnlyApproval200DownstreamIdentityAuthentication];
+  /**
+     * @minItems 1
+     * @maxItems 1
+     */
+  forward_headers?: DecideMcpReadOnlyApproval200DownstreamIdentityForwardHeadersItem[];
+  oauth_client?: DecideMcpReadOnlyApproval200DownstreamIdentityOauthClient;
+};
+
+export type DecideMcpReadOnlyApproval200ObservationToolsItemInputSchema = { [key: string]: unknown };
+
+export type DecideMcpReadOnlyApproval200ObservationToolsItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  name: string;
+  title: string | null;
+  description: string | null;
+  input_schema?: DecideMcpReadOnlyApproval200ObservationToolsItemInputSchema;
+  read_only_hint?: boolean;
+};
+
+export type DecideMcpReadOnlyApproval200Observation = {
+  /**
+     * @minLength 1
+     * @maxLength 64
+     */
+  protocol_version: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  server_name: string;
+  server_version: string | null;
+  /** @maxItems 1024 */
+  tools: DecideMcpReadOnlyApproval200ObservationToolsItem[];
+} | null;
+
+export const DecideMcpReadOnlyApproval200CandidatesItemState = {  NEW: 'NEW',
+  PUBLISHED: 'PUBLISHED',
+  IGNORED: 'IGNORED',
+  BLOCKED: 'BLOCKED',
+} as const
+export type DecideMcpReadOnlyApproval200CandidatesItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[^\u0000\r\n]+$
+     */
+  candidate_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[^\u0000\r\n]+$
+     */
+  capability_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[^\u0000\r\n]+$
+     */
+  tool_name: string;
+  /** @pattern ^[a-f0-9]{64}$ */
+  revision_digest: string;
+  state: typeof DecideMcpReadOnlyApproval200CandidatesItemState[keyof typeof DecideMcpReadOnlyApproval200CandidatesItemState];
+};
+
+export type DecideMcpReadOnlyApproval200 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[^\u0000\r\n]+$
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[^\u0000\r\n]+$
+     */
+  operation_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[^\u0000\r\n]+$
+     */
+  gateway_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[^\u0000\r\n]+$
+     */
+  resource_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[^\u0000\r\n]+$
+     */
+  connection_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[^\u0000\r\n]+$
+     */
+  requested_by_subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[^\u0000\r\n]+$
+     */
+  correlation_id: string;
+  state: typeof DecideMcpReadOnlyApproval200State[keyof typeof DecideMcpReadOnlyApproval200State];
+  runtime_id: string | null;
+  /**
+     * @minLength 1
+     * @maxLength 2048
+     */
+  endpoint: string;
+  credential_ref: string | null;
+  downstream_identity: DecideMcpReadOnlyApproval200DownstreamIdentity;
+  observation: DecideMcpReadOnlyApproval200Observation;
+  /** @maxItems 1024 */
+  candidates: DecideMcpReadOnlyApproval200CandidatesItem[];
+  error_code: string | null;
+  error_message: string | null;
+  /** @minimum 0 */
+  created_at: number;
+  claimed_at: number | null;
+  completed_at: number | null;
+  /** @minimum 0 */
+  updated_at: number;
+};
+
 export const ClaimMcpDiscoveryOperation200State = {  PENDING: 'PENDING',
   RUNNING: 'RUNNING',
   SUCCEEDED: 'SUCCEEDED',
@@ -9341,6 +9857,8 @@ export type ClaimMcpDiscoveryOperation200DownstreamIdentity = {
   oauth_client?: ClaimMcpDiscoveryOperation200DownstreamIdentityOauthClient;
 };
 
+export type ClaimMcpDiscoveryOperation200ObservationToolsItemInputSchema = { [key: string]: unknown };
+
 export type ClaimMcpDiscoveryOperation200ObservationToolsItem = {
   /**
      * @minLength 1
@@ -9349,6 +9867,8 @@ export type ClaimMcpDiscoveryOperation200ObservationToolsItem = {
   name: string;
   title: string | null;
   description: string | null;
+  input_schema?: ClaimMcpDiscoveryOperation200ObservationToolsItemInputSchema;
+  read_only_hint?: boolean;
 };
 
 export type ClaimMcpDiscoveryOperation200Observation = {
@@ -9484,6 +10004,8 @@ export type CompleteMcpDiscoveryOperationBody = {
   name: string;
   title: string | null;
   description: string | null;
+  input_schema?: { [key: string]: unknown };
+  read_only_hint?: boolean;
 })[];
 };
 } | {
@@ -9565,6 +10087,8 @@ export type CompleteMcpDiscoveryOperation200DownstreamIdentity = {
   oauth_client?: CompleteMcpDiscoveryOperation200DownstreamIdentityOauthClient;
 };
 
+export type CompleteMcpDiscoveryOperation200ObservationToolsItemInputSchema = { [key: string]: unknown };
+
 export type CompleteMcpDiscoveryOperation200ObservationToolsItem = {
   /**
      * @minLength 1
@@ -9573,6 +10097,8 @@ export type CompleteMcpDiscoveryOperation200ObservationToolsItem = {
   name: string;
   title: string | null;
   description: string | null;
+  input_schema?: CompleteMcpDiscoveryOperation200ObservationToolsItemInputSchema;
+  read_only_hint?: boolean;
 };
 
 export type CompleteMcpDiscoveryOperation200Observation = {
@@ -9879,6 +10405,45 @@ export type PostV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdAuth
   authorization_url: string;
   /** @minimum 0 */
   expires_at: number;
+};
+
+export type PostV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscoveryBody = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     * @pattern ^[^\u0000\r\n]+$
+     */
+  correlation_id: string;
+};
+
+export const PostV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscovery202State = {  PENDING: 'PENDING',
+  RUNNING: 'RUNNING',
+  SUCCEEDED: 'SUCCEEDED',
+  FAILED: 'FAILED',
+} as const
+export type PostV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscovery202 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  operation_id: string;
+  state: typeof PostV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscovery202State[keyof typeof PostV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscovery202State];
+  error_code: string | null;
+};
+
+export const GetV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscoveryOperationId200State = {  PENDING: 'PENDING',
+  RUNNING: 'RUNNING',
+  SUCCEEDED: 'SUCCEEDED',
+  FAILED: 'FAILED',
+} as const
+export type GetV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscoveryOperationId200 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  operation_id: string;
+  state: typeof GetV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscoveryOperationId200State[keyof typeof GetV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscoveryOperationId200State];
+  error_code: string | null;
 };
 
 export const ListProviderProfiles200ItemProviderType = {  GENERIC_OPENAI_COMPATIBLE: 'GENERIC_OPENAI_COMPATIBLE',
@@ -24317,6 +24882,34 @@ export type CompileGatewayProjection200 = ({
   response_filter_order: string[];
 };
 };
+  /** @maxItems 1024 */
+  mcp_tool_definitions?: ({
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  resource_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  connection_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  canonical_tool_name: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  exposed_tool_name: string;
+  /** @pattern ^[a-f0-9]{64}$ */
+  source_revision_digest: string;
+  description: string | null;
+  input_schema: {[key: string]: unknown};
+  read_only: true;
+})[];
 }) & ({
   operation: 'APPLY';
   /** @minItems 1 */
@@ -24644,6 +25237,34 @@ export type CompileGatewayProjection200 = ({
   response_filter_order: string[];
 };
 };
+  /** @maxItems 1024 */
+  mcp_tool_definitions?: ({
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  resource_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  connection_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  canonical_tool_name: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  exposed_tool_name: string;
+  /** @pattern ^[a-f0-9]{64}$ */
+  source_revision_digest: string;
+  description: string | null;
+  input_schema: {[key: string]: unknown};
+  read_only: true;
+})[];
 }) & ({
   operation: 'DELETE';
   /** @maxItems 0 */
@@ -29583,6 +30204,123 @@ export type ListGatewayAuthorizationAuditEvents200 = (({
   after_revision: number;
   /** @minimum 0 */
   occurred_at: number;
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  audit_event_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  correlation_id: string;
+  kind: 'ACCESS_GOVERNANCE_CHANGE';
+  outcome: 'SUCCESS';
+  subject: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  subject_id: string;
+  evidence_level: 'VERIFIED';
+};
+  actor_subject: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  subject_id: string;
+  evidence_level: 'VERIFIED';
+};
+  acting_client: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  acting_client_id: string;
+  evidence_level: 'VERIFIED';
+};
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  resource_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  capability_id: string;
+  access_request_id: string | null;
+  entitlement_id: string | null;
+  operation: 'CREATED' | 'DENY' | 'APPROVE' | 'REVOKE' | 'CANCEL';
+  /** @minimum 0 */
+  occurred_at: number;
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  audit_event_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  correlation_id: string;
+  kind: 'AUTO_GRANT_ACTIVATION';
+  outcome: 'SUCCESS';
+  activation: 'GRANTED' | 'ALREADY_ENTITLED';
+  subject: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  subject_id: string;
+  evidence_level: 'VERIFIED';
+};
+  actor_subject: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  subject_id: string;
+  evidence_level: 'VERIFIED';
+};
+  acting_client: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  acting_client_id: string;
+  evidence_level: 'VERIFIED';
+};
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  resource_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  capability_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  entitlement_id: string;
+  /** @minimum 0 */
+  occurred_at: number;
 })[] | {
   events: (({
   /**
@@ -30083,6 +30821,123 @@ export type ListGatewayAuthorizationAuditEvents200 = (({
   after_revision: number;
   /** @minimum 0 */
   occurred_at: number;
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  audit_event_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  correlation_id: string;
+  kind: 'ACCESS_GOVERNANCE_CHANGE';
+  outcome: 'SUCCESS';
+  subject: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  subject_id: string;
+  evidence_level: 'VERIFIED';
+};
+  actor_subject: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  subject_id: string;
+  evidence_level: 'VERIFIED';
+};
+  acting_client: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  acting_client_id: string;
+  evidence_level: 'VERIFIED';
+};
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  resource_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  capability_id: string;
+  access_request_id: string | null;
+  entitlement_id: string | null;
+  operation: 'CREATED' | 'DENY' | 'APPROVE' | 'REVOKE' | 'CANCEL';
+  /** @minimum 0 */
+  occurred_at: number;
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  audit_event_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  correlation_id: string;
+  kind: 'AUTO_GRANT_ACTIVATION';
+  outcome: 'SUCCESS';
+  activation: 'GRANTED' | 'ALREADY_ENTITLED';
+  subject: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  subject_id: string;
+  evidence_level: 'VERIFIED';
+};
+  actor_subject: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  subject_id: string;
+  evidence_level: 'VERIFIED';
+};
+  acting_client: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  acting_client_id: string;
+  evidence_level: 'VERIFIED';
+};
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  resource_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  capability_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  entitlement_id: string;
+  /** @minimum 0 */
+  occurred_at: number;
 })[];
   /** @minimum 0 */
   source_revision: number;
@@ -30122,6 +30977,23 @@ export type ListGatewayAuthorizationAuditEvents400 = {
   /** @minLength 1 */
   message: string;
   violations: ListGatewayAuthorizationAuditEvents400ViolationsItem[];
+};
+
+export type ListGatewayAuthorizationAuditEvents403ViolationsItem = {
+  /** @minLength 1 */
+  code: string;
+  /** @minLength 1 */
+  message: string;
+  /** @minLength 1 */
+  field?: string;
+};
+
+export type ListGatewayAuthorizationAuditEvents403 = {
+  /** @minLength 1 */
+  code: string;
+  /** @minLength 1 */
+  message: string;
+  violations: ListGatewayAuthorizationAuditEvents403ViolationsItem[];
 };
 
 export type ExportGatewayAuthorizationAuditParams = {
@@ -33846,6 +34718,62 @@ export type UpdateGatewayDiagnosticSettings200 = {
   updated_at: number;
 };
 
+export type GetPostHogIntegration200 = {
+  enabled: boolean;
+  host: 'https://us.i.posthog.com' | 'https://eu.i.posthog.com' | null;
+  project_id: number | null;
+  project_token: string | null;
+  configured_by: string | null;
+  configured_at: number | null;
+};
+
+export const UpdatePostHogIntegrationBodyHost = {  'https://usiposthogcom': 'https://us.i.posthog.com',
+  'https://euiposthogcom': 'https://eu.i.posthog.com',
+} as const
+export type UpdatePostHogIntegrationBody = {
+  enabled: boolean;
+  host?: typeof UpdatePostHogIntegrationBodyHost[keyof typeof UpdatePostHogIntegrationBodyHost];
+  /**
+     * @minimum 1
+     * @maximum 9007199254740991
+     */
+  project_id?: number;
+  /**
+     * @minLength 5
+     * @maxLength 512
+     * @pattern ^phc_[A-Za-z0-9_-]+$
+     */
+  project_token?: string;
+};
+
+export type UpdatePostHogIntegration200 = {
+  enabled: boolean;
+  host: 'https://us.i.posthog.com' | 'https://eu.i.posthog.com' | null;
+  project_id: number | null;
+  project_token: string | null;
+  configured_by: string | null;
+  configured_at: number | null;
+};
+
+export const GetPostHogBrowserConfiguration200Host = {  'https://usiposthogcom': 'https://us.i.posthog.com',
+  'https://euiposthogcom': 'https://eu.i.posthog.com',
+} as const
+export type GetPostHogBrowserConfiguration200 = {
+  enabled: true;
+  host: typeof GetPostHogBrowserConfiguration200Host[keyof typeof GetPostHogBrowserConfiguration200Host];
+  /**
+     * @minimum 1
+     * @maximum 9007199254740991
+     */
+  project_id: number;
+  /**
+     * @minLength 5
+     * @maxLength 512
+     * @pattern ^phc_[A-Za-z0-9_-]+$
+     */
+  project_token: string;
+} | null;
+
 export type ListGatewayRegistrations200ItemLabels = {[key: string]: string};
 
 export const ListGatewayRegistrations200ItemState = {  PROVISIONING: 'PROVISIONING',
@@ -34559,6 +35487,8 @@ export type PostV1TenantsTenantIdAccessRequests200 = {
      * @maxLength 256
      */
   access_request_id: string;
+  request_correlation_id: string | null;
+  decision_correlation_id: string | null;
   /**
      * @minLength 1
      * @maxLength 256
@@ -34651,6 +35581,8 @@ export type PostV1TenantsTenantIdAccessRequests200 = {
      * @maxLength 256
      */
   access_request_id: string;
+  request_correlation_id: string | null;
+  decision_correlation_id: string | null;
   /**
      * @minLength 1
      * @maxLength 256
@@ -34825,6 +35757,8 @@ export type GetV1TenantsTenantIdAccessRequests200Item = {
      * @maxLength 256
      */
   access_request_id: string;
+  request_correlation_id: string | null;
+  decision_correlation_id: string | null;
   /**
      * @minLength 1
      * @maxLength 256
@@ -34871,6 +35805,56 @@ export type GetV1TenantsTenantIdAccessRequests200Item = {
   approval_stages: GetV1TenantsTenantIdAccessRequests200ItemApprovalStagesItem[];
   /** @minimum 0 */
   current_approval_stage: number;
+};
+
+export type ActivateAutoGrantEntitlementBody = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  correlation_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  resource_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  capability_id: string;
+};
+
+export const ActivateAutoGrantEntitlement200State = {  ACTIVE: 'ACTIVE',
+  REVOKED: 'REVOKED',
+  EXPIRED: 'EXPIRED',
+} as const
+export type ActivateAutoGrantEntitlement200 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  entitlement_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  resource_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  capability_id: string;
+  state: typeof ActivateAutoGrantEntitlement200State[keyof typeof ActivateAutoGrantEntitlement200State];
+  /** @minimum 0 */
+  valid_from: number;
+  valid_until: number | null;
+  revocation_reason: string | null;
 };
 
 export const GetV1TenantsTenantIdMeAccessRequests200ItemActingClientEvidenceLevel = {  VERIFIED: 'VERIFIED',
@@ -34954,6 +35938,8 @@ export type GetV1TenantsTenantIdMeAccessRequests200Item = {
      * @maxLength 256
      */
   access_request_id: string;
+  request_correlation_id: string | null;
+  decision_correlation_id: string | null;
   /**
      * @minLength 1
      * @maxLength 256
@@ -35107,6 +36093,8 @@ export type PostV1TenantsTenantIdAccessRequestsRequestIdDecision200Request = {
      * @maxLength 256
      */
   access_request_id: string;
+  request_correlation_id: string | null;
+  decision_correlation_id: string | null;
   /**
      * @minLength 1
      * @maxLength 256
@@ -35183,8 +36171,7 @@ export type PostV1TenantsTenantIdAccessRequestsRequestIdDecision200Entitlement =
   state: typeof PostV1TenantsTenantIdAccessRequestsRequestIdDecision200EntitlementState[keyof typeof PostV1TenantsTenantIdAccessRequestsRequestIdDecision200EntitlementState];
   /** @minimum 0 */
   valid_from: number;
-  /** @minimum 0 */
-  valid_until: number;
+  valid_until: number | null;
   revocation_reason: string | null;
 } | null;
 
@@ -35287,6 +36274,8 @@ export type PostV1TenantsTenantIdAccessRequestsRequestIdCancel200 = {
      * @maxLength 256
      */
   access_request_id: string;
+  request_correlation_id: string | null;
+  decision_correlation_id: string | null;
   /**
      * @minLength 1
      * @maxLength 256
@@ -35376,8 +36365,7 @@ export type PostV1TenantsTenantIdEntitlementsEntitlementIdRevoke200 = {
   state: typeof PostV1TenantsTenantIdEntitlementsEntitlementIdRevoke200State[keyof typeof PostV1TenantsTenantIdEntitlementsEntitlementIdRevoke200State];
   /** @minimum 0 */
   valid_from: number;
-  /** @minimum 0 */
-  valid_until: number;
+  valid_until: number | null;
   revocation_reason: string | null;
 };
 
@@ -35409,8 +36397,7 @@ export type GetV1TenantsTenantIdMeEntitlements200Item = {
   state: typeof GetV1TenantsTenantIdMeEntitlements200ItemState[keyof typeof GetV1TenantsTenantIdMeEntitlements200ItemState];
   /** @minimum 0 */
   valid_from: number;
-  /** @minimum 0 */
-  valid_until: number;
+  valid_until: number | null;
   revocation_reason: string | null;
 };
 
@@ -35442,8 +36429,7 @@ export type GetV1TenantsTenantIdMeOwnedEntitlements200Item = {
   state: typeof GetV1TenantsTenantIdMeOwnedEntitlements200ItemState[keyof typeof GetV1TenantsTenantIdMeOwnedEntitlements200ItemState];
   /** @minimum 0 */
   valid_from: number;
-  /** @minimum 0 */
-  valid_until: number;
+  valid_until: number | null;
   revocation_reason: string | null;
 };
 
@@ -36113,6 +37099,34 @@ export type GetGatewayAggregateReleasePackage200ProjectionsItemProjection = ({
   response_filter_order: string[];
 };
 };
+  /** @maxItems 1024 */
+  mcp_tool_definitions?: ({
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  resource_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  connection_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  canonical_tool_name: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  exposed_tool_name: string;
+  /** @pattern ^[a-f0-9]{64}$ */
+  source_revision_digest: string;
+  description: string | null;
+  input_schema: {[key: string]: unknown};
+  read_only: true;
+})[];
 }) & ({
   operation: 'APPLY';
   /** @minItems 1 */
@@ -36440,6 +37454,34 @@ export type GetGatewayAggregateReleasePackage200ProjectionsItemProjection = ({
   response_filter_order: string[];
 };
 };
+  /** @maxItems 1024 */
+  mcp_tool_definitions?: ({
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  resource_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  connection_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  canonical_tool_name: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  exposed_tool_name: string;
+  /** @pattern ^[a-f0-9]{64}$ */
+  source_revision_digest: string;
+  description: string | null;
+  input_schema: {[key: string]: unknown};
+  read_only: true;
+})[];
 }) & ({
   operation: 'DELETE';
   /** @maxItems 0 */
@@ -40071,6 +41113,63 @@ return managementApiFetch<decideMcpDiscoveryCandidateResponse>(getDecideMcpDisco
 
 
 
+export type decideMcpReadOnlyApprovalResponse200 = {
+  data: DecideMcpReadOnlyApproval200
+  status: 200
+}
+
+export type decideMcpReadOnlyApprovalResponseSuccess = (decideMcpReadOnlyApprovalResponse200) & {
+  headers: Headers;
+};
+;
+
+export type decideMcpReadOnlyApprovalResponse = (decideMcpReadOnlyApprovalResponseSuccess)
+
+export const getDecideMcpReadOnlyApprovalUrl = (tenantId: string,
+    resourceId: string,
+    connectionId: string,
+    candidateId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/resources/${encodeURIComponent(String(resourceId))}/connections/${encodeURIComponent(String(connectionId))}/mcp-discovery/candidates/${encodeURIComponent(String(candidateId))}/read-only-approval`
+}
+
+/**
+ * @summary Explicitly approve or revoke automatic confirmation bypass for one published MCP read tool
+ */
+export const decideMcpReadOnlyApproval = async (tenantId: string,
+    resourceId: string,
+    connectionId: string,
+    candidateId: string,
+    decideMcpReadOnlyApprovalBody: DecideMcpReadOnlyApprovalBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<decideMcpReadOnlyApprovalResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return managementApiFetch<decideMcpReadOnlyApprovalResponse>(getDecideMcpReadOnlyApprovalUrl(tenantId,resourceId,connectionId,candidateId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(decideMcpReadOnlyApprovalBody)
+  }
+);}
+
+
+
 export type claimMcpDiscoveryOperationResponse200 = {
   data: ClaimMcpDiscoveryOperation200
   status: 200
@@ -40531,6 +41630,97 @@ export const postV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdAut
   {
     ...options,
     method: 'POST'
+
+
+  }
+);}
+
+
+
+export type postV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscoveryResponse202 = {
+  data: PostV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscovery202
+  status: 202
+}
+
+export type postV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscoveryResponseSuccess = (postV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscoveryResponse202) & {
+  headers: Headers;
+};
+;
+
+export type postV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscoveryResponse = (postV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscoveryResponseSuccess)
+
+export const getPostV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscoveryUrl = (tenantId: string,
+    resourceId: string,
+    connectionId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/me/resource-connections/${encodeURIComponent(String(resourceId))}/${encodeURIComponent(String(connectionId))}/discovery`
+}
+
+export const postV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscovery = async (tenantId: string,
+    resourceId: string,
+    connectionId: string,
+    postV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscoveryBody: PostV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscoveryBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<postV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscoveryResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return managementApiFetch<postV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscoveryResponse>(getPostV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscoveryUrl(tenantId,resourceId,connectionId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscoveryBody)
+  }
+);}
+
+
+
+export type getV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscoveryOperationIdResponse200 = {
+  data: GetV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscoveryOperationId200
+  status: 200
+}
+
+export type getV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscoveryOperationIdResponseSuccess = (getV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscoveryOperationIdResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscoveryOperationIdResponse = (getV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscoveryOperationIdResponseSuccess)
+
+export const getGetV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscoveryOperationIdUrl = (tenantId: string,
+    resourceId: string,
+    connectionId: string,
+    operationId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/me/resource-connections/${encodeURIComponent(String(resourceId))}/${encodeURIComponent(String(connectionId))}/discovery/${encodeURIComponent(String(operationId))}`
+}
+
+export const getV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscoveryOperationId = async (tenantId: string,
+    resourceId: string,
+    connectionId: string,
+    operationId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscoveryOperationIdResponse> => {
+
+  return managementApiFetch<getV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscoveryOperationIdResponse>(getGetV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDiscoveryOperationIdUrl(tenantId,resourceId,connectionId,operationId),
+  {
+    ...options,
+    method: 'GET'
 
 
   }
@@ -44935,10 +46125,15 @@ export type listGatewayAuthorizationAuditEventsResponse400 = {
   status: 400
 }
 
+export type listGatewayAuthorizationAuditEventsResponse403 = {
+  data: ListGatewayAuthorizationAuditEvents403
+  status: 403
+}
+
 export type listGatewayAuthorizationAuditEventsResponseSuccess = (listGatewayAuthorizationAuditEventsResponse200) & {
   headers: Headers;
 };
-export type listGatewayAuthorizationAuditEventsResponseError = (listGatewayAuthorizationAuditEventsResponse400) & {
+export type listGatewayAuthorizationAuditEventsResponseError = (listGatewayAuthorizationAuditEventsResponse400 | listGatewayAuthorizationAuditEventsResponse403) & {
   headers: Headers;
 };
 
@@ -46439,6 +47634,120 @@ return managementApiFetch<updateGatewayDiagnosticSettingsResponse>(getUpdateGate
 
 
 
+export type getPostHogIntegrationResponse200 = {
+  data: GetPostHogIntegration200
+  status: 200
+}
+
+export type getPostHogIntegrationResponseSuccess = (getPostHogIntegrationResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getPostHogIntegrationResponse = (getPostHogIntegrationResponseSuccess)
+
+export const getGetPostHogIntegrationUrl = (tenantId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/telemetry/posthog`
+}
+
+export const getPostHogIntegration = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getPostHogIntegrationResponse> => {
+
+  return managementApiFetch<getPostHogIntegrationResponse>(getGetPostHogIntegrationUrl(tenantId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type updatePostHogIntegrationResponse200 = {
+  data: UpdatePostHogIntegration200
+  status: 200
+}
+
+export type updatePostHogIntegrationResponseSuccess = (updatePostHogIntegrationResponse200) & {
+  headers: Headers;
+};
+;
+
+export type updatePostHogIntegrationResponse = (updatePostHogIntegrationResponseSuccess)
+
+export const getUpdatePostHogIntegrationUrl = (tenantId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/telemetry/posthog`
+}
+
+export const updatePostHogIntegration = async (tenantId: string,
+    updatePostHogIntegrationBody: UpdatePostHogIntegrationBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<updatePostHogIntegrationResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return managementApiFetch<updatePostHogIntegrationResponse>(getUpdatePostHogIntegrationUrl(tenantId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(updatePostHogIntegrationBody)
+  }
+);}
+
+
+
+export type getPostHogBrowserConfigurationResponse200 = {
+  data: GetPostHogBrowserConfiguration200
+  status: 200
+}
+
+export type getPostHogBrowserConfigurationResponseSuccess = (getPostHogBrowserConfigurationResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getPostHogBrowserConfigurationResponse = (getPostHogBrowserConfigurationResponseSuccess)
+
+export const getGetPostHogBrowserConfigurationUrl = (tenantId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/telemetry/posthog/browser-configuration`
+}
+
+export const getPostHogBrowserConfiguration = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getPostHogBrowserConfigurationResponse> => {
+
+  return managementApiFetch<getPostHogBrowserConfigurationResponse>(getGetPostHogBrowserConfigurationUrl(tenantId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
 export type listGatewayRegistrationsResponse200 = {
   data: ListGatewayRegistrations200Item[]
   status: 200
@@ -46729,6 +48038,54 @@ export const getV1TenantsTenantIdAccessRequests = async (tenantId: string, optio
     method: 'GET'
 
 
+  }
+);}
+
+
+
+export type activateAutoGrantEntitlementResponse200 = {
+  data: ActivateAutoGrantEntitlement200
+  status: 200
+}
+
+export type activateAutoGrantEntitlementResponseSuccess = (activateAutoGrantEntitlementResponse200) & {
+  headers: Headers;
+};
+;
+
+export type activateAutoGrantEntitlementResponse = (activateAutoGrantEntitlementResponseSuccess)
+
+export const getActivateAutoGrantEntitlementUrl = (tenantId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/me/entitlements/activate`
+}
+
+export const activateAutoGrantEntitlement = async (tenantId: string,
+    activateAutoGrantEntitlementBody: ActivateAutoGrantEntitlementBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<activateAutoGrantEntitlementResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return managementApiFetch<activateAutoGrantEntitlementResponse>(getActivateAutoGrantEntitlementUrl(tenantId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(activateAutoGrantEntitlementBody)
   }
 );}
 

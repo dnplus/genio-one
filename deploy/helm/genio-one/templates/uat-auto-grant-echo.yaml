@@ -1,0 +1,108 @@
+{{- if .Values.uat.autoGrantEcho.enabled }}
+{{- $name := printf "%s-uat-auto-grant-echo" (include "genio-one.fullname" .) -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: uat-auto-grant-echo
+data:
+  server.mjs: |
+    const sessionId = "genio-one-uat-auto-grant-echo";
+    const tools = [
+      { name: "echo", description: "Return the fixed UAT echo result.", inputSchema: { type: "object", properties: {} } },
+      { name: "status", description: "Return the fixed UAT status result.", inputSchema: { type: "object", properties: {} } },
+    ];
+    const response = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", "mcp-session-id": sessionId } });
+    const server = Bun.serve({
+      hostname: "0.0.0.0",
+      port: 8080,
+      async fetch(request) {
+        const path = new URL(request.url).pathname;
+        if (request.method === "GET" && path === "/health") return Response.json({ status: "ok" });
+        if (request.method !== "POST" || path !== "/mcp") return new Response(null, { status: 404 });
+        let message;
+        try { message = await request.json(); } catch { return response({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } }, 400); }
+        if (message?.method === "initialize") {
+          return response({ jsonrpc: "2.0", id: message.id, result: { protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "genio-one-uat-auto-grant-echo", version: "1.0.0" } } });
+        }
+        if (message?.method === "notifications/initialized") return new Response(null, { status: 202, headers: { "mcp-session-id": sessionId } });
+        if (message?.method === "tools/list") return response({ jsonrpc: "2.0", id: message.id, result: { tools } });
+        if (message?.method === "tools/call" && message.params?.name === "echo") {
+          return response({ jsonrpc: "2.0", id: message.id, result: { content: [{ type: "text", text: "UAT_AUTO_GRANT_ECHO_OK" }] } });
+        }
+        if (message?.method === "tools/call" && message.params?.name === "status") {
+          return response({ jsonrpc: "2.0", id: message.id, result: { content: [{ type: "text", text: "UAT_AUTO_GRANT_STATUS_OK" }] } });
+        }
+        return response({ jsonrpc: "2.0", id: message?.id ?? null, error: { code: -32601, message: "Method not found" } });
+      },
+    });
+    void server;
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: uat-auto-grant-echo
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/component: uat-auto-grant-echo
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: http
+      port: {{ .Values.uat.autoGrantEcho.service.port }}
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: uat-auto-grant-echo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: uat-auto-grant-echo
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: uat-auto-grant-echo
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/part-of: genio-one
+    spec:
+      automountServiceAccountToken: false
+      {{- include "genio-one.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: mcp
+          image: {{ include "genio-one.image" (list .Values.uat.autoGrantEcho.image .) }}
+          imagePullPolicy: {{ .Values.uat.autoGrantEcho.image.pullPolicy }}
+          command: ["bun", "/app/server.mjs"]
+          ports:
+            - name: http
+              containerPort: {{ .Values.uat.autoGrantEcho.service.port }}
+          readinessProbe: { httpGet: { path: /health, port: http }, periodSeconds: 5, failureThreshold: 6 }
+          livenessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 5, periodSeconds: 10 }
+          resources: {{- toYaml .Values.uat.autoGrantEcho.resources | nindent 12 }}
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] }, readOnlyRootFilesystem: true }
+          volumeMounts:
+            - name: server
+              mountPath: /app
+              readOnly: true
+      volumes:
+        - name: server
+          configMap:
+            name: {{ $name }}
+{{- end }}

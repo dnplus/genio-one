@@ -29,6 +29,7 @@ import {
 } from "./detail-contract"
 import type { GatewayActivityMaterializer, GatewayActivityStore } from "./module"
 import type { GatewayActivityDetailStore } from "./detail-module"
+import type { PostHogGatewayActivitySink } from "./posthog"
 import type { GatewayMetricsStore } from "../metrics/module"
 import { PlatformApiError, PlatformApiErrorResponseSchema } from "../errors"
 
@@ -37,6 +38,7 @@ export interface GatewayActivityHttpOptions {
   detail?: GatewayActivityDetailStore
   materializer?: GatewayActivityMaterializer
   metrics?: GatewayMetricsStore
+  postHog?: PostHogGatewayActivitySink
   authorizeRuntime(input: {
     tenantId: string
     runtimeId: string
@@ -90,6 +92,13 @@ export const gatewayActivityHttp: FastifyPluginAsync<GatewayActivityHttpOptions>
         tenantId: request.params.tenant_id,
         event: request.body,
       })
+      try {
+        await options.postHog?.capture({
+          event,
+        })
+      } catch (error) {
+        request.log.warn({ error }, "PostHog Gateway Activity projection failed")
+      }
       return reply.code(201).send(event)
     },
   )

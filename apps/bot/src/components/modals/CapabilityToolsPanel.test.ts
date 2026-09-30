@@ -171,6 +171,53 @@ describe("CapabilityToolsPanel list builder", () => {
   })
 })
 
+test("renders a supplied built-in Discovery status separately from an account connection", async () => {
+  const { createElement } = await import("react")
+  const { renderToStaticMarkup } = await import("react-dom/server")
+  const { CapabilityToolsPanel } = await import("./CapabilityToolsPanel")
+  const discovery: CatalogAddRow = {
+    builtinService: "DISCOVERY",
+    resourceId: "genio-one-discovery",
+    capabilityId: "search_resources",
+    resourceDisplayName: "GenioOne Discovery",
+    capabilityDisplayName: "搜尋可見資源與工具",
+    addState: "CONNECTED",
+    connectionStatus: "CONNECTED",
+    reason: "builtin_service_ready",
+    approvalPolicyRef: null,
+    skillId: null,
+    installBinding: false,
+    pendingBinding: false,
+    usableFromCatalogAlone: false,
+    binding: null,
+  }
+  const mail: CatalogAddRow = {
+    ...discovery,
+    builtinService: null,
+    resourceId: "mail2000",
+    capabilityId: "mcp.list_mailboxes",
+    resourceDisplayName: "Mail2000",
+    capabilityDisplayName: "讀取信箱",
+    addState: "NEEDS_CONNECTION",
+    connectionStatus: "NEEDS_CONNECTION",
+    reason: "connection_required",
+  }
+  const rows = buildBotCapabilityRows([discovery, mail], null)
+  expect(rows.find((row) => row.enterprise?.resourceId === "genio-one-discovery")?.status).toBe("available")
+  expect(rows.find((row) => row.enterprise?.resourceId === "mail2000")?.status).toBe("connect_first")
+
+  const html = renderToStaticMarkup(createElement(CapabilityToolsPanel, {
+    catalogRows: [discovery, mail],
+    runtimePolicy: null,
+    addBusy: null,
+    addMessage: "",
+    onEnterpriseAction: () => {},
+  }))
+  expect(html).toContain("平台內建 · 已連線")
+  expect(html).toContain("企業 · 需連線")
+  expect(html).toContain("此能力需要先完成帳號連線，才能加入與呼叫。")
+})
+
 test("groups Discovery tools without combining per-capability permissions and collapses runtime controls", async () => {
   const { createElement } = await import("react")
   const { renderToStaticMarkup } = await import("react-dom/server")

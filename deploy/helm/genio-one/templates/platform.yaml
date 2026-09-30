@@ -8,6 +8,9 @@
 {{- if .Values.demo.archify.enabled -}}
 {{- $connectionVerifierAllowedHosts = append $connectionVerifierAllowedHosts $archifyServiceHost -}}
 {{- end -}}
+{{- if .Values.uat.autoGrantEcho.enabled -}}
+{{- $connectionVerifierAllowedHosts = append $connectionVerifierAllowedHosts (printf "%s-uat-auto-grant-echo" (include "genio-one.fullname" .)) -}}
+{{- end -}}
 {{- $oidcOrigin := trimSuffix "/" (required "global.keycloakPublicOrigin is required" .Values.global.keycloakPublicOrigin) -}}
 {{- $oidcIssuer := printf "%s/realms/%s" $oidcOrigin .Values.identity.realm -}}
 {{- $oidcJwksUri := printf "http://%s-keycloak:8080/realms/%s/protocol/openid-connect/certs" (include "genio-one.fullname" .) .Values.identity.realm -}}
@@ -130,6 +133,10 @@ spec:
             - { name: GENIO_ONE_DISABLE_DOTENV, value: "1" }
             - { name: NODE_ENV, value: production }
             - { name: GENIO_ONE_PLATFORM_API_MODE, value: postgres }
+            {{- if .Values.platform.ardPublisher.enabled }}
+            - name: GENIO_ONE_ARD_PUBLISHER_JSON
+              value: {{ dict "tenant_id" .Values.tenant.id "public_origin" (required "platform.ardPublisher.publicOrigin is required when ARD publishing is enabled" .Values.platform.ardPublisher.publicOrigin) "namespace" .Values.platform.ardPublisher.namespace "resource_ids" .Values.platform.ardPublisher.resourceIds | toJson | quote }}
+            {{- end }}
             {{- if .Values.bot.enabled }}
             - name: GENIO_BOT_SERVICE_ENDPOINT
               value: {{ printf "http://%s-bot:%d" (include "genio-one.fullname" .) (int .Values.bot.service.port) | quote }}

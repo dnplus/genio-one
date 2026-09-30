@@ -19,6 +19,7 @@ WORKDIR /workspace/apps/platform
 COPY runtimes/gateway/services /workspace/runtimes/gateway/services
 COPY packages /workspace/packages
 COPY apps/platform/scripts/build-gateway-services.mjs ./scripts/build-gateway-services.mjs
+COPY apps/connectors/mail2000/metadata.ts /workspace/apps/connectors/mail2000/metadata.ts
 
 RUN bun scripts/build-gateway-services.mjs
 

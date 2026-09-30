@@ -349,8 +349,13 @@ test("one long handoff does not block another target or the next recovery scan",
   const broker = new RuntimeBroker({ provision: async () => { throw new Error("not used") } })
   const releases: Array<() => void> = []
   const finishByInvocation = new Map<string, () => void>()
-  let started!: () => void
-  const bothStarted = new Promise<void>((resolve) => { started = resolve })
+  const startedTurns = new Set<string>()
+  const startWaiters = new Map<string, () => void>()
+  const waitForTurn = (invocationId: string) => {
+    const clientUserMessageId = `handoff-task:${invocationId}`
+    if (startedTurns.has(clientUserMessageId)) return Promise.resolve()
+    return new Promise<void>((resolve) => startWaiters.set(clientUserMessageId, resolve))
+  }
   try {
     const caller = registry.create(principal, { name: "Caller", description: "Original" })
     const targets = ["A", "B"].map((name) => registry.create(principal, { name, description: "Target" }))
@@ -369,19 +374,25 @@ test("one long handoff does not block another target or the next recovery scan",
               const thread = request.params.threadId
               callbacks.onMessage(JSON.stringify({ id: request.id, result: { turn: { id: thread } } }))
               releases.push(() => callbacks.onMessage(JSON.stringify({ method: "turn/completed", params: { threadId: thread, turn: { id: thread, status: "completed", items: [] } } })))
-              finishByInvocation.set(request.params.clientUserMessageId, releases.at(-1)!)
-              if (releases.length === 2) started()
+              const clientUserMessageId = String(request.params.clientUserMessageId)
+              finishByInvocation.set(clientUserMessageId, releases.at(-1)!)
+              startedTurns.add(clientUserMessageId)
+              startWaiters.get(clientUserMessageId)?.()
+              startWaiters.delete(clientUserMessageId)
             }
           },
           async close() { callbacks.onExit("closed") },
         }
       },
     } as BotServerContext
+    const firstTurn = waitForTurn(first.invocationId)
     await recoverApprovedInvocations(context)
+    await firstTurn
     expect(registry.getInvocationForService(first.invocationId)?.state).toBe("RUNNING")
     const second = registry.createHandoffs(principal, { fromBotId: caller.id, toBotId: targets[1]!.id, fact: "Independent work" })[0]!
+    const secondTurn = waitForTurn(second.invocationId)
     await recoverApprovedInvocations(context)
-    await bothStarted
+    await secondTurn
     expect(registry.getInvocationForService(first.invocationId)?.state).toBe("RUNNING")
     expect(registry.getInvocationForService(second.invocationId)?.state).toBe("RUNNING")
     finishByInvocation.get(`handoff-task:${second.invocationId}`)!()
@@ -410,9 +421,13 @@ test("concurrent offline cross-owner handoffs keep each Bot's credential across 
   const policyTokens: string[] = []
   const modelUpstream: Array<{ authorization: string | null; organizationId: string | null; useCaseId: string | null }> = []
   const discoveryUpstream: Array<{ authorization: string | null; organizationId: string | null; useCaseId: string | null }> = []
-  let bothStarted!: () => void
-  const started = new Promise<void>((resolve) => { bothStarted = resolve })
-  let startedTurns = 0
+  const startedTurns = new Set<string>()
+  const startWaiters = new Map<string, () => void>()
+  const waitForTurn = (invocationId: string) => {
+    const clientUserMessageId = `handoff-task:${invocationId}`
+    if (startedTurns.has(clientUserMessageId)) return Promise.resolve()
+    return new Promise<void>((resolve) => startWaiters.set(clientUserMessageId, resolve))
+  }
   process.env.GENIO_ONE_AGENT_TOKEN_EXCHANGE_URL = "https://identity.example/agent-exchange"
   process.env.GENIO_ONE_AGENT_TOKEN_EXCHANGE_TOKEN = "exchange-service-token"
   process.env.GENIO_ONE_MODEL_GATEWAY_BASE_URL = "https://gateway.example/v1"
@@ -496,9 +511,11 @@ test("concurrent offline cross-owner handoffs keep each Bot's credential across 
         if (request.method === "turn/start") {
           const threadId = request.params.threadId as string
           callbacks.onMessage(JSON.stringify({ id: request.id, result: { turn: { id: `turn-${threadId}` } } }))
-          finishByInvocation.set(request.params.clientUserMessageId, () => callbacks.onMessage(JSON.stringify({ method: "turn/completed", params: { threadId, turn: { id: `turn-${threadId}`, status: "completed", items: [] } } })))
-          startedTurns++
-          if (startedTurns === 2) bothStarted()
+          const clientUserMessageId = String(request.params.clientUserMessageId)
+          finishByInvocation.set(clientUserMessageId, () => callbacks.onMessage(JSON.stringify({ method: "turn/completed", params: { threadId, turn: { id: `turn-${threadId}`, status: "completed", items: [] } } })))
+          startedTurns.add(clientUserMessageId)
+          startWaiters.get(clientUserMessageId)?.()
+          startWaiters.delete(clientUserMessageId)
         }
       },
       async close() { callbacks.onExit("closed") },
@@ -541,11 +558,12 @@ test("concurrent offline cross-owner handoffs keep each Bot's credential across 
     registry.decideInvocation(owner, handoffB.invocationId, "APPROVE")
     const ownerSession = await broker.start(owner, { onMessage() {}, onExit() {} })
     ownerSession.initialized = true
-    const tasks = [
-      runApprovedBotInvocation(context, handoffA.invocationId, "caller-token"),
-      runApprovedBotInvocation(context, handoffB.invocationId, "caller-token"),
-    ]
-    await started
+    const firstTurn = waitForTurn(handoffA.invocationId)
+    const taskA = runApprovedBotInvocation(context, handoffA.invocationId, "caller-token")
+    await firstTurn
+    const secondTurn = waitForTurn(handoffB.invocationId)
+    const taskB = runApprovedBotInvocation(context, handoffB.invocationId, "caller-token")
+    await secondTurn
     expect(ownerSession.accessToken).toBeUndefined()
     expect(broker.accessTokenForBot(ownerSession.id, targetA.id)).toBe(exchangeTokens.get(handoffA.invocationId))
     expect(broker.accessTokenForBot(ownerSession.id, targetB.id)).toBe(exchangeTokens.get(handoffB.invocationId))
@@ -582,7 +600,7 @@ test("concurrent offline cross-owner handoffs keep each Bot's credential across 
     ]))
     finishByInvocation.get(`handoff-task:${handoffA.invocationId}`)!()
     finishByInvocation.get(`handoff-task:${handoffB.invocationId}`)!()
-    await Promise.all(tasks)
+    await Promise.all([taskA, taskB])
     expect(broker.accessTokenForBot(ownerSession.id, targetA.id)).toBeUndefined()
     expect(broker.accessTokenForBot(ownerSession.id, targetB.id)).toBeUndefined()
   } finally {

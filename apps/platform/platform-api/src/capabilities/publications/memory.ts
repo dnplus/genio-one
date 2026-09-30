@@ -170,6 +170,31 @@ export function createInMemoryPublicationWorkflowStore(
       return snapshot
     },
 
+    async getPublishedSnapshot(input) {
+      const resource = options.state.resources.get(resourceKey(input.tenantId, input.resourceId))
+      if (!resource || resource.lifecycle !== "PUBLISHED") return null
+      const projection = [...options.state.publicationProjections.values()].find(
+        (candidate) =>
+          candidate.tenant_id === input.tenantId &&
+          candidate.resource_id === input.resourceId &&
+          candidate.operation === "APPLY",
+      )
+      if (!projection) return null
+      const snapshot = options.state.publicationSnapshots.get(
+        publicationKey(input.tenantId, projection.publication_id),
+      )
+      if (
+        !snapshot ||
+        snapshot.tenant_id !== input.tenantId ||
+        snapshot.resource_id !== input.resourceId ||
+        snapshot.publication_id !== projection.publication_id ||
+        !snapshotDigestMatches(snapshot, snapshot.snapshot_digest)
+      ) {
+        return null
+      }
+      return structuredClone(snapshot)
+    },
+
     async getProjection(input) {
       const projection = [...options.state.publicationProjections.values()].find(
         (candidate) =>
@@ -500,6 +525,7 @@ export function createInMemoryPublicationWorkflowStore(
       )
       for (const [key, projection] of options.state.publicationProjections) {
         if (
+          projection.tenant_id === input.tenantId &&
           projection.resource_id === input.projection.resource_id &&
           projection.capability_id === input.projection.capability_id
         ) options.state.publicationProjections.delete(key)
@@ -777,6 +803,10 @@ export function createAiResourcePublicationWorkflow(
 
   return {
     projectionSource: store,
+
+    getPublishedSnapshot(input) {
+      return store.getPublishedSnapshot(input)
+    },
 
     async requestReview(input) {
       const resource = await options.resources.getResource(input)

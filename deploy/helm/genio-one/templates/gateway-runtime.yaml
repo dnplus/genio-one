@@ -42,6 +42,36 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
+  name: {{ include "genio-one.fullname" . }}-gateway-httproutefilters
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway-runtime
+rules:
+  - apiGroups: [gateway.envoyproxy.io]
+    resources: [httproutefilters]
+    verbs: [get, create, patch, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "genio-one.fullname" . }}-gateway-httproutefilters
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "genio-one.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway-runtime
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "genio-one.fullname" . }}-gateway-httproutefilters
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "genio-one.fullname" . }}-gateway-runtime
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
   name: {{ include "genio-one.fullname" . }}-gateway-provider-credentials
   namespace: {{ .Release.Namespace }}
 rules:

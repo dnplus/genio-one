@@ -15,6 +15,17 @@ export interface CompiledAuthorizationRule {
   required_obligations?: string[]
 }
 
+export interface CompiledMcpToolDefinition {
+  resource_id: string
+  connection_id: string
+  canonical_tool_name: string
+  exposed_tool_name: string
+  source_revision_digest: string
+  description: string | null
+  input_schema: Record<string, unknown>
+  read_only: true
+}
+
 export interface CompiledAuthorizationBundle {
   schema_version: typeof AUTHORIZATION_BUNDLE_SCHEMA_VERSION
   tenant_id: string
@@ -30,6 +41,7 @@ export interface CompiledAuthorizationBundle {
   subject_contexts?: CompiledSubjectContext[]
   agent_delegations?: CompiledAgentDelegation[]
   execution_grants?: CompiledExecutionGrant[]
+  mcp_tool_definitions?: CompiledMcpToolDefinition[]
 }
 
 export interface CompiledSubjectContext {

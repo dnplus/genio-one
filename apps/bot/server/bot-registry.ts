@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path"
 import { randomUUID } from "node:crypto"
 import { BotQuestions } from "./bot-questions"
 import { BotContinuations } from "./bot-continuations"
+import { BotConnectionContinuations } from "./bot-connection-continuations"
 import { BotMemoryStore } from "./bot-memory"
 import { Database } from "bun:sqlite"
 
@@ -353,6 +354,7 @@ export class BotRegistry {
   readonly interactionHistory: InteractionHistory
   readonly questions: BotQuestions
   readonly continuations: BotContinuations
+  readonly connectionContinuations: BotConnectionContinuations
   readonly memory: BotMemoryStore
   readonly ownedSkills: BotOwnedSkills
   private readonly historyImportObservers = new Set<(event: RuntimeHistoryImport) => void>()
@@ -365,12 +367,13 @@ export class BotRegistry {
     this.db = new Database(databasePath)
     this.questions = new BotQuestions(this.db)
     this.continuations = new BotContinuations(this.db, (id) => this.handoffs.kindForInvocation(id) === "fyi")
+    this.connectionContinuations = new BotConnectionContinuations(this.db)
     this.memory = new BotMemoryStore(this.db, (botId, ids) => {
       const messages = new Set(this.timeline.read(botId, []).map((message) => message.id))
       return ids.every((id) => messages.has(id))
     })
     this.interactionHistory = new InteractionHistory(this.db)
-    this.timeline = new BotTimelineStore(this.db, (botId, clientId) => this.continuations.inputLabel(botId, clientId), (botId, clientId) => this.continuations.inputHandoff(botId, clientId), (botId, clientId) => {
+    this.timeline = new BotTimelineStore(this.db, (botId, clientId) => this.continuations.inputLabel(botId, clientId) ?? this.connectionContinuations.inputLabel(botId, clientId), (botId, clientId) => this.continuations.inputHandoff(botId, clientId), (botId, clientId) => {
       if (!clientId.startsWith("question-answer:")) return null
       const question = this.questions.list(botId).find((question) => `question-answer:${question.id}:${question.clientAnswerId}` === clientId)
       return question?.answer ? { id: question.id, answer: question.answer } : null
@@ -1143,6 +1146,7 @@ export class BotRegistry {
         this.applySessionEvent(botId, message.params?.turn?.status === "completed" ? silentFyi ? "turn_idle" : "turn_completed" : "turn_stopped")
       }
       this.continuations.observe(botId, threadId, message.method, message.params)
+      this.connectionContinuations.observe(botId, threadId, message.method, message.params)
     })()
   }
 

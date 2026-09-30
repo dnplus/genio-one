@@ -24,8 +24,17 @@ export interface ManagedMcpMount {
 }
 export type ManagedMcpMounts = Record<string, ManagedMcpMount>
 
+export interface ManagedMcpTarget {
+  url: string
+  host: string
+}
+
 export function isManagedMcpServerName(value: unknown) {
   return typeof value === "string" && MANAGED_SERVER_NAME.test(value)
+}
+
+export function isDynamicManagedMcpServerName(value: unknown) {
+  return typeof value === "string" && value.startsWith(MCP_SERVER_NAME_PREFIX) && MANAGED_SERVER_NAME.test(value)
 }
 
 function isInstalledMcpBinding(bindings: readonly ManagedMcpBinding[], resourceId: string, capabilityId: string) {
@@ -141,15 +150,13 @@ export async function resolveManagedMcpMounts(options: ResolveManagedMcpMountsOp
   return managedMcpMountsFromCatalog(body, bindings)
 }
 
-export function managedMcpTarget(mount: ManagedMcpMount, environment: NodeJS.ProcessEnv = process.env): string | null {
+export function managedMcpTarget(mount: ManagedMcpMount, environment: NodeJS.ProcessEnv = process.env): ManagedMcpTarget | null {
   const configured = resolveGenioOneMcpUrl(environment)
   if (!configured) return null
   try {
     const transport = new URL(configured)
     if (transport.protocol !== "http:" && transport.protocol !== "https:") return null
-    const origin = new URL(`${transport.protocol}//${mount.hostname}`)
-    origin.port = transport.port
-    return new URL(mount.basePath, origin).toString()
+    return { url: new URL(mount.basePath, transport).toString(), host: mount.hostname }
   } catch {
     return null
   }
@@ -182,4 +189,14 @@ export function managedMcpConfig(
       required: false,
     }]]
   }))
+}
+
+export function managedMcpServersConfig(
+  runtimeSessionId: string,
+  botId: string,
+  mounts: ManagedMcpMounts = {},
+  environment: NodeJS.ProcessEnv = process.env,
+) {
+  return Object.fromEntries(Object.entries(managedMcpConfig(runtimeSessionId, botId, mounts, environment))
+    .map(([key, value]) => [key.slice("mcp_servers.".length), value]))
 }

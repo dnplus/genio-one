@@ -1,6 +1,7 @@
 import {
   createDistillationTriageHandoff,
   distillationTriageHandoffPath,
+  removeDistillationTriageHandoff,
   type DistillationTriageHandoff,
 } from "./local-distillation-triage-handoff.mjs"
 import {
@@ -91,39 +92,66 @@ function signalOwner(owner: DistillationPortOwner, signal: NodeJS.Signals): void
   signalPid(owner.pid, signal)
 }
 
+export async function releaseClaimedDistillationTriage(
+  _checkoutRoot: string,
+  hooks: {
+    publishTakeover: () => DistillationTriageHandoff
+    owners: () => DistillationPortOwner[]
+    portOccupied: () => Promise<boolean>
+    release: (owners: DistillationPortOwner[]) => Promise<void>
+    abandon: (handoff: DistillationTriageHandoff) => void
+  },
+): Promise<DistillationTriageHandoff> {
+  const handoff = hooks.publishTakeover()
+  try {
+    const owners = hooks.owners()
+    assertKnownDistillationPortOwnership(owners, await hooks.portOccupied())
+    await hooks.release(owners)
+    return handoff
+  } catch (error) {
+    hooks.abandon(handoff)
+    throw error
+  }
+}
+
 export async function releaseLocalDistillationTriageForProcessor(
   checkoutRoot: string,
 ): Promise<DistillationTriageHandoff> {
-  const owners = listeningPortOwners(LOCAL_DISTILLATION_TRIAGE_PORT)
-  assertKnownDistillationPortOwnership(owners, await portIsOccupied(LOCAL_DISTILLATION_TRIAGE_PORT))
-  let handoff: DistillationTriageHandoff | undefined
-  await releaseLocalDistillationTriage({
-    checkoutRoot,
-    owners,
-    writeHandoff(path) {
-      if (path !== distillationTriageHandoffPath(checkoutRoot)) {
-        throw new Error("distillation triage handoff path changed during release")
-      }
-      handoff = createDistillationTriageHandoff(checkoutRoot, "taking-over")
+  return releaseClaimedDistillationTriage(checkoutRoot, {
+    publishTakeover: () => createDistillationTriageHandoff(checkoutRoot, "taking-over"),
+    owners: () => listeningPortOwners(LOCAL_DISTILLATION_TRIAGE_PORT),
+    portOccupied: () => portIsOccupied(LOCAL_DISTILLATION_TRIAGE_PORT),
+    abandon: (handoff) => {
+      removeDistillationTriageHandoff(handoff)
     },
-    stopPid(pid) {
-      signalPid(pid, "SIGTERM")
-    },
-    revalidateOwner: ownerRevalidation,
-    async waitUntilPortFree() {
-      const deadline = Date.now() + 5_000
-      while (Date.now() < deadline) {
-        if (!(await portIsOccupied(LOCAL_DISTILLATION_TRIAGE_PORT))) return true
-        await new Promise((resolveWait) => setTimeout(resolveWait, 100))
-      }
-      for (const owner of owners) signalOwner(owner, "SIGKILL")
-      const killDeadline = Date.now() + 1_000
-      while (Date.now() < killDeadline) {
-        if (!(await portIsOccupied(LOCAL_DISTILLATION_TRIAGE_PORT))) return true
-        await new Promise((resolveWait) => setTimeout(resolveWait, 100))
-      }
-      return false
+    async release(owners) {
+      await releaseLocalDistillationTriage({
+        checkoutRoot,
+        owners,
+        writeHandoff(path) {
+          if (path !== distillationTriageHandoffPath(checkoutRoot)) {
+            throw new Error("distillation triage handoff path changed during release")
+          }
+        },
+        stopPid(pid) {
+          signalPid(pid, "SIGTERM")
+        },
+        revalidateOwner: ownerRevalidation,
+        async waitUntilPortFree() {
+          const deadline = Date.now() + 5_000
+          while (Date.now() < deadline) {
+            if (!(await portIsOccupied(LOCAL_DISTILLATION_TRIAGE_PORT))) return true
+            await new Promise((resolveWait) => setTimeout(resolveWait, 100))
+          }
+          for (const owner of owners) signalOwner(owner, "SIGKILL")
+          const killDeadline = Date.now() + 1_000
+          while (Date.now() < killDeadline) {
+            if (!(await portIsOccupied(LOCAL_DISTILLATION_TRIAGE_PORT))) return true
+            await new Promise((resolveWait) => setTimeout(resolveWait, 100))
+          }
+          return false
+        },
+      })
     },
   })
-  return handoff ?? createDistillationTriageHandoff(checkoutRoot, "taking-over")
 }

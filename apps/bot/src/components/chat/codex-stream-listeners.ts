@@ -1,7 +1,7 @@
 import { gatewayModelsFromDirectory } from "../../lib/model-route"
 import { preferredModel } from "../../../shared/model-selection"
 import { readSavedModel } from "../../bots-storage"
-import { primaryMcpServer } from "../../lib/primary-mcp-server"
+import { isActiveMcpServer } from "../../lib/primary-mcp-server"
 import { isGenioSessionRejection } from "../../../shared/session-rejection"
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "react"
 import {
@@ -40,6 +40,7 @@ export interface StreamListenerContext {
   modelDirectoryModelsRef: MutableRefObject<CodexModel[]>
   loggedInRef: MutableRefObject<boolean>
   isTurnRunningRef: MutableRefObject<boolean>
+  managedMcpServerNamesRef: MutableRefObject<string[]>
   setRuntime: Dispatch<SetStateAction<RuntimeDetails | null>>
   setRuntimeTiers: Dispatch<SetStateAction<Partial<Record<"none" | "headless" | "desktop", RuntimeDetails>>>>
   setRuntimeState: Dispatch<SetStateAction<string>>
@@ -60,6 +61,7 @@ export interface StreamListenerContext {
   setMcpStatus: Dispatch<SetStateAction<string>>
   setDynamicSkills: Dispatch<SetStateAction<Array<{ id: string; name: string; description: string; path?: string }>>>
   setTurnRunning: (running: boolean) => void
+  refreshMcpStatus: () => Promise<void>
   prepareCodexSession: () => Promise<void>
   attachRuntimeDesktop: (details: RuntimeDetails) => Promise<void>
   shouldPrepareRuntime?: (details: RuntimeDetails) => boolean
@@ -125,6 +127,7 @@ export function registerCodexStreamListeners(ctx: StreamListenerContext): () => 
   } = ctx
   let runtimeFailure: string | null = null
   let runtimeFailureReason: string | null = null
+  let mcpStatusRefreshPending = false
 
   const unsubscribeMessage = client.onMessage((message) => {
     if (!isMounted()) return
@@ -482,12 +485,13 @@ export function registerCodexStreamListeners(ctx: StreamListenerContext): () => 
     if (message.method === "genio/personalConnection/request") {
       const params = message.params as Partial<PersonalConnectionRequest>
       const threadId = ctx.threadRef.current
-      if (!params.requestToken || !params.botId || !params.threadId || !params.resourceId || !params.resourceName ||
+      if (!params.requestToken || !params.botId || !params.threadId || !params.turnId || !params.resourceId || !params.resourceName ||
         params.botId !== activeBotRef.current.id || params.threadId !== threadId) return
       const request = {
         requestToken: params.requestToken,
         botId: params.botId,
         threadId: params.threadId,
+        turnId: params.turnId,
         resourceId: params.resourceId,
         resourceName: params.resourceName,
         reason: params.reason,
@@ -506,8 +510,15 @@ export function registerCodexStreamListeners(ctx: StreamListenerContext): () => 
 
     if (message.method === "mcpServer/startupStatus/updated") {
       const params = message.params as { name: string; status: string; error?: string | null }
-      if (params.name === primaryMcpServer(activeBotRef.current.bindings)) {
-        setMcpStatus(params.status === "ready" ? "已連線" : params.error || params.status)
+      const bindings = activeBotRef.current.bindings
+      const isRelevant = isActiveMcpServer(bindings, ctx.managedMcpServerNamesRef.current, params.name)
+      if (!isRelevant) return
+      setMcpStatus(params.status === "ready" ? "工具連線中" : params.error || params.status)
+      if (params.status === "ready" && !mcpStatusRefreshPending) {
+        mcpStatusRefreshPending = true
+        void ctx.refreshMcpStatus().catch((error) => {
+          if (isMounted()) setMcpStatus(error instanceof Error ? error.message : "GENIO_MANAGED_MCP_UNAVAILABLE")
+        }).finally(() => { mcpStatusRefreshPending = false })
       }
     }
 

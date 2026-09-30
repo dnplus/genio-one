@@ -33,6 +33,7 @@ test("Organization Administrator registers and reads only Organization-owned App
         client_id: "management-ui",
         role: "ORGANIZATION_ADMINISTRATOR",
         organization_ids: [owned.organization_id],
+        administrator_organization_ids: [owned.organization_id],
       },
       "user-token": {
         tenant_id: "tenant-acme",
@@ -121,4 +122,151 @@ test("Organization Administrator registers and reads only Organization-owned App
   assert.equal(revoke.statusCode, 404)
   assert.equal(revoke.json().code, "APPLICATION_CREDENTIAL_NOT_FOUND")
   await app.close()
+})
+
+test("Application credential mutations require owner management scope while membership remains readable", async () => {
+  const tenantId = "tenant-acme"
+  const modules = createInMemoryPlatformModules({ now: () => 1_000 })
+  await modules.identity.bootstrap({
+    tenantId,
+    subjects: [
+      { subject_id: "person-kevin", kind: "PERSON", role: "USER" },
+      { subject_id: "person-tenant-admin", kind: "PERSON", role: "TENANT_ADMINISTRATOR" },
+    ],
+  })
+  const sales = await modules.organizations.create({
+    tenantId,
+    display_name: "Sales",
+    member_subject_ids: ["person-kevin"],
+  })
+  const uatAccess = await modules.organizations.create({
+    tenantId,
+    display_name: "UAT Access",
+    member_subject_ids: ["person-kevin"],
+  })
+  const salesApplication = await modules.applications.register({
+    tenantId,
+    registeredBySubjectId: "person-kevin",
+    value: {
+      display_name: "Sales Automation",
+      owner_organization_id: sales.organization_id,
+    },
+  })
+  const uatAccessApplication = await modules.applications.register({
+    tenantId,
+    registeredBySubjectId: "person-kevin",
+    value: {
+      display_name: "UAT Access Automation",
+      owner_organization_id: uatAccess.organization_id,
+    },
+  })
+  const app = await createManagementApi({
+    modules,
+    resourceCatalog: modules.resources,
+    principalAuthenticator: createStaticPrincipalAuthenticator({
+      kevin: {
+        tenant_id: tenantId,
+        subject_id: "person-kevin",
+        client_id: "management-ui",
+        role: "ORGANIZATION_ADMINISTRATOR",
+        organization_ids: [sales.organization_id, uatAccess.organization_id],
+        administrator_organization_ids: [uatAccess.organization_id],
+      },
+      "tenant-admin": {
+        tenant_id: tenantId,
+        subject_id: "person-tenant-admin",
+        client_id: "management-ui",
+        role: "TENANT_ADMINISTRATOR",
+        organization_ids: [],
+      },
+    }),
+  })
+  const headers = (token: string) => ({ authorization: `Bearer ${token}` })
+  const credentialPath = (applicationId: string) =>
+    `/v1/tenants/${tenantId}/applications/${applicationId}/api-credentials`
+  const issuePayload = {
+    correlation_id: "application-credential-issue",
+    resource_id: "resource-api",
+    capability_id: "incident.list",
+  }
+  const rotatePayload = {
+    correlation_id: "application-credential-rotate",
+    grace_period_seconds: 60,
+  }
+  const revokePayload = { correlation_id: "application-credential-revoke" }
+
+  try {
+    const salesCredentials = await app.inject({
+      method: "GET",
+      url: credentialPath(salesApplication.application_id),
+      headers: headers("kevin"),
+    })
+    assert.equal(salesCredentials.statusCode, 200, salesCredentials.body)
+    assert.deepEqual(salesCredentials.json(), [])
+
+    const salesIssue = await app.inject({
+      method: "POST",
+      url: credentialPath(salesApplication.application_id),
+      headers: headers("kevin"),
+      payload: issuePayload,
+    })
+    assert.equal(salesIssue.statusCode, 403, salesIssue.body)
+    assert.equal(salesIssue.json().code, "RESOURCE_OWNER_OR_TENANT_ADMIN_REQUIRED")
+
+    const salesRotate = await app.inject({
+      method: "POST",
+      url: `${credentialPath(salesApplication.application_id)}/credential-1/rotate`,
+      headers: headers("kevin"),
+      payload: rotatePayload,
+    })
+    assert.equal(salesRotate.statusCode, 403, salesRotate.body)
+    assert.equal(salesRotate.json().code, "RESOURCE_OWNER_OR_TENANT_ADMIN_REQUIRED")
+
+    const salesRevoke = await app.inject({
+      method: "POST",
+      url: `${credentialPath(salesApplication.application_id)}/credential-1/revoke`,
+      headers: headers("kevin"),
+      payload: revokePayload,
+    })
+    assert.equal(salesRevoke.statusCode, 403, salesRevoke.body)
+    assert.equal(salesRevoke.json().code, "RESOURCE_OWNER_OR_TENANT_ADMIN_REQUIRED")
+
+    const uatAccessIssue = await app.inject({
+      method: "POST",
+      url: credentialPath(uatAccessApplication.application_id),
+      headers: headers("kevin"),
+      payload: issuePayload,
+    })
+    assert.equal(uatAccessIssue.statusCode, 503, uatAccessIssue.body)
+    assert.equal(uatAccessIssue.json().code, "APPLICATION_CREDENTIAL_PROVISIONER_UNAVAILABLE")
+
+    const uatAccessRotate = await app.inject({
+      method: "POST",
+      url: `${credentialPath(uatAccessApplication.application_id)}/credential-1/rotate`,
+      headers: headers("kevin"),
+      payload: rotatePayload,
+    })
+    assert.equal(uatAccessRotate.statusCode, 503, uatAccessRotate.body)
+    assert.equal(uatAccessRotate.json().code, "APPLICATION_CREDENTIAL_PROVISIONER_UNAVAILABLE")
+
+    const uatAccessRevoke = await app.inject({
+      method: "POST",
+      url: `${credentialPath(uatAccessApplication.application_id)}/credential-1/revoke`,
+      headers: headers("kevin"),
+      payload: revokePayload,
+    })
+    assert.equal(uatAccessRevoke.statusCode, 404, uatAccessRevoke.body)
+    assert.equal(uatAccessRevoke.json().code, "APPLICATION_CREDENTIAL_NOT_FOUND")
+
+    const tenantAdminIssue = await app.inject({
+      method: "POST",
+      url: credentialPath(salesApplication.application_id),
+      headers: headers("tenant-admin"),
+      payload: issuePayload,
+    })
+    assert.equal(tenantAdminIssue.statusCode, 503, tenantAdminIssue.body)
+    assert.equal(tenantAdminIssue.json().code, "APPLICATION_CREDENTIAL_PROVISIONER_UNAVAILABLE")
+  } finally {
+    await app.close()
+  }
 })

@@ -28,8 +28,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import {
   Table,
@@ -39,7 +41,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import type { IdentitySession, OverviewSnapshot, TenantConfiguration, TenantConfigurationRevision, TenantLoginBranding, NotificationSubscription, NotificationChannel, NotificationType } from "@/domain/contracts"
+import type { IdentitySession, OverviewSnapshot, PostHogIngestHost, PostHogTelemetrySettings, TenantConfiguration, TenantConfigurationRevision, TenantLoginBranding, NotificationSubscription, NotificationChannel, NotificationType } from "@/domain/contracts"
 import { ProviderCredentialProfilesPanel } from "@/features/provider-credentials/provider-credential-profiles-panel"
 import { } from "@/features/access/access-request-sheet"
 import { } from "@/features/access/grant-entitlement-sheet"
@@ -66,11 +68,13 @@ import { } from "@/domain/organization-roles"
 import { relativeTime } from "@/lib/format"
 import { } from "@/lib/personal-preferences"
 import {
+  configurePostHogTelemetry,
   configureSiemDestination,
   cancelNotificationSubscription,
   createConfigurationRevision,
   listConfigurationRevisions,
   listNotificationSubscriptions,
+  loadPostHogTelemetrySettings,
   retryConfigurationProjection,
   transitionConfigurationRevision,
   upsertNotificationSubscription,
@@ -97,6 +101,46 @@ const defaultTenantLoginBranding: TenantLoginBranding = {
 }
 
 const loginLogoPlaceholder = "https://cdn.example.com/logo.svg"
+
+const postHogIngestHosts: Array<{ value: PostHogIngestHost; label: string }> = [
+  { value: "https://us.i.posthog.com", label: "US ingest (us.i.posthog.com)" },
+  { value: "https://eu.i.posthog.com", label: "EU ingest (eu.i.posthog.com)" },
+]
+
+type PostHogResult = { kind: "error" | "success"; message: string }
+type PostHogLoadState = "loading" | "loaded" | "error"
+
+function postHogHost(value: PostHogTelemetrySettings["host"]): PostHogIngestHost {
+  return value === "https://eu.i.posthog.com" ? value : "https://us.i.posthog.com"
+}
+
+function hasPostHogBinding(settings: PostHogTelemetrySettings | null) {
+  return Boolean(settings?.host && settings.project_id && settings.project_token)
+}
+
+function postHogProjectUrl(settings: PostHogTelemetrySettings | null) {
+  if (!settings?.project_id) return null
+  const host = settings.host === "https://eu.i.posthog.com"
+    ? "https://eu.posthog.com"
+    : "https://us.posthog.com"
+  return `${host}/project/${settings.project_id}`
+}
+
+function postHogBindingWasEdited(
+  settings: PostHogTelemetrySettings | null,
+  host: PostHogIngestHost,
+  projectId: string,
+  projectToken: string,
+) {
+  return host !== postHogHost(settings?.host ?? null)
+    || projectId.trim() !== (settings?.project_id?.toString() ?? "")
+    || projectToken !== (settings?.project_token ?? "")
+}
+
+function hasCompletePostHogBinding(projectId: number, projectToken: string) {
+  return Number.isSafeInteger(projectId) && projectId > 0 &&
+    projectToken.length >= 5 && projectToken.length <= 512 && /^phc_[A-Za-z0-9_-]+$/.test(projectToken)
+}
 
 function previewColor(value: string, fallback: string): string {
   return /^#[0-9A-Fa-f]{6}$/.test(value) ? value : fallback
@@ -165,12 +209,21 @@ export function SettingsPage({
   onReload: () => Promise<void>
 }) {
   const { t } = useTranslation()
+  const canManagePostHog = identity.role === "TENANT_ADMINISTRATOR"
   const [destinationId, setDestinationId] = useState(data.siemDestination?.destination_id ?? "primary")
   const [endpointUrl, setEndpointUrl] = useState(data.siemDestination?.endpoint_url ?? "")
   const [eventKinds, setEventKinds] = useState(data.siemDestination?.event_kinds.join(", ") ?? "")
   const [siemEnabled, setSiemEnabled] = useState(data.siemDestination?.enabled ?? true)
   const [siemBusy, setSiemBusy] = useState(false)
   const [siemResult, setSiemResult] = useState<string | null>(null)
+  const [postHogSettings, setPostHogSettings] = useState<PostHogTelemetrySettings | null>(null)
+  const [postHogEnabled, setPostHogEnabled] = useState(false)
+  const [postHogHostValue, setPostHogHostValue] = useState<PostHogIngestHost>(postHogIngestHosts[0].value)
+  const [postHogProjectId, setPostHogProjectId] = useState("")
+  const [postHogProjectToken, setPostHogProjectToken] = useState("")
+  const [postHogLoadState, setPostHogLoadState] = useState<PostHogLoadState>("loading")
+  const [postHogBusy, setPostHogBusy] = useState(false)
+  const [postHogResult, setPostHogResult] = useState<PostHogResult | null>(null)
   const [configurationRevisions, setConfigurationRevisions] = useState<TenantConfigurationRevision[]>([])
   const [notificationSubscriptions, setNotificationSubscriptions] = useState<NotificationSubscription[]>([])
   const [configurationBusy, setConfigurationBusy] = useState(false)
@@ -216,6 +269,34 @@ export function SettingsPage({
       setConfigurationResult(error instanceof Error ? error.message : t("Configuration could not be loaded."))
     })
   }, [tenantId, t])
+
+  useEffect(() => {
+    if (!canManagePostHog) return
+    let active = true
+    setPostHogLoadState("loading")
+    setPostHogResult(null)
+    void loadPostHogTelemetrySettings(tenantId)
+      .then((settings) => {
+        if (!active) return
+        setPostHogSettings(settings)
+        setPostHogEnabled(settings.enabled)
+        setPostHogHostValue(postHogHost(settings.host))
+        setPostHogProjectId(settings.project_id?.toString() ?? "")
+        setPostHogProjectToken(settings.project_token ?? "")
+        setPostHogLoadState("loaded")
+      })
+      .catch((error) => {
+        if (!active) return
+        setPostHogLoadState("error")
+        setPostHogResult({
+          kind: "error",
+          message: error instanceof Error ? error.message : t("PostHog settings could not be loaded."),
+        })
+      })
+    return () => {
+      active = false
+    }
+  }, [canManagePostHog, t, tenantId])
 
   async function createDraft() {
     setConfigurationBusy(true)
@@ -348,7 +429,59 @@ export function SettingsPage({
     }
   }
 
+  async function savePostHogSettings(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (postHogLoadState !== "loaded") return
+    const projectId = Number(postHogProjectId)
+    const projectToken = postHogProjectToken.trim()
+    const shouldSavePostHogBinding = postHogEnabled || postHogBindingWasEdited(
+      postHogSettings,
+      postHogHostValue,
+      postHogProjectId,
+      projectToken,
+    )
+    if (shouldSavePostHogBinding && !hasCompletePostHogBinding(projectId, projectToken)) {
+      setPostHogResult({
+        kind: "error",
+        message: t("Enter a positive project ID and a valid public project token before saving this PostHog integration."),
+      })
+      return
+    }
+    setPostHogBusy(true)
+    setPostHogResult(null)
+    try {
+      const settings = await configurePostHogTelemetry(
+        tenantId,
+        shouldSavePostHogBinding
+          ? {
+              enabled: postHogEnabled,
+              host: postHogHostValue,
+              projectId,
+              projectToken,
+            }
+          : { enabled: false },
+      )
+      setPostHogSettings(settings)
+      setPostHogEnabled(settings.enabled)
+      setPostHogHostValue(postHogHost(settings.host))
+      setPostHogProjectId(settings.project_id?.toString() ?? "")
+      setPostHogProjectToken(settings.project_token ?? "")
+      await onReload()
+      setPostHogResult({ kind: "success", message: t("PostHog settings saved. Newly loaded sessions follow this setting.") })
+    } catch (error) {
+      setPostHogResult({
+        kind: "error",
+        message: error instanceof Error ? error.message : t("PostHog settings could not be saved."),
+      })
+    } finally {
+      setPostHogBusy(false)
+    }
+  }
+
   const latestConfiguration = latestConfigurationRevision(configurationRevisions)
+  const postHogConfigured = hasPostHogBinding(postHogSettings)
+  const postHogProject = postHogLoadState === "loaded" ? postHogProjectUrl(postHogSettings) : null
+  const postHogInputsDisabled = postHogBusy || postHogLoadState !== "loaded"
 
   return (
     <div className="flex flex-col gap-5">
@@ -477,6 +610,79 @@ export function SettingsPage({
         </CardContent>
       </Card>
 </div></details>
+      {canManagePostHog ? (
+        <details className="rounded-xl border p-4">
+          <summary className="cursor-pointer font-medium">{t("PostHog integration")}</summary>
+          <div className="mt-4">
+            <Card>
+              <CardHeader className="border-b">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <CardTitle>{t("PostHog integration")}</CardTitle>
+                    <CardDescription className="mt-1">{t("Bind this tenant to a PostHog project for browser telemetry and available Gateway AI/MCP activity summaries.")}</CardDescription>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {postHogLoadState === "loading" ? <Badge variant="outline">{t("Loading PostHog settings…")}</Badge> : null}
+                    {postHogLoadState === "error" ? <Badge variant="destructive">{t("PostHog settings unavailable")}</Badge> : null}
+                    {postHogLoadState === "loaded" ? <>
+                      <span className="text-sm text-muted-foreground">{t("Project binding")}</span>
+                      <Badge variant={postHogConfigured ? "secondary" : "outline"}>{t(postHogConfigured ? "Configured" : "Not configured")}</Badge>
+                      <span className="text-sm text-muted-foreground">{t("Integration")}</span>
+                      <Badge variant={postHogSettings?.enabled ? "secondary" : "outline"}>{t(postHogSettings?.enabled ? "Enabled" : "Disabled")}</Badge>
+                    </> : null}
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="grid gap-6 xl:grid-cols-[minmax(20rem,0.8fr)_minmax(32rem,1.2fr)]">
+                <form onSubmit={(event) => void savePostHogSettings(event)}>
+                  <FieldGroup>
+                    <Field className="rounded-lg border bg-muted/20 p-4" orientation="horizontal">
+                      <FieldContent>
+                        <FieldLabel htmlFor="posthog-enabled">{t("Enable PostHog integration")}</FieldLabel>
+                        <FieldDescription>{t("Saved settings apply to new browser sessions only when this integration is enabled.")}</FieldDescription>
+                      </FieldContent>
+                      <Switch id="posthog-enabled" checked={postHogEnabled} disabled={postHogInputsDisabled} onCheckedChange={(checked) => setPostHogEnabled(checked === true)} />
+                    </Field>
+                    <div className="space-y-4 rounded-lg border p-4">
+                      <div>
+                        <div className="font-medium">{t("Project binding")}</div>
+                        <p className="mt-1 text-sm text-muted-foreground">{t("When enabled, this tenant's browser telemetry and available Gateway AI/MCP activity summaries are sent to the selected PostHog project.")}</p>
+                      </div>
+                      <Field>
+                        <FieldLabel htmlFor="posthog-ingest-host">{t("Ingest host")}</FieldLabel>
+                        <Select disabled={postHogInputsDisabled} value={postHogHostValue} onValueChange={(value) => setPostHogHostValue(value as PostHogIngestHost)}>
+                          <SelectTrigger id="posthog-ingest-host" className="w-full"><SelectValue /></SelectTrigger>
+                          <SelectContent><SelectGroup>{postHogIngestHosts.map((host) => <SelectItem key={host.value} value={host.value}>{t(host.label)}</SelectItem>)}</SelectGroup></SelectContent>
+                        </Select>
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="posthog-project-id">{t("Project ID")}</FieldLabel>
+                        <Input id="posthog-project-id" disabled={postHogInputsDisabled} inputMode="numeric" min="1" onChange={(event) => setPostHogProjectId(event.target.value)} step="1" type="number" value={postHogProjectId} />
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="posthog-project-token">{t("Public project token")}</FieldLabel>
+                        <Input id="posthog-project-token" autoComplete="off" disabled={postHogInputsDisabled} onChange={(event) => setPostHogProjectToken(event.target.value)} type="password" value={postHogProjectToken} />
+                        <FieldDescription>{t("Use the public project token from PostHog. This is not a PostHog account credential.")}</FieldDescription>
+                      </Field>
+                    </div>
+                    <Button type="submit" className="self-start" disabled={postHogInputsDisabled}>
+                      <SaveIcon data-icon="inline-start" />
+                      {postHogBusy ? t("Saving…") : t("Save PostHog settings")}
+                    </Button>
+                    {postHogResult ? <p role={postHogResult.kind === "error" ? "alert" : "status"} className={postHogResult.kind === "error" ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>{postHogResult.message}</p> : null}
+                  </FieldGroup>
+                </form>
+                <div className="rounded-lg border bg-muted/20 p-4">
+                  <div className="font-medium">{t("Data handling")}</div>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{t("This project binding does not use PostHog account OAuth. Saving a setting does not confirm that PostHog has ingested data; open the project to verify received events. When enabled, users’ browsers connect directly to the selected PostHog US or EU host.")}</p>
+                  <p className="mt-3 text-sm leading-6 text-muted-foreground">{t("Gateway activity summaries include only tenant, resource, model, provider, tool, status, duration, and token counts; they do not include request or response content.")}</p>
+                  {postHogProject ? <a className="mt-4 inline-flex text-sm font-medium text-primary underline-offset-4 hover:underline" href={postHogProject} rel="noreferrer" target="_blank">{t("Open PostHog project")}</a> : null}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </details>
+      ) : null}
       <details className="rounded-xl border p-4"><summary className="cursor-pointer font-medium">{t("Tenant configuration")}</summary><div className="mt-4">      <Card>
         <CardHeader className="border-b">
           <CardTitle className="flex items-center gap-2"><Settings2Icon className="size-4" /><TitleHelp help={t("Draft → Validate → Preview → Review → Publish. Published revisions expose desired, observed, drift, retry and rollback evidence.")}>{t("Tenant configuration")}</TitleHelp></CardTitle>

@@ -97,7 +97,12 @@ export function createCanonicalPrincipalAuthenticator(options: {
       if (authorization.suspended) return null
       if (!authorization.registered) return principal
       if (authorization.tenant_administrator) {
-        return { ...principal, role: "TENANT_ADMINISTRATOR", organization_ids: [] }
+        return {
+          ...principal,
+          role: "TENANT_ADMINISTRATOR",
+          organization_ids: [],
+          administrator_organization_ids: [],
+        }
       }
       const access = await options.organizations.accessForSubject({
         tenantId: principal.tenant_id,
@@ -109,6 +114,7 @@ export function createCanonicalPrincipalAuthenticator(options: {
           ? "ORGANIZATION_ADMINISTRATOR"
           : "USER",
         organization_ids: access.organization_ids,
+        administrator_organization_ids: access.administrator_organization_ids,
       }
     },
   }

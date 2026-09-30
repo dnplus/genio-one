@@ -57,6 +57,14 @@ test("Tenant configuration lifecycle keeps publish and convergence separate", as
   })
   assert.equal(denied.statusCode, 403)
 
+  const unconfigured = await app.inject({
+    method: "GET",
+    url: "/v1/tenants/tenant-acme/self-service-configuration",
+    headers: { authorization: "Bearer user" },
+  })
+  assert.equal(unconfigured.statusCode, 200)
+  assert.equal(unconfigured.json(), null)
+
   const created = await app.inject({
     method: "POST",
     url: "/v1/tenants/tenant-acme/configuration-revisions",

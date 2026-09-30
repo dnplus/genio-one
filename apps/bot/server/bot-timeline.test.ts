@@ -177,6 +177,7 @@ test("MCP HTML artifacts are verified, retained in durable timeline, and exclude
       arguments: {},
       appContext: null,
       mcpAppResourceUri: undefined,
+      mcpAppUi: null,
       pluginId: null,
       readOnlyHint: true,
       result: { content: [{ type: "text", text: "架構圖已產生" }], structuredContent: { diagram: "ce" }, _meta: { "genio/artifacts": [valid, invalid] } },

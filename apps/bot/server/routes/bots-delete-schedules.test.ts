@@ -10,6 +10,7 @@ import { createCapabilityGate } from "../capability-gate"
 import { RuntimeBroker } from "../runtime-broker"
 import type { RuntimePolicyResolver } from "../runtime-policy-contract"
 import { BotDeletionReconciler } from "../bot-deletion-reconciler"
+import { platformOrigin } from "../platform-origin"
 import type { ManagedDesktop } from "../runtime"
 
 function desktop(): ManagedDesktop {
@@ -47,7 +48,7 @@ test("DELETE /api/bots/:botId atomically removes its active schedules", async ()
     expect(registry.getOwned(bot.id, principal)).toBeNull()
     expect(schedules.list(principal, bot.id)).toEqual([])
     expect(schedules.listActive()).toEqual([])
-    expect(calls).toEqual([`http://127.0.0.1:58082/v1/tenants/${principal.tenant_id}/distillation-markers/bots/${bot.id}`])
+    expect(calls).toEqual([new URL(`/v1/tenants/${principal.tenant_id}/distillation-markers/bots/${bot.id}`, platformOrigin()).toString()])
   } finally {
     await app.close()
     registry.close()

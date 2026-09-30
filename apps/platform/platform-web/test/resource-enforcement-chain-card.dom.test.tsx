@@ -201,6 +201,20 @@ test("renders tenant-scoped JEV safety and Presidio tokenization controls", asyn
   expect(screen.getByDisplayValue("EMAIL_ADDRESS")).toBeTruthy()
 })
 
+test("allows selecting CUSTOMER_DATA from the data protection semantic type editor", async () => {
+  restoreFetch = installFetch()
+  const user = userEvent.setup()
+
+  await renderCard("en")
+  await user.click(await screen.findByRole("button", { name: "Edit policy" }))
+
+  const semanticType = await screen.findByRole("combobox", { name: "Search semantic types" })
+  await user.click(semanticType)
+  await user.click(await screen.findByRole("option", { name: "CUSTOMER_DATA" }))
+
+  await waitFor(() => expect((semanticType as HTMLInputElement).value).toBe("CUSTOMER_DATA"))
+})
+
 test("shows client-side safety validation before any draft save", async () => {
   restoreFetch = installFetch({ adapterId: "" })
   const user = userEvent.setup()

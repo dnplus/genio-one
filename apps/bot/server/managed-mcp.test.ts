@@ -138,7 +138,24 @@ test("keeps configured gateway transport separate from each publication endpoint
     hostname: "archify.stellar-freight.localhost",
     basePath: "/mcp",
   }, { GENIO_ONE_MCP_URL: "https://gateway.example.test:8443/ignored" } as NodeJS.ProcessEnv))
-    .toBe("https://archify.stellar-freight.localhost:8443/mcp")
+    .toEqual({
+      url: "https://gateway.example.test:8443/mcp",
+      host: "archify.stellar-freight.localhost",
+    })
+})
+
+test("keeps localhost transport separate from the MCPRoute authority", () => {
+  expect(managedMcpTarget({
+    resourceId: "genio.demo.context7",
+    capabilityId: "context7",
+    serverName: "genio_mcp_context7",
+    hostname: "context7.stellar-freight.localhost",
+    basePath: "/mcp/genio.demo.context7",
+  }, { GENIO_ONE_MCP_URL: "http://one.localhost:1975/ignored" } as NodeJS.ProcessEnv))
+    .toEqual({
+      url: "http://one.localhost:1975/mcp/genio.demo.context7",
+      host: "context7.stellar-freight.localhost",
+    })
 })
 
 test("uses the local Bot relay when no public relay origin is configured", () => {

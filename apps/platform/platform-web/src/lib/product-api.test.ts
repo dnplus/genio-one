@@ -66,6 +66,65 @@ test("overview requests Access Groups for management administrators and keeps au
   }
 })
 
+test("overview requests tenant-wide Audit only for Tenant Administrators", async () => {
+  const originalFetch = globalThis.fetch
+  const urls: string[] = []
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = input instanceof Request ? input.url : String(input)
+    urls.push(url)
+    return new Response(JSON.stringify(responseFor(url)), {
+      headers: { "content-type": "application/json" },
+      status: 200,
+    })
+  }) as typeof fetch
+  try {
+    const organizationAdministrator = await loadOverview("tenant-acme", "ORGANIZATION_ADMINISTRATOR")
+
+    assert.equal(urls.some((url) => url.includes("/audit-events")), false)
+    assert.deepEqual(organizationAdministrator.auditEvents, [])
+    assert.deepEqual(organizationAdministrator.endpointSecurityEvents, [])
+
+    urls.length = 0
+    await loadOverview("tenant-acme", "TENANT_ADMINISTRATOR")
+
+    assert.equal(urls.some((url) => url.includes("/audit-events")), true)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("overview reports each settled source failure once", async () => {
+  const originalFetch = globalThis.fetch
+  const originalSessionStorage = globalThis.sessionStorage
+  const failedRequestCodes: string[] = []
+  Object.defineProperty(globalThis, "sessionStorage", {
+    configurable: true,
+    value: { getItem: () => null },
+  })
+  globalThis.fetch = Object.assign(
+    async (_input: Parameters<typeof fetch>[0]) => {
+      const code = `OVERVIEW_REQUEST_FAILED_${failedRequestCodes.length}`
+      failedRequestCodes.push(code)
+      return new Response(JSON.stringify({ code }), { status: 503 })
+    },
+    { preconnect: originalFetch.preconnect },
+  )
+  try {
+    const overview = await loadOverview("tenant-acme", "TENANT_ADMINISTRATOR")
+    const sources = overview.failures.map((failure) => failure.source)
+    assert.equal(new Set(sources).size, sources.length)
+    assert.deepEqual(overview.failures.map((failure) => failure.code), failedRequestCodes)
+    assert.deepEqual(overview.resources, [])
+    assert.equal(overview.platformHealthy, false)
+  } finally {
+    globalThis.fetch = originalFetch
+    Object.defineProperty(globalThis, "sessionStorage", {
+      configurable: true,
+      value: originalSessionStorage,
+    })
+  }
+})
+
 test("live and mock overview omit legacy policy authority", async () => {
   const originalFetch = globalThis.fetch
   const originalSessionStorage = globalThis.sessionStorage

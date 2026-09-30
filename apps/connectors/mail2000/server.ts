@@ -4,6 +4,7 @@ import { z } from "zod"
 import type { Mail2000Imap } from "./imap"
 import type { Mail2000Dav } from "./dav"
 import { sendMailSchema, type OutgoingMail } from "./smtp"
+import { MAIL2000_READ_ONLY_MCP_TOOLS } from "./metadata"
 
 export interface Mail2000Credential { username: string; password: string }
 export interface Mailbox { path: string; name: string; specialUse?: string }
@@ -28,8 +29,9 @@ export function createMail2000Handler(options: Partial<Mail2000Imap> & { caldav?
     if (path !== "/mcp") return new Response(null, { status: 404 })
     const credential = readMail2000Credential(request.headers.get("authorization"))
     const server = new McpServer({ name: "genio-mail2000", version: "0.1.0" })
+    const listMailboxes = MAIL2000_READ_ONLY_MCP_TOOLS["mail2000__list_mailboxes"]!
     server.registerTool("list_mailboxes", {
-      title: "列出 Mail2000 郵件資料夾", description: "使用目前使用者的 Mail2000 連線列出可用郵件資料夾。", inputSchema: {},
+      title: listMailboxes.title, description: listMailboxes.description, inputSchema: {},
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     }, async () => {
       if (!credential) return { isError: true, content: [{ type: "text", text: "MAIL2000_CONNECTION_REQUIRED" }] }
@@ -58,8 +60,10 @@ export function createMail2000Handler(options: Partial<Mail2000Imap> & { caldav?
       }
     }
     const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
-    server.registerTool("search_mail", { title: "搜尋郵件", description: "搜尋 Mail2000 郵件，依日期新到舊回傳，每筆附 folder、uid、uid_validity 供後續讀取或管理。folders 可一次搜尋多個資料夾（先用 list_mailboxes 取得）。text 比對主旨、寄件者、收件者與副本，不含內文；有 text 或 from 時預設只搜最近 30 天，可用 since 指定更早日期；truncated 為 true 時 total 只是已掃描範圍內的筆數。", inputSchema: { folder: folder.default("INBOX"), folders: z.array(folder).min(1).max(10).optional(), text: z.string().max(1000).optional(), from: z.string().max(512).optional(), unseen: z.boolean().optional(), since: day.optional().describe("YYYY-MM-DD，含當日"), before: day.optional().describe("YYYY-MM-DD，不含當日"), limit: z.number().int().min(1).max(500).default(20) }, annotations: read }, (args) => execute((credential) => options.search!(credential, args)))
-    server.registerTool("read_mail", { title: "讀取郵件", description: "讀取指定 UID 的郵件；內容最多 100KB，過長會標示 truncated。", inputSchema: reference, annotations: read }, (args) => execute((credential) => options.read!(credential, args)))
+    const searchMail = MAIL2000_READ_ONLY_MCP_TOOLS["mail2000__search_mail"]!
+    server.registerTool("search_mail", { title: searchMail.title, description: searchMail.description, inputSchema: { folder: folder.default("INBOX"), folders: z.array(folder).min(1).max(10).optional(), text: z.string().max(1000).optional(), from: z.string().max(512).optional(), unseen: z.boolean().optional(), since: day.optional().describe("YYYY-MM-DD，含當日"), before: day.optional().describe("YYYY-MM-DD，不含當日"), limit: z.number().int().min(1).max(500).default(20) }, annotations: read }, (args) => execute((credential) => options.search!(credential, args)))
+    const readMail = MAIL2000_READ_ONLY_MCP_TOOLS["mail2000__read_mail"]!
+    server.registerTool("read_mail", { title: readMail.title, description: readMail.description, inputSchema: reference, annotations: read }, (args) => execute((credential) => options.read!(credential, args)))
     server.registerTool("set_mail_flags", { title: "更新郵件旗標", description: "設定指定郵件的已讀、星號等旗標，取代原旗標集合。", inputSchema: { ...reference, flags: z.array(z.enum(["\\Seen", "\\Flagged", "\\Answered", "\\Draft"])).max(4) }, annotations: { ...write, idempotentHint: true } }, (args) => execute((credential) => options.setFlags!(credential, args)))
     server.registerTool("move_mail", { title: "搬移郵件", description: "將指定 UID 的郵件搬到目的資料夾。", inputSchema: { ...reference, destination: folder }, annotations: write }, (args) => execute((credential) => options.move!(credential, args)))
     server.registerTool("delete_mail", { title: "刪除郵件", description: "永久刪除指定 UID 的郵件。", inputSchema: reference, annotations: write }, (args) => execute((credential) => options.delete!(credential, args)))

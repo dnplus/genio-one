@@ -1,0 +1,86 @@
+global:
+  publicOrigin: https://one.192.168.1.175.nip.io
+  keycloakPublicOrigin: https://identity.192.168.1.175.nip.io
+  botPublicOrigin: https://bot.192.168.1.175.nip.io
+  allowInsecureOidcHttp: true
+secrets:
+  existingSecret: genio-one-release-secrets
+tenant:
+  id: tenant-default
+  administratorSubjectId: person-platform-admin
+  administratorExternalSubjectId: f912ed99-2c04-475f-8e21-ccb949ad1994
+  administratorUsername: admin
+  administratorEmail: admin@genio.internal
+  administratorDisplayName: GenioOne Administrator
+  bootstrapPeopleSecret: genio-one-uat-people
+  bootstrapPeople:
+    - username: anrita
+      subjectId: person-uat-anrita
+      externalSubjectId: 4e3a8078-d5ca-4d83-bc9a-1c6bc333ecfd
+      displayName: Anrita
+      email: anrita@uat.genio.internal
+      department: Executive
+    - username: kevin
+      subjectId: person-uat-kevin
+      externalSubjectId: 62216480-209c-472a-881b-42e0c8425661
+      displayName: Kevin
+      email: kevin@uat.genio.internal
+      department: Sales
+    - username: dylan
+      subjectId: person-uat-dylan
+      externalSubjectId: 8b86e023-58ee-4255-ad32-d49f29a0665b
+      displayName: Dylan
+      email: dylan@uat.genio.internal
+      department: Engineering
+    - username: brief
+      subjectId: person-uat-brief
+      externalSubjectId: 54d0d42b-9a15-4e3c-9f75-5a19e4920c5b
+      displayName: Weekly Brief UAT
+      email: brief@uat.genio.internal
+      department: Operations
+images:
+  connectors:
+    repository: genio-connectors
+    tag: 0.1.0-dev.1
+    digest: ""
+    pullPolicy: IfNotPresent
+demo:
+  archify:
+    enabled: false
+uat:
+  autoGrantEcho:
+    enabled: true
+platform:
+  replicas: 1
+  connectionVerification:
+    allowHttp: true
+    allowedHosts:
+      - genio-one-genio-one-connectors-mail2000
+      - genio-one-genio-one-connectors-servicenow-csm
+  publicationDnsVerification:
+    allowLocalhost: false
+    gatewayTargets:
+      genio-ai-mcp-gateway: 192.168.1.175.nip.io
+gateway:
+  replicas: 1
+identity:
+  replicas: 1
+analytics:
+  collectorReplicas: 1
+apiManagement:
+  enabled: false
+connectors:
+  enabled: true
+runtimeReport:
+  existingSecret: genio-one-runtime-report
+aiMcpGateway:
+  enabled: true
+  installCrds: false
+bot:
+  enabled: true
+  runtime: local
+  modelGatewayBaseUrl: ""
+  modelGatewayModels: []
+ingress:
+  enabled: false
+  tls: []

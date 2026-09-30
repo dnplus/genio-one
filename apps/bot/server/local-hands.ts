@@ -20,7 +20,7 @@ import { runtimePolicyDecisionTarget } from "./runtime-policy-contract"
 const PAIRING_MS = 5 * 60_000
 const LEASE_MS = 60 * 60_000
 const MAX_MESSAGE_BYTES = 8 * 1024 * 1024
-const EXECUTOR_VERSION = "0.153.4"
+const EXECUTOR_VERSION = "0.159.2"
 
 type Pairing = { token: string; session: RuntimeSession; botId: string; expiresAt: number }
 type Lease = {

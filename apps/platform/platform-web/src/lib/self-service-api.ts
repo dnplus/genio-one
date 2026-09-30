@@ -123,7 +123,7 @@ export function activateAutoGrant(
 ) {
   return requestJson<unknown>(
     token,
-    `/v1/tenants/${encodeURIComponent(tenantId)}/invocations/authorize`,
+    `/v1/tenants/${encodeURIComponent(tenantId)}/me/entitlements/activate`,
     {
       method: "POST",
       body: JSON.stringify({

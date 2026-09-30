@@ -1,6 +1,6 @@
 import { Type, type Static } from "typebox"
 
-import { DownstreamIdentityProjectionSchema } from "../connections/contract"
+import { DownstreamIdentityProjectionSchema, McpToolInputSchemaSchema } from "../connections/contract"
 
 const Identifier = Type.String({ minLength: 1, maxLength: 256, pattern: "^[^\\u0000\\r\\n]+$" })
 const Timestamp = Type.Integer({ minimum: 0 })
@@ -12,10 +12,12 @@ const McpDiscoveryStateSchema = Type.Union([
   Type.Literal("FAILED"),
 ])
 
-const McpDiscoveryToolSchema = Type.Object({
+export const McpDiscoveryToolSchema = Type.Object({
   name: Type.String({ minLength: 1, maxLength: 256 }),
   title: Type.Union([Type.String({ maxLength: 512 }), Type.Null()]),
   description: Type.Union([Type.String({ maxLength: 16_384 }), Type.Null()]),
+  input_schema: Type.Optional(McpToolInputSchemaSchema),
+  read_only_hint: Type.Optional(Type.Boolean()),
 }, { additionalProperties: false })
 
 export const McpDiscoveryCandidateSchema = Type.Object({
@@ -70,6 +72,11 @@ export const DecideMcpDiscoveryCandidateSchema = Type.Object({
   state: Type.Union([Type.Literal("PUBLISHED"), Type.Literal("IGNORED"), Type.Literal("BLOCKED")]),
 }, { additionalProperties: false })
 
+export const DecideMcpReadOnlyApprovalSchema = Type.Object({
+  expected_revision_digest: Type.String({ pattern: "^[a-f0-9]{64}$" }),
+  execution_mode: Type.Union([Type.Literal("AUTO_READ_ONLY"), Type.Literal("REQUIRE_CONFIRMATION")]),
+}, { additionalProperties: false })
+
 export const CompleteMcpDiscoverySchema = Type.Union([
   Type.Object({
     state: Type.Literal("SUCCEEDED"),
@@ -88,7 +95,9 @@ export const McpDiscoveryCredentialSchema = Type.Object({
 }, { additionalProperties: false })
 
 export type McpDiscoveryObservation = Static<typeof McpDiscoveryObservationSchema>
+export type McpDiscoveryTool = Static<typeof McpDiscoveryToolSchema>
 export type McpDiscoveryOperation = Static<typeof McpDiscoveryOperationSchema>
 export type McpDiscoveryCandidate = Static<typeof McpDiscoveryCandidateSchema>
 export type CompleteMcpDiscoveryInput = Static<typeof CompleteMcpDiscoverySchema>
 export type McpDiscoveryCredential = Static<typeof McpDiscoveryCredentialSchema>
+export type DecideMcpReadOnlyApprovalInput = Static<typeof DecideMcpReadOnlyApprovalSchema>

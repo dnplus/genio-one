@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import test from "node:test"
+import { exportJWK, generateKeyPair, SignJWT } from "jose"
 
 import { DISTILLATION_EXTRACTOR_VERSION } from "@genioone/protocol/distillation-triage"
 import { tmpdir } from "node:os"
@@ -110,6 +111,137 @@ test("memory development mode is explicit and never allowed in production", asyn
       }),
     /memory-dev mode is forbidden/,
   )
+})
+
+test("memory development OIDC derives Organization Administrator scope from canonical membership", async () => {
+  const tenantId = "tenant-memory-oidc"
+  const issuer = "http://127.0.0.1:58080/realms/memory-oidc"
+  const jwksUri = `${issuer}/protocol/openid-connect/certs`
+  const { publicKey, privateKey } = await generateKeyPair("RS256", { extractable: true })
+  const publicJwk = await exportJWK(publicKey)
+  const originalFetch = globalThis.fetch
+  let app: Awaited<ReturnType<typeof createConfiguredManagementApi>> | null = null
+  const token = (subject: string, role: string) => new SignJWT({
+    azp: "management-ui",
+    scope: "genioone-management",
+    groups: ["untrusted-organization"],
+    realm_access: { roles: [role] },
+  })
+    .setProtectedHeader({ alg: "RS256", kid: "memory-oidc-key" })
+    .setIssuer(issuer)
+    .setAudience("management-ui")
+    .setSubject(subject)
+    .setIssuedAt()
+    .setExpirationTime("5m")
+    .sign(privateKey)
+
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const requested = input instanceof Request ? input.url : String(input)
+    assert.equal(requested, jwksUri)
+    return Response.json({
+      keys: [{ ...publicJwk, kid: "memory-oidc-key", alg: "RS256", use: "sig" }],
+    })
+  }) as typeof fetch
+  try {
+    app = await createConfiguredManagementApi({
+      logger: false,
+      environment: {
+        NODE_ENV: "development",
+        GENIO_ONE_PLATFORM_API_MODE: "memory-dev",
+        GENIO_ONE_MANAGEMENT_API_AUTH_MODE: "oidc",
+        GENIO_ONE_MANAGEMENT_API_OIDC_TENANTS_JSON: JSON.stringify([{
+          tenant_id: tenantId,
+          identity_provider_id: "memory-keycloak",
+          issuer,
+          audiences: ["management-ui"],
+          jwks_uri: jwksUri,
+          algorithms: ["RS256"],
+          claims: {
+            subject: "sub",
+            client: "azp",
+            role: "realm_access.roles",
+            organizations: "groups",
+          },
+        }]),
+        GENIO_ONE_BROWSER_IDENTITY_JSON: JSON.stringify({
+          tenant_id: tenantId,
+          issuer,
+          authorization_endpoint: `${issuer}/protocol/openid-connect/auth`,
+          token_endpoint: `${issuer}/protocol/openid-connect/token`,
+          client_id: "self-service-ui",
+          scopes: ["genioone-invocation"],
+          management_client_id: "management-ui",
+          management_scopes: ["genioone-management"],
+        }),
+        GENIO_ONE_BOOTSTRAP_SUBJECTS_JSON: JSON.stringify([
+          {
+            tenant_id: tenantId,
+            subject_id: "person-tenant-admin",
+            kind: "PERSON",
+            role: "TENANT_ADMINISTRATOR",
+            external_identities: [{
+              provider_id: "memory-keycloak",
+              external_subject_id: "external-tenant-admin",
+            }],
+          },
+          {
+            tenant_id: tenantId,
+            subject_id: "person-organization-admin",
+            kind: "PERSON",
+            role: "USER",
+            external_identities: [{
+              provider_id: "memory-keycloak",
+              external_subject_id: "external-organization-admin",
+            }],
+          },
+        ]),
+      },
+    })
+    const tenantHeaders = { authorization: `Bearer ${await token("external-tenant-admin", "TENANT_ADMINISTRATOR")}` }
+    const organizationHeaders = { authorization: `Bearer ${await token("external-organization-admin", "ORGANIZATION_ADMINISTRATOR")}` }
+    const created = await app.inject({
+      method: "POST",
+      url: `/v1/tenants/${tenantId}/organizations`,
+      headers: tenantHeaders,
+      payload: { display_name: "Memory OIDC" },
+    })
+    assert.equal(created.statusCode, 201, created.body)
+    const organization = created.json() as { organization_id: string; display_name: string }
+    const update = {
+      display_name: organization.display_name,
+      member_subject_ids: ["person-organization-admin"],
+      organization_administrator_subject_ids: ["person-organization-admin"],
+      membership_sources: [{ kind: "MANUAL", reference: "memory-oidc", status: "SYNCED" }],
+    }
+    const configured = await app.inject({
+      method: "PUT",
+      url: `/v1/tenants/${tenantId}/organizations/${organization.organization_id}`,
+      headers: tenantHeaders,
+      payload: update,
+    })
+    assert.equal(configured.statusCode, 200, configured.body)
+
+    const session = await app.inject({
+      method: "GET",
+      url: "/v1/identity/session",
+      headers: organizationHeaders,
+    })
+    assert.equal(session.statusCode, 200, session.body)
+    assert.deepEqual(session.json().organization_ids, [organization.organization_id])
+    assert.deepEqual(session.json().administrator_organization_ids, [organization.organization_id])
+    assert.equal(session.json().role, "ORGANIZATION_ADMINISTRATOR")
+
+    const managed = await app.inject({
+      method: "PUT",
+      url: `/v1/tenants/${tenantId}/organizations/${organization.organization_id}`,
+      headers: organizationHeaders,
+      payload: update,
+    })
+    assert.equal(managed.statusCode, 200, managed.body)
+  } finally {
+    await app?.close()
+    globalThis.fetch = originalFetch
+  }
 })
 
 test("configured memory API uses its Bot service endpoint without reading the process environment", async () => {

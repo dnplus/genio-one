@@ -21,7 +21,7 @@
      --codex ./apps/bot/node_modules/.bin/codex
    ```
 
-5. 終端機提示後貼上配對碼。CLI 核對 Codex 0.153.4，Bot 完成原生 environment 註冊後，即可在同一段對話要求執行命令或修改檔案。部署環境使用 Bot 的 HTTPS origin。
+5. 終端機提示後貼上配對碼。CLI 核對 Codex 0.159.2，Bot 完成原生 environment 註冊後，即可在同一段對話要求執行命令或修改檔案。部署環境使用 Bot 的 HTTPS origin。
 6. 點「停止本機連線」或在 Endpoint 終端機按 Ctrl-C。連線中斷後需清除舊連線，再產生新的配對碼；不重送先前的執行請求。
 
 `GENIO_ONE_LOCAL_HANDS_TOKEN` 可供非互動啟動傳入一次性配對碼。Endpoint 不會把此變數傳給執行子程序。`--codex` 未指定時使用 PATH 中的 `codex`，版本不符會拒絕連線。

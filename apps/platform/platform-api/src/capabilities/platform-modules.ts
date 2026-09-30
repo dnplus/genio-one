@@ -38,6 +38,12 @@ import { createInMemoryEnforcementChainReader } from "./enforcement/memory"
 import type { AiResourcePublicationWorkflow } from "./publications/module"
 import { createInMemoryModelEntitlementCatalog } from "./entitlements/memory"
 import type { ModelEntitlementCatalog } from "./entitlements/module"
+import { createSecurityFindingJournal, type SecurityFindingJournal } from "./security-findings/journal"
+import {
+  watchCredentialGenerationRevocations,
+  watchEntitlementRevocations,
+  watchRevokedAuthorityUse,
+} from "./security-findings/watch"
 import { createInMemoryRuntimeControlStore } from "./runtime-control/memory"
 import type {
   RegisterGatewayRuntimeInput,
@@ -56,6 +62,7 @@ import { createInMemoryUsageCounterStore } from "./usage-governance/memory-count
 import type { UsageCounterStore } from "./usage-governance/admission"
 import type { GatewayActivityDetailStore } from "./activities/detail-module"
 import type { GatewayActivityMaterializer, GatewayActivityStore } from "./activities/module"
+import type { PostHogGatewayActivitySink } from "./activities/posthog"
 import type { TraceStore } from "./traces/module"
 import { createInMemoryTraceStore } from "./traces/memory"
 import type { GatewayMetricsStore } from "./metrics/module"
@@ -89,6 +96,8 @@ import { createMcpOAuthService } from "./mcp-oauth/module"
 import type { McpOAuthService } from "./mcp-oauth/module"
 import { createInMemoryGatewayDiagnosticSettingsStore } from "./gateway-settings/memory"
 import type { GatewayDiagnosticSettingsStore } from "./gateway-settings/module"
+import { createInMemoryPostHogIntegrationStore } from "./posthog-integration/memory"
+import type { PostHogIntegrationStore } from "./posthog-integration/module"
 import type { GatewayRegistrationLifecycle } from "./gateway-registration/module"
 import { createGatewayRegistrationLifecycle } from "./gateway-registration/module"
 import { createInMemoryGatewayRegistrationRepository } from "./gateway-registration/memory"
@@ -159,11 +168,13 @@ export interface PlatformModuleGraph {
   endpointRuntime: EndpointRuntimeStore
   activityDetails?: GatewayActivityDetailStore
   activityMaterializer?: GatewayActivityMaterializer
+  postHogGatewayActivitySink?: PostHogGatewayActivitySink
   traces: TraceStore
   metrics: GatewayMetricsStore
   identity: IdentityDirectory
   accessGroups: AccessGroupDirectory
   auditEvents: GatewayAuthorizationAuditStore
+  securityFindings: SecurityFindingJournal
   siem: SiemForwarder
   notifications: NotificationSubscriptionStore
   distillation: DistillationStore
@@ -173,6 +184,7 @@ export interface PlatformModuleGraph {
   personalCredentials: PersonalCredentials
   mcpOAuth: McpOAuthService
   gatewayDiagnosticSettings: GatewayDiagnosticSettingsStore
+  postHogIntegration: PostHogIntegrationStore
   gatewayRegistrations: GatewayRegistrationLifecycle
   agentDelegations: AgentDelegationDirectory
   executionGrants: ExecutionGrantDirectory
@@ -197,20 +209,29 @@ export interface InMemoryPlatformOptions {
 export function createInMemoryPlatformModules(
   options: InMemoryPlatformOptions = {},
 ): InMemoryPlatformModules {
+  const now = options.now ?? (() => Math.floor(Date.now() / 1000))
+  const securityFindings = createSecurityFindingJournal()
   const organizations = createInMemoryOrganizationDirectory({ now: options.now })
   const identity = createInMemoryIdentityDirectory()
-  const auditEvents = createInMemoryGatewayAuthorizationAuditStore()
+  const auditEvents = watchRevokedAuthorityUse(
+    createInMemoryGatewayAuthorizationAuditStore(),
+    securityFindings,
+  )
   const accessGroups = createAccessGroupDirectory({
     repository: createInMemoryAccessGroupRepository({ audit: auditEvents }),
     identity,
     organizations,
     now: options.now,
   })
-  const applications = createInMemoryApplicationRegistry({
-    identity,
-    organizations,
-    now: options.now,
-  })
+  const applications = watchCredentialGenerationRevocations(
+    createInMemoryApplicationRegistry({
+      identity,
+      organizations,
+      now: options.now,
+    }),
+    securityFindings,
+    now,
+  )
   const federation = createInMemoryFederationService({
     now: options.now,
     async applicationSubject({ tenantId, applicationId }) {
@@ -252,7 +273,11 @@ export function createInMemoryPlatformModules(
     decisionMinimumConfidence: options.modelRoutingDecisionMinimumConfidence,
   })
   const modelRoutingPolicies = createInMemoryModelRoutingPolicyStore({ now: options.now })
-  const entitlements = createInMemoryModelEntitlementCatalog({ now: options.now, models })
+  const entitlements = watchEntitlementRevocations(
+    createInMemoryModelEntitlementCatalog({ now: options.now, models }),
+    securityFindings,
+    now,
+  )
   const agentDelegations = createAgentDelegationDirectory({
     repository: createInMemoryAgentDelegationRepository(),
     identity,
@@ -365,6 +390,8 @@ export function createInMemoryPlatformModules(
     configuration,
     identity,
     organizations,
+    connections,
+    audit: auditEvents,
     now: options.now,
   })
   const mcpDiscovery = createInMemoryMcpDiscoveryStore({
@@ -384,6 +411,9 @@ export function createInMemoryPlatformModules(
     now: options.now,
   })
   const gatewayDiagnosticSettings = createInMemoryGatewayDiagnosticSettingsStore({
+    now: options.now,
+  })
+  const postHogIntegration = createInMemoryPostHogIntegrationStore({
     now: options.now,
   })
   const gatewayRegistrations = createGatewayRegistrationLifecycle({
@@ -469,6 +499,7 @@ export function createInMemoryPlatformModules(
     identity,
     accessGroups,
     auditEvents,
+    securityFindings,
     siem,
     notifications,
     distillation,
@@ -478,6 +509,7 @@ export function createInMemoryPlatformModules(
     mcpOAuth,
     personalCredentials,
     gatewayDiagnosticSettings,
+    postHogIntegration,
     gatewayRegistrations,
     botAccessPolicy,
     demoInstallations,

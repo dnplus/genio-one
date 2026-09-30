@@ -89,6 +89,7 @@ test("in-memory policy toggles fail closed before committing their revision when
       if (rejectAudit) throw new Error("AUDIT_WRITE_FAILED")
       return persisted.record(input)
     },
+    findById: persisted.findById,
     query: persisted.query,
     findRuntimeAuthorization: persisted.findRuntimeAuthorization,
     findRuntimeReport: persisted.findRuntimeReport,

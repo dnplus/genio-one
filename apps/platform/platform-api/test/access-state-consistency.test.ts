@@ -1,10 +1,11 @@
 import assert from "node:assert/strict"
 import test from "node:test"
+import type { AccessGovernanceAuditEvent } from "../src/capabilities/access/audit"
 import { createInMemoryAccessGovernanceStore } from "../src/capabilities/access/memory"
 
-function store(startsAt: number | null) {
+function store(startsAt: number | null, events: AccessGovernanceAuditEvent[] = []) {
   const resource = { tenant_id: "qa", resource_id: "service", display_name: "Service", owner_organization_id: "sales", kind: "MCP", lifecycle: "PUBLISHED", operational_state: "HEALTHY", publication_endpoint: { visibility: "REQUEST", hostname: "service.qa.localhost", base_path: "/mcp/service" }, capabilities: [{ capability_id: "mcp.invoke", display_name: "Invoke" }] }
-  return createInMemoryAccessGovernanceStore({ now: () => 100, resources: { listResources: async () => [resource], getResource: async () => resource }, entitlements: { list: async () => startsAt === null ? [] : [{ entitlement_id: "grant", subject_id: "dylan", resource_id: "service", capability_id: "mcp.invoke", state: "ACTIVE", starts_at: startsAt, expires_at: 300 }] }, identity: { inventory: async () => ({ subjects: [] }) }, organizations: { list: async () => [] }, configuration: { published: async () => ({ revision: "1", settings: { request_form: { enabled: true }, ttl_options_seconds: [60], approval_workflow_version: "1" } }) } } as unknown as Parameters<typeof createInMemoryAccessGovernanceStore>[0])
+  return createInMemoryAccessGovernanceStore({ now: () => 100, resources: { listResources: async () => [resource], getResource: async () => resource }, entitlements: { list: async () => startsAt === null ? [] : [{ entitlement_id: "grant", subject_id: "dylan", resource_id: "service", capability_id: "mcp.invoke", state: "ACTIVE", starts_at: startsAt, expires_at: 300 }] }, identity: { inventory: async () => ({ subjects: [] }) }, organizations: { list: async () => [] }, configuration: { published: async () => ({ revision: "1", settings: { request_form: { enabled: true }, ttl_options_seconds: [60], approval_workflow_version: "1" } }) }, audit: { async record({ event }: { event: AccessGovernanceAuditEvent }) { events.push(event) } } } as unknown as Parameters<typeof createInMemoryAccessGovernanceStore>[0])
 }
 const actor = { subjectId: "dylan", clientId: "bot", role: "USER" as const, organizationIds: [] }
 const request = { tenantId: "qa", actor, value: { correlation_id: "test", resource_id: "service", capability_id: "mcp.invoke", justification: "Read cases", requested_valid_for_seconds: 60 } }
@@ -30,4 +31,16 @@ test("denial and cancellation retain the same stage outcome", async () => {
     assert.equal(updated.state, cancel ? "CANCELLED" : "DENIED")
     assert.equal(updated.approval_stages[0]?.state, updated.state)
   }
+})
+
+test("cancellation records its governance audit correlation", async () => {
+  const events: AccessGovernanceAuditEvent[] = []
+  const access = store(null, events)
+  const result = await access.request({ tenantId: "qa", actor, value: { ...request.value, correlation_id: "request-correlation" } })
+  if (!("CREATED" in result)) throw new Error("request was not created")
+  const cancelled = await access.cancel({ tenantId: "qa", actor, requestId: result.CREATED.access_request_id, value: { correlation_id: "cancel-correlation", reason: "No longer needed" } })
+  assert.equal(cancelled.decision_correlation_id, "cancel-correlation")
+  assert.equal(events.at(-1)?.operation, "CANCEL")
+  assert.equal(events.at(-1)?.correlation_id, "cancel-correlation")
+  assert.equal(events.at(-1)?.access_request_id, result.CREATED.access_request_id)
 })

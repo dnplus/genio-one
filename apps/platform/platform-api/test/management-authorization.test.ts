@@ -13,6 +13,7 @@ const organizationPrincipal: Principal = {
   subject_id: "person-owner",
   role: "ORGANIZATION_ADMINISTRATOR",
   organization_ids: ["organization-owner"],
+  administrator_organization_ids: ["organization-owner"],
   client_id: "management-ui",
   scopes: ["genioone-management"],
 }
@@ -197,6 +198,48 @@ test("Organization Administrators can update only scoped Organizations and Acces
   )
 })
 
+test("Organization membership alone cannot authorize Organization mutation", async () => {
+  const module = authorization({
+    ...organizationPrincipal,
+    administrator_organization_ids: [],
+  })
+  const input = request({
+    url: "/v1/tenants/tenant-acme/organizations/organization-owner",
+    method: "PUT",
+    token: "accepted",
+    body: {},
+  })
+  await module.authenticate(input)
+  await module.normalize(input)
+  await assert.rejects(
+    module.authorize(input),
+    (error: unknown) => error instanceof PlatformApiError && error.code === "RESOURCE_OWNER_OR_TENANT_ADMIN_REQUIRED",
+  )
+})
+
+test("member Resource reads do not grant Connection management visibility", async () => {
+  const member = authorization({ ...organizationPrincipal, role: "USER", administrator_organization_ids: [] })
+  const resourceDetail = request({ url: "/v1/tenants/tenant-acme/resources/resource-owned", method: "GET", token: "accepted" })
+  await member.authenticate(resourceDetail)
+  await member.authorize(resourceDetail)
+
+  for (const principal of [
+    { ...organizationPrincipal, role: "USER" as const, administrator_organization_ids: [] },
+    { ...organizationPrincipal, administrator_organization_ids: [] },
+  ]) {
+    const module = authorization(principal)
+    const connections = request({ url: "/v1/tenants/tenant-acme/resources/resource-owned/connections", method: "GET", token: "accepted" })
+    await module.authenticate(connections)
+    await assert.rejects(module.authorize(connections), (error: unknown) =>
+      error instanceof PlatformApiError && error.code === "RESOURCE_OWNER_OR_TENANT_ADMIN_REQUIRED")
+  }
+
+  const owner = authorization()
+  const ownedConnections = request({ url: "/v1/tenants/tenant-acme/resources/resource-owned/connections", method: "GET", token: "accepted" })
+  await owner.authenticate(ownedConnections)
+  await owner.authorize(ownedConnections)
+})
+
 test("raw tenant telemetry requires tenant administration rather than organization access", async () => {
   for (const path of ["logs", "traces", `traces/${"a".repeat(32)}/spans`]) {
     for (const role of ["USER", "ORGANIZATION_ADMINISTRATOR", "TENANT_ADMINISTRATOR"] as const) {
@@ -205,6 +248,26 @@ test("raw tenant telemetry requires tenant administration rather than organizati
       await module.authenticate(input)
       if (role === "TENANT_ADMINISTRATOR") await module.authorize(input)
       else await assert.rejects(module.authorize(input), error => error instanceof PlatformApiError && error.statusCode === 403)
+    }
+  }
+})
+
+test("audit event list requires Tenant Administrator authorization", async () => {
+  for (const role of ["USER", "ORGANIZATION_ADMINISTRATOR", "TENANT_ADMINISTRATOR"] as const) {
+    const module = authorization({ ...organizationPrincipal, role })
+    const input = request({
+      url: "/v1/tenants/tenant-acme/audit-events?kind=ACCESS_GOVERNANCE_CHANGE",
+      method: "GET",
+      token: "accepted",
+    })
+    await module.authenticate(input)
+    if (role === "TENANT_ADMINISTRATOR") {
+      await module.authorize(input)
+    } else {
+      await assert.rejects(
+        module.authorize(input),
+        (error: unknown) => error instanceof PlatformApiError && error.code === "TENANT_ADMINISTRATOR_REQUIRED",
+      )
     }
   }
 })

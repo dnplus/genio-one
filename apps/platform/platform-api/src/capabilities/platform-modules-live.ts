@@ -29,6 +29,12 @@ import {
   type GatewayAggregateRuntimeControlModule,
   type PlatformModuleGraph as BasePlatformModuleGraph,
 } from "./platform-modules"
+import { createSecurityFindingJournal } from "./security-findings/journal"
+import {
+  watchCredentialGenerationRevocations,
+  watchEntitlementRevocations,
+  watchRevokedAuthorityUse,
+} from "./security-findings/watch"
 import { createPostgresGatewayAggregateRuntimeControlStore } from "./gateway-runtime-control/postgres"
 import { createPostgresGatewayPolicyReleaseStore } from "./gateway-policy-release/postgres"
 import type { GatewayPolicyReleaseStore } from "./gateway-policy-release/module"
@@ -43,6 +49,7 @@ import { createPostgresGatewayActiveProjectionSetSource } from "./gateway-policy
 import { createPostgresGatewayPolicyInputSource } from "./gateway-policy-release/policy-inputs"
 import type { CompactJwsSigner } from "./gateway-policy-release/contract"
 import { createPostgresGatewayActivityStore } from "./activities/postgres"
+import { createPostHogGatewayActivitySink } from "./activities/posthog"
 import { createPostgresEndpointActivityStore } from "./endpoint-activities/postgres"
 import { createPostgresEndpointRuntimeStore } from "./endpoint-runtime/postgres"
 import { createClickHouseGatewayActivityMaterializer } from "./activities/otel-clickhouse"
@@ -69,6 +76,7 @@ import {
   createPostgresGatewayDiagnosticSettingsSource,
   createPostgresGatewayDiagnosticSettingsStore,
 } from "./gateway-settings/postgres"
+import { createPostgresPostHogIntegrationStore } from "./posthog-integration/postgres"
 import type { GatewayIdentityProvisioner } from "./gateway-registration/module"
 import type { ApplicationOAuthClientProvisioner } from "./applications/module"
 import type { ApplicationTokenBroker, WorkloadAssertionVerifier } from "./federation/module"
@@ -206,6 +214,12 @@ export function createPlatformModuleGraph(
     releasePublisher: lifecycleReleasePublisher,
     now: options.now,
   })
+  const postHogIntegration = createPostgresPostHogIntegrationStore({
+    sql: options.sql,
+  })
+  const postHogGatewayActivitySink = createPostHogGatewayActivitySink({
+    integrations: postHogIntegration,
+  })
   const gatewayRegistrations = createGatewayRegistrationLifecycle({
     repository: createPostgresGatewayRegistrationRepository({ sql: options.sql }),
     provisioner: options.gatewayIdentityProvisioner,
@@ -258,7 +272,22 @@ export function createPlatformModuleGraph(
     connections: postgres.connections,
     processorAdapters,
   })
-  const auditEvents = createPostgresGatewayAuthorizationAuditStore({ sql: postgres.sql })
+  const securityFindings = createSecurityFindingJournal()
+  const revokedAuthorityClock = options.now ?? (() => Math.floor(Date.now() / 1000))
+  const applications = watchCredentialGenerationRevocations(
+    postgres.applications,
+    securityFindings,
+    revokedAuthorityClock,
+  )
+  const entitlements = watchEntitlementRevocations(
+    postgres.entitlements,
+    securityFindings,
+    revokedAuthorityClock,
+  )
+  const auditEvents = watchRevokedAuthorityUse(
+    createPostgresGatewayAuthorizationAuditStore({ sql: postgres.sql }),
+    securityFindings,
+  )
   const policyDrafts = createPolicyDraftStore({ sql: postgres.sql, now: options.now, audit: auditEvents })
   const enforcementRevisionStore = createPostgresEnforcementChainRevisionStore({
     sql: postgres.sql,
@@ -318,6 +347,7 @@ export function createPlatformModuleGraph(
         activities,
         audits: auditEvents,
         connections: postgres.connections,
+        postHog: postHogGatewayActivitySink,
       })
     : undefined
   const activityDetails = options.clickhouse
@@ -342,7 +372,7 @@ export function createPlatformModuleGraph(
       releasePublisher: lifecycleReleasePublisher,
     }),
     identity,
-    entitlements: postgres.entitlements,
+    entitlements,
     now: options.now,
   })
   const executionGrants = createExecutionGrantDirectory({
@@ -350,7 +380,7 @@ export function createPlatformModuleGraph(
       sql: postgres.sql,
       releasePublisher: lifecycleReleasePublisher,
     }),
-    entitlements: postgres.entitlements,
+    entitlements,
     resources: postgres.resources,
     organizations: postgres.organizations,
     now: options.now,
@@ -372,6 +402,7 @@ export function createPlatformModuleGraph(
   })
   const access = createPostgresAccessGovernanceStore({
     sql: postgres.sql,
+    audit: auditEvents,
     releasePublisher: lifecycleReleasePublisher,
     now: options.now,
     idFactory: options.idFactory,
@@ -417,14 +448,14 @@ export function createPlatformModuleGraph(
   return {
     sql: postgres.sql,
     organizations: postgres.organizations,
-    applications: postgres.applications,
+    applications,
     federation: postgres.federation,
     resources: postgres.resources,
     connections: postgres.connections,
     providers: postgres.providers,
     providerCredentials: postgres.providerCredentials,
     models: postgres.models,
-    entitlements: postgres.entitlements,
+    entitlements,
     modelRouter,
     modelRoutingPolicies: postgres.modelRoutingPolicies,
     enforcementCompiler,
@@ -456,6 +487,7 @@ export function createPlatformModuleGraph(
     agentDelegations,
     executionGrants,
     auditEvents,
+    securityFindings,
     siem,
     notifications,
     distillation,
@@ -465,6 +497,8 @@ export function createPlatformModuleGraph(
     mcpOAuth,
     personalCredentials,
     gatewayDiagnosticSettings,
+    postHogIntegration,
+    postHogGatewayActivitySink,
     gatewayRegistrations,
     botAccessPolicy,
     demoInstallations,

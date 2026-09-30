@@ -654,6 +654,7 @@ test("selected GCP Vertex Connection projects exact credential profile strategie
     mcp_tool_namespace: null,
     mcp_selected_tools: [],
     mcp_tool_selection_operation_id: null,
+    mcp_tool_reviews: [],
     status: "READY",
     configuration_revision: 3,
     lifecycle: "ENABLED",
@@ -910,6 +911,7 @@ test("API projection preserves unspecified parameters and compiles operation ove
     mcp_tool_namespace: null,
     mcp_selected_tools: [],
     mcp_tool_selection_operation_id: null,
+    mcp_tool_reviews: [],
     credential_ref: null,
     downstream_identity: { mode: "NONE" },
     request_mapping: {
@@ -1094,6 +1096,22 @@ test("MCP projection delegates outbound identity to native backend policy", asyn
     mcp_tool_namespace: "jira",
     mcp_selected_tools: ["search_issues"],
     mcp_tool_selection_operation_id: "mcp-discovery-jira-1",
+    mcp_tool_reviews: [{
+      tool_name: "search_issues",
+      source_revision_digest: "a".repeat(64),
+      execution_mode: "AUTO_READ_ONLY",
+      source_read_only_hint: true,
+      title: "Search issues",
+      description: "Search approved engineering issues.",
+      input_schema: {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+        additionalProperties: false,
+      },
+      approved_by_subject_id: "platform-admin",
+      approved_at: 1,
+    }],
     credential_ref: null,
     downstream_identity: {
       mode: "USER_PASSTHROUGH",
@@ -1168,6 +1186,208 @@ test("MCP projection delegates outbound identity to native backend policy", asyn
   assert.deepEqual(route.spec.hostnames, ["mcp.example.test"])
   assert.equal(route.spec.path, "/mcp")
   assert.equal((route.spec.parentRefs as Array<{ sectionName: string }>)[0]?.sectionName, "http")
+  assert.deepEqual((route.spec.securityPolicy as { oauth: unknown }).oauth, {
+    issuer: "https://identity.example.test/realms/acme",
+    audiences: ["genio-one"],
+    jwks: {
+      remoteJWKS: {
+        uri: "https://identity.example.test/realms/acme/protocol/openid-connect/certs",
+      },
+    },
+    protectedResourceMetadata: {
+      resource: "https://mcp.example.test/mcp",
+      scopesSupported: ["genioone-invocation"],
+    },
+    claimToHeaders: [
+      { claim: "sub", header: "x-genio-verified-subject" },
+      { claim: "azp", header: "x-genio-verified-client" },
+    ],
+  })
+  const metadataFilter = projection.resources.find(
+    (candidate) => candidate.kind === "HTTPRouteFilter",
+  )!
+  const directResponse = metadataFilter.spec.directResponse as {
+    contentType: string
+    statusCode: number
+    body: { type: string; inline: string }
+  }
+  assert.equal(directResponse.contentType, "application/json")
+  assert.equal(directResponse.statusCode, 200)
+  assert.equal(directResponse.body.type, "Inline")
+  assert.deepEqual(JSON.parse(directResponse.body.inline), {
+    resource: "https://mcp.example.test/mcp",
+    authorization_servers: ["https://identity.example.test/realms/acme"],
+    scopes_supported: ["genioone-invocation"],
+    bearer_methods_supported: ["header"],
+  })
+  const metadataRoute = projection.resources.find(
+    (candidate) => candidate.kind === "HTTPRoute" && candidate.metadata.name === metadataFilter.metadata.name,
+  )!
+  assert.deepEqual(metadataRoute.spec.hostnames, ["mcp.example.test"])
+  assert.deepEqual(metadataRoute.spec.parentRefs, route.spec.parentRefs)
+  assert.deepEqual(metadataRoute.spec.rules, [{
+    matches: [{
+      method: "GET",
+      path: {
+        type: "Exact",
+        value: "/.well-known/oauth-protected-resource/mcp",
+      },
+    }],
+    filters: [{
+      type: "ExtensionRef",
+      extensionRef: {
+        group: "gateway.envoyproxy.io",
+        kind: "HTTPRouteFilter",
+        name: metadataFilter.metadata.name,
+      },
+    }],
+  }])
+  assert.equal("securityPolicy" in metadataRoute.spec, false)
+  assert.equal(
+    projection.resources.some((candidate) =>
+      candidate.kind === "SecurityPolicy" &&
+      (candidate.spec.targetRefs as Array<{ name?: string }> | undefined)?.some(
+        (target) => target.name === metadataRoute.metadata.name,
+      ),
+    ),
+    false,
+  )
+  for (const {
+    basePath,
+    expectedResource,
+    expectedMetadataPath,
+  } of [
+    {
+      basePath: "/",
+      expectedResource: "https://mcp.example.test/",
+      expectedMetadataPath: "/.well-known/oauth-protected-resource",
+    },
+    {
+      basePath: "/mcp",
+      expectedResource: "https://mcp.example.test/mcp",
+      expectedMetadataPath: "/.well-known/oauth-protected-resource/mcp",
+    },
+    {
+      basePath: "/mcp/",
+      expectedResource: "https://mcp.example.test/mcp",
+      expectedMetadataPath: "/.well-known/oauth-protected-resource/mcp",
+    },
+  ]) {
+    const publicationId = `publication-mcp-metadata-${basePath === "/" ? "root" : basePath.endsWith("/") ? "trailing" : "path"}`
+    const endpoint = { ...mcpResource.publication_endpoint!, base_path: basePath }
+    const pathProjection = await projector(
+      publicationSnapshot({
+        publication_id: publicationId,
+        resource_id: "resource-mcp",
+        capability_id: "mcp.invoke",
+        policy_revision: 1,
+        resource: { ...mcpResource, publication_endpoint: endpoint },
+        publication_endpoint: endpoint,
+        one_policy_chain: mcpChain,
+        connections: [mcpConnection] as never,
+        models: [],
+        model_mappings: [],
+      }),
+    ).compile({ tenantId: "tenant-acme", value: { publication_id: publicationId } })
+    const pathMcpRoute = pathProjection.resources.find((candidate) => candidate.kind === "MCPRoute")!
+    const pathMetadataFilter = pathProjection.resources.find(
+      (candidate) => candidate.kind === "HTTPRouteFilter",
+    )!
+    const pathMetadataRoute = pathProjection.resources.find(
+      (candidate) => candidate.kind === "HTTPRoute" && candidate.metadata.name === pathMetadataFilter.metadata.name,
+    )!
+    const pathDirectResponse = pathMetadataFilter.spec.directResponse as {
+      body: { inline: string }
+    }
+    const pathMatch = (pathMetadataRoute.spec.rules as Array<{
+      matches: Array<{ method: string; path: { value: string } }>
+    }>)[0]!.matches[0]!
+    assert.equal(pathMcpRoute.spec.path, basePath === "/" ? "/" : "/mcp")
+    assert.equal(JSON.parse(pathDirectResponse.body.inline).resource, expectedResource)
+    assert.equal(pathMatch.method, "GET")
+    assert.equal(pathMatch.path.value, expectedMetadataPath)
+  }
+
+  const metadataBoundaryEndpoint = {
+    ...mcpResource.publication_endpoint!,
+    base_path: `/${"p".repeat(2047)}`,
+  }
+  const metadataDocumentBytes = (issuer: string) => new TextEncoder().encode(JSON.stringify({
+    resource: `https://mcp.example.test${metadataBoundaryEndpoint.base_path}`,
+    authorization_servers: [issuer],
+    scopes_supported: ["genioone-invocation"],
+    bearer_methods_supported: ["header"],
+  })).byteLength
+  const boundaryIssuerPrefix = "https://identity.example.test/"
+  const boundaryIssuer = `${boundaryIssuerPrefix}${"i".repeat(4096 - metadataDocumentBytes(boundaryIssuerPrefix))}`
+  assert.equal(metadataDocumentBytes(boundaryIssuer), 4096)
+  const boundaryChain = {
+    ...mcpChain,
+    steps: mcpChain.steps.map((step) => step.kind === "AUTHENTICATE"
+      ? { ...step, config: { ...step.config, issuer: boundaryIssuer } }
+      : step),
+  }
+  const boundaryResource = {
+    ...mcpResource,
+    publication_endpoint: metadataBoundaryEndpoint,
+  }
+  const boundaryProjection = await projector(
+    publicationSnapshot({
+      publication_id: "publication-mcp-metadata-boundary",
+      resource_id: "resource-mcp",
+      capability_id: "mcp.invoke",
+      policy_revision: 1,
+      resource: boundaryResource,
+      publication_endpoint: metadataBoundaryEndpoint,
+      one_policy_chain: boundaryChain,
+      connections: [mcpConnection] as never,
+      models: [],
+      model_mappings: [],
+    }),
+  ).compile({
+    tenantId: "tenant-acme",
+    value: { publication_id: "publication-mcp-metadata-boundary" },
+  })
+  const boundaryFilter = boundaryProjection.resources.find(
+    (candidate) => candidate.kind === "HTTPRouteFilter",
+  )!
+  const boundaryBody = (boundaryFilter.spec.directResponse as {
+    body: { inline: string }
+  }).body.inline
+  assert.equal(new TextEncoder().encode(boundaryBody).byteLength, 4096)
+  assert.equal(Check(GatewayProjectionSchema, boundaryProjection), true)
+
+  const oversizedIssuer = `${boundaryIssuer}界`
+  assert.equal(metadataDocumentBytes(oversizedIssuer), 4099)
+  const oversizedChain = {
+    ...mcpChain,
+    steps: mcpChain.steps.map((step) => step.kind === "AUTHENTICATE"
+      ? { ...step, config: { ...step.config, issuer: oversizedIssuer } }
+      : step),
+  }
+  await assert.rejects(
+    projector(
+      publicationSnapshot({
+        publication_id: "publication-mcp-metadata-too-large",
+        resource_id: "resource-mcp",
+        capability_id: "mcp.invoke",
+        policy_revision: 1,
+        resource: boundaryResource,
+        publication_endpoint: metadataBoundaryEndpoint,
+        one_policy_chain: oversizedChain,
+        connections: [mcpConnection] as never,
+        models: [],
+        model_mappings: [],
+      }),
+    ).compile({
+      tenantId: "tenant-acme",
+      value: { publication_id: "publication-mcp-metadata-too-large" },
+    }),
+    (error: unknown) =>
+      error instanceof PlatformApiError &&
+      error.code === "MCP_OAUTH_PROTECTED_RESOURCE_METADATA_TOO_LARGE" &&
+      error.statusCode === 422,
+  )
   assert.equal(backendRef.path, "/mcp")
   assert.deepEqual(backendRef.toolSelector, { include: ["search_issues"] })
   assert.deepEqual(backendRef.forwardHeaders, [
@@ -1179,6 +1399,53 @@ test("MCP projection delegates outbound identity to native backend policy", asyn
     (candidate) => candidate.kind === "Backend" && candidate.metadata.name === "jira",
   )!
   assert.equal(backend.metadata.name, "jira")
+  assert.equal(backend.metadata.annotations?.["genio.one/connection-id"], "connection-mcp")
+  assert.deepEqual(projection.mcp_tool_definitions, [{
+    resource_id: "resource-mcp",
+    connection_id: "connection-mcp",
+    canonical_tool_name: "search_issues",
+    exposed_tool_name: "jira__search_issues",
+    source_revision_digest: "a".repeat(64),
+    description: "Search approved engineering issues.",
+    input_schema: {
+      type: "object",
+      properties: { query: { type: "string" } },
+      required: ["query"],
+      additionalProperties: false,
+    },
+    read_only: true,
+  }])
+  const unreviewedProjection = await projector(
+    publicationSnapshot({
+      publication_id: "publication-mcp-unreviewed-1",
+      resource_id: "resource-mcp",
+      capability_id: "mcp.invoke",
+      policy_revision: 1,
+      resource: mcpResource,
+      publication_endpoint: mcpResource.publication_endpoint!,
+      one_policy_chain: mcpChain,
+      connections: [{ ...mcpConnection, mcp_tool_reviews: [] }] as never,
+      models: [],
+      model_mappings: [],
+    }),
+  ).compile({ tenantId: "tenant-acme", value: { publication_id: "publication-mcp-unreviewed-1" } })
+  assert.equal(unreviewedProjection.mcp_tool_definitions, undefined)
+  const internalProjection = await projector(
+    publicationSnapshot({
+      publication_id: "publication-mcp-internal-1",
+      resource_id: "resource-mcp",
+      capability_id: "mcp.invoke",
+      policy_revision: 1,
+      resource: mcpResource,
+      publication_endpoint: mcpResource.publication_endpoint!,
+      one_policy_chain: mcpChain,
+      connections: [{ ...mcpConnection, endpoint: "http://genio-one-connectors-mail2000:8080/mcp" }] as never,
+      models: [],
+      model_mappings: [],
+    }),
+  ).compile({ tenantId: "tenant-acme", value: { publication_id: "publication-mcp-internal-1" } })
+  const internalBackend = internalProjection.resources.find((candidate) => candidate.kind === "Backend" && candidate.metadata.name === "jira")!
+  assert.deepEqual(internalBackend.spec.endpoints, [{ fqdn: { hostname: "genio-one-connectors-mail2000.default.svc.cluster.local", port: 8080 } }])
   const tls = backend.spec.tls as {
     ecdhCurves: string[]
     sni: string

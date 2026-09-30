@@ -6,6 +6,7 @@ import type { McpDiscoveryStore } from "./module"
 import type { ResourceMemoryState } from "../resources/state"
 import { mcpToolCapabilityId } from "../../../../../../runtimes/gateway/services/shared/mcp-tool-capability"
 import { discoveryCandidates } from "./candidates"
+import { mcpToolReviewForCandidate, pruneMcpToolReviews, replaceMcpToolReview } from "./reviews"
 
 function connectionKey(tenantId: string, connectionId: string): string {
   return `${tenantId}\u0000${connectionId}`
@@ -133,17 +134,32 @@ export function createInMemoryMcpDiscoveryStore(options: {
           candidate.operation_id !== operation.operation_id &&
           candidate.state === "SUCCEEDED")
         .sort((left, right) => right.completed_at! - left.completed_at!)[0]
+      const nextCandidates = input.result.state === "SUCCEEDED"
+        ? discoveryCandidates(
+            operation.connection_id,
+            input.result.observation,
+            connection.mcp_selected_tools,
+            previous?.candidates,
+          )
+        : []
+      if (input.result.state === "SUCCEEDED") {
+        const nextReviews = pruneMcpToolReviews(connection.mcp_tool_reviews, nextCandidates)
+        if (JSON.stringify(nextReviews) !== JSON.stringify(connection.mcp_tool_reviews ?? [])) {
+          options.state.connections.set(`${input.tenantId}:${operation.resource_id}:${operation.connection_id}`, {
+            ...connection,
+            mcp_tool_reviews: nextReviews,
+            configuration_revision: connection.configuration_revision + 1,
+          })
+          const resourceKey = `${input.tenantId}:${operation.resource_id}`
+          options.state.resourceRevisions.set(resourceKey, (options.state.resourceRevisions.get(resourceKey) ?? 1) + 1)
+        }
+      }
       const completed: McpDiscoveryOperation = input.result.state === "SUCCEEDED"
         ? {
             ...operation,
             state: "SUCCEEDED",
             observation: input.result.observation,
-            candidates: discoveryCandidates(
-              operation.connection_id,
-              input.result.observation,
-              connection.mcp_selected_tools,
-              previous?.candidates,
-            ),
+            candidates: nextCandidates,
             completed_at: timestamp,
             updated_at: timestamp,
           }
@@ -195,9 +211,17 @@ export function createInMemoryMcpDiscoveryStore(options: {
       const selected = (input.state === "PUBLISHED"
         ? [...new Set([...connection.mcp_selected_tools, candidate.tool_name])]
         : connection.mcp_selected_tools.filter((name) => name !== candidate.tool_name)).sort()
-      if (JSON.stringify(selected) !== JSON.stringify(connection.mcp_selected_tools)) {
+      const nextReviews = input.state === "PUBLISHED"
+        ? connection.mcp_tool_reviews ?? []
+        : replaceMcpToolReview(connection.mcp_tool_reviews, null, candidate.tool_name)
+      const selectionChanged = JSON.stringify(selected) !== JSON.stringify(connection.mcp_selected_tools)
+      const reviewsChanged = JSON.stringify(nextReviews) !== JSON.stringify(connection.mcp_tool_reviews ?? [])
+      if (selectionChanged || reviewsChanged) {
         options.state.connections.set(ownedConnectionKey, {
-          ...connection, mcp_selected_tools: selected, mcp_tool_selection_operation_id: operation.operation_id,
+          ...connection,
+          mcp_selected_tools: selected,
+          mcp_tool_selection_operation_id: operation.operation_id,
+          mcp_tool_reviews: nextReviews,
           configuration_revision: connection.configuration_revision + 1,
         })
         const existing = new Set(resource.capabilities.map((capability) => capability.capability_id))
@@ -207,6 +231,57 @@ export function createInMemoryMcpDiscoveryStore(options: {
       }
       operations.set(updated.operation_id, updated)
       return clone(updated)
+    },
+
+    async decideReadOnlyApproval(input) {
+      const operation = [...operations.values()]
+        .filter((candidate) =>
+          candidate.tenant_id === input.tenantId &&
+          candidate.resource_id === input.resourceId &&
+          candidate.connection_id === input.connectionId &&
+          candidate.state === "SUCCEEDED")
+        .sort((left, right) => right.completed_at! - left.completed_at!)[0]
+      if (!operation) throw new PlatformApiError("MCP_DISCOVERY_NOT_FOUND", 404)
+      const candidate = operation.candidates.find((value) => value.candidate_id === input.candidateId)
+      if (!candidate) throw new PlatformApiError("MCP_DISCOVERY_CANDIDATE_NOT_FOUND", 404)
+      if (candidate.revision_digest !== input.expectedRevisionDigest) {
+        throw new PlatformApiError("MCP_DISCOVERY_CANDIDATE_REVISION_CONFLICT", 409)
+      }
+      const resourceKey = `${input.tenantId}:${input.resourceId}`
+      const ownedConnectionKey = `${resourceKey}:${input.connectionId}`
+      const connection = options.state.connections.get(ownedConnectionKey)
+      const resource = options.state.resources.get(resourceKey)
+      if (!connection || !resource) throw new PlatformApiError("MCP_CONNECTION_NOT_FOUND", 404)
+      if (
+        resource.publication_request?.state === "PENDING" &&
+        resource.publication_request.publication_state !== "FAILED"
+      ) {
+        throw new PlatformApiError("MCP_TOOL_SELECTION_LOCKED", 409)
+      }
+      if (!connection.mcp_selected_tools.includes(candidate.tool_name) || candidate.state !== "PUBLISHED") {
+        throw new PlatformApiError("MCP_TOOL_REVIEW_TOOL_NOT_PUBLISHED", 409)
+      }
+      if (input.executionMode === "AUTO_READ_ONLY" && !operation.observation) {
+        throw new PlatformApiError("MCP_TOOL_REVIEW_METADATA_REQUIRED", 409)
+      }
+      const review = input.executionMode === "AUTO_READ_ONLY"
+        ? mcpToolReviewForCandidate({
+            observation: operation.observation!,
+            candidate,
+            approvedBySubjectId: input.approvedBySubjectId,
+            approvedAt: now(),
+          })
+        : null
+      const nextReviews = replaceMcpToolReview(connection.mcp_tool_reviews, review, candidate.tool_name)
+      if (JSON.stringify(nextReviews) !== JSON.stringify(connection.mcp_tool_reviews ?? [])) {
+        options.state.connections.set(ownedConnectionKey, {
+          ...connection,
+          mcp_tool_reviews: nextReviews,
+          configuration_revision: connection.configuration_revision + 1,
+        })
+        options.state.resourceRevisions.set(resourceKey, (options.state.resourceRevisions.get(resourceKey) ?? 1) + 1)
+      }
+      return clone(operation)
     },
   }
 }

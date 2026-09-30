@@ -1,8 +1,11 @@
 import type { PrincipalRole } from "../tenancy-auth/contract"
 import type { SqlTransaction } from "../../persistence/sql-adapter"
+import type { GatewayAuthorizationAuditStore } from "../audit-events/module"
 import type {
   AccessNotification,
   AccessRequest,
+  ActivateAutoGrantInput,
+  AutoGrantActivationAuditEvent,
   CancelAccessRequestInput,
   DecideAccessRequestInput,
   LegacyEntitlement,
@@ -17,6 +20,7 @@ export interface AccessActor {
   clientId: string
   role: PrincipalRole
   organizationIds: readonly string[]
+  administratorOrganizationIds?: readonly string[]
 }
 
 export interface AccessEntitlementReleasePublisher {
@@ -28,6 +32,19 @@ export interface AccessEntitlementReleasePublisher {
   }): Promise<void>
 }
 
+export interface AccessAuditWriter {
+  findById: GatewayAuthorizationAuditStore["findById"]
+  record(input: {
+    tenantId: string
+    event: AutoGrantActivationAuditEvent
+  }): Promise<unknown>
+  recordInTransaction?(input: {
+    transaction: SqlTransaction
+    tenantId: string
+    event: AutoGrantActivationAuditEvent
+  }): Promise<unknown>
+}
+
 export interface AccessGovernanceStore {
   catalog(input: { tenantId: string; actor: AccessActor }): Promise<SubjectCatalog>
   request(input: {
@@ -35,6 +52,11 @@ export interface AccessGovernanceStore {
     actor: AccessActor
     value: RequestAccessInput
   }): Promise<RequestAccessOutcome>
+  activateAutoGrant(input: {
+    tenantId: string
+    actor: AccessActor
+    value: ActivateAutoGrantInput
+  }): Promise<LegacyEntitlement>
   listMine(input: { tenantId: string; actor: AccessActor }): Promise<AccessRequest[]>
   listManagement(input: { tenantId: string; actor: AccessActor }): Promise<AccessRequest[]>
   decide(input: {

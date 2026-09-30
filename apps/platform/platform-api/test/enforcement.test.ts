@@ -42,6 +42,7 @@ const connection: ConnectionRegistration = {
   endpoint: "https://api.openai.com",
   mcp_selected_tools: [],
   mcp_tool_selection_operation_id: null,
+  mcp_tool_reviews: [],
   credential_ref: "secret-openai",
   downstream_identity: { mode: "NONE" },
   request_mapping: null,

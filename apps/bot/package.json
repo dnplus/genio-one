@@ -16,7 +16,7 @@
     "build:e2b-template": "bun scripts/build-e2b-template.ts",
     "prepare:local-one-mcp": "bun scripts/prepare-local-one-mcp.ts",
     "typecheck": "tsc --noEmit",
-    "test": "bun test ./src ./server",
+    "test": "bun test ./src ./server ./shared",
     "test:local-hands": "cargo build -p genio-one-endpoint --bin genio-endpoint-hands && bun test tests/local-hands/native.test.ts",
     "test:hands-mcp": "bun test tests/hands-mcp",
     "test:e2b:desktop": "bun server/e2b-desktop-live.ts",
@@ -44,7 +44,7 @@
     "ws": "^8.21.3"
   },
   "devDependencies": {
-    "@openai/codex": "0.155.0",
+    "@openai/codex": "0.159.2",
     "@playwright/test": "1.63.0",
     "@types/bun": "1.4.2",
     "@types/node": "26.6.1",

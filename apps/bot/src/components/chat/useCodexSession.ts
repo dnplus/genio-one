@@ -1,5 +1,5 @@
 import { DEFAULT_CODEX_MODEL, preferredModel } from "../../../shared/model-selection"
-import { primaryMcpServer } from "../../lib/primary-mcp-server"
+import { mcpConnectionStatus, type McpServerStatus } from "../../lib/primary-mcp-server"
 import { isGenioSessionRejection } from "../../../shared/session-rejection"
 import { BOT_MEMORY_GUIDANCE } from "../../../shared/bot-memory"
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react"
@@ -160,8 +160,12 @@ export function useCodexSession({
 
   const clientRef = useRef<CodexClient | null>(null)
   const threadRef = useRef<string | null>(null)
+  const managedMcpServerNamesRef = useRef<string[]>([])
   const activeBotRef = useRef(activeBot)
-  if (activeBotRef.current.id !== activeBot.id) threadRef.current = null
+  if (activeBotRef.current.id !== activeBot.id) {
+    threadRef.current = null
+    managedMcpServerNamesRef.current = []
+  }
   activeBotRef.current = activeBot
   const tokenRef = useRef(token)
   tokenRef.current = token
@@ -268,29 +272,38 @@ export function useCodexSession({
     const execConstraint = hasExec
       ? `Remote ${tier === "desktop" ? "desktop" : "headless"} execution sandbox (${bot.workspacePath}) is ACTIVE. You may use shell commands and workspace files inside that isolated sandbox. Do not execute on the Bot host.`
       : `CRITICAL RESTRICTION - EXEC SANDBOX IS NOT READY: There is NO remote execution environment attached. You MUST NOT execute any local shell commands, host terminal tools, or command execution tools (such as exec_command, write_stdin, bash, or editing host files). Host command execution is strictly forbidden and blocked. You are operating as a conversational and enterprise MCP agent only until the remote sandbox is provisioned.`
-    const defaultToolsGuidance = BOT_MEMORY_GUIDANCE + " Teammate collaboration: When the user requests delegation, use the genio_bot list_bots and send_to_bot tools when available. Use returned Bot IDs, send only the necessary task facts, and do not fan out without explicit user direction. A sent acknowledgement is not completion; the teammate result will wake this Bot later. Do not create acknowledgement loops. Default capabilities: You have built-in interactive tools to ask questions with structured choice options (request_user_input) when clarifying requirements or selecting next steps, and request missing configuration parameters or credentials (mcpServer/elicitation) when installing or connecting tools."
+    const defaultToolsGuidance = BOT_MEMORY_GUIDANCE + " Teammate collaboration: When the user requests delegation, use the genio_bot list_bots and send_to_bot tools when available. Use returned Bot IDs, send only the necessary task facts, and do not fan out without explicit user direction. A sent acknowledgement is not completion; the teammate result will wake this Bot later. Do not create acknowledgement loops. Default capabilities: You have built-in interactive tools to ask questions with structured choice options (request_user_input when you cannot continue without the answer; genio_bot request_user_input_async when independent work can continue) when clarifying requirements or selecting next steps, and request missing configuration parameters or credentials (mcpServer/elicitation) when installing or connecting tools."
     return `You are ${bot.name}, an enterprise personal agent acting on behalf of the user. Your working style is: ${bot.description ?? bot.role}. Assigned workspace: ${bot.workspacePath}. Enabled skills: ${bot.skills.join(", ") || "none"}. Installed Bot bindings: ${bindings}. External tool preference: ${tools}; this is not an authorization control and does not disable the built-in genio_bot history, memory or work-summary tools. ${defaultToolsGuidance} ${execConstraint} Treat GenioOne resource authorization as authoritative and never infer access.`
   }, [])
 
   const refreshGenioMcp = useCallback(async (client: CodexClient, threadId: string) => {
-    await client.request("config/mcpServer/reload", undefined)
     const status = await client.request("mcpServerStatus/list", {
       threadId,
       detail: "toolsAndAuthOnly",
-    }) as { data: Array<{ name: string; runtimeStatus: string | null; authStatus: string; tools: Record<string, unknown> }> }
-    const genioOne = status.data.find((server) => server.name === primaryMcpServer(activeBotRef.current.bindings))
-    if (!genioOne) throw new Error("GENIO_ONE_MCP_NOT_CONFIGURED")
+    }) as { data: McpServerStatus[] }
+    const connection = mcpConnectionStatus(activeBotRef.current.bindings, managedMcpServerNamesRef.current, status.data)
     if (!isMountedRef.current) return
-    if (genioOne.runtimeStatus === "connected") {
-      setMcpStatus(`${Object.keys(genioOne.tools).length} 個工具 · GenioOne SSO`)
+    if (connection.connected) {
+      setMcpStatus(connection.message)
       return
     }
-    if (genioOne.authStatus === "notLoggedIn" || genioOne.runtimeStatus === "authenticationRequired") {
-      setMcpStatus("GenioOne SSO session 無法使用")
-      return
-    }
-    throw new Error("GENIO_ONE_MCP_UNAVAILABLE")
+    throw new Error(connection.message)
   }, [])
+
+  const reloadAndRefreshGenioMcp = useCallback(async (client: CodexClient, threadId: string) => {
+    const refreshed = await client.requestRaw("genio/mcp/refresh", { threadId }, activeBotRef.current.id) as { managedMcpServerNames?: unknown }
+    if (Array.isArray(refreshed.managedMcpServerNames)) {
+      managedMcpServerNamesRef.current = refreshed.managedMcpServerNames.filter((name): name is string => typeof name === "string")
+    }
+    await refreshGenioMcp(client, threadId)
+  }, [refreshGenioMcp])
+
+  const refreshMcpStatus = useCallback(async () => {
+    const client = clientRef.current
+    const threadId = threadRef.current
+    if (!client || !threadId) return
+    await refreshGenioMcp(client, threadId)
+  }, [refreshGenioMcp])
 
   const connectionGenerationRef = useRef(0)
   const modelRouteGenerationRef = useRef(0)
@@ -432,7 +445,7 @@ export function useCodexSession({
           setRuntimeState("就緒")
           setTurnRunning(resumed.thread.turns.some((turn) => turn.status === "inProgress"))
           await client.restorePending(resumed.thread.id, bot.id)
-          void refreshGenioMcp(client, resumed.thread.id).catch((error) => {
+          void reloadAndRefreshGenioMcp(client, resumed.thread.id).catch((error) => {
             if (isMountedRef.current) setMcpStatus(error instanceof Error ? error.message : "GENIO_ONE_MCP_UNAVAILABLE")
           })
           return true
@@ -467,7 +480,7 @@ export function useCodexSession({
       setThreadReady(true)
       setChannelReady(true)
       setRuntimeState("就緒")
-      void refreshGenioMcp(client, started.thread.id).catch((error) => {
+      void reloadAndRefreshGenioMcp(client, started.thread.id).catch((error) => {
         if (isMountedRef.current) setMcpStatus(error instanceof Error ? error.message : "GENIO_ONE_MCP_UNAVAILABLE")
       })
       return true
@@ -501,7 +514,7 @@ export function useCodexSession({
     threadStartsRef.current.set(bot.id, threadStarting)
 
     return threadStarting
-  }, [botInstructions, clearExecutionRuntime, demo, refreshGenioMcp, restorePendingExecution, safeTimeout, scrollToBottom, setMessages])
+  }, [botInstructions, clearExecutionRuntime, demo, reloadAndRefreshGenioMcp, restorePendingExecution, safeTimeout, scrollToBottom, setMessages])
 
   startThreadRef.current = startThread
 
@@ -571,8 +584,9 @@ export function useCodexSession({
       const selected = await client.requestRaw("genio/bot/select", { botId }).catch((error) => {
         if (!isCurrent()) return null
         throw error
-      }) as { modelDirectory?: string; models?: Array<{ publicModelId?: string; displayName?: string }> } | null
+      }) as { modelDirectory?: string; models?: Array<{ publicModelId?: string; displayName?: string }>; managedMcpServerNames?: string[] } | null
       if (!isCurrent() || !selected) return
+      managedMcpServerNamesRef.current = Array.isArray(selected.managedMcpServerNames) ? selected.managedMcpServerNames : []
       if (selected.modelDirectory === "codex-subscription" || selected.modelDirectory === "genio-gateway") {
         setModelDirectory(selected.modelDirectory)
         modelDirectoryModelsRef.current = selected.modelDirectory === "genio-gateway" ? gatewayModelsFromDirectory(selected.models ?? []) : []
@@ -625,6 +639,7 @@ export function useCodexSession({
       modelDirectoryModelsRef,
       loggedInRef,
       isTurnRunningRef,
+      managedMcpServerNamesRef,
       setRuntime,
       setRuntimeTiers,
       setRuntimeState,
@@ -646,6 +661,7 @@ export function useCodexSession({
       setMcpStatus,
       setDynamicSkills,
       setTurnRunning,
+      refreshMcpStatus,
       prepareCodexSession,
       attachRuntimeDesktop,
       shouldPrepareRuntime: (details) => selectedExecutionTierRef.current === details.tier && runtimeCanExec(details) && preparedExecutionEnvironmentRef.current !== details.environmentId,
@@ -678,7 +694,7 @@ export function useCodexSession({
       resetConnection()
       client.close()
     }
-  }, [clearExecutionRuntime, demo, focusInput, onMarkBotUnread, onBotWorkEvent, onPendingExecutionReady, onSignOut, prepareModelProvider, restorePendingExecution, safeTimeout, setArtifacts, setExecutionRuntime, setMessages, setTurnRunning])
+  }, [clearExecutionRuntime, demo, focusInput, onMarkBotUnread, onBotWorkEvent, onPendingExecutionReady, onSignOut, prepareModelProvider, refreshMcpStatus, restorePendingExecution, safeTimeout, setArtifacts, setExecutionRuntime, setMessages, setTurnRunning])
 
   const botModelRoute = canonicalModelRoute(activeBot.modelRoute)
   const botConfigurationKey = JSON.stringify([activeBot.id, activeBot.name, activeBot.description, activeBot.role, activeBot.workspacePath, activeBot.skills, activeBot.bindings, activeBot.allowedTools])
@@ -792,14 +808,32 @@ export function useCodexSession({
     const client = clientRef.current
     const threadId = threadRef.current
     if (!client || !threadId) return
+    if (isTurnRunningRef.current) {
+      setMcpStatus("目前工作仍在進行，完成後再重新連線工具。")
+      return
+    }
     setMcpStatus("重新連線中")
     try {
-      await client.request("config/mcpServer/reload", undefined)
-      await refreshGenioMcp(client, threadId)
+      const bot = activeBotRef.current
+      await selectBotRef.current(bot.id)
+      const currentExecutionRuntime = executionRuntimeRef.current
+      const hasExec = runtimeCanExec(currentExecutionRuntime)
+      const executionTier = currentExecutionRuntime?.tier ?? "none"
+      await client.request("thread/resume", {
+        threadId,
+        excludeTurns: true,
+        model: selectedModel,
+        ...(modelProviderForRoute(bot.modelRoute) ? { modelProvider: modelProviderForRoute(bot.modelRoute) } : {}),
+        approvalPolicy: "on-request",
+        sandbox: hasExec ? "danger-full-access" : "read-only",
+        baseInstructions: botInstructions(bot, hasExec, executionTier),
+        environments: nativeExecutionEnvironments(currentExecutionRuntime),
+      } as any, bot.id)
+      await reloadAndRefreshGenioMcp(client, threadId)
     } catch (error) {
       if (isMountedRef.current) setMcpStatus(error instanceof Error ? error.message : "MCP reload failed")
     }
-  }, [refreshGenioMcp])
+  }, [botInstructions, reloadAndRefreshGenioMcp, selectedModel])
 
   const submitInteraction = useCallback((id: number, result: unknown) => {
     const client = clientRef.current
@@ -846,14 +880,26 @@ export function useCodexSession({
     const client = clientRef.current
     if (!request || !client) throw new Error("連線要求已失效，請重新載入待處理事項。")
     if (request.botId !== activeBotRef.current.id || request.threadId !== threadRef.current) throw new Error("目前已切換到另一個 Bot 或對話，請重新載入待處理事項。")
-    await client.requestRaw("genio/personalConnection/complete", {
+    const completed = await client.requestRaw("genio/personalConnection/complete", {
       requestToken: request.requestToken,
       botId: request.botId,
       threadId: request.threadId,
+      turnId: request.turnId,
       resourceId: request.resourceId,
       connectionId,
       status,
-    })
+    }) as { managedMcpServerNames?: unknown; continuationState?: unknown }
+    if (Array.isArray(completed.managedMcpServerNames)) {
+      managedMcpServerNamesRef.current = completed.managedMcpServerNames.filter((name): name is string => typeof name === "string")
+    }
+    if (completed.continuationState === "PENDING_NEW_TURN" && isMountedRef.current) {
+      setRuntimeState("連線完成。此工作回覆結束後，請用新的訊息繼續；新的工作階段會載入工具。")
+      setMcpStatus("等待新的工作階段載入工具")
+    }
+    if (completed.continuationState === "AUTOMATIC_CONTINUATION_QUEUED" && isMountedRef.current) {
+      setRuntimeState("連線完成，正在確認工具後接續原工作。")
+      setMcpStatus("正在確認企業工具")
+    }
     if (isMountedRef.current) setPersonalConnectionRequests((current) => current.filter((candidate) => candidate.requestToken !== request.requestToken))
   }, [personalConnectionRequests])
 
@@ -865,6 +911,7 @@ export function useCodexSession({
       requestToken: request.requestToken,
       botId: request.botId,
       threadId: request.threadId,
+      turnId: request.turnId,
       resourceId: request.resourceId,
     })
     if (isMountedRef.current) setPersonalConnectionRequests((current) => current.filter((candidate) => candidate.requestToken !== request.requestToken))

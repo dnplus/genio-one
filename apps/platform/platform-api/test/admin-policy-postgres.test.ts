@@ -101,6 +101,7 @@ test("PostgreSQL draft mutations roll back both state and inserted audits on an 
         await durableAudit.recordInTransaction!(input)
         throw new Error("SIMULATED_AUDIT_FAILURE")
       },
+      findById: durableAudit.findById,
       query: durableAudit.query,
       findRuntimeAuthorization: durableAudit.findRuntimeAuthorization,
       findRuntimeReport: durableAudit.findRuntimeReport,
@@ -219,6 +220,7 @@ test("PostgreSQL first-party policy toggles atomically append attributed audits 
         await durableAudit.recordInTransaction!(input)
         throw new Error("SIMULATED_TOGGLE_AUDIT_FAILURE")
       },
+      findById: durableAudit.findById,
       query: durableAudit.query,
       findRuntimeAuthorization: durableAudit.findRuntimeAuthorization,
       findRuntimeReport: durableAudit.findRuntimeReport,

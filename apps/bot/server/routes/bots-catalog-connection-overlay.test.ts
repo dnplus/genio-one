@@ -44,7 +44,11 @@ describe("Platform catalog personal connection overlay", () => {
     cleanupDir = null
   })
 
-  async function boot(mode: "full" | "empty" | "unavailable", mailStatus: "NEEDS_CONNECTION" | "SAVED" = "NEEDS_CONNECTION") {
+  async function boot(
+    mode: "full" | "empty" | "unavailable",
+    mailStatus: "NEEDS_CONNECTION" | "SAVED" = "NEEDS_CONNECTION",
+    catalogCapabilities?: Array<Record<string, unknown>>,
+  ) {
     process.env.GENIO_ONE_PLATFORM_ORIGIN = "http://platform.test"
     process.env.GENIO_BOT_CORP_CATALOG = "platform"
     cleanupDir = mkdtempSync(join(tmpdir(), "bot-catalog-overlay-"))
@@ -61,18 +65,19 @@ describe("Platform catalog personal connection overlay", () => {
       if (url.endsWith("/v1/tenants/tenant-keycloak-local/catalog")) {
         if (mode === "unavailable") return new Response("upstream unavailable", { status: 503 })
         if (mode === "empty") return new Response(JSON.stringify({ capabilities: [] }), { status: 200 })
-        return new Response(JSON.stringify({ capabilities: [
+        return new Response(JSON.stringify({ capabilities: catalogCapabilities ?? [
           baseCapability("mail2000", "mcp.invoke"),
           { ...baseCapability("mail2000", "mcp.send"), access: "AUTO_GRANT" },
           { ...baseCapability("servicenow-csm", "mcp.invoke"), access: "AUTO_GRANT" },
           baseCapability("notion-resource", "mcp.invoke"),
-          { ...baseCapability("genio-one-discovery", "search_resources"), builtin_service: "DISCOVERY" },
+          { ...baseCapability("genio-one-discovery", "search_resources"), access: "AUTO_GRANT", builtin_service: "DISCOVERY", hub_status: "AVAILABLE" },
         ] }), { status: 200 })
       }
       const match = url.match(/\/me\/resource-connections\/([^/?]+)$/)
       if (match) {
         const resourceId = decodeURIComponent(match[1]!)
         calls.set(resourceId, (calls.get(resourceId) ?? 0) + 1)
+        if (resourceId === "genio-one-discovery") return new Response("upstream unavailable", { status: 503 })
         const connections = resourceId === "mail2000"
           ? [{ connection_id: "mail2000", display_name: "Mail2000", authentication: "PASSWORD", status: mailStatus }]
           : resourceId === "servicenow-csm"
@@ -101,7 +106,6 @@ describe("Platform catalog personal connection overlay", () => {
       ["mail2000", 1],
       ["servicenow-csm", 1],
       ["notion-resource", 1],
-      ["genio-one-discovery", 1],
     ]))
 
     await app!.close()
@@ -112,6 +116,20 @@ describe("Platform catalog personal connection overlay", () => {
     const savedResult = await app!.inject({ method: "GET", url: `/api/bots/${saved.botId}/catalog-add`, headers: saved.headers })
     const savedRow = (savedResult.json() as { catalog: Array<{ resourceId: string; capabilityId: string; addState: string; connectionStatus: string }> }).catalog.find((row) => row.resourceId === "mail2000" && row.capabilityId === "mcp.invoke")
     expect(savedRow).toMatchObject({ addState: "ENTITLED", connectionStatus: "AVAILABLE" })
+  })
+
+  test("preserves builtin Discovery access restrictions without personal connection lookups", async () => {
+    const discoveryCapabilities = [
+      { ...baseCapability("genio-one-discovery", "search_resources"), access: "REQUEST", builtin_service: "DISCOVERY", hub_status: "AVAILABLE" },
+      { ...baseCapability("genio-one-discovery", "list_resource_tools"), access: "DENIED", builtin_service: "DISCOVERY", hub_status: "AVAILABLE", denial_reason: "discovery_not_permitted" },
+    ]
+    const { botId, calls, headers } = await boot("full", "NEEDS_CONNECTION", discoveryCapabilities)
+    const result = await app!.inject({ method: "GET", url: `/api/bots/${botId}/catalog-add`, headers })
+    expect(result.statusCode).toBe(200)
+    const rows = (result.json() as { catalog: Array<{ capabilityId: string; addState: string; connectionStatus: string; reason: string }> }).catalog
+    expect(rows.find((row) => row.capabilityId === "search_resources")).toMatchObject({ addState: "REQUEST", connectionStatus: "CONNECTED", reason: "access_request_required" })
+    expect(rows.find((row) => row.capabilityId === "list_resource_tools")).toMatchObject({ addState: "DENIED", connectionStatus: "CONNECTED", reason: "discovery_not_permitted" })
+    expect(calls.size).toBe(0)
   })
 
   test("empty or unavailable formal catalog never falls back to local fixture capabilities", async () => {

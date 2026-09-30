@@ -22,6 +22,7 @@ export interface Principal {
   email?: string
   role: PrincipalRole
   organization_ids: string[]
+  administrator_organization_ids?: string[]
   client_id: string
   scopes?: string[]
   external_identity?: {

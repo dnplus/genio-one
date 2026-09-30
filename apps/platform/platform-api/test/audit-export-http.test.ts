@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { createManagementApi } from "../src/app"
+import { accessGovernanceAuditEvent, autoGrantActivationAuditEvent } from "../src/capabilities/access/audit"
 import type { GatewayAuthorizationAuditIngest } from "../src/capabilities/audit-events/contract"
 import type { GatewayAuthorizationAuditStore } from "../src/capabilities/audit-events/module"
 import { createInMemoryPlatformModules } from "../src/capabilities/platform-modules"
@@ -139,6 +140,20 @@ test("audit export returns only the requested tenant, resource, and time range",
     tenantId: tenantB,
     event: auditEvent({ id: "audit-foreign-tenant", correlationId: "decision-foreign-tenant", occurredAt: exportFrom }),
   })
+  await modules.auditEvents.record({
+    tenantId: tenantA,
+    event: autoGrantActivationAuditEvent({
+      tenantId: tenantA,
+      subjectId: "person-export",
+      clientId: "self-service-ui",
+      correlationId: "activation-in-range",
+      resourceId,
+      capabilityId: "model.invoke",
+      entitlementId: "entitlement-auto-grant",
+      disposition: "GRANTED",
+      occurredAt: exportFrom,
+    }),
+  })
 
   const response = await app.inject({
     method: "GET",
@@ -171,6 +186,48 @@ test("audit export returns only the requested tenant, resource, and time range",
   })
   assert.equal(foreignTenant.statusCode, 403)
   assert.equal(foreignTenant.json().code, "TENANT_ACCESS_DENIED")
+  await app.close()
+})
+
+test("audit export includes only policy decisions when governance events share its resource and time range", async () => {
+  const { app, modules } = await createApp()
+  await modules.auditEvents.record({
+    tenantId: tenantA,
+    event: auditEvent({ id: "audit-policy-decision", correlationId: "decision-policy", occurredAt: exportFrom }),
+  })
+  await modules.auditEvents.record({
+    tenantId: tenantA,
+    event: accessGovernanceAuditEvent({
+      tenantId: tenantA,
+      correlationId: "access-governance-change",
+      actorSubjectId: "person-admin-a",
+      subjectId: "person-export",
+      actingClientId: "management-ui",
+      resourceId,
+      capabilityId: "model.invoke",
+      operation: "APPROVE",
+      accessRequestId: "access-request-export",
+      entitlementId: "entitlement-export",
+      occurredAt: exportFrom + 1,
+    }),
+  })
+
+  const response = await app.inject({
+    method: "GET",
+    url: exportUrl(tenantA),
+    headers: { authorization: "Bearer admin-a" },
+  })
+
+  assert.equal(response.statusCode, 200, response.body)
+  assert.deepEqual(response.json().records, [{
+    policy_version: "one-policy@7",
+    decision_correlation_id: "decision-policy",
+    audit_event_id: "audit-policy-decision",
+    correlation_id: "decision-policy",
+    resource_id: resourceId,
+    occurred_at: exportFrom,
+  }])
+  assert.equal(response.json().record_count, 1)
   await app.close()
 })
 
@@ -239,6 +296,7 @@ test("audit export rejects an over-limit result instead of truncating it", async
   const total = 10_001
   const auditEvents: GatewayAuthorizationAuditStore = {
     async record() { throw new Error("NOT_USED") },
+    async findById() { return null },
     async query(input) {
       const remaining = Math.max(0, total - input.offset)
       const count = Math.min(input.limit, remaining)
@@ -273,6 +331,7 @@ test("audit export fails closed when the audited source revision changes between
   let queryCount = 0
   const auditEvents: GatewayAuthorizationAuditStore = {
     async record() { throw new Error("NOT_USED") },
+    async findById() { return null },
     async query(_input) {
       queryCount += 1
       if (queryCount === 1) {

@@ -98,13 +98,16 @@ export async function smoke(options) {
   const requests = []
   async function rpc(auth, method, params, id) {
     const correlationId = randomUUID()
-    const headers = { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2025-03-26", "x-request-id": correlationId }
+    const headers = { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2025-03-26", "x-request-id": correlationId, "x-genio-correlation-id": correlationId }
     if (auth) headers.authorization = `Bearer ${auth}`
     if (session) headers["mcp-session-id"] = session
     const response = await fetch(options.url, { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", ...(id === undefined ? {} : { id }), method, ...(params ? { params } : {}) }), redirect: "error", signal: AbortSignal.timeout(45000) })
     const body = await response.text(), payload = parseRpc(body)
     session = response.headers.get("mcp-session-id") ?? session
-    const receipt = { method, authenticated: Boolean(auth), correlation_id: correlationId, status: response.status, response_bytes: Buffer.byteLength(body), response_sha256: createHash("sha256").update(body).digest("hex"), ...(payload?.result?.isError === undefined ? {} : { tool_is_error: payload.result.isError }) }
+    const responseRequestId = response.headers.get("x-request-id")
+    const responseCorrelationId = response.headers.get("x-genio-correlation-id")
+    const auditCorrelationId = responseRequestId ?? responseCorrelationId ?? correlationId
+    const receipt = { method, authenticated: Boolean(auth), sent_correlation_id: correlationId, ...(responseRequestId ? { response_request_id: responseRequestId } : {}), ...(responseCorrelationId ? { response_correlation_id: responseCorrelationId } : {}), correlation_id: auditCorrelationId, status: response.status, response_bytes: Buffer.byteLength(body), response_sha256: createHash("sha256").update(body).digest("hex"), ...(payload?.result?.isError === undefined ? {} : { tool_is_error: payload.result.isError }) }
     requests.push(receipt); console.log(JSON.stringify(receipt))
     return { response, payload }
   }

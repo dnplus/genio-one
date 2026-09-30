@@ -11,6 +11,7 @@ import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/c
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Textarea } from "@/components/ui/textarea"
 import type { Entitlement } from "@/domain/contracts"
+import { captureProductEvent } from "@/lib/posthog-analytics"
 import { revokeEntitlement } from "@/lib/product-api"
 
 export function RevokeEntitlementSheet({
@@ -50,6 +51,7 @@ export function RevokeEntitlementSheet({
     setError("")
     try {
       await revokeEntitlement(tenantId, currentEntitlement.entitlement_id, reason.trim())
+      captureProductEvent("genioone_journey_action", { action: "entitlement_revoked" })
       await onRevoked()
       onOpenChange(false)
     } catch (caught) {

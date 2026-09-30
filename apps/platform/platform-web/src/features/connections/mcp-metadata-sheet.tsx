@@ -9,17 +9,19 @@ import { Input } from "@/components/ui/input"
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import type { ConnectionSummary, McpDiscoveryOperation, McpOAuthBinding } from "@/domain/contracts"
 import { formatEpochSeconds } from "@/lib/personal-preferences"
-import { decideMcpDiscoveryCandidate, disconnectMcpOAuthBinding, getLatestMcpDiscovery, getMcpOAuthBinding, requestMcpDiscovery, startMcpOAuthAuthorization } from "@/lib/product-api"
+import { decideMcpDiscoveryCandidate, decideMcpReadOnlyApproval, disconnectMcpOAuthBinding, getLatestMcpDiscovery, getMcpOAuthBinding, requestMcpDiscovery, startMcpOAuthAuthorization } from "@/lib/product-api"
 
 export function McpMetadataSheet({
   tenantId,
   backend,
   editable,
+  canApproveReadOnly,
   onUpdated,
 }: {
   tenantId: string
   backend: ConnectionSummary
   editable: boolean
+  canApproveReadOnly: boolean
   onUpdated: () => Promise<void>
 }) {
   const { t } = useTranslation()
@@ -64,7 +66,7 @@ export function McpMetadataSheet({
     return () => {
       active = false
     }
-  }, [backend.connection_id, backend.downstream_identity.mode, backend.mcp_selected_tools, backend.mcp_tool_selection_operation_id, backend.resource_id, open, tenantId])
+  }, [backend.connection_id, backend.downstream_identity.mode, backend.mcp_selected_tools, backend.mcp_tool_reviews, backend.mcp_tool_selection_operation_id, backend.resource_id, open, tenantId])
 
   async function authorize() {
     setAuthorizing(true)
@@ -130,6 +132,31 @@ export function McpMetadataSheet({
       await onUpdated()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "MCP_DISCOVERY_CANDIDATE_DECISION_FAILED")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function decideReadOnlyReview(
+    candidateId: string,
+    revisionDigest: string,
+    executionMode: "AUTO_READ_ONLY" | "REQUIRE_CONFIRMATION",
+  ) {
+    setSaving(true)
+    setError("")
+    try {
+      const updated = await decideMcpReadOnlyApproval(
+        tenantId,
+        backend.resource_id,
+        backend.connection_id,
+        candidateId,
+        revisionDigest,
+        executionMode,
+      )
+      setOperation(updated)
+      await onUpdated()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "MCP_TOOL_REVIEW_DECISION_FAILED")
     } finally {
       setSaving(false)
     }
@@ -216,12 +243,21 @@ export function McpMetadataSheet({
                     {filteredTools.length ? filteredTools.map((tool) => {
                       const id = `mcp-tool-${backend.connection_id}-${tool.name}`
                       const candidate = operation?.candidates.find((value) => value.tool_name === tool.name)
+                      const review = candidate
+                        ? backend.mcp_tool_reviews.find((value) => value.tool_name === tool.name && value.source_revision_digest === candidate.revision_digest)
+                        : undefined
                       return (
                         <Field key={tool.name} orientation="horizontal" className="items-start">
                           <FieldContent>
                             <FieldLabel className="font-mono" htmlFor={id}>{tool.name}</FieldLabel>
                             {tool.title || tool.description ? <FieldDescription>{tool.title ?? tool.description}</FieldDescription> : null}
                             {candidate ? <FieldDescription className="font-mono text-[11px]">{candidate.revision_digest}</FieldDescription> : null}
+                            {candidate?.state === "PUBLISHED" ? (
+                              <div className="mt-2 flex flex-wrap items-center gap-2">
+                                <Badge variant={review ? "secondary" : "outline"}>{t(review ? "Automatic read-only approved" : "Confirmation required")}</Badge>
+                                {tool.read_only_hint ? <Badge variant="outline">{t("Upstream suggests read-only")}</Badge> : null}
+                              </div>
+                            ) : null}
                           </FieldContent>
                           {candidate ? (
                             <div className="flex flex-wrap items-center justify-end gap-2">
@@ -231,6 +267,21 @@ export function McpMetadataSheet({
                                   <Button type="button" size="sm" variant="outline" disabled={saving || candidate.state === "PUBLISHED"} onClick={() => void decideCandidate(candidate.candidate_id, candidate.revision_digest, "PUBLISHED")}>{t("Publish")}</Button>
                                   <Button type="button" size="sm" variant="outline" disabled={saving || candidate.state === "IGNORED"} onClick={() => void decideCandidate(candidate.candidate_id, candidate.revision_digest, "IGNORED")}>{t("Ignore")}</Button>
                                   <Button type="button" size="sm" variant="outline" disabled={saving || candidate.state === "BLOCKED"} onClick={() => void decideCandidate(candidate.candidate_id, candidate.revision_digest, "BLOCKED")}>{t("Block")}</Button>
+                                  {candidate.state === "PUBLISHED" && canApproveReadOnly ? (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={saving}
+                                      onClick={() => void decideReadOnlyReview(
+                                        candidate.candidate_id,
+                                        candidate.revision_digest,
+                                        review ? "REQUIRE_CONFIRMATION" : "AUTO_READ_ONLY",
+                                      )}
+                                    >
+                                      {t(review ? "Require confirmation" : "Approve automatic read-only")}
+                                    </Button>
+                                  ) : null}
                                 </>
                               ) : null}
                             </div>
@@ -240,6 +291,11 @@ export function McpMetadataSheet({
                     }) : <div className="px-3 py-2 text-sm text-muted-foreground">{t(metadata.tools.length ? "No tools match your search" : "No tools discovered")}</div>}
                   </div>
                   <FieldDescription>{t("A discovery result never expands the active surface. Publish a candidate explicitly, then apply the staged successor Release.")}</FieldDescription>
+                </Field>
+                <Field>
+                  <FieldDescription>{t("The upstream hint is only a reference. Approve each tool revision before read calls can continue without confirmation.")}</FieldDescription>
+                  <FieldDescription>{t("Changes to discovered tool metadata require approval again.")}</FieldDescription>
+                  {editable && !canApproveReadOnly ? <FieldDescription>{t("A Tenant Administrator must approve automatic read-only execution.")}</FieldDescription> : null}
                 </Field>
                 <FieldDescription>
                   {operation?.completed_at ? t("Synchronized at {{time}}", { time: formatEpochSeconds(operation.completed_at) }) : null}

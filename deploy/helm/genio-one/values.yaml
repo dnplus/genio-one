@@ -99,6 +99,11 @@ secrets:
 
 platform:
   replicas: 2
+  ardPublisher:
+    enabled: false
+    publicOrigin: ""
+    namespace: genioone
+    resourceIds: []
   connectionVerification:
     allowHttp: false
     allowedHosts: []
@@ -192,6 +197,20 @@ demo:
     resources:
       requests: { cpu: 25m, memory: 64Mi }
       limits: { cpu: 500m, memory: 256Mi }
+
+uat:
+  autoGrantEcho:
+    enabled: false
+    image:
+      repository: oven/bun
+      tag: 1.4.2-alpine
+      digest: ""
+      pullPolicy: IfNotPresent
+    service:
+      port: 8080
+    resources:
+      requests: { cpu: 5m, memory: 32Mi }
+      limits: { cpu: 100m, memory: 128Mi }
 
 ingress:
   enabled: false

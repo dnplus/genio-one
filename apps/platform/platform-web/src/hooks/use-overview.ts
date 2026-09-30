@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 
+import { canReadTenantAudit } from "@/domain/audit-events"
 import type { IdentitySession, OverviewFailure, OverviewSnapshot } from "@/domain/contracts"
 import { LatestRequestGate } from "@/lib/latest-request"
 import { loadAuditEvents, loadOverview, ProductApiError } from "@/lib/product-api"
@@ -21,6 +22,7 @@ export function useOverview(tenantId: string, enabled = true, demoMode = isMockM
   const requestGate = useRef(new LatestRequestGate())
   const normalizedTenantId = tenantId.trim()
   const canLoad = enabled && normalizedTenantId.length > 0
+  const canLoadTenantAudit = canReadTenantAudit(role)
 
   const refresh = useCallback(async (scope: "all" | "audit" = "all") => {
     if (!canLoad) {
@@ -38,6 +40,7 @@ export function useOverview(tenantId: string, enabled = true, demoMode = isMockM
     setRefreshing(true)
     try {
       if (scope === "audit") {
+        if (!canLoadTenantAudit) return
         try {
           const auditEvents = await loadAuditEvents(normalizedTenantId)
           if (requestGate.current.isLatest(generation)) {
@@ -70,7 +73,7 @@ export function useOverview(tenantId: string, enabled = true, demoMode = isMockM
         setRefreshing(false)
       }
     }
-  }, [canLoad, demoMode, normalizedTenantId, role])
+  }, [canLoad, canLoadTenantAudit, demoMode, normalizedTenantId, role])
 
   useEffect(() => {
     requestGate.current.begin()

@@ -15,7 +15,7 @@ authority.
 | E2B Desktop template (historical source audit) | `e2b-dev/desktop` `89a545e22343aa1c40f28338bf3281a6c04b1d4a` (2026-09-03) |
 | E2B JavaScript SDK | `e2b@2.50.0`; package metadata repository `e2b-dev/e2b`, directory `packages/js-sdk` |
 | Installed Desktop SDK | `@e2b/desktop@2.4.0`, lock integrity `sha512-eeY4p/lz7kkDJMidREe7sp2nln16P1M1p64Fb+csn4SssxC2EjKBGqP0NEIlVDVd6iCuPbM7cVlkE/qbwJX4jg==` |
-| Installed Codex CLI | `@openai/codex@0.155.0`, lock integrity `sha512-35a85Hbwy9WXkDTJumLjTcmMgpR7BMdrTloWBVGjoA+FBCh7jb3+cYp2W+3U4klqGAjAskoIvQZv7/eedmCjHA==` |
+| Installed Codex CLI | `@openai/codex@0.159.2`, lock integrity `sha512-SE13C3nZCYoVL569BdegoOl6vwjb7o2sXOo7ivwVzaVoY0cswwi0/6pIE0TyO/C0vIkQh3jslExitET7PBTfIg==` |
 
 The core `e2b` package metadata points to `e2b-dev/e2b` `packages/js-sdk`; the
 Desktop package points to the same repository's `packages/desktop-js`. The
@@ -26,7 +26,7 @@ template source audit input.
 ## Current package and adapter boundary
 
 `apps/bot/package.json` is the current package authority for this workspace:
-`e2b@2.50.0`, `@e2b/desktop@2.4.0`, and `@openai/codex@0.155.0`; matching
+`e2b@2.50.0`, `@e2b/desktop@2.4.0`, and `@openai/codex@0.159.2`; matching
 integrity records are in `pnpm-lock.yaml`.
 
 GenioOne still has no native CUA driver integrated with Codex or OpenAI
@@ -79,6 +79,6 @@ The `0.153.4` mentions in `apps/bot/docs/app-server-boundary.md`,
 `apps/bot/docs/codex-app-server-upgrade-20260908.md`, and
 `apps/bot/docs/local-hands.md` are historical probe or upgrade evidence. They
 remain unchanged as historical records. Current install and pin authority is
-`apps/bot/package.json` at `@openai/codex@0.155.0` and the matching
+`apps/bot/package.json` at `@openai/codex@0.159.2` and the matching
 `pnpm-lock.yaml` entry; current guidance should not infer `0.153.4` from those
 historical documents.

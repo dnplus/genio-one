@@ -3,9 +3,18 @@ import { createHash, randomUUID } from "node:crypto"
 import type { SqlAdapter, SqlTransaction } from "../../persistence/sql-adapter"
 import { PlatformApiError } from "../errors"
 import type { TenantConfiguration } from "../configuration/contract"
+import { accessGovernanceAuditEvent, type AccessGovernanceAuditWriter } from "./audit"
 import type { AccessNotification, AccessRequest, LegacyEntitlement, SubjectCatalog } from "./contract"
+import {
+  autoGrantActivationAuditEvent,
+  autoGrantActivationIdempotencyKey,
+  autoGrantActivationRequestDigest,
+  recordAutoGrantActivationOnce,
+  type AutoGrantActivationDisposition,
+} from "./audit"
 import type {
   AccessActor,
+  AccessAuditWriter,
   AccessEntitlementReleasePublisher,
   AccessGovernanceStore,
 } from "./module"
@@ -33,13 +42,17 @@ function nullableSeconds(value: unknown): number | null {
   return value === null || value === undefined ? null : seconds(value)
 }
 function allowed(actor: AccessActor, organizationId: string): boolean {
-  return actor.role === "TENANT_ADMINISTRATOR" || actor.organizationIds.includes(organizationId)
+  return actor.role === "TENANT_ADMINISTRATOR" || (
+    actor.role === "ORGANIZATION_ADMINISTRATOR" &&
+    actor.administratorOrganizationIds?.includes(organizationId) === true
+  )
 }
 
 const REQUEST_COLUMNS = `tenant_id, access_request_id, requester_subject_id, target_subject_id,
   acting_client_id, resource_id, capability_id, owner_organization_id, justification,
   requested_valid_for, configuration_revision, approval_workflow_version, state,
-  created_at, expires_at, resolved_at, resolution_reason, decided_by_subject_id, entitlement_id`
+  created_at, expires_at, resolved_at, resolution_reason, decided_by_subject_id, entitlement_id,
+  request_correlation_id, decision_correlation_id`
 
 function accessRequest(row: Row): AccessRequest {
   const owner = text(row, "owner_organization_id")
@@ -48,6 +61,8 @@ function accessRequest(row: Row): AccessRequest {
   const decidedAt = nullableSeconds(row.resolved_at)
   return {
     access_request_id: text(row, "access_request_id"),
+    request_correlation_id: nullableText(row, "request_correlation_id"),
+    decision_correlation_id: nullableText(row, "decision_correlation_id"),
     requester: text(row, "requester_subject_id"),
     target_subject: text(row, "target_subject_id"),
     acting_client: {
@@ -87,18 +102,22 @@ const ENTITLEMENT_COLUMNS = `entitlement_id, subject_id, resource_id, capability
   revocation_reason`
 
 function entitlement(row: Row, now: number): LegacyEntitlement {
-  const expires = row.valid_until === null || row.valid_until === undefined ? 4_102_444_800 : Number(row.valid_until)
+  const expires = nullableSeconds(row.valid_until)
   const rawState = text(row, "state")
   return {
     entitlement_id: text(row, "entitlement_id"),
     subject_id: text(row, "subject_id"),
     resource_id: text(row, "resource_id"),
     capability_id: text(row, "capability_id"),
-    state: rawState === "ACTIVE" && expires <= now ? "EXPIRED" : rawState as LegacyEntitlement["state"],
+    state: rawState === "ACTIVE" && expires !== null && expires <= now ? "EXPIRED" : rawState as LegacyEntitlement["state"],
     valid_from: Number(row.valid_from),
     valid_until: expires,
     revocation_reason: nullableText(row, "revocation_reason"),
   }
+}
+
+function effectiveEntitlement(value: LegacyEntitlement, at: number): boolean {
+  return value.state === "ACTIVE" && value.valid_from <= at && (value.valid_until === null || value.valid_until > at)
 }
 
 async function lockedRequest(transaction: SqlTransaction, tenantId: string, requestId: string): Promise<Row> {
@@ -113,6 +132,7 @@ async function lockedRequest(transaction: SqlTransaction, tenantId: string, requ
 
 export function createPostgresAccessGovernanceStore(options: {
   sql: SqlAdapter
+  audit?: AccessGovernanceAuditWriter | AccessAuditWriter
   releasePublisher?: AccessEntitlementReleasePublisher
   now?: () => number
   idFactory?: (prefix: string) => string
@@ -133,7 +153,10 @@ export function createPostgresAccessGovernanceStore(options: {
                 capability.value ->> 'display_name' as capability_display_name,
                 resource.owner_organization_id,
                 owner.display_name as resource_owner_display_name,
-                case when resource.kind = 'EXTENSION'
+                case when resource.builtin_service = 'DISCOVERY'
+                       and discovery_connection.ready is not null
+                  then 'READY'
+                  when resource.kind = 'EXTENSION'
                        and resource.lifecycle = 'PUBLISHED'
                        and resource.extension_metadata is not null
                        and nullif(trim(resource.extension_metadata ->> 'manifest_digest'), '') is not null
@@ -164,6 +187,18 @@ export function createPostgresAccessGovernanceStore(options: {
                  and publication.publication_state in ('PUBLISHED', 'DEPRECATED')
                order by publication.endpoint_revision desc limit 1
             ) publication on true
+            left join lateral (
+              select 1 as ready
+                from genio_one_resource_connections connection
+               where connection.tenant_id = resource.tenant_id
+                 and connection.resource_id = resource.resource_id
+                 and connection.connection_id = resource.resource_id
+                 and connection.status = 'READY'
+                 and connection.lifecycle = 'ENABLED'
+                 and connection.verification_state = 'VERIFIED'
+                 and connection.health_state = 'HEALTHY'
+               limit 1
+            ) discovery_connection on true
             cross join lateral jsonb_array_elements(resource.capabilities) capability(value)
             left join lateral (
               select entitlement_id from genio_one_model_entitlements entitlement
@@ -185,7 +220,8 @@ export function createPostgresAccessGovernanceStore(options: {
             ) pending on true
            where resource.tenant_id = $1 and resource.lifecycle = 'PUBLISHED'
              and (
-               resource.kind = 'EXTENSION' or resource.builtin_service = 'DISCOVERY' or
+               resource.kind = 'EXTENSION' or
+               (resource.builtin_service = 'DISCOVERY' and discovery_connection.ready is not null) or
                (
                  publication.publication_state = 'PUBLISHED' and
                  (
@@ -206,7 +242,8 @@ export function createPostgresAccessGovernanceStore(options: {
       ])
       const capabilities: SubjectCatalog["capabilities"] = result.rows.map((row) => {
         const isExtension = row.resource_kind === "EXTENSION"
-        const visibility = row.builtin_service === "DISCOVERY" ? "PUBLIC" : isExtension ? "REQUEST" : text(row, "visibility")
+        const isBuiltinDiscovery = row.builtin_service === "DISCOVERY"
+        const visibility = isBuiltinDiscovery ? "PUBLIC" : isExtension ? "REQUEST" : text(row, "visibility")
         const entitled = nullableText(row, "entitlement_id") !== null
         const pending = nullableText(row, "access_request_id") !== null
         const endpoint = entitled || visibility === "PUBLIC" ? publicationEndpoint(row) : undefined
@@ -218,11 +255,11 @@ export function createPostgresAccessGovernanceStore(options: {
           resource_owner_id: text(row, "owner_organization_id"),
           resource_owner_display_name: text(row, "resource_owner_display_name"),
           connection_status: text(row, "connection_status"),
-          access: entitled ? "ENTITLED" : isExtension ? "REQUEST" : visibility === "PUBLIC" ? "AUTO_GRANT" : "REQUEST",
-          hub_status: entitled ? "CONNECTED" : pending ? "PENDING_APPROVAL" : isExtension ? "REQUEST_ACCESS" : visibility === "PUBLIC" ? "AVAILABLE" : "REQUEST_ACCESS",
+          access: isBuiltinDiscovery ? "AUTO_GRANT" : entitled ? "ENTITLED" : isExtension ? "REQUEST" : visibility === "PUBLIC" ? "AUTO_GRANT" : "REQUEST",
+          hub_status: isBuiltinDiscovery ? "CONNECTED" : entitled ? "CONNECTED" : pending ? "PENDING_APPROVAL" : isExtension ? "REQUEST_ACCESS" : visibility === "PUBLIC" ? "AVAILABLE" : "REQUEST_ACCESS",
           restriction_reason: null,
           ...(endpoint ? { publication_endpoint: endpoint } : {}),
-          ...(row.builtin_service === "DISCOVERY" ? { builtin_service: "DISCOVERY" as const } : {}),
+          ...(isBuiltinDiscovery ? { builtin_service: "DISCOVERY" as const } : {}),
           ...(row.resource_kind === "EXTENSION" ? {
             resource_kind: "EXTENSION",
             extension_metadata: row.extension_metadata && typeof row.extension_metadata === "object" && !Array.isArray(row.extension_metadata)
@@ -265,7 +302,7 @@ export function createPostgresAccessGovernanceStore(options: {
           if (
             actor.role === "USER" ||
             (actor.role === "ORGANIZATION_ADMINISTRATOR" &&
-              !actor.organizationIds.includes(ownerOrganizationId))
+              !actor.administratorOrganizationIds?.includes(ownerOrganizationId))
           ) {
             throw new PlatformApiError("APPLICATION_ACCESS_MANAGEMENT_REQUIRED", 403)
           }
@@ -323,22 +360,189 @@ export function createPostgresAccessGovernanceStore(options: {
           [tenantId, targetSubjectId, value.resource_id, value.capability_id],
         )
         if (existing.rows[0]) return { EXISTING: accessRequest(existing.rows[0]) }
+        const audit = options.audit as AccessGovernanceAuditWriter | undefined
+        if (!audit?.recordInTransaction) {
+          throw new PlatformApiError("ACCESS_AUDIT_TRANSACTION_REQUIRED", 503)
+        }
         const result = await transaction.query<Row>(
           `insert into genio_one_access_requests
              (tenant_id, access_request_id, requester_subject_id, target_subject_id,
               acting_client_id, resource_id, capability_id, owner_organization_id,
               justification, requested_valid_for, configuration_revision,
-              approval_workflow_version)
-           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+              approval_workflow_version, request_correlation_id)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
            returning ${REQUEST_COLUMNS}`,
           [
             tenantId, idFactory("access-request"), actor.subjectId, targetSubjectId, actor.clientId,
             value.resource_id, value.capability_id, text(target.rows[0], "owner_organization_id"),
             value.justification.trim(), value.requested_valid_for_seconds,
-            text(configurationRow, "revision"), configuration.approval_workflow_version,
+            text(configurationRow, "revision"), configuration.approval_workflow_version, value.correlation_id,
           ],
         )
-        return { CREATED: accessRequest(result.rows[0]!) }
+        const created = accessRequest(result.rows[0]!)
+        await audit.recordInTransaction({
+          transaction,
+          tenantId,
+          event: accessGovernanceAuditEvent({
+            tenantId,
+            correlationId: value.correlation_id,
+            operation: "CREATED",
+            actorSubjectId: actor.subjectId,
+            subjectId: created.target_subject,
+            actingClientId: actor.clientId,
+            resourceId: created.resource_id,
+            capabilityId: created.capability_id,
+            accessRequestId: created.access_request_id,
+            entitlementId: null,
+            occurredAt: now(),
+          }),
+        })
+        return { CREATED: created }
+      })
+    },
+    async activateAutoGrant({ tenantId, actor, value }) {
+      return options.sql.transaction(async (transaction) => {
+        const audit = options.audit
+        if (!audit || !("findById" in audit) || !audit.findById || !audit.recordInTransaction) {
+          throw new PlatformApiError("AUTO_GRANT_AUDIT_REQUIRED", 503)
+        }
+        const recordInTransaction = audit.recordInTransaction
+        const at = now()
+        const recordActivationAudit = (entitlementId: string, disposition: AutoGrantActivationDisposition) => {
+          const event = autoGrantActivationAuditEvent({
+            tenantId,
+            subjectId: actor.subjectId,
+            clientId: actor.clientId,
+            correlationId: value.correlation_id,
+            resourceId: value.resource_id,
+            capabilityId: value.capability_id,
+            entitlementId,
+            disposition,
+            occurredAt: at,
+          })
+          return recordAutoGrantActivationOnce(audit, event, () => recordInTransaction({ transaction, tenantId, event }), transaction)
+        }
+        const verified = await transaction.query<Row>(
+          `select subject_id
+             from genio_one_subjects
+            where tenant_id = $1 and subject_id = $2 and suspended_at is null
+            for update`,
+          [tenantId, actor.subjectId],
+        )
+        if (!verified.rows[0]) {
+          throw new PlatformApiError("AUTO_GRANT_ACTOR_NOT_VERIFIED", 403)
+        }
+        const target = await transaction.query<Row>(
+          `select publication.gateway_id
+             from genio_one_resources resource
+             join lateral (
+               select gateway_id, publication_state, visibility
+                 from genio_one_publications publication
+                where publication.tenant_id = resource.tenant_id
+                  and publication.resource_id = resource.resource_id
+                  and publication.publication_state = 'PUBLISHED'
+                  and publication.visibility = 'PUBLIC'
+                order by endpoint_revision desc
+                limit 1
+             ) publication on true
+            where resource.tenant_id = $1
+              and resource.resource_id = $2
+              and resource.lifecycle = 'PUBLISHED'
+              and resource.kind <> 'EXTENSION'
+              and resource.builtin_service is distinct from 'DISCOVERY'
+              and resource.capabilities @> jsonb_build_array(
+                jsonb_build_object('capability_id', $3::text)
+              )
+            for update of resource`,
+          [tenantId, value.resource_id, value.capability_id],
+        )
+        const targetRow = target.rows[0]
+        if (!targetRow) throw new PlatformApiError("AUTO_GRANT_NOT_AVAILABLE", 422)
+        const idempotencyKey = autoGrantActivationIdempotencyKey({
+          tenantId,
+          subjectId: actor.subjectId,
+          clientId: actor.clientId,
+          correlationId: value.correlation_id,
+        })
+        const requestDigest = autoGrantActivationRequestDigest({
+          tenantId,
+          subjectId: actor.subjectId,
+          clientId: actor.clientId,
+          resourceId: value.resource_id,
+          capabilityId: value.capability_id,
+        })
+        const retried = await transaction.query<Row>(
+          `select ${ENTITLEMENT_COLUMNS}, grant_request_digest
+             from genio_one_model_entitlements
+            where tenant_id = $1 and grant_idempotency_key = $2
+            for update`,
+          [tenantId, idempotencyKey],
+        )
+        const priorRow = retried.rows[0]
+        if (priorRow) {
+          if (nullableText(priorRow, "grant_request_digest") !== requestDigest) {
+            throw new PlatformApiError("AUTO_GRANT_CORRELATION_REUSED", 409)
+          }
+          const prior = entitlement(priorRow, at)
+          if (!effectiveEntitlement(prior, at)) {
+            throw new PlatformApiError("AUTO_GRANT_RETRY_NOT_EFFECTIVE", 409)
+          }
+          await recordActivationAudit(prior.entitlement_id, "GRANTED")
+          return prior
+        }
+        const current = await transaction.query<Row>(
+          `select ${ENTITLEMENT_COLUMNS}
+             from genio_one_model_entitlements
+            where tenant_id = $1
+              and subject_id = $2
+              and resource_id = $3
+              and capability_id = $4
+              and state = 'ACTIVE'
+              and starts_at <= to_timestamp($5)
+              and (expires_at is null or expires_at > to_timestamp($5))
+            order by starts_at desc, created_at desc, entitlement_id desc
+            limit 1
+            for update`,
+          [tenantId, actor.subjectId, value.resource_id, value.capability_id, at],
+        )
+        const currentRow = current.rows[0]
+        if (currentRow) {
+          const existing = entitlement(currentRow, at)
+          await recordActivationAudit(existing.entitlement_id, "ALREADY_ENTITLED")
+          return existing
+        }
+        const inserted = await transaction.query<Row>(
+          `insert into genio_one_model_entitlements
+             (tenant_id, entitlement_id, subject_id, client_id, resource_id,
+              capability_id, public_model_id, state, starts_at, expires_at,
+              grant_idempotency_key, grant_request_digest)
+           values ($1,$2,$3,null,$4,$5,null,'ACTIVE',to_timestamp($6),null,$7,$8)
+           returning ${ENTITLEMENT_COLUMNS}`,
+          [
+            tenantId,
+            idFactory("entitlement"),
+            actor.subjectId,
+            value.resource_id,
+            value.capability_id,
+            at,
+            idempotencyKey,
+            requestDigest,
+          ],
+        )
+        const insertedRow = inserted.rows[0]
+        if (!insertedRow) throw new PlatformApiError("AUTO_GRANT_WRITE_FAILED", 500)
+        const created = entitlement(insertedRow, at)
+        if (!options.releasePublisher) {
+          throw new PlatformApiError("GATEWAY_RELEASE_PUBLISHER_REQUIRED", 500)
+        }
+        await options.releasePublisher.reconcileInTransaction({
+          transaction,
+          tenantId,
+          gatewayId: text(targetRow, "gateway_id"),
+          issuedAt: at,
+        })
+        await recordActivationAudit(created.entitlement_id, "GRANTED")
+        return created
       })
     },
     async listMine({ tenantId, actor }) {
@@ -355,7 +559,7 @@ export function createPostgresAccessGovernanceStore(options: {
         `select ${REQUEST_COLUMNS} from genio_one_access_requests
           where tenant_id = $1 and ($2::boolean or owner_organization_id = any($3::text[]))
           order by created_at desc, access_request_id desc`,
-        [tenantId, actor.role === "TENANT_ADMINISTRATOR", [...actor.organizationIds]],
+        [tenantId, actor.role === "TENANT_ADMINISTRATOR", [...(actor.administratorOrganizationIds ?? [])]],
       )
       return result.rows.map(accessRequest)
     },
@@ -365,6 +569,10 @@ export function createPostgresAccessGovernanceStore(options: {
         const current = accessRequest(row)
         if (current.state !== "PENDING" || !allowed(actor, text(row, "owner_organization_id"))) {
           throw new PlatformApiError("ACCESS_DECISION_DENIED", 403)
+        }
+        const audit = options.audit as AccessGovernanceAuditWriter | undefined
+        if (!audit?.recordInTransaction) {
+          throw new PlatformApiError("ACCESS_AUDIT_TRANSACTION_REQUIRED", 503)
         }
         const at = now()
         let created: LegacyEntitlement | null = null
@@ -382,9 +590,10 @@ export function createPostgresAccessGovernanceStore(options: {
           created = entitlement(grant.rows[0]!, at)
           await transaction.query(
             `update genio_one_access_requests set state = 'APPROVED', expires_at = to_timestamp($3),
-                    resolved_at = to_timestamp($4), decided_by_subject_id = $5, entitlement_id = $6
+                    resolved_at = to_timestamp($4), decided_by_subject_id = $5, entitlement_id = $6,
+                    decision_correlation_id = $7
               where tenant_id = $1 and access_request_id = $2`,
-            [tenantId, requestId, value.decision.APPROVE.valid_until, at, actor.subjectId, entitlementId],
+            [tenantId, requestId, value.decision.APPROVE.valid_until, at, actor.subjectId, entitlementId, value.correlation_id],
           )
           const publication = await transaction.query<{ gateway_id: string }>(
             `select gateway_id from genio_one_publications
@@ -403,13 +612,47 @@ export function createPostgresAccessGovernanceStore(options: {
               issuedAt: at,
             })
           }
+          await audit.recordInTransaction({
+            transaction,
+            tenantId,
+            event: accessGovernanceAuditEvent({
+              tenantId,
+              correlationId: value.correlation_id,
+              operation: "APPROVE",
+              actorSubjectId: actor.subjectId,
+              subjectId: current.target_subject,
+              actingClientId: actor.clientId,
+              resourceId: current.resource_id,
+              capabilityId: current.capability_id,
+              accessRequestId: current.access_request_id,
+              entitlementId: created.entitlement_id,
+              occurredAt: at,
+            }),
+          })
         } else {
           await transaction.query(
             `update genio_one_access_requests set state = 'DENIED', resolution_reason = $3,
-                    resolved_at = to_timestamp($4), decided_by_subject_id = $5
+                    resolved_at = to_timestamp($4), decided_by_subject_id = $5, decision_correlation_id = $6
               where tenant_id = $1 and access_request_id = $2`,
-            [tenantId, requestId, value.decision.DENY.reason.trim(), at, actor.subjectId],
+            [tenantId, requestId, value.decision.DENY.reason.trim(), at, actor.subjectId, value.correlation_id],
           )
+          await audit.recordInTransaction({
+            transaction,
+            tenantId,
+            event: accessGovernanceAuditEvent({
+              tenantId,
+              correlationId: value.correlation_id,
+              operation: "DENY",
+              actorSubjectId: actor.subjectId,
+              subjectId: current.target_subject,
+              actingClientId: actor.clientId,
+              resourceId: current.resource_id,
+              capabilityId: current.capability_id,
+              accessRequestId: current.access_request_id,
+              entitlementId: null,
+              occurredAt: at,
+            }),
+          })
         }
         const updated = await transaction.query<Row>(
           `select ${REQUEST_COLUMNS} from genio_one_access_requests
@@ -420,20 +663,46 @@ export function createPostgresAccessGovernanceStore(options: {
       })
     },
     async cancel({ tenantId, actor, requestId, value }) {
-      const result = await options.sql.query<Row>(
-        `update genio_one_access_requests set state = 'CANCELLED', resolution_reason = $4,
-                resolved_at = to_timestamp($5), decided_by_subject_id = $3
-          where tenant_id = $1 and access_request_id = $2 and requester_subject_id = $3 and state = 'PENDING'
-          returning ${REQUEST_COLUMNS}`,
-        [tenantId, requestId, actor.subjectId, value.reason.trim(), now()],
-      )
-      if (!result.rows[0]) throw new PlatformApiError("ACCESS_REQUEST_CANCEL_DENIED", 403)
-      return accessRequest(result.rows[0])
+      return options.sql.transaction(async (transaction) => {
+        const audit = options.audit as AccessGovernanceAuditWriter | undefined
+        if (!audit?.recordInTransaction) {
+          throw new PlatformApiError("ACCESS_AUDIT_TRANSACTION_REQUIRED", 503)
+        }
+        const cancelledAt = now()
+        const result = await transaction.query<Row>(
+          `update genio_one_access_requests set state = 'CANCELLED', resolution_reason = $4,
+                  resolved_at = to_timestamp($5), decided_by_subject_id = $3,
+                  decision_correlation_id = $6
+            where tenant_id = $1 and access_request_id = $2 and requester_subject_id = $3 and state = 'PENDING'
+            returning ${REQUEST_COLUMNS}`,
+          [tenantId, requestId, actor.subjectId, value.reason.trim(), cancelledAt, value.correlation_id],
+        )
+        if (!result.rows[0]) throw new PlatformApiError("ACCESS_REQUEST_CANCEL_DENIED", 403)
+        const cancelled = accessRequest(result.rows[0])
+        await audit.recordInTransaction({
+          transaction,
+          tenantId,
+          event: accessGovernanceAuditEvent({
+            tenantId,
+            correlationId: value.correlation_id,
+            operation: "CANCEL",
+            actorSubjectId: actor.subjectId,
+            subjectId: cancelled.target_subject,
+            actingClientId: actor.clientId,
+            resourceId: cancelled.resource_id,
+            capabilityId: cancelled.capability_id,
+            accessRequestId: cancelled.access_request_id,
+            entitlementId: null,
+            occurredAt: cancelledAt,
+          }),
+        })
+        return cancelled
+      })
     },
     async revokeEntitlement({ tenantId, actor, entitlementId, value }) {
       return options.sql.transaction(async (transaction) => {
         const current = await transaction.query<Row>(
-          `select entitlement.entitlement_id, entitlement.state,
+          `select entitlement.entitlement_id, entitlement.subject_id, entitlement.capability_id, entitlement.state,
                   entitlement.resource_id, resource.owner_organization_id,
                   publication.gateway_id
              from genio_one_model_entitlements entitlement
@@ -458,6 +727,10 @@ export function createPostgresAccessGovernanceStore(options: {
         }
         if (text(row, "state") !== "ACTIVE") {
           throw new PlatformApiError("ENTITLEMENT_NOT_ACTIVE", 409)
+        }
+        const audit = options.audit as AccessGovernanceAuditWriter | undefined
+        if (!audit?.recordInTransaction) {
+          throw new PlatformApiError("ACCESS_AUDIT_TRANSACTION_REQUIRED", 503)
         }
         const at = now()
         const result = await transaction.query<Row>(
@@ -489,7 +762,25 @@ export function createPostgresAccessGovernanceStore(options: {
             issuedAt: at,
           })
         }
-        return entitlement(result.rows[0]!, at)
+        const revoked = entitlement(result.rows[0]!, at)
+        await audit.recordInTransaction({
+          transaction,
+          tenantId,
+          event: accessGovernanceAuditEvent({
+            tenantId,
+            correlationId: value.correlation_id,
+            operation: "REVOKE",
+            actorSubjectId: actor.subjectId,
+            subjectId: text(row, "subject_id"),
+            actingClientId: actor.clientId,
+            resourceId: revoked.resource_id,
+            capabilityId: revoked.capability_id,
+            accessRequestId: null,
+            entitlementId: revoked.entitlement_id,
+            occurredAt: at,
+          }),
+        })
+        return revoked
       })
     },
     async entitlementsForSubject({ tenantId, actor }) {
@@ -512,7 +803,7 @@ export function createPostgresAccessGovernanceStore(options: {
             and resource.resource_id = entitlement.resource_id
           where entitlement.tenant_id = $1 and ($2::boolean or resource.owner_organization_id = any($3::text[]))
           order by entitlement.created_at desc`,
-        [tenantId, actor.role === "TENANT_ADMINISTRATOR", [...actor.organizationIds]],
+        [tenantId, actor.role === "TENANT_ADMINISTRATOR", [...(actor.administratorOrganizationIds ?? [])]],
       )
     },
     async notifications({ tenantId, actor }) {
@@ -523,7 +814,7 @@ export function createPostgresAccessGovernanceStore(options: {
             ($3::boolean or owner_organization_id = any($4::text[]))
           ) and state in ('PENDING','APPROVED','DENIED')
           order by coalesce(resolved_at, created_at) desc limit 100`,
-        [tenantId, actor.subjectId, actor.role === "TENANT_ADMINISTRATOR", [...actor.organizationIds]],
+        [tenantId, actor.subjectId, actor.role === "TENANT_ADMINISTRATOR", [...(actor.administratorOrganizationIds ?? [])]],
       )
       return result.rows.map((row): AccessNotification => {
         const request = accessRequest(row)

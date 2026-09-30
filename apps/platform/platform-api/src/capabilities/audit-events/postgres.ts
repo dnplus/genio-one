@@ -54,6 +54,15 @@ export function createPostgresGatewayAuthorizationAuditStore(options: { sql: Sql
     async recordInTransaction(input) {
       return recordAuthorizationAuditEvent(input.transaction, input)
     },
+    async findById({ tenantId, auditEventId, transaction }) {
+      const result = await (transaction ?? options.sql).query<AuditRow>(
+        `select tenant_id, audit_event_id, event, occurred_at
+           from genio_one_gateway_authorization_audit_events
+          where tenant_id = $1 and audit_event_id = $2`,
+        [tenantId, auditEventId],
+      )
+      return result.rows[0] ? mapRow(result.rows[0]) : null
+    },
     async query(input) {
       const conditions = ["tenant_id = $1"]
       const parameters: unknown[] = [input.tenantId]

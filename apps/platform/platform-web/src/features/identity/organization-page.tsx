@@ -71,9 +71,10 @@ export function OrganizationPage({
   const { t } = useTranslation()
   const peopleById = new Map((data.identity?.subjects ?? []).map((subject) => [subject.subject_id, subject]))
   const tenantAdministrators = data.identity?.tenant_administrators ?? []
-  const canManageRoles = identity.role === "TENANT_ADMINISTRATOR" || identity.role === "ORGANIZATION_ADMINISTRATOR"
-  const canCreateOrganization = identity.role === "TENANT_ADMINISTRATOR"
-  const canViewTenantAdministrators = identity.role === "TENANT_ADMINISTRATOR"
+  const isTenantAdministrator = identity.role === "TENANT_ADMINISTRATOR"
+  const administratorOrganizationIds = new Set(identity.administrator_organization_ids)
+  const canCreateOrganization = isTenantAdministrator
+  const canViewTenantAdministrators = isTenantAdministrator
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
@@ -108,7 +109,7 @@ export function OrganizationPage({
                   <TableCell className="tabular-nums">{users.length}</TableCell>
                   <TableCell className="tabular-nums">{organizationAdministrators.length}</TableCell>
                   <TableCell>{t("Organization only")}</TableCell>
-                  <TableCell className="text-right">{canManageRoles && (identity.role === "TENANT_ADMINISTRATOR" || (identity.organization_ids ?? []).includes(organization.organization_id)) ? <ManageOrganizationSheet tenantId={tenantId} organization={organization} identity={data.identity} subjectScope={identity.role === "TENANT_ADMINISTRATOR" ? "tenant" : "organization"} onSaved={onReload} /> : "—"}</TableCell>
+                  <TableCell className="text-right">{isTenantAdministrator || administratorOrganizationIds.has(organization.organization_id) ? <ManageOrganizationSheet tenantId={tenantId} organization={organization} identity={data.identity} subjectScope={isTenantAdministrator ? "tenant" : "organization"} onSaved={onReload} /> : "—"}</TableCell>
                 </TableRow>
               })}</TableBody>
             </Table>

@@ -17,6 +17,7 @@ import {
   canonicalizeApiRequestMapping,
   canonicalizeDownstreamIdentity,
   ApiUpstreamRequestMapping,
+  canonicalizeMcpToolReviews,
   ConnectionKind,
   ConnectionRegistration,
   CreateConnectionInput,
@@ -80,6 +81,7 @@ const CONNECTION_COLUMNS = `
   mcp_tool_namespace,
   mcp_selected_tools,
   mcp_tool_selection_operation_id,
+  mcp_tool_reviews,
   credential_ref,
   provider_credential_profile_id,
   provider_credential_profile_revision,
@@ -158,6 +160,23 @@ function rowStringArray(row: DatabaseRow, key: string): string[] {
     throw new PlatformApiError("CONNECTION_DATA_INVALID", 500, `Persisted ${key} is invalid`)
   }
   return value
+}
+
+function mcpToolReviews(row: DatabaseRow) {
+  let value = row.mcp_tool_reviews
+  if (value === null || value === undefined) return []
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value) as unknown
+    } catch {
+      throw new PlatformApiError("CONNECTION_DATA_INVALID", 500, "Persisted mcp_tool_reviews is invalid")
+    }
+  }
+  const reviews = canonicalizeMcpToolReviews(value)
+  if (!reviews) {
+    throw new PlatformApiError("CONNECTION_DATA_INVALID", 500, "Persisted mcp_tool_reviews is invalid")
+  }
+  return reviews
 }
 
 function downstreamIdentity(row: DatabaseRow): DownstreamIdentityProjection {
@@ -257,6 +276,7 @@ function mapConnection(row: DatabaseRow, now: () => number): ConnectionRegistrat
     mcp_tool_namespace: optionalRowString(row, "mcp_tool_namespace"),
     mcp_selected_tools: rowStringArray(row, "mcp_selected_tools"),
     mcp_tool_selection_operation_id: optionalRowString(row, "mcp_tool_selection_operation_id"),
+    mcp_tool_reviews: mcpToolReviews(row),
     credential_ref: optionalRowString(row, "credential_ref"),
     provider_credential_profile: providerCredentialProfileId && providerCredentialProfileRevision && providerCredentialStrategyDigest
       ? {

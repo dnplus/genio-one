@@ -8,6 +8,7 @@ const request: PersonalConnectionRequest = {
   requestToken: "connection-request-301",
   botId: "bot-1",
   threadId: "thread-1",
+  turnId: "turn-1",
   message: "需要你的 Notion 帳號連線",
   resourceId: "notion",
   resourceName: "Notion",

@@ -799,9 +799,10 @@ describe("managed MCP relay runtime policy", () => {
     expect(reply.statusCode).toBe(200)
     expect(authorizations).toHaveLength(1)
     expect(reports).toHaveLength(1)
-    expect(requests).toEqual(["https://context7.example/mcp?session=1"])
+    expect(requests).toEqual(["https://gateway.example/mcp?session=1"])
     expect(upstreamHeaders).not.toBeNull()
     expect(upstreamHeaders!.get("authorization")).toBe("Bearer session-token")
+    expect(upstreamHeaders!.get("host")).toBe("context7.example")
     expect(upstreamHeaders!.get("x-genio-session-id")).toBe("runtime-session")
     expect(upstreamHeaders!.get("x-genio-organization-id")).toBeNull()
     expect(upstreamHeaders!.get("x-genio-use-case-id")).toBeNull()
@@ -965,7 +966,7 @@ describe("managed MCP relay runtime policy", () => {
           publication_endpoint: { hostname: "context7.example", base_path: "/mcp" },
         }] : [] })
       }
-      expect(url).toBe("https://context7.example/mcp?cursor=next")
+      expect(url).toBe("https://gateway.example/mcp?cursor=next")
       upstream.push(new Headers(init?.headers))
       return Response.json({ jsonrpc: "2.0", id: 1, result: {} })
     }) as typeof fetch
@@ -1030,6 +1031,7 @@ describe("managed MCP relay runtime policy", () => {
     expect(ownedPrincipals).toEqual(expect.arrayContaining([session.principal]))
     expect(upstream).toHaveLength(1)
     expect(upstream[0]!.get("authorization")).toBe("Bearer current-session-token")
+    expect(upstream[0]!.get("host")).toBe("context7.example")
     expect(upstream[0]!.get("x-request-id")).toBe(correlationId)
     expect(upstream[0]!.get("x-genio-correlation-id")).toBe(correlationId)
     expect(upstream[0]!.get("x-genio-session-id")).toBe("runtime-session")
@@ -1063,6 +1065,28 @@ describe("managed MCP relay runtime policy", () => {
     expect(authorizations).toHaveLength(1)
   })
 
+  test("connects through localhost transport while preserving the publication authority", async () => {
+    process.env.GENIO_ONE_MCP_URL = "http://one.localhost:1975/mcp"
+    const upstream: Array<{ url: string, headers: Headers }> = []
+    globalThis.fetch = managedMcpFetch(async (input, init) => {
+      upstream.push({ url: String(input), headers: new Headers(init?.headers) })
+      return Response.json({ jsonrpc: "2.0", id: 1, result: {} })
+    })
+    const route = await routeFor(contextFor({
+      async authorize(input: Record<string, unknown>) { return managedMcpDecision(String(input.correlationId)) },
+      async report() {},
+    }))
+
+    const reply = new Reply()
+    await route(request(), reply)
+    for await (const _chunk of reply.body as AsyncIterable<unknown>) {}
+
+    expect(reply.statusCode).toBe(200)
+    expect(upstream).toHaveLength(1)
+    expect(upstream[0]!.url).toBe("http://127.0.0.1:1975/mcp?session=1")
+    expect(upstream[0]!.headers.get("host")).toBe("context7.example")
+  })
+
   test("reports a completed managed MCP invocation only after its response reaches EOF", async () => {
     process.env.GENIO_ONE_MCP_URL = "https://gateway.example/mcp"
     const authorizations: Array<Record<string, unknown>> = []
@@ -1088,8 +1112,9 @@ describe("managed MCP relay runtime policy", () => {
     expect(authorizations).toHaveLength(1)
     expect(authorizations[0]).toMatchObject({ capabilityId: "mcp.invoke", action: "invoke", botId: "bot-dylan" })
     expect(upstream).toHaveLength(1)
-    expect(upstream[0]!.url).toBe("https://context7.example/mcp?session=1")
+    expect(upstream[0]!.url).toBe("https://gateway.example/mcp?session=1")
     expect(upstream[0]!.headers.get("authorization")).toBe("Bearer session-token")
+    expect(upstream[0]!.headers.get("host")).toBe("context7.example")
     expect(reports).toHaveLength(1)
     expect(reports[0]).toMatchObject({ capabilityId: "mcp.invoke", action: "invoke", outcome: "COMPLETED", correlationId: authorizations[0]!.correlationId })
     expect(reply.statusCode).toBe(200)
@@ -1217,5 +1242,76 @@ describe("managed MCP relay runtime policy", () => {
     expect(reply.statusCode).toBe(502)
     expect(reports).toHaveLength(1)
     expect(reports[0]).toMatchObject({ capabilityId: "mcp.invoke", action: "invoke", outcome: "FAILED", reasonCode: "MCP_GATEWAY_UPSTREAM_502" })
+  })
+
+  test("does not forward hop-by-hop MCP request headers", async () => {
+    process.env.GENIO_ONE_MCP_URL = "https://gateway.example/mcp"
+    let upstreamHeaders: Headers | null = null
+    globalThis.fetch = managedMcpFetch(async (_input, init) => {
+      upstreamHeaders = new Headers(init?.headers)
+      return Response.json({ jsonrpc: "2.0", id: 1, result: {} })
+    })
+    const route = await routeFor(contextFor({
+      async authorize(input: Record<string, unknown>) { return managedMcpDecision(String(input.correlationId)) },
+      async report() {},
+    }))
+    const baseRequest = request()
+    const clientRequest = {
+      ...baseRequest,
+      headers: {
+        ...baseRequest.headers,
+        connection: "keep-alive",
+        "keep-alive": "timeout=5",
+        "proxy-authorization": "Basic ignored",
+        te: "trailers",
+        trailer: "x-checksum",
+        "transfer-encoding": "chunked",
+        upgrade: "websocket",
+      },
+    }
+
+    const reply = new Reply()
+    await route(clientRequest, reply)
+    for await (const _chunk of reply.body as AsyncIterable<unknown>) {}
+
+    expect(reply.statusCode).toBe(200)
+    expect(upstreamHeaders).not.toBeNull()
+    for (const name of ["connection", "keep-alive", "proxy-authorization", "te", "trailer", "transfer-encoding", "upgrade"]) {
+      expect(upstreamHeaders!.has(name)).toBe(false)
+    }
+  })
+
+  test("logs an upstream failure without request secrets", async () => {
+    process.env.GENIO_ONE_MCP_URL = "https://gateway.example/mcp"
+    globalThis.fetch = managedMcpFetch(async () => {
+      throw Object.assign(new Error("secret-token-must-not-appear"), { code: "ECONNREFUSED" })
+    })
+    const route = await routeFor(contextFor({
+      async authorize(input: Record<string, unknown>) { return managedMcpDecision(String(input.correlationId)) },
+      async report() {},
+    }))
+    const originalWarn = console.warn
+    const entries: string[] = []
+    console.warn = (entry: string) => { entries.push(entry) }
+    try {
+      const reply = new Reply()
+      await route(request(), reply)
+
+      expect(reply.statusCode).toBe(502)
+    } finally {
+      console.warn = originalWarn
+    }
+
+    expect(entries).toHaveLength(1)
+    expect(JSON.parse(entries[0]!)).toEqual({
+      event: "mcp.relay.upstream_failed",
+      resource_id: "resource-context7",
+      upstream_hostname: "gateway.example",
+      upstream_port: null,
+      publication_hostname: "context7.example",
+      error_name: "Error",
+      error_code: "ECONNREFUSED",
+    })
+    expect(entries[0]).not.toContain("secret-token-must-not-appear")
   })
 })

@@ -28,3 +28,32 @@ test("MCP discovery drift remains NEW and preserves explicit ignore or block onl
   }, [], ignored)
   assert.equal(drifted[0]!.state, "NEW")
 })
+
+test("MCP discovery digest binds the input schema and upstream read-only hint", () => {
+  const base = {
+    protocol_version: "2025-06-18",
+    server_name: "engineering",
+    server_version: "1",
+    tools: [{
+      name: "issues.search",
+      title: "Search",
+      description: "Search issues",
+      input_schema: { type: "object", properties: { query: { type: "string" } } },
+      read_only_hint: true,
+    }],
+  }
+  const initial = discoveryCandidates("connection-mcp", base, [])
+  const changedSchema = discoveryCandidates("connection-mcp", {
+    ...base,
+    tools: [{
+      ...base.tools[0]!,
+      input_schema: { type: "object", properties: { query: { type: "string" }, project: { type: "string" } } },
+    }],
+  }, [])
+  const changedHint = discoveryCandidates("connection-mcp", {
+    ...base,
+    tools: [{ ...base.tools[0]!, read_only_hint: false }],
+  }, [])
+  assert.notEqual(changedSchema[0]?.revision_digest, initial[0]?.revision_digest)
+  assert.notEqual(changedHint[0]?.revision_digest, initial[0]?.revision_digest)
+})

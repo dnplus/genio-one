@@ -13,7 +13,7 @@ import {
   ShieldCheckIcon,
   DownloadIcon,
 } from "lucide-react"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { DataTable } from "@/components/data-table/data-table"
@@ -89,6 +89,7 @@ import { } from "@/features/identity/suspend-person-action"
 import { } from "@/domain/organization-roles"
 import { actingClientLabel, relativeTime } from "@/lib/format"
 import { } from "@/lib/personal-preferences"
+import { captureProductEvent } from "@/lib/posthog-analytics"
 import {
   exportAuditEvents,
   queryAuditEvents,
@@ -319,6 +320,7 @@ export function ActivityPage({
   const [auditQueryError, setAuditQueryError] = useState("")
   const [failedAuditQuery, setFailedAuditQuery] = useState<AuditQuerySnapshot | null>(null)
   const [retryingRuntimeAudit, setRetryingRuntimeAudit] = useState(false)
+  const auditOpenedCaptured = useRef(false)
   const activityDisplay = useMemo(
     () => createActivityDisplayDirectory(data),
     [data.applications, data.connections, data.identity, data.resources],
@@ -632,6 +634,15 @@ export function ActivityPage({
     matchesEnforcementPoint(event.enforcement_point_id, "ACCESS_GATEWAY") && governedActivityMatchesSearch(event),
   )
   const runtimeAuditFailure = data.failures.find((failure) => failure.source === "Audit")
+  useEffect(() => {
+    if (mode !== "audit") {
+      auditOpenedCaptured.current = false
+      return
+    }
+    if (runtimeAuditFailure || auditOpenedCaptured.current) return
+    captureProductEvent("genioone_journey_action", { action: "audit_opened" })
+    auditOpenedCaptured.current = true
+  }, [mode, runtimeAuditFailure])
   const runtimeActivities = executionAuditEvents.filter((event) => {
     if (!isRuntimeAuditEvent(event) || !matchesEnforcementPoint(event.enforcement_point_id, "AGENT_RUNTIME")) return false
     const actorSubjectId = event.actor_subject?.subject_id ?? event.subject.subject_id

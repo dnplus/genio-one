@@ -178,6 +178,40 @@ function connectionProxyError(error: unknown, fallback: string) {
 export async function botRoutes(app: FastifyInstance, context: BotServerContext) {
   const { botRegistry } = context
 
+  app.get("/api/bots/:botId/connection-recovery", async (request, reply) => {
+    const principal = await requestPrincipal(request)
+    const botId = (request.params as { botId: string }).botId
+    if (!botRegistry.getOwned(botId, principal)) return reply.code(404).send({ error: "BOT_NOT_FOUND" })
+    const continuation = botRegistry.connectionContinuations.pending().find((entry) => entry.botId === botId && entry.state === "guarded")
+    if (!continuation) return reply.send({ state: "ready" })
+    const runtime = context.runtimeBroker.findByPrincipal(principal)
+    const canReset = Boolean(runtime && runtime.selectedBotId === botId && !context.runtimeBroker.hasOtherBotTurn(runtime.id, botId))
+    return reply.send({ state: "guarded", requestToken: continuation.requestToken, resourceName: continuation.resourceName, error: continuation.error ?? "CONNECTION_CONTINUATION_GUARDED", runtimeSessionId: canReset ? runtime!.id : null, canReset })
+  })
+
+  app.post("/api/bots/:botId/connection-recovery/reset", async (request, reply) => {
+    const principal = await requestPrincipal(request)
+    const botId = (request.params as { botId: string }).botId
+    if (!botRegistry.getOwned(botId, principal)) return reply.code(404).send({ error: "BOT_NOT_FOUND" })
+    const body = request.body as { requestToken?: unknown; runtimeSessionId?: unknown }
+    if (typeof body?.requestToken !== "string" || typeof body.runtimeSessionId !== "string") return reply.code(400).send({ error: "CONNECTION_RECOVERY_INVALID" })
+    let continuation
+    try { continuation = botRegistry.connectionContinuations.get(body.requestToken) }
+    catch { return reply.code(404).send({ error: "CONNECTION_RECOVERY_NOT_FOUND" }) }
+    if (continuation.botId !== botId || continuation.state !== "guarded") return reply.code(409).send({ error: "CONNECTION_RECOVERY_NOT_GUARDED" })
+    const runtime = context.runtimeBroker.get(body.runtimeSessionId)
+    if (!runtime || runtime.principal.tenant_id !== principal.tenant_id || runtime.principal.subject_id !== principal.subject_id || runtime.principal.acting_client_id !== principal.acting_client_id || runtime.selectedBotId !== botId || context.runtimeBroker.hasOtherBotTurn(runtime.id, botId)) return reply.code(409).send({ error: "CONNECTION_RECOVERY_RUNTIME_CHANGED" })
+    try {
+      await context.runtimeBroker.stop(runtime.id, undefined, botId)
+      context.botToolSessions.invalidateRuntimeBot(runtime.id, botId)
+      const released = botRegistry.connectionContinuations.releaseGuarded(botId, "CONNECTION_CONTINUATION_USER_SESSION_RESET")
+      console.warn(JSON.stringify({ event: "bot.connection.continuation.user_session_reset", bot_id: botId, request_token: continuation.requestToken, runtime_session_id: runtime.id, released_request_tokens: released.map((entry) => entry.requestToken) }))
+      return reply.send({ state: "ready", reset: true })
+    } catch (error) {
+      return reply.code(409).send({ error: error instanceof Error ? error.message : "CONNECTION_RECOVERY_RESET_FAILED" })
+    }
+  })
+
   app.post("/api/bots/:botId/timeline/legacy-import", async (request, reply) => {
     const principal = await requestPrincipal(request)
     const bot = botRegistry.getOwned((request.params as { botId: string }).botId, principal)
@@ -682,10 +716,11 @@ async function fetchCatalogCapabilities(
     if (caps.length === 0) return []
     if (!principal) return caps
 
+    const isBuiltinDiscovery = (cap: CatalogCapabilityView) => cap.builtin_service === "DISCOVERY"
     const resourceIds = [...new Set(caps.flatMap((cap) => {
       const resourceId = typeof cap.resource_id === "string" ? cap.resource_id.trim() : ""
       const access = typeof cap.access === "string" ? cap.access : ""
-      return resourceId && (access === "ENTITLED" || access === "AUTO_GRANT") ? [resourceId] : []
+      return resourceId && !isBuiltinDiscovery(cap) && (access === "ENTITLED" || access === "AUTO_GRANT") ? [resourceId] : []
     }))]
     const connectionStates = new Map<string, PlatformPersonalConnection[] | null>()
     await Promise.all(resourceIds.map(async (resourceId) => {
@@ -696,6 +731,7 @@ async function fetchCatalogCapabilities(
       }
     }))
     return caps.map((cap) => {
+      if (isBuiltinDiscovery(cap)) return cap
       const resourceId = typeof cap.resource_id === "string" ? cap.resource_id.trim() : ""
       const connections = resourceId ? connectionStates.get(resourceId) : undefined
       if (connections === undefined || connections === null || connections.length === 0) return connections === null

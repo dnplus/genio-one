@@ -68,11 +68,20 @@ export class BotToolSessions {
     if (this.tokens.get(key) === token) this.tokens.delete(key)
   }
 
+  invalidateRuntimeBot(runtimeSessionId: string, botId: string) {
+    for (const [token, session] of this.sessions) {
+      if (session.runtimeSessionId !== runtimeSessionId || session.botId !== botId) continue
+      this.sessions.delete(token)
+      const key = this.key(session.runtimeSessionId, session.botId)
+      if (this.tokens.get(key) === token) this.tokens.delete(key)
+    }
+  }
+
   private configFor(token: string) {
     return {
       url: `http://127.0.0.1:${process.env.GENIO_BOT_PORT || "5181"}/api/bot-tools`,
       http_headers: { Authorization: `Bearer ${token}` },
-      default_tools_approval_mode: "auto",
+      default_tools_approval_mode: "writes",
       tools: { request_user_input_async: { approval_mode: "approve" }, update_work_summary: { approval_mode: "approve" } },
       required: false,
     }

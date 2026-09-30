@@ -2,6 +2,7 @@ import {
   AUTHORIZATION_BUNDLE_SCHEMA_VERSION,
   type CompiledAuthorizationBundle,
   type CompiledAuthorizationRule,
+  type CompiledMcpToolDefinition,
 } from "@genioone/protocol/authorization"
 import {
   verifyCompactEdDsaJws,
@@ -38,6 +39,62 @@ function positiveInteger(value: unknown): boolean {
 
 function nonNegativeInteger(value: unknown): boolean {
   return Number.isSafeInteger(value) && Number(value) >= 0
+}
+
+function safeJsonValue(value: unknown, depth = 0, state = { nodes: 0 }): boolean {
+  if (depth > 24 || state.nodes++ > 2_048) return false
+  if (value === null || typeof value === "boolean") return true
+  if (typeof value === "string") return value.length <= 16_384
+  if (typeof value === "number") return Number.isFinite(value)
+  if (Array.isArray(value)) return value.every((entry) => safeJsonValue(entry, depth + 1, state))
+  if (!value || typeof value !== "object") return false
+  const prototype = Object.getPrototypeOf(value)
+  if (prototype !== Object.prototype && prototype !== null) return false
+  return Object.entries(value as Record<string, unknown>).every(([key, entry]) =>
+    key.length <= 256 &&
+    !/[\u0000\r\n]/.test(key) &&
+    key !== "__proto__" &&
+    key !== "constructor" &&
+    key !== "prototype" &&
+    safeJsonValue(entry, depth + 1, state),
+  )
+}
+
+function isMcpToolDefinition(value: unknown): value is CompiledMcpToolDefinition {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false
+  const definition = value as Record<string, unknown>
+  const schema = definition.input_schema
+  return hasOnlyKeys(definition, [
+    "resource_id",
+    "connection_id",
+    "canonical_tool_name",
+    "exposed_tool_name",
+    "source_revision_digest",
+    "description",
+    "input_schema",
+    "read_only",
+  ]) &&
+    nonEmptyString(definition.resource_id) &&
+    nonEmptyString(definition.connection_id) &&
+    nonEmptyString(definition.canonical_tool_name) &&
+    nonEmptyString(definition.exposed_tool_name) &&
+    typeof definition.source_revision_digest === "string" && /^[a-f0-9]{64}$/.test(definition.source_revision_digest) &&
+    (definition.description === null || (typeof definition.description === "string" && definition.description.length <= 16_384)) &&
+    Boolean(schema) && typeof schema === "object" && !Array.isArray(schema) &&
+    (schema as Record<string, unknown>).type === "object" &&
+    safeJsonValue(schema) &&
+    definition.read_only === true
+}
+
+function hasUniqueMcpToolDefinitions(value: unknown): boolean {
+  if (!Array.isArray(value) || !value.every(isMcpToolDefinition)) return false
+  const identities = new Set<string>()
+  for (const definition of value) {
+    const identity = `${definition.resource_id}\u0000${definition.exposed_tool_name}`
+    if (identities.has(identity)) return false
+    identities.add(identity)
+  }
+  return true
 }
 
 function isRule(value: unknown): value is CompiledAuthorizationRule {
@@ -157,6 +214,7 @@ export function isCompiledAuthorizationBundle(
     && (bundle.subject_contexts === undefined || (Array.isArray(bundle.subject_contexts) && bundle.subject_contexts.every(isSubjectContext)))
     && (bundle.agent_delegations === undefined || (Array.isArray(bundle.agent_delegations) && bundle.agent_delegations.every(isAgentDelegation)))
     && (bundle.execution_grants === undefined || (Array.isArray(bundle.execution_grants) && bundle.execution_grants.every(isExecutionGrant)))
+    && (bundle.mcp_tool_definitions === undefined || hasUniqueMcpToolDefinitions(bundle.mcp_tool_definitions))
   )
 }
 

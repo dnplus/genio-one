@@ -22,3 +22,12 @@ test("local clean refuses to run while the distillation triage service is listen
     },
   }), /8182\/48291/)
 })
+
+test("local clean refuses to run while the Mail2000 connector is listening", () => {
+  assert.ok(devServicePorts.includes(58111))
+  assert.throws(() => assertDevStopped({
+    findRunningPids(port) {
+      return port === 58111 ? ["58111"] : []
+    },
+  }), /58111\/58111/)
+})

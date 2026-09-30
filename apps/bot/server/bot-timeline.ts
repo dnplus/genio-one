@@ -33,6 +33,13 @@ export class BotTimelineStore {
     return Boolean(this.db.query("select 1 from bot_timeline_turns where bot_id = ? and json_extract(body_json, '$.status') = 'inProgress' limit 1").get(botId))
   }
 
+  hasNewerTurn(botId: string, threadId: string, turnId: string): boolean {
+    return Boolean(this.db.query(`select 1 from bot_timeline_turns
+      where bot_id = ? and thread_id = ? and rowid > (
+        select rowid from bot_timeline_turns where bot_id = ? and thread_id = ? and turn_id = ?
+      ) limit 1`).get(botId, threadId, botId, threadId, turnId))
+  }
+
   interruptTurn(botId: string, threadId: string, turnId: string): boolean {
     const current = this.getTurn(botId, threadId, turnId)
     if (!current || current.status !== "inProgress") return false

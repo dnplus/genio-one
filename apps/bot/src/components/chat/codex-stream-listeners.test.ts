@@ -12,6 +12,7 @@ function harness(options: { deferTimeout?: boolean; isPendingExecutionCurrent?: 
   const timeouts: Array<() => void> = []
   const pendingTasks: string[] = []
   const restoredTasks: string[] = []
+  let mcpStatusRefreshes = 0
   const messages: Array<{ id: string; text: string }> = []
   const pendingExecutionRef = { current: null as PendingExecution | null }
   const state = {
@@ -21,6 +22,7 @@ function harness(options: { deferTimeout?: boolean; isPendingExecutionCurrent?: 
     channelReady: true,
     turnRunning: true,
     signedOut: false,
+    mcpStatus: "等待連線",
     elicitationRequest: null as InstallElicitationRequest | null,
     personalConnectionRequests: [] as PersonalConnectionRequest[],
   }
@@ -36,6 +38,7 @@ function harness(options: { deferTimeout?: boolean; isPendingExecutionCurrent?: 
     bindings: [],
   } as unknown as BotInstance
   const activeBotRef = { current: bot }
+  const managedMcpServerNamesRef = { current: [] as string[] }
   const set = <Key extends keyof typeof state>(key: Key) => (value: (typeof state)[Key] | ((current: (typeof state)[Key]) => (typeof state)[Key])) => {
     state[key] = typeof value === "function"
       ? (value as (current: (typeof state)[Key]) => (typeof state)[Key])(state[key])
@@ -62,6 +65,7 @@ function harness(options: { deferTimeout?: boolean; isPendingExecutionCurrent?: 
     modelDirectoryModelsRef: { current: [] },
     loggedInRef: { current: false },
     isTurnRunningRef: { current: true },
+    managedMcpServerNamesRef,
     setRuntime: () => {},
     setRuntimeTiers: () => {},
     setRuntimeState: set("runtimeState"),
@@ -82,9 +86,10 @@ function harness(options: { deferTimeout?: boolean; isPendingExecutionCurrent?: 
     setUserInputRequest: () => {},
     setElicitationRequest: set("elicitationRequest"),
     setPersonalConnectionRequests: set("personalConnectionRequests"),
-    setMcpStatus: () => {},
+    setMcpStatus: set("mcpStatus"),
     setDynamicSkills: () => {},
     setTurnRunning: (running: boolean) => { state.turnRunning = running },
+    refreshMcpStatus: async () => { mcpStatusRefreshes++ },
     prepareCodexSession: async () => {},
     attachRuntimeDesktop: async () => {},
     isPendingExecutionCurrent: options.isPendingExecutionCurrent ? () => options.isPendingExecutionCurrent!() : undefined,
@@ -104,7 +109,7 @@ function harness(options: { deferTimeout?: boolean; isPendingExecutionCurrent?: 
     const handlers = (client as unknown as { closeHandlers: Set<(event: { code: number; reason: string }) => void> }).closeHandlers
     for (const handler of handlers) handler({ code, reason })
   }
-  return { client, state, receive, status, close, unsubscribe, activeBotRef, pendingExecutionRef, pendingTasks, restoredTasks, timeouts, messages }
+  return { client, state, receive, status, close, unsubscribe, activeBotRef, managedMcpServerNamesRef, pendingExecutionRef, pendingTasks, restoredTasks, timeouts, messages, get mcpStatusRefreshes() { return mcpStatusRefreshes } }
 }
 
 describe("Codex stream runtime errors", () => {
@@ -112,6 +117,29 @@ describe("Codex stream runtime errors", () => {
 
   afterEach(() => {
     for (const cleanup of cleanups.splice(0)) cleanup()
+  })
+
+  test("refreshes managed MCP status after a relevant server becomes ready", async () => {
+    const value = harness()
+    cleanups.push(value.unsubscribe)
+    value.activeBotRef.current.bindings = [{ resourceId: "mail2000", capabilityId: "mail.search", version: "1", state: "INSTALLED", kind: "MCP" }]
+    value.managedMcpServerNamesRef.current = ["genio_mcp_mail2000"]
+    value.receive({ method: "mcpServer/startupStatus/updated", params: { name: "genio_mcp_mail2000", status: "ready" } })
+    await Promise.resolve()
+
+    expect(value.state.mcpStatus).toBe("工具連線中")
+    expect(value.mcpStatusRefreshes).toBe(1)
+  })
+
+  test("refreshes a newly configured managed MCP before the Bot binding readback renders", async () => {
+    const value = harness()
+    cleanups.push(value.unsubscribe)
+    value.managedMcpServerNamesRef.current = ["genio_mcp_notion"]
+    value.receive({ method: "mcpServer/startupStatus/updated", params: { name: "genio_mcp_notion", status: "ready" } })
+    await Promise.resolve()
+
+    expect(value.state.mcpStatus).toBe("工具連線中")
+    expect(value.mcpStatusRefreshes).toBe(1)
   })
 
   test("runtime policy denial preserves conversation and identifies the execution environment", () => {
@@ -307,6 +335,7 @@ describe("Codex stream personal connection elicitation", () => {
       params: {
         requestToken: "connection-request-44",
         threadId: "thread-dylan",
+        turnId: "turn-dylan",
         botId: "bot-dylan",
         serverName: "genio_bot",
         mode: "genio/personal-connection",
@@ -319,6 +348,7 @@ describe("Codex stream personal connection elicitation", () => {
     expect(value.state.personalConnectionRequests).toEqual([{
       requestToken: "connection-request-44",
       threadId: "thread-dylan",
+      turnId: "turn-dylan",
       botId: "bot-dylan",
       resourceId: "notion",
       resourceName: "Notion",
@@ -347,13 +377,32 @@ describe("Codex stream personal connection elicitation", () => {
     expect(value.state.agentState).toBe("idle")
   })
 
+  test("ignores a connection request without its source turn", () => {
+    const value = harness()
+    cleanups.push(value.unsubscribe)
+
+    value.receive({
+      method: "genio/personalConnection/request",
+      params: {
+        requestToken: "connection-request-without-turn",
+        threadId: "thread-dylan",
+        botId: "bot-dylan",
+        resourceId: "notion",
+        resourceName: "Notion",
+      },
+    })
+
+    expect(value.state.personalConnectionRequests).toEqual([])
+    expect(value.state.agentState).toBe("idle")
+  })
+
   const connectionRequest = {
     method: "genio/personalConnection/request",
-    params: { requestToken: "connection-request-55", threadId: "thread-dylan", botId: "bot-dylan", resourceId: "notion", resourceName: "Notion", reason: "整理週報" },
+    params: { requestToken: "connection-request-55", threadId: "thread-dylan", turnId: "turn-dylan", botId: "bot-dylan", resourceId: "notion", resourceName: "Notion", reason: "整理週報" },
   }
   const secondConnectionRequest = {
     method: "genio/personalConnection/request",
-    params: { requestToken: "connection-request-56", threadId: "thread-dylan", botId: "bot-dylan", resourceId: "mail", resourceName: "Mail", reason: "整理郵件" },
+    params: { requestToken: "connection-request-56", threadId: "thread-dylan", turnId: "turn-dylan", botId: "bot-dylan", resourceId: "mail", resourceName: "Mail", reason: "整理郵件" },
   }
 
   test("keeps parallel connection requests available when one expires", () => {

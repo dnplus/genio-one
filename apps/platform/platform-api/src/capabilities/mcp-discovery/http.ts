@@ -8,6 +8,7 @@ import type { McpOAuthService } from "../mcp-oauth/module"
 import {
   CompleteMcpDiscoverySchema,
   DecideMcpDiscoveryCandidateSchema,
+  DecideMcpReadOnlyApprovalSchema,
   McpDiscoveryCredentialSchema,
   McpDiscoveryOperationSchema,
   RequestMcpDiscoverySchema,
@@ -78,6 +79,12 @@ async function authorizeRuntime(
   return { gatewayId: registration.target_id }
 }
 
+function requireTenantAdministrator(request: FastifyRequest): void {
+  if (request.principal?.role !== "TENANT_ADMINISTRATOR") {
+    throw new PlatformApiError("TENANT_ADMINISTRATOR_REQUIRED", 403)
+  }
+}
+
 export const mcpDiscoveryHttp: FastifyPluginAsync<McpDiscoveryHttpOptions> = async (
   app,
   options,
@@ -146,6 +153,32 @@ export const mcpDiscoveryHttp: FastifyPluginAsync<McpDiscoveryHttpOptions> = asy
       expectedRevisionDigest: request.body.expected_revision_digest,
       state: request.body.state,
     }),
+  )
+
+  routes.post(
+    "/v1/tenants/:tenant_id/resources/:resource_id/connections/:connection_id/mcp-discovery/candidates/:candidate_id/read-only-approval",
+    {
+      schema: {
+        operationId: "decideMcpReadOnlyApproval",
+        summary: "Explicitly approve or revoke automatic confirmation bypass for one published MCP read tool",
+        tags: ["Connections"],
+        params: CandidatePathSchema,
+        body: DecideMcpReadOnlyApprovalSchema,
+        response: { 200: McpDiscoveryOperationSchema },
+      },
+    },
+    async (request) => {
+      requireTenantAdministrator(request)
+      return options.store.decideReadOnlyApproval({
+        tenantId: request.params.tenant_id,
+        resourceId: request.params.resource_id,
+        connectionId: request.params.connection_id,
+        candidateId: request.params.candidate_id,
+        expectedRevisionDigest: request.body.expected_revision_digest,
+        executionMode: request.body.execution_mode,
+        approvedBySubjectId: request.principal!.subject_id,
+      })
+    },
   )
 
   routes.get(

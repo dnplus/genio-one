@@ -1,17 +1,26 @@
-export interface Mail2000DirectoryEntry {
+interface Mail2000DirectoryEntryBase {
   uid: string | null
   full_name: string
   emails: string[]
   organization: string | null
   title: string | null
   categories: string[]
-  kind: "person" | "group"
   member_emails: string[]
   address_book: string
   address_book_path: string
   address_book_url: string
   object_url: string
 }
+
+export interface Mail2000PersonDirectoryEntry extends Mail2000DirectoryEntryBase {
+  kind: "person"
+}
+
+export interface Mail2000GroupDirectoryEntry extends Mail2000DirectoryEntryBase {
+  kind: "group"
+}
+
+export type Mail2000DirectoryEntry = Mail2000PersonDirectoryEntry | Mail2000GroupDirectoryEntry
 
 function unescapeValue(value: string): string {
   return value
@@ -82,20 +91,32 @@ export function parseMail2000VCard(input: { url: string; data: string; addressBo
   const kind = (first("KIND") ?? "").toLowerCase() === "group" || memberEmails.length > 0 ? "group" : "person"
   const name = fullName || structuredName || emails[0] || ""
   if (!name && memberEmails.length === 0) return null
-  return {
+  const entry = {
     uid: first("UID") ? unescapeValue(first("UID")!) : null,
     full_name: name,
     emails,
     organization,
     title: first("TITLE") ? unescapeValue(first("TITLE")!) : null,
     categories,
-    kind,
     member_emails: memberEmails,
     address_book: input.addressBook,
     address_book_path: new URL(input.addressBookUrl).pathname.split("/").filter(Boolean).map((segment) => decodeURIComponent(segment)).join("/"),
     address_book_url: input.addressBookUrl,
     object_url: input.url,
   }
+  return kind === "group" ? { ...entry, kind: "group" } : { ...entry, kind: "person" }
+}
+
+function cappedMemberEmails(emails: string[], normalizedQuery: string, cap = 100): string[] {
+  if (emails.length <= cap) return emails
+  if (!normalizedQuery) return emails.slice(0, cap)
+  const matches = emails.filter((email) => email.normalize("NFKC").toLocaleLowerCase().includes(normalizedQuery))
+  if (matches.length === 0) return emails.slice(0, cap)
+  if (matches.length >= cap) return matches.slice(0, cap)
+  const selected = emails.slice(0, cap)
+  const missing = matches.filter((email) => !selected.includes(email))
+  if (missing.length === 0) return selected
+  return [...selected.slice(0, cap - missing.length), ...missing]
 }
 
 export function searchMail2000Directory(entries: Mail2000DirectoryEntry[], args: { query: string; kind: "all" | "person" | "group"; limit: number }) {
@@ -113,17 +134,20 @@ export function searchMail2000Directory(entries: Mail2000DirectoryEntry[], args:
     query: args.query,
     total_matches: matches.length,
     truncated: matches.length > selected.length,
-    results: selected.map((entry) => ({
-      ...entry,
-      ...(entry.kind === "group" ? {
-        // The member cap must apply to every member field, or member_emails would still return all addresses.
-        member_emails: entry.member_emails.slice(0, 100),
-        members: entry.member_emails.slice(0, 100).map((email) => {
+    results: selected.map((entry) => {
+      if (entry.kind !== "group") return entry
+      // The member cap must apply to every member field, or member_emails would still return all addresses.
+      // A query that hits a member outside the first slice must still return that address.
+      const memberEmails = cappedMemberEmails(entry.member_emails, query)
+      return {
+        ...entry,
+        member_emails: memberEmails,
+        members: memberEmails.map((email) => {
           const member = peopleByEmail.get(email)
           return { email, full_name: member?.full_name ?? null, organization: member?.organization ?? null, title: member?.title ?? null, found_in_directory: Boolean(member) }
         }),
         members_truncated: entry.member_emails.length > 100,
-      } : {}),
-    })),
+      }
+    }),
   }
 }

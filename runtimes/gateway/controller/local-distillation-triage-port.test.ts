@@ -8,6 +8,7 @@ import {
   assertKnownDistillationPortOwnership,
   distillationPortRole,
   distillationTriageHandoffPath,
+  releaseClaimedDistillationTriage,
   releaseLocalDistillationTriage,
 } from "./local-distillation-triage-port"
 import {
@@ -195,6 +196,70 @@ test("a managed handoff atomically replaces a legacy marker", async () => {
   } finally {
     await rm(root, { recursive: true, force: true })
   }
+})
+
+test("takeover is published before the port is probed", async () => {
+  const events: string[] = []
+  const handoff = {
+    path: "/tmp/handoff",
+    targetPath: "/tmp/handoff.1",
+    contents: "taking-over\n1",
+    phase: "taking-over" as const,
+    generation: "1",
+    managed: true,
+  }
+  const result = await releaseClaimedDistillationTriage(checkout, {
+    publishTakeover() {
+      events.push("publish")
+      return handoff
+    },
+    owners() {
+      events.push("owners")
+      return []
+    },
+    async portOccupied() {
+      events.push("probe")
+      return false
+    },
+    async release() {
+      events.push("release")
+    },
+    abandon() {
+      events.push("abandon")
+    },
+  })
+  expect(events).toEqual(["publish", "owners", "probe", "release"])
+  expect(result).toBe(handoff)
+})
+
+test("a failed takeover claim removes the handoff it already published", async () => {
+  let abandoned = false
+  const handoff = {
+    path: "/tmp/handoff",
+    targetPath: "/tmp/handoff.1",
+    contents: "taking-over\n1",
+    phase: "taking-over" as const,
+    generation: "1",
+    managed: true,
+  }
+  await expect(releaseClaimedDistillationTriage(checkout, {
+    publishTakeover() {
+      return handoff
+    },
+    owners() {
+      return [{ pid: "9", cwd: "/tmp", command: "bun services/processor/local-distillation-triage.ts" }]
+    },
+    async portOccupied() {
+      return true
+    },
+    async release() {
+      throw new Error("port 8182 is occupied")
+    },
+    abandon(published) {
+      abandoned = published === handoff
+    },
+  })).rejects.toThrow("port 8182 is occupied")
+  expect(abandoned).toBe(true)
 })
 
 test("a stale dead-owner lock is reclaimed before the next takeover", async () => {

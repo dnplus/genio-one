@@ -9,7 +9,7 @@ const platformDir = resolve(root, "apps/platform")
 const botDir = resolve(root, "apps/bot")
 const envFile = resolve(platformDir, ".env.local")
 const confirmationPhrase = "CLEAN LOCAL GENIO DATA"
-const devServicePorts = [5173, 5180, 5181, 58082, 8182]
+const devServicePorts = [5173, 5180, 5181, 58082, 58111, 8182]
 
 const preserveTables = [
   "schema_migrations",

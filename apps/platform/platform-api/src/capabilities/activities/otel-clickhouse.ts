@@ -1,12 +1,20 @@
 import type { GatewayAuthorizationAuditStore } from "../audit-events/module"
 import type { ResourceConnectionRegistry } from "../connections/module"
-import type { GatewayActivityIngest } from "./contract"
+import type { GatewayActivityEvent, GatewayActivityIngest } from "./contract"
 import type { GatewayActivityMaterializer, GatewayActivityStore } from "./module"
+import type { PostHogGatewayActivitySink } from "./posthog"
 import type { HttpFetch } from "../../../../../../runtimes/gateway/services/shared/http-fetch"
 
 interface OTelAccessLogRow {
   observed_at_millis: number | string
   attributes: Record<string, string>
+}
+
+function databaseIdentifier(value: string): string {
+  if (!/^[a-zA-Z0-9_]+$/.test(value)) {
+    throw new Error(`INVALID_CLICKHOUSE_DATABASE_NAME:${value}`)
+  }
+  return value
 }
 
 function quote(value: string): string {
@@ -62,11 +70,13 @@ export function createClickHouseGatewayActivityMaterializer(options: {
     Partial<Pick<GatewayActivityStore, "get">>
   audits: Pick<GatewayAuthorizationAuditStore, "query">
   connections: Pick<ResourceConnectionRegistry, "list">
+  postHog?: PostHogGatewayActivitySink
   fetch?: HttpFetch
   lookbackSeconds?: number
 }): GatewayActivityMaterializer {
   const request = options.fetch ?? fetch
   const origin = options.origin.replace(/\/$/, "")
+  const database = databaseIdentifier(options.database)
   const authorization = `Basic ${Buffer.from(`${options.username}:${options.password}`).toString("base64")}`
   const lookbackSeconds = Math.max(60, Math.min(3_600, options.lookbackSeconds ?? 900))
 
@@ -76,7 +86,7 @@ export function createClickHouseGatewayActivityMaterializer(options: {
         select
           toUnixTimestamp64Milli(Timestamp) as observed_at_millis,
           LogAttributes as attributes
-        from ${options.database}.otel_logs
+        from ${database}.otel_logs
         where ResourceAttributes['genio.tenant.id'] = ${quote(tenantId)}
           and LogAttributes['genio.event.kind'] = 'ai_gateway_activity'
           and Timestamp >= now() - interval ${lookbackSeconds} second
@@ -103,6 +113,7 @@ export function createClickHouseGatewayActivityMaterializer(options: {
         const audit = (await options.audits.query({
           tenantId,
           correlationId,
+          kind: "ONE_POLICY_DECISION",
           offset: 0,
           limit: 1,
         })).events[0]
@@ -188,64 +199,71 @@ export function createClickHouseGatewayActivityMaterializer(options: {
             )
           : undefined
         const startedAt = Date.parse(value(main.attributes, "start_time") ?? "")
+        const observedAttributes = activityCandidates.map((candidate) => candidate.attributes)
+        const observedValue = (name: string): string | null =>
+          observedAttributes.map((attributes) => value(attributes, name)).find(
+            (current): current is string => current !== null,
+          ) ?? null
+        const event: GatewayActivityIngest = {
+          correlation_id: correlationId,
+          resource_id: audit.resource_id,
+          capability_id: audit.capability_id,
+          application_id: audit.acting_client?.acting_client_id ?? null,
+          subject_id: audit.subject?.subject_id ?? null,
+          acting_client_id: audit.acting_client?.acting_client_id ?? null,
+          entitlement_id: audit.entitlement_id ?? null,
+          usage_admission_id: null,
+          usage_admission_disposition: "NOT_APPLICABLE",
+          usage_admission_reason: null,
+          consumer_organization_id: null,
+          resource_owner_organization_id: null,
+          use_case_id: null,
+          enforcement_point_id: audit.enforcement_point_id,
+          route: "MANAGED",
+          method: value(main.attributes, "method") ?? "POST",
+          path: value(main.attributes, "path") ?? "/",
+          status_code: status,
+          outcome: outcome(status),
+          error_code: status >= 400 ? value(main.attributes, "response_code_details") : null,
+          latency_millis: integer(value(main.attributes, "duration")),
+          upstream_attempted: value((provider ?? main).attributes, "upstream_host") !== null,
+          requested_model_id: observedValue("gen_ai.request.model"),
+          effective_model_id: observedValue("gen_ai.response.model"),
+          provider_id: observedValue("gen_ai.provider.name"),
+          connection_id: mcpConnection?.connection_id ?? selectedConnection?.connection_id ?? connectionId(backend),
+          mcp_method: provider && value(provider.attributes, "mcp.tool.name")
+            ? value(provider.attributes, "mcp.method.name")
+            : audit.decision?.input_receipt?.mcp_method ??
+              (provider ? value(provider.attributes, "mcp.method.name") : null),
+          mcp_tool: audit.decision?.input_receipt?.mcp_tool ??
+            (provider ? value(provider.attributes, "mcp.tool.name") : null),
+          mcp_backend: backend,
+          processor_bundle_revision: null,
+          processor_request_steps: [],
+          processor_response_steps: [],
+          data_classifications: [],
+          safety_decisions: [],
+          input_tokens: integer(observedValue("gen_ai.usage.input_tokens")),
+          output_tokens: integer(observedValue("gen_ai.usage.output_tokens")),
+          total_tokens: integer(observedValue("gen_ai.usage.total_tokens")),
+          route_mode: null,
+          route_lease_id: null,
+          route_lease_reused: null,
+          routing_policy_id: null,
+          routing_revision: null,
+          candidate_set_digest: null,
+          detail_availability: "NOT_CAPTURED",
+          detail_ref: null,
+          detail_expires_at: null,
+          occurred_at: Number.isFinite(startedAt)
+            ? Math.floor(startedAt / 1_000)
+            : Math.floor(Number((provider ?? main).observed_at_millis) / 1_000),
+        }
+        let persisted: GatewayActivityEvent
         try {
-          await options.activities.record({
+          persisted = await options.activities.record({
             tenantId,
-            event: {
-            correlation_id: correlationId,
-            resource_id: audit.resource_id,
-            capability_id: audit.capability_id,
-            application_id: audit.acting_client?.acting_client_id ?? null,
-            subject_id: audit.subject?.subject_id ?? null,
-            acting_client_id: audit.acting_client?.acting_client_id ?? null,
-            entitlement_id: audit.entitlement_id ?? null,
-            usage_admission_id: null,
-            usage_admission_disposition: "NOT_APPLICABLE",
-            usage_admission_reason: null,
-            consumer_organization_id: null,
-            resource_owner_organization_id: null,
-            use_case_id: null,
-            enforcement_point_id: audit.enforcement_point_id,
-            route: "MANAGED",
-            method: value(main.attributes, "method") ?? "POST",
-            path: value(main.attributes, "path") ?? "/",
-            status_code: status,
-            outcome: outcome(status),
-            error_code: status >= 400 ? value(main.attributes, "response_code_details") : null,
-            latency_millis: integer(value(main.attributes, "duration")),
-            upstream_attempted: value((provider ?? main).attributes, "upstream_host") !== null,
-            requested_model_id: null,
-            effective_model_id: null,
-            provider_id: null,
-            connection_id: mcpConnection?.connection_id ?? selectedConnection?.connection_id ?? connectionId(backend),
-            mcp_method: provider && value(provider.attributes, "mcp.tool.name")
-              ? value(provider.attributes, "mcp.method.name")
-              : audit.decision?.input_receipt?.mcp_method ??
-                (provider ? value(provider.attributes, "mcp.method.name") : null),
-            mcp_tool: audit.decision?.input_receipt?.mcp_tool ??
-              (provider ? value(provider.attributes, "mcp.tool.name") : null),
-            mcp_backend: backend,
-            processor_bundle_revision: null,
-            processor_request_steps: [],
-            processor_response_steps: [],
-            data_classifications: [],
-            safety_decisions: [],
-            input_tokens: null,
-            output_tokens: null,
-            total_tokens: null,
-            route_mode: null,
-            route_lease_id: null,
-            route_lease_reused: null,
-            routing_policy_id: null,
-            routing_revision: null,
-            candidate_set_digest: null,
-            detail_availability: "NOT_CAPTURED",
-            detail_ref: null,
-            detail_expires_at: null,
-            occurred_at: Number.isFinite(startedAt)
-              ? Math.floor(startedAt / 1_000)
-              : Math.floor(Number((provider ?? main).observed_at_millis) / 1_000),
-            },
+            event,
           })
         } catch (error) {
           process.stderr.write(`${JSON.stringify({
@@ -253,6 +271,16 @@ export function createClickHouseGatewayActivityMaterializer(options: {
             event: "activity-record-rejected",
             correlation_id: correlationId,
             reason: error instanceof Error ? error.message : "unknown",
+          })}\n`)
+          continue
+        }
+        try {
+          await options.postHog?.capture({ event: persisted })
+        } catch {
+          process.stderr.write(`${JSON.stringify({
+            component: "gateway-activity-materializer",
+            event: "posthog-projection-failed",
+            correlation_id: correlationId,
           })}\n`)
         }
       }

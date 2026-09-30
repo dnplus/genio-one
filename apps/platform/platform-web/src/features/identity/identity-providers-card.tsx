@@ -119,8 +119,8 @@ export function IdentityProvidersCard({ tenantId }: { tenantId: string }) {
                   <Button variant="outline" size="sm" onClick={() => setEditing(provider)}>{t("Edit")}</Button>
                   <Button
                     variant="ghost"
-                    size="sm"
-                    aria-label={t("Remove")}
+                    size="icon-sm"
+                    aria-label={t("Remove {{name}}", { name: provider.display_name })}
                     onClick={() => void remove(provider.alias)}
                   >
                     <Trash2Icon />

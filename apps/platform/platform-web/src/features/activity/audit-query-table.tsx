@@ -14,18 +14,21 @@ export function AuditQueryTable({ events, onOpen }: { events: AuditEvent[]; onOp
     </div>
     <Table>
       <TableHeader><TableRow>
-        <TableHead>{t("Audit Event")}</TableHead><TableHead>{t("Outcome")}</TableHead>
-        <TableHead>{t("Policy / Target")}</TableHead><TableHead>{t("Subject / Acting Client")}</TableHead>
+        <TableHead>{t("Audit Event")}</TableHead><TableHead>{t("Operation / Outcome")}</TableHead>
+        <TableHead>{t("Policy / Target")}</TableHead><TableHead>{t("Subject / Actor / Client")}</TableHead>
         <TableHead>{t("Correlation")}</TableHead><TableHead className="text-right">{t("Occurred")}</TableHead>
       </TableRow></TableHeader>
       <TableBody>{events.map((event) => {
         const governance = isGovernanceAuditEvent(event)
         const target = governance
-          ? event.kind === "POLICY_CHANGE" ? event.policy_key : event.access_group_id
+          ? event.kind === "POLICY_CHANGE" ? event.policy_key : event.kind === "ACCESS_GROUP_CHANGE" ? event.access_group_id : event.resource_id
           : event.kind === "RUNTIME_POLICY_DECISION"
             ? `${event.policy_display_name ?? event.policy_id ?? t("Runtime capability policy")}${event.policy_revision == null ? "" : ` · r${event.policy_revision}`}`
             : event.decision?.policy_version ?? "—"
         const action = governance
+          ? event.kind === "POLICY_CHANGE" ? event.action : event.kind === "ACCESS_GROUP_CHANGE" ? event.operation : event.capability_id
+          : event.target ?? ""
+        const operation = governance
           ? event.kind === "POLICY_CHANGE" ? event.action : event.operation
           : event.target ?? ""
         return <TableRow key={event.audit_event_id} aria-label={t("View details")}
@@ -37,11 +40,11 @@ export function AuditQueryTable({ events, onOpen }: { events: AuditEvent[]; onOp
             }
           }} tabIndex={0}>
           <TableCell><div className="font-mono text-xs">{event.audit_event_id}</div><div className="text-xs text-muted-foreground">{t(event.kind)}</div></TableCell>
-          <TableCell><Badge variant={event.outcome === "FAILED" || event.outcome === "DENY" ? "destructive" : "outline"}>{t(event.outcome)}</Badge>
+          <TableCell><div className="text-xs text-muted-foreground">{t(operation)}</div><Badge variant={event.outcome === "FAILED" || event.outcome === "DENY" ? "destructive" : "outline"}>{t(event.outcome)}</Badge>
             {!governance && event.kind === "RUNTIME_POLICY_DECISION" && event.report_outcome ? <div className="mt-1 text-xs text-muted-foreground">{t("Result")}: {t(event.report_outcome)}</div> : null}
           </TableCell>
           <TableCell><div className="max-w-56 truncate font-medium" title={target}>{target}</div><div className="max-w-56 truncate text-xs text-muted-foreground" title={action}>{t(action)}</div></TableCell>
-          <TableCell><div className="font-medium">{event.subject.subject_id}</div><div className="text-xs text-muted-foreground">{governance ? t(event.actor_subject.evidence_level) : event.acting_client.acting_client_id ?? t("Unknown")}</div></TableCell>
+          <TableCell><div className="font-medium">{event.subject.subject_id}</div><div className="text-xs text-muted-foreground">{governance ? event.actor_subject.subject_id : event.acting_client.acting_client_id ?? t("Unknown")}</div>{governance && event.kind === "ACCESS_GOVERNANCE_CHANGE" ? <div className="text-xs text-muted-foreground">{t("Client")}: {event.acting_client?.acting_client_id ?? "—"}</div> : null}</TableCell>
           <TableCell className="max-w-64 truncate font-mono text-xs" title={event.correlation_id}>{event.correlation_id}</TableCell>
           <TableCell className="text-right text-muted-foreground">{relativeTime(event.occurred_at)}</TableCell>
         </TableRow>

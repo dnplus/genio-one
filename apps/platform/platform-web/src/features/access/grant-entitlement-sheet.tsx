@@ -6,20 +6,23 @@ import { Button } from "@/components/ui/button"
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { SearchableSelect } from "@/components/ui/searchable-select"
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import type { ResourceRegistration, TenantIdentityInventory } from "@/domain/contracts"
+import type { IdentitySession, ResourceRegistration, TenantIdentityInventory } from "@/domain/contracts"
 import { grantEntitlement } from "@/lib/product-api"
 
 export function GrantEntitlementSheet({
   tenantId,
+  actorIdentity,
   identity,
   loadResources,
   onGranted,
 }: {
   tenantId: string
+  actorIdentity: IdentitySession
   identity: TenantIdentityInventory | null
   loadResources: () => Promise<ResourceRegistration[]>
   onGranted: () => Promise<void>
 }) {
+  const canGrant = actorIdentity.role === "TENANT_ADMINISTRATOR"
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [subjectId, setSubjectId] = useState("")
@@ -39,16 +42,16 @@ export function GrantEntitlementSheet({
   const selectedResource = publishedResources.find((resource) => resource.resource_id === resourceId)
 
   useEffect(() => {
-    if (!open) return
+    if (!open || !canGrant) return
     grantRequestRef.current = null
     setSubjectId("")
     setResourceId("")
     setCapabilityId("")
     setError("")
-  }, [open])
+  }, [canGrant, open])
 
   useEffect(() => {
-    if (!open) return
+    if (!open || !canGrant) return
     let current = true
     setResources(null)
     setLoadingResources(true)
@@ -64,7 +67,9 @@ export function GrantEntitlementSheet({
       }
     })()
     return () => { current = false }
-  }, [loadResources, open])
+  }, [canGrant, loadResources, open])
+
+  if (!canGrant) return null
 
   async function submit(event: FormEvent) {
     event.preventDefault()

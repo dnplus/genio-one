@@ -171,19 +171,28 @@ export function AccessGroupsPanel({ tenantId, data, identity, canManage, onChang
   const groups = data.accessGroups.groups
   const canManageGlobal = identity?.role === "TENANT_ADMINISTRATOR"
   const isOrganizationScoped = identity?.role === "ORGANIZATION_ADMINISTRATOR"
-  const organizations = identity?.role === "ORGANIZATION_ADMINISTRATOR"
-    ? data.organizations.filter((organization) => identity.organization_ids?.includes(organization.organization_id))
+  const administratorOrganizationIds = new Set(identity?.administrator_organization_ids ?? [])
+  const manageableOrganizations = isOrganizationScoped
+    ? data.organizations.filter((organization) => administratorOrganizationIds.has(organization.organization_id))
     : data.organizations
-  const scopedData = organizations.length === data.organizations.length ? data : { ...data, organizations }
-  const canCreate = canManage && (canManageGlobal || organizations.length > 0)
+  const scopedData = manageableOrganizations.length === data.organizations.length ? data : { ...data, organizations: manageableOrganizations }
+  const canManageAnyGroup = canManage && (canManageGlobal || (isOrganizationScoped && manageableOrganizations.length > 0))
+  const canCreate = canManageAnyGroup
+  const canManageGroup = (group: LocalAccessGroup) => canManage && (
+    canManageGlobal || (
+      isOrganizationScoped &&
+      group.organization_id !== null &&
+      administratorOrganizationIds.has(group.organization_id)
+    )
+  )
   const ownerLabel = (organizationId: string | null) => organizationId
-    ? organizations.find((organization) => organization.organization_id === organizationId)?.display_name ?? organizationId
+    ? data.organizations.find((organization) => organization.organization_id === organizationId)?.display_name ?? organizationId
     : t("Global")
   return <>
     <Card>
       <CardHeader><div className="flex flex-wrap items-center justify-between gap-3"><div><CardTitle>{t("Access groups")}</CardTitle><CardDescription>{t(isOrganizationScoped ? "Showing Access Groups in your canonical Organization scope." : "Tenant Administrators can see global and Organization-owned Access Groups.")} · {t("Membership source")}: {t("MANUAL")}</CardDescription></div>{canCreate ? <Button onClick={() => setSelected(null)}><UsersIcon data-icon="inline-start" />{t("Create Access Group")}</Button> : null}</div></CardHeader>
       <CardContent className="px-0">
-        {groups.length ? <Table><TableHeader><TableRow><TableHead>{t("Display name")}</TableHead><TableHead>{t("Owner")}</TableHead><TableHead>{t("People")}</TableHead><TableHead>{t("Status")}</TableHead>{canManage ? <TableHead className="text-right">{t("Actions")}</TableHead> : null}</TableRow></TableHeader><TableBody>{groups.map((group) => <TableRow key={group.access_group_id}><TableCell><div className="font-medium">{group.display_name}</div><div className="font-mono text-xs text-muted-foreground">{group.access_group_id}</div></TableCell><TableCell>{ownerLabel(group.organization_id)}</TableCell><TableCell>{groupMemberCount(group, data)}</TableCell><TableCell><Badge variant={group.enabled ? "secondary" : "outline"}>{t(group.enabled ? "ENABLED" : "DISABLED")}</Badge></TableCell>{canManage ? <TableCell className="text-right"><Button size="sm" variant="outline" onClick={() => setSelected(group)}>{t("Edit")}</Button></TableCell> : null}</TableRow>)}</TableBody></Table> : <DataEmpty icon={UsersIcon} title={t("Access groups")} description={t(isOrganizationScoped ? "No Access Groups are available in your canonical Organization scope." : "No Access Groups are configured for this tenant.")} />}
+        {groups.length ? <Table><TableHeader><TableRow><TableHead>{t("Display name")}</TableHead><TableHead>{t("Owner")}</TableHead><TableHead>{t("People")}</TableHead><TableHead>{t("Status")}</TableHead>{canManageAnyGroup ? <TableHead className="text-right">{t("Actions")}</TableHead> : null}</TableRow></TableHeader><TableBody>{groups.map((group) => <TableRow key={group.access_group_id}><TableCell><div className="font-medium">{group.display_name}</div><div className="font-mono text-xs text-muted-foreground">{group.access_group_id}</div></TableCell><TableCell>{ownerLabel(group.organization_id)}</TableCell><TableCell>{groupMemberCount(group, data)}</TableCell><TableCell><Badge variant={group.enabled ? "secondary" : "outline"}>{t(group.enabled ? "ENABLED" : "DISABLED")}</Badge></TableCell>{canManageAnyGroup ? <TableCell className="text-right">{canManageGroup(group) ? <Button size="sm" variant="outline" onClick={() => setSelected(group)}>{t("Edit")}</Button> : "—"}</TableCell> : null}</TableRow>)}</TableBody></Table> : <DataEmpty icon={UsersIcon} title={t("Access groups")} description={t(isOrganizationScoped ? "No Access Groups are available in your canonical Organization scope." : "No Access Groups are configured for this tenant.")} />}
       </CardContent>
     </Card>
     {selected !== undefined ? <AccessGroupEditor key={selected?.access_group_id ?? "new"} tenantId={tenantId} data={scopedData} identity={identity} initial={selected} onChanged={onChanged} onClose={() => setSelected(undefined)} /> : null}

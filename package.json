@@ -2,7 +2,7 @@
   "name": "genioone",
   "private": true,
   "version": "0.1.0",
-  "description": "GenioOne community edition: Control Plane, AI Gateway, and Genio Bot.",
+  "description": "A self-hosted, open-source platform for teams to connect AI agents to shared tools and models, manage access, and trace requests.",
   "license": "Apache-2.0",
   "scripts": {
     "dev": "node tooling/local-dev.mjs",

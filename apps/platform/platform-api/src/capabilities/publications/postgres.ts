@@ -9,6 +9,7 @@ import { PlatformApiError, type PlatformApiViolation } from "../errors"
 import {
   canonicalizeApiRequestMapping,
   canonicalizeDownstreamIdentity,
+  canonicalizeMcpToolReviews,
   type ApiUpstreamRequestMapping,
   type DownstreamIdentityProjection,
 } from "../connections/contract"
@@ -311,6 +312,7 @@ function mapConnectionRow(row: DatabaseRow): GatewayProjectionSnapshot["connecti
     mcp_tool_namespace: optionalRowString(row, "mcp_tool_namespace"),
     mcp_selected_tools: stringArray(row.mcp_selected_tools, "CONNECTION_DATA_INVALID"),
     mcp_tool_selection_operation_id: optionalRowString(row, "mcp_tool_selection_operation_id"),
+    mcp_tool_reviews: mcpToolReviews(row.mcp_tool_reviews),
     credential_ref: optionalRowString(row, "credential_ref"),
     provider_credential_profile: providerCredentialProfileId && providerCredentialProfileRevision && providerCredentialStrategyDigest
       ? {
@@ -355,6 +357,13 @@ function stringArray(value: unknown, code: string): string[] {
     throw new PlatformApiError(code, 500)
   }
   return parsed as string[]
+}
+
+function mcpToolReviews(value: unknown): GatewayProjectionSnapshot["connections"][number]["mcp_tool_reviews"] {
+  if (value === null || value === undefined) return []
+  const reviews = canonicalizeMcpToolReviews(jsonValue(value, "CONNECTION_DATA_INVALID"))
+  if (!reviews) throw new PlatformApiError("CONNECTION_DATA_INVALID", 500)
+  return reviews
 }
 
 function mapModelRow(row: DatabaseRow): GatewayProjectionSnapshot["models"][number] {
@@ -421,7 +430,7 @@ async function assertFrozenInputs(
   const connectionResult = await transaction.query<DatabaseRow>(
     `select tenant_id, connection_id, resource_id, display_name, connection_kind,
             provider_type, provider_profile_id, endpoint, mcp_tool_namespace,
-            mcp_selected_tools, mcp_tool_selection_operation_id, credential_ref,
+            mcp_selected_tools, mcp_tool_selection_operation_id, mcp_tool_reviews, credential_ref,
             provider_credential_profile_id, provider_credential_profile_revision,
             provider_credential_strategy_digest,
             downstream_identity, request_mapping, connector_configuration,
@@ -597,6 +606,36 @@ export function createPostgresPublicationWorkflowStore(
       const row = await publicationById(options.sql, input.tenantId, input.publicationId)
       if (!row) return null
       return parseSnapshot(row.publication_snapshot)
+    },
+
+    async getPublishedSnapshot(input) {
+      const result = await options.sql.query<DatabaseRow>(
+        `select publication.tenant_id, publication.publication_id, publication.resource_id,
+                publication.publication_snapshot
+           from genio_one_publications publication
+           join genio_one_resources resource
+             on resource.tenant_id = publication.tenant_id
+            and resource.resource_id = publication.resource_id
+          where publication.tenant_id = $1
+            and publication.resource_id = $2
+            and publication.publication_state = 'PUBLISHED'
+            and publication.publication_build_state = 'READY'
+            and resource.lifecycle = 'PUBLISHED'
+          order by publication.endpoint_revision desc
+          limit 1`,
+        [input.tenantId, input.resourceId],
+      )
+      const row = result.rows[0]
+      if (!row) return null
+      const snapshot = parseSnapshot(row.publication_snapshot)
+      if (
+        snapshot.tenant_id !== input.tenantId ||
+        snapshot.resource_id !== input.resourceId ||
+        snapshot.publication_id !== rowString(row, "publication_id")
+      ) {
+        throw new PlatformApiError("PUBLICATION_SNAPSHOT_INVALID", 500)
+      }
+      return snapshot
     },
 
     async getProjection(input) {

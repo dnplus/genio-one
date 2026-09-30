@@ -120,12 +120,12 @@ export const organizationHttp: FastifyPluginAsync<OrganizationHttpOptions> = asy
         organizationId: request.params.organization_id,
       })
       if (
-        principal.role === "ORGANIZATION_ADMINISTRATOR" &&
-        !principal.organization_ids.includes(request.params.organization_id)
+        principal.role !== "TENANT_ADMINISTRATOR" &&
+        (
+          principal.role !== "ORGANIZATION_ADMINISTRATOR" ||
+          !principal.administrator_organization_ids?.includes(request.params.organization_id)
+        )
       ) {
-        throw new PlatformApiError("ORGANIZATION_ACCESS_DENIED", 403)
-      }
-      if (principal.role === "USER") {
         throw new PlatformApiError("ORGANIZATION_ACCESS_DENIED", 403)
       }
       const inventory = await options.identity.inventory({ tenantId: request.params.tenant_id })

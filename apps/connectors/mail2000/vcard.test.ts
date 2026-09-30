@@ -19,10 +19,11 @@ test("CardDAV directory parsing preserves organization hints and resolves group 
     data: ["BEGIN:VCARD", "VERSION:4.0", "UID:member", "FN:王小明", "EMAIL:member@example.com", "ORG:GSS;BDSVD", "TITLE:工程師", "END:VCARD"].join("\r\n"),
   })!
   const result = searchMail2000Directory([group, person], { query: "BDSVD", kind: "group", limit: 10 })
+  const matchedGroup = result.results.find((entry) => entry.kind === "group")
   expect(result.total_matches).toBe(1)
   expect(result.results[0]?.organization).toBe("GSS / BDSVD")
   expect(result.results[0]?.categories).toEqual(["weekly", "工程,設計"])
-  expect(result.results[0]?.members).toEqual([
+  expect(matchedGroup?.members).toEqual([
     { email: "dnplus@example.com", full_name: null, organization: null, title: null, found_in_directory: false },
     { email: "member@example.com", full_name: "王小明", organization: "GSS / BDSVD", title: "工程師", found_in_directory: true },
   ])
@@ -54,10 +55,14 @@ test("large CardDAV groups cap every member field so truncation actually bounds 
     data: ["BEGIN:VCARD", "VERSION:4.0", "UID:everyone", "FN:全公司", "KIND:group", ...members, "END:VCARD"].join("\r\n"),
   })!
   expect(group.member_emails).toHaveLength(150)
-  const result = searchMail2000Directory([group], { query: "user149@example.com", kind: "group", limit: 10 })
+  const result = searchMail2000Directory([group], { query: "user99@example.com", kind: "group", limit: 10 })
+  const matchedGroup = result.results.find((entry) => entry.kind === "group")
   expect(result.total_matches).toBe(1)
-  expect(result.results[0]?.members_truncated).toBe(true)
-  expect(result.results[0]?.members).toHaveLength(100)
-  expect(result.results[0]?.member_emails).toHaveLength(100)
-  expect(result.results[0]?.member_emails).toEqual(result.results[0]!.members!.map((member) => member.email))
+  expect(matchedGroup?.members_truncated).toBe(true)
+  expect(matchedGroup?.members).toHaveLength(100)
+  expect(matchedGroup?.member_emails).toHaveLength(100)
+  expect(matchedGroup?.member_emails).toContain("user99@example.com")
+  expect(matchedGroup?.member_emails).toEqual(matchedGroup?.members.map((member) => member.email))
+  const byName = searchMail2000Directory([group], { query: "全公司", kind: "group", limit: 10 })
+  expect(byName.results[0]?.member_emails).toEqual(group.member_emails.slice(0, 100))
 })

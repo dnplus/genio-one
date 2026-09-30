@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify"
 import { TypeBoxTypeProvider } from "@fastify/type-provider-typebox"
 
 import { PlatformApiError } from "../errors"
+import type { Principal } from "../tenancy-auth/contract"
 import {
   CreateProviderCredentialProfileSchema,
   ProviderCredentialProfileListSchema,
@@ -17,11 +18,17 @@ export const providerCredentialProfileHttp: FastifyPluginAsync<{
 }> = async (app, options) => {
   const routes = app.withTypeProvider<TypeBoxTypeProvider>()
 
-  function canManage(request: {
-    principal?: { role: string; organization_ids: readonly string[] }
-  }, organizationId: string): boolean {
-    return request.principal?.role === "TENANT_ADMINISTRATOR" ||
-      request.principal?.organization_ids.includes(organizationId) === true
+  function canManage(principal: Principal | undefined, organizationId: string): boolean {
+    return principal?.role === "TENANT_ADMINISTRATOR" ||
+      (
+        principal?.role === "ORGANIZATION_ADMINISTRATOR" &&
+        principal.administrator_organization_ids?.includes(organizationId) === true
+      )
+  }
+
+  function canView(principal: Principal | undefined, organizationId: string): boolean {
+    return principal?.role === "TENANT_ADMINISTRATOR" ||
+      principal?.organization_ids.includes(organizationId) === true
   }
 
   routes.get("/v1/tenants/:tenant_id/provider-credential-profiles", {
@@ -50,7 +57,7 @@ export const providerCredentialProfileHttp: FastifyPluginAsync<{
       tenantId: request.params.tenant_id,
       profileId: request.params.profile_id,
     })
-    if (!profile || !canManage(request, profile.owner_organization_id)) {
+    if (!profile || !canView(request.principal, profile.owner_organization_id)) {
       throw new PlatformApiError("PROVIDER_CREDENTIAL_PROFILE_NOT_FOUND", 404)
     }
     return profile
@@ -65,7 +72,7 @@ export const providerCredentialProfileHttp: FastifyPluginAsync<{
       response: { 201: ProviderCredentialProfileRevisionSchema },
     },
   }, async (request, reply) => {
-    if (!canManage(request, request.body.owner_organization_id)) {
+    if (!canManage(request.principal, request.body.owner_organization_id)) {
       throw new PlatformApiError("ORGANIZATION_ADMIN_REQUIRED", 403)
     }
     return reply.code(201).send(await options.store.create({
@@ -88,7 +95,7 @@ export const providerCredentialProfileHttp: FastifyPluginAsync<{
       tenantId: request.params.tenant_id,
       profileId: request.params.profile_id,
     })
-    if (!current || !canManage(request, current.owner_organization_id)) {
+    if (!current || !canManage(request.principal, current.owner_organization_id)) {
       throw new PlatformApiError("PROVIDER_CREDENTIAL_PROFILE_NOT_FOUND", 404)
     }
     return reply.code(201).send(await options.store.revise({

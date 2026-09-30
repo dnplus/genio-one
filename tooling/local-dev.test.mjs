@@ -1,10 +1,10 @@
 import assert from "node:assert/strict"
 import { spawn } from "node:child_process"
-import { once } from "node:events"
+import { EventEmitter, once } from "node:events"
 import { resolve } from "node:path"
 import test from "node:test"
 
-import { adoptDistillationProcessor, canCompleteTriageRecovery, canRestartStandaloneDistillationTriage, configureDistillationLaunch, distillationLaunchConfiguration, distillationLaunchState, distillationPortRole, existingServiceLaunchIsCurrent, launchConfigurationDigest, nextTriageHandoffAction, nextTriageRestoreAction, reconcileDistillationLaunchConfiguration, runtimePolicyReportEnvironment, serviceLaunchState, services, serviceOwnerMatches, shouldMonitorUnmanagedTriageHandoff, signalVerifiedServiceOwner, startupServiceNames, triageHandoffPhase, triageHandoffStartupRecoveryOptions, triggerUnmanagedTriageRecovery, unmanagedTriageRecoveryOptions, waitForHealthy, watchServiceExit } from "./local-dev.mjs"
+import { adoptDistillationProcessor, canCompleteTriageRecovery, canRestartStandaloneDistillationTriage, configureDistillationLaunch, distillationLaunchConfiguration, distillationLaunchState, distillationPortRole, existingServiceLaunchIsCurrent, launchConfigurationDigest, nextTriageHandoffAction, nextTriageRestoreAction, reconcileDistillationLaunchConfiguration, runtimePolicyReportEnvironment, serviceLaunchState, services, serviceOwnerMatches, shouldMonitorUnmanagedTriageHandoff, signalVerifiedServiceOwner, startupServiceNames, syncPricingCatalogInBackground, triageHandoffPhase, triageHandoffStartupRecoveryOptions, triggerUnmanagedTriageRecovery, unmanagedTriageRecoveryOptions, waitForHealthy, watchServiceExit } from "./local-dev.mjs"
 
 function fixtureChild(script) {
   return spawn(process.execPath, ["-e", script], { stdio: "ignore" })
@@ -74,6 +74,55 @@ test("a healthy Platform API without the recorded connector launch is restarted,
   // The recorded state never contains the raw configuration key.
   assert.equal(recorded.includes("k".repeat(43)), false)
   assert.equal(typeof services.find((service) => service.name === "platform-api").launchConfiguration, "function")
+})
+
+test("a healthy Mail2000 connector restarts when the shared configuration key changes", () => {
+  const mail2000 = services.find((service) => service.name === "mail2000-connector")
+  assert.equal(typeof mail2000.launchConfiguration, "function")
+  assert.match(String(mail2000.launchConfiguration), /GENIO_CONNECTOR_CONFIGURATION_KEY/)
+  const names = ["GENIO_CONNECTOR_CONFIGURATION_KEY"]
+  const configured = launchConfigurationDigest({
+    GENIO_CONNECTOR_CONFIGURATION_KEY: "k".repeat(43),
+  }, names)
+  const owners = [{ pid: "58111", cwd: "/repo/apps/connectors", command: "bun mail2000/main.ts" }]
+  const recorded = serviceLaunchState(configured, owners)
+  const rotated = launchConfigurationDigest({
+    GENIO_CONNECTOR_CONFIGURATION_KEY: "r".repeat(43),
+  }, names)
+  assert.notEqual(rotated, configured)
+  assert.equal(existingServiceLaunchIsCurrent({ recorded, configuration: configured, owners }), true)
+  assert.equal(existingServiceLaunchIsCurrent({ recorded, configuration: rotated, owners }), false)
+  assert.equal(recorded.includes("k".repeat(43)), false)
+})
+
+test("the price catalog refreshes in the background and its failure only warns", () => {
+  const launches = []
+  const spawnProcess = (command, args, options) => {
+    const child = new EventEmitter()
+    launches.push({ command, args, cwd: options.cwd, child })
+    return child
+  }
+  const reports = []
+  const report = (event) => reports.push(event)
+
+  assert.equal(syncPricingCatalogInBackground({ spawnProcess, envFileExists: false, report }), null)
+  assert.equal(launches.length, 0)
+
+  const child = syncPricingCatalogInBackground({ spawnProcess, envFileExists: true, report, isStopping: () => false })
+  assert.equal(child, launches[0].child)
+  assert.deepEqual([launches[0].command, launches[0].args], ["pnpm", ["pricing:sync:if-stale"]])
+  assert.match(launches[0].cwd, /apps\/platform$/)
+
+  child.emit("exit", 0, null)
+  assert.deepEqual(reports, [])
+
+  const failing = syncPricingCatalogInBackground({ spawnProcess, envFileExists: true, report, isStopping: () => false })
+  failing.emit("exit", 1, null)
+  assert.deepEqual(reports, [{ event: "local-dev.pricing-sync-failed", code: 1, signal: null }])
+
+  const stopped = syncPricingCatalogInBackground({ spawnProcess, envFileExists: true, report, isStopping: () => true })
+  stopped.emit("exit", 1, null)
+  assert.equal(reports.length, 1)
 })
 
 test("the distillation worker stays off until a local adapter registry exists", () => {
