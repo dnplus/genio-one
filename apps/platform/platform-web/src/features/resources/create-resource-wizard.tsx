@@ -771,7 +771,7 @@ export function CreateResourceWizard({
                       <FieldDescription>{t("Select a declared parameter or enter a provider-specific header or query parameter.")}</FieldDescription>
                     </Field>
                     <Field><FieldLabel>{t("Action")}</FieldLabel><Select value={rule.action} onValueChange={(value) => updateApiRequestRule(index, { action: value as ApiRequestParameterRule["action"], value: value === "SET" ? rule.value : null })}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="PASSTHROUGH">{t("Pass through")}</SelectItem><SelectItem value="SET">{t("Override")}</SelectItem><SelectItem value="REMOVE">{t("Remove")}</SelectItem></SelectGroup></SelectContent></Select></Field>
-                    <Button aria-label={t("Remove rule")} className="self-end" onClick={() => setApiRequestRules((current) => current.filter((_, position) => position !== index))} size="icon" type="button" variant="ghost"><Trash2Icon /></Button>
+                    <Button aria-label={t("Remove rule {{index}}: {{name}}", { index: index + 1, name: rule.name.trim() || t("unnamed") })} className="self-end" onClick={() => setApiRequestRules((current) => current.filter((_, position) => position !== index))} size="icon" type="button" variant="ghost"><Trash2Icon /></Button>
                   </div>
                   {rule.action === "SET" ? <Field><FieldLabel>{t("Override value")}</FieldLabel><Input onChange={(event) => updateApiRequestRule(index, { value: event.target.value })} value={rule.value ?? ""} /></Field> : null}
                 </div>)}

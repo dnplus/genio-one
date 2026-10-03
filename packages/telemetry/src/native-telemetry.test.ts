@@ -38,3 +38,65 @@ test("native structured attribute values are forwarded as JSON strings", async (
     assert.deepEqual(attributes.find((item: any) => item.key === "plain").value, { stringValue: "kept" })
   } finally { receiver.close() }
 })
+
+test("native telemetry preserves own JSON prototype fields, redaction and verified identity", async () => {
+  const saved: any[] = []
+  const receiver = createNativeTelemetryReceiver({ origin: "http://collector.test", identity: { tenantId: "tenant-a", subjectId: "subject-a", runtimeSessionId: "runtime-a" }, persist: async (signal, body) => { saved.push({ signal, body }); return true } })
+  try {
+    const body = JSON.parse(`{
+      "__proto__": { "note": "root" },
+      "resourceLogs": [{
+        "__proto__": { "note": "group" },
+        "resource": { "attributes": [
+          { "key": "genio.tenant.id", "value": { "stringValue": "forged-tenant" } },
+          { "key": "genio.subject.id", "value": { "stringValue": "forged-subject" } },
+          { "key": "genio.runtime.session.id", "value": { "stringValue": "forged-runtime" } }
+        ] },
+        "scopeLogs": [{ "logRecords": [{
+          "__proto__": { "note": "record" },
+          "body": { "stringValue": "completed" },
+          "attributes": [{ "key": "genio.tenant.id", "value": { "stringValue": "forged-record" } }]
+        }] }]
+      }]
+    }`)
+    const capability = new URL(receiver.origin).pathname.slice(1)
+    body.__proto__.note += ` ${capability}`
+    body.resourceLogs[0].__proto__.note += ` ${capability}`
+    body.resourceLogs[0].scopeLogs[0].logRecords[0].__proto__.note += ` ${capability}`
+    const response = await fetch(`${receiver.origin}/v1/logs`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
+    assert.equal(response.status, 200)
+    assert.equal(saved.length, 1)
+    const persisted = saved[0].body
+    const group = persisted.resourceLogs[0]
+    const record = group.scopeLogs[0].logRecords[0]
+    for (const [node, note] of [[persisted, "root"], [group, "group"], [record, "record"]]) {
+      assert.equal(Object.hasOwn(node, "__proto__"), true)
+      assert.equal(Object.getPrototypeOf(node), Object.prototype)
+      assert.deepEqual(node.__proto__, { note: `${note} [REDACTED]` })
+      assert.equal(Object.getPrototypeOf(node.__proto__), Object.prototype)
+    }
+    assert.deepEqual(group.resource.attributes, [
+      { key: "genio.tenant.id", value: { stringValue: "tenant-a" } },
+      { key: "genio.telemetry.source", value: { stringValue: "native-runtime" } },
+      { key: "genio.subject.id", value: { stringValue: "subject-a" } },
+      { key: "genio.runtime.session.id", value: { stringValue: "runtime-a" } },
+    ])
+    assert.deepEqual(record.attributes, [])
+    assert.equal(JSON.stringify(persisted).includes(capability), false)
+    assert.equal(JSON.stringify(persisted).includes("forged-"), false)
+    assert.deepEqual(JSON.parse(JSON.stringify(persisted)).__proto__, { note: "root [REDACTED]" })
+  } finally { receiver.close() }
+})
+
+test("native telemetry rejects signal containers stored only in JSON prototype fields", async () => {
+  const saved: any[] = []
+  const receiver = createNativeTelemetryReceiver({ origin: "http://collector.test", identity: { tenantId: "tenant-a" }, persist: async (signal, body) => { saved.push({ signal, body }); return true } })
+  try {
+    for (const [signal, container] of [["logs", "resourceLogs"], ["traces", "resourceSpans"], ["metrics", "resourceMetrics"]]) {
+      const body = JSON.parse(`{"__proto__":{"${container}":[{}]}}`)
+      const response = await fetch(`${receiver.origin}/v1/${signal}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
+      assert.equal(response.status, 400, signal)
+    }
+    assert.deepEqual(saved, [])
+  } finally { receiver.close() }
+})

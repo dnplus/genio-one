@@ -42,14 +42,34 @@ function plainAnyValue(value: any): unknown {
 // stores it anyway — because the collector's rules only read string attribute values and cannot
 // walk nested maps, so {request.headers: {authorization: …}} would otherwise bypass them.
 function sanitizeTelemetry(value: unknown, capability: string): unknown {
-  if (typeof value === "string") return value.replaceAll(capability, "[REDACTED]")
-  if (Array.isArray(value)) return value.map(item => sanitizeTelemetry(item, capability))
+  if (typeof value === "string") {
+    return value.includes(capability) ? value.replaceAll(capability, "[REDACTED]") : value
+  }
+  if (Array.isArray(value)) {
+    const len = value.length
+    const result = new Array(len)
+    for (let i = 0; i < len; i++) {
+      result[i] = sanitizeTelemetry(value[i], capability)
+    }
+    return result
+  }
   if (!value || typeof value !== "object") return value
   const source = value as Record<string, any>
   if (typeof source.key === "string" && (source.value?.kvlistValue || source.value?.arrayValue)) {
-    return { ...source, value: { stringValue: JSON.stringify(plainAnyValue(source.value)).replaceAll(capability, "[REDACTED]") } }
+    const jsonStr = JSON.stringify(plainAnyValue(source.value))
+    const redacted = jsonStr.includes(capability) ? jsonStr.replaceAll(capability, "[REDACTED]") : jsonStr
+    return { ...source, value: { stringValue: redacted } }
   }
-  return Object.fromEntries(Object.entries(source).map(([key, item]) => [key, sanitizeTelemetry(item, capability)]))
+  const result: Record<string, any> = {}
+  for (const key of Object.keys(source)) {
+    const item = sanitizeTelemetry(source[key], capability)
+    if (key === "__proto__") {
+      Object.defineProperty(result, key, { value: item, enumerable: true, writable: true, configurable: true })
+    } else {
+      result[key] = item
+    }
+  }
+  return result
 }
 
 export function createNativeTelemetryReceiver(options: { origin: string; identity: NativeIdentity; persist?: typeof persistOtel }) {

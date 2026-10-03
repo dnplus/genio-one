@@ -133,7 +133,7 @@ export function ApiRequestMappingSheet({
                 {t("Add rule")}
               </Button>
             </div>
-            {rules.map((rule) => {
+            {rules.map((rule, index) => {
               const knownParameters = parameterOptions(rule)
               return (
                 <div className="grid gap-3 rounded-lg border p-3" key={rule.id}>
@@ -183,7 +183,7 @@ export function ApiRequestMappingSheet({
                         <SelectContent><SelectGroup><SelectItem value="PASSTHROUGH">{t("Pass through")}</SelectItem><SelectItem value="SET">{t("Override")}</SelectItem><SelectItem value="REMOVE">{t("Remove")}</SelectItem></SelectGroup></SelectContent>
                       </Select>
                     </Field>
-                    <Button aria-label={t("Remove rule")} className="self-end" onClick={() => setRules((current) => current.filter((candidate) => candidate.id !== rule.id))} size="icon" type="button" variant="ghost"><Trash2Icon /></Button>
+                    <Button aria-label={t("Remove rule {{index}}: {{name}}", { index: index + 1, name: rule.name.trim() || t("unnamed") })} className="self-end" onClick={() => setRules((current) => current.filter((candidate) => candidate.id !== rule.id))} size="icon" type="button" variant="ghost"><Trash2Icon /></Button>
                   </div>
                   {rule.action === "SET" ? <Field><FieldLabel>{t("Override value")}</FieldLabel><Input aria-label={t("Override value")} onChange={(event) => updateRule(rule.id, { value: event.target.value })} value={rule.value ?? ""} /></Field> : null}
                 </div>

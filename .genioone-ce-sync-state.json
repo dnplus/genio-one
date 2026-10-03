@@ -6023,7 +6023,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/activities/otel-clickhouse.ts": {
-      "sha256": "90cadc88bb83c3b15d9506c367766ad7e7aeb55248b75c340ceea4e1381add8e",
+      "sha256": "e61395f2040eed2a28913c1efeaa14381a0a6ef3076b0149582db82787a2bb78",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/activities/postgres.ts": {
@@ -7627,7 +7627,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/observability-clickhouse.test.ts": {
-      "sha256": "8a72aa0eaf732f44cdd43d4fcd8ce3a1930d704361e4ebe5b5de26f786c3299b",
+      "sha256": "5e19b7cb26cc40df2fddd57ae315e77cc09b77cb06b750a9d8b6b7acb23c594a",
       "mode": 420
     },
     "apps/platform/platform-api/test/oidc-authentication.test.ts": {
@@ -8135,7 +8135,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/features/connections/api-request-mapping-sheet.tsx": {
-      "sha256": "00cae1d95669875816d070cae9f6a2cd297b37a40c473246d7e25307f2b65d39",
+      "sha256": "714b225ed54f7eeeebc993efae37dca75e93cd1ce51e51fe5d5c449e1917a58c",
       "mode": 420
     },
     "apps/platform/platform-web/src/features/connections/connection-catalog.tsx": {
@@ -8335,7 +8335,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/features/resources/create-resource-wizard.tsx": {
-      "sha256": "7de8351d3daedc0efe7cede559ebe3b12ea41f4691215f42f0c0ee27209c6f33",
+      "sha256": "347f7d14b74d6ea158954e7dca8c1c443875cda60686c908a95d634cbd40f3ca",
       "mode": 420
     },
     "apps/platform/platform-web/src/features/resources/resource-administration.test.ts": {
@@ -8443,11 +8443,11 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/i18n.test.ts": {
-      "sha256": "b237d840facc7f862c8b3dee8afa250474a2b0e7f990f40a5969ecf31bd4c30d",
+      "sha256": "74cc386d525c99453fe5d9d78b630db74938fb925d6a7f425bc6c2b39cf4bd50",
       "mode": 420
     },
     "apps/platform/platform-web/src/i18n.ts": {
-      "sha256": "3ff6acef46c1cf2444f38285a26ccfd4896e72b1c8d7065b150b4c726eeeeb8a",
+      "sha256": "cbdf5e8c641bcaab16c5016753cb9bb0e1f5605acb3900676c642d09ca9125c8",
       "mode": 420
     },
     "apps/platform/platform-web/src/i18n/admin-governance.ts": {
@@ -8570,6 +8570,10 @@
       "sha256": "e50200e970482b7c57d9e24e1ef40d1eeaf3dc96a2bb4b48f352cfc69bb9f7c4",
       "mode": 420
     },
+    "apps/platform/platform-web/test/api-request-mapping-sheet.dom.test.tsx": {
+      "sha256": "94b0f204d162e4c6dc9e42e8c33ae23ad52d0863a011d3ab031c386db7d8b850",
+      "mode": 420
+    },
     "apps/platform/platform-web/test/app.dom.test.tsx": {
       "sha256": "fc667871da6fb3d7bcbda13f84673ef3e1737ea303d5e9691121244fdc74b5b7",
       "mode": 420
@@ -8583,7 +8587,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/test/create-resource-wizard.dom.test.tsx": {
-      "sha256": "36f2070ffb091f3e024cd00fe5451bca1cbc2f13fef1de3321864317b5aa7e89",
+      "sha256": "4b41715e09359124c67e4979eb216ad182b46b762fa0f18743711bc695224413",
       "mode": 420
     },
     "apps/platform/platform-web/test/data-table.dom.test.tsx": {
@@ -9295,11 +9299,11 @@
       "mode": 420
     },
     "packages/telemetry/src/native-telemetry.test.ts": {
-      "sha256": "c6c15403577eb635e89cc7995d3cd8c75429af4e308d4e3bbd290a3baa6cdb28",
+      "sha256": "4f76e05bfeec27df06b31b67f351c43d15b1fe5c490ec71046ef0d19570325e4",
       "mode": 420
     },
     "packages/telemetry/src/native-telemetry.ts": {
-      "sha256": "85bb3baea326c9a43532ceae807b006fa163fe655ee5457f4c5dcc65ebf89a73",
+      "sha256": "ca4c9554adbe52f3fb47a99aaca89c6a135571ac792b4f8997ffbc0394deb10c",
       "mode": 420
     },
     "packages/telemetry/src/operation-observability.test.ts": {

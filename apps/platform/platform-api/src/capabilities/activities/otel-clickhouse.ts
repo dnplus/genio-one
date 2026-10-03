@@ -21,6 +21,14 @@ function quote(value: string): string {
   return `'${value.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`
 }
 
+function integerParam<T extends number | undefined>(value: T, name: string): T {
+  if (value === undefined) return value
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw Object.assign(new Error(`INVALID_ACTIVITY_QUERY_PARAMETER:${name}`), { statusCode: 400 })
+  }
+  return value
+}
+
 function value(attributes: Record<string, string>, name: string): string | null {
   const current = attributes[name]
   return current && current !== "-" ? current : null
@@ -78,7 +86,8 @@ export function createClickHouseGatewayActivityMaterializer(options: {
   const origin = options.origin.replace(/\/$/, "")
   const database = databaseIdentifier(options.database)
   const authorization = `Basic ${Buffer.from(`${options.username}:${options.password}`).toString("base64")}`
-  const lookbackSeconds = Math.max(60, Math.min(3_600, options.lookbackSeconds ?? 900))
+  const validatedLookback = integerParam(options.lookbackSeconds, "lookbackSeconds")
+  const lookbackSeconds = Math.max(60, Math.min(3_600, validatedLookback ?? 900))
 
   return {
     async refresh({ tenantId }) {

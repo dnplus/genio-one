@@ -223,6 +223,27 @@ test("ClickHouse metrics store rejects non-integer windowSeconds parameter", asy
   }
 })
 
+test("ClickHouse activity materializer rejects non-integer lookbackSeconds parameter", () => {
+  const injected = "100) OR 1=1 --" as unknown as number
+  const baseOptions = {
+    ...clickhouse,
+    activities: {
+      record: async ({ tenantId, event }: any) => ({ ...event, tenant_id: tenantId }),
+      recordAttempt: async ({ tenantId, event }: any) => ({ ...event, tenant_id: tenantId }),
+    },
+    audits: { query: async () => ({ events: [], hasMore: false, sourceRevision: 0 }) },
+    connections: { list: async () => [] },
+  }
+
+  for (const invalidLookback of [injected, 1.5, -10, Number.NaN]) {
+    assert.throws(
+      () => createClickHouseGatewayActivityMaterializer({ ...baseOptions, lookbackSeconds: invalidLookback }),
+      (error: Error & { statusCode?: number }) =>
+        error.message === "INVALID_ACTIVITY_QUERY_PARAMETER:lookbackSeconds" && error.statusCode === 400,
+    )
+  }
+})
+
 test("ClickHouse store constructors reject invalid database names", () => {
   const invalidNames = ["analytics; DROP TABLE otel_logs--", "db-with-dash", "db name", "db'name"]
   for (const db of invalidNames) {

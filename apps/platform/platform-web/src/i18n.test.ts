@@ -3,6 +3,20 @@ import test from "node:test"
 
 import i18n from "@/i18n"
 
+test("request-rule removal names include their row and localized unnamed fallback", () => {
+  const key = "Remove rule {{index}}: {{name}}"
+
+  for (const language of ["en", "zh-TW"]) {
+    assert.equal(i18n.exists(key, { lng: language, fallbackLng: false }), true)
+    assert.equal(i18n.exists("unnamed", { lng: language, fallbackLng: false }), true)
+  }
+
+  assert.equal(i18n.t(key, { index: 2, name: "x-region", lng: "en" }), "Remove rule 2: x-region")
+  assert.equal(i18n.t(key, { index: 2, name: "x-region", lng: "zh-TW" }), "移除第 2 列規則：x-region")
+  assert.equal(i18n.t(key, { index: 1, name: i18n.t("unnamed", { lng: "en" }), lng: "en" }), "Remove rule 1: unnamed")
+  assert.equal(i18n.t(key, { index: 1, name: i18n.t("unnamed", { lng: "zh-TW" }), lng: "zh-TW" }), "移除第 1 列規則：未命名")
+})
+
 test("audit export success copy states included provenance without claiming integrity verification", () => {
   const key = "Includes Policy Version {{policy}} and Decision Correlation ID {{correlation}}."
   const options = { policy: "one-policy@7", correlation: "decision-correlation-1" }
