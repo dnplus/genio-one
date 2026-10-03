@@ -273,7 +273,8 @@ class FakeCrossVersionMarkerAdapter implements SqlAdapter {
 
 test("the clean-install baseline and ordered migrations encode the current Platform schema", async () => {
   const migrations = await loadMigrations()
-  assert.deepEqual(migrations.map((migration) => migration.id), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23])
+  assert.deepEqual(migrations.map((migration) => migration.id), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24])
+  assert.equal(migrations[23].name, "endpoint_credential_rotation_event")
   assert.equal(migrations[1].name, "gateway_activity_safety_decisions")
   assert.equal(migrations[2].name, "distillation_markers")
   assert.match(migrations[2].sql, /create table genio_one_distillation_markers/i)

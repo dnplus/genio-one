@@ -27,7 +27,7 @@ export interface EndpointRuntimeHttpOptions {
     tenantId: string
     deviceId: string
     request: { principal?: import("../tenancy-auth/contract").Principal }
-  }): Promise<{ subjectId: string; credentialId: string }>
+  }): Promise<{ subjectId: string; credentialId: string; correlationId: string }>
 }
 
 export const endpointRuntimeHttp: FastifyPluginAsync<EndpointRuntimeHttpOptions> = async (app, options) => {
@@ -55,7 +55,9 @@ export const endpointRuntimeHttp: FastifyPluginAsync<EndpointRuntimeHttpOptions>
   }, async (request, reply) => {
     const identity = await options.authorizeEndpoint({ tenantId: request.params.tenant_id, deviceId: request.params.device_id, request })
     reply.header("cache-control", "no-store")
-    return options.store.rotateCredential({ tenantId: request.params.tenant_id, deviceId: request.params.device_id, credentialId: identity.credentialId })
+    reply.header("x-correlation-id", identity.correlationId)
+    return options.store.rotateCredential({ tenantId: request.params.tenant_id, deviceId: request.params.device_id,
+      credentialId: identity.credentialId, subjectId: identity.subjectId, correlationId: identity.correlationId })
   })
   routes.get("/v1/tenants/:tenant_id/endpoints", {
     schema: { operationId: "listEndpointDevices", tags: ["Endpoint Runtime"],

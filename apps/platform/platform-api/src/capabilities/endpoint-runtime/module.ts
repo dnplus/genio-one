@@ -24,7 +24,13 @@ export interface EndpointCredentialIdentity {
 export interface EndpointRuntimeStore {
   bootstrap(input: { tenantId: string; subjectId: string; correlationId: string }): Promise<EndpointBootstrap>
   authenticateCredential(input: { tenantId: string; token: string }): Promise<EndpointCredentialIdentity>
-  rotateCredential(input: { tenantId: string; deviceId: string; credentialId: string }): Promise<EndpointCredential>
+  rotateCredential(input: {
+    tenantId: string
+    deviceId: string
+    credentialId: string
+    subjectId: string
+    correlationId: string
+  }): Promise<EndpointCredential>
   list(input: { tenantId: string }): Promise<RegisteredEndpoint[]>
   get(input: { tenantId: string; deviceId: string }): Promise<RegisteredEndpoint>
   lifecycleEvents(input: { tenantId: string; deviceId: string }): Promise<EndpointLifecycleEvent[]>

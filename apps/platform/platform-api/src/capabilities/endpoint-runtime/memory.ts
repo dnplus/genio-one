@@ -33,15 +33,20 @@ export function createInMemoryEndpointRuntimeStore(
       const { tokenHash, consumedAt, revokedAt, ...identity } = record
       return identity
     },
-    async rotateCredential({ tenantId, deviceId, credentialId }) {
+    async rotateCredential({ tenantId, deviceId, credentialId, subjectId, correlationId }) {
       const old = assertCredential(credentials.get(credentialId), tenantId, now())
       const device = devices.get(JSON.stringify([tenantId, deviceId]))
-      if (old.kind !== "RUNTIME" || old.deviceId !== deviceId || !device || device.lifecycle_state !== "ACTIVE") {
+      if (old.kind !== "RUNTIME" || old.deviceId !== deviceId || old.subjectId !== subjectId ||
+        !device || device.lifecycle_state !== "ACTIVE") {
         throw new PlatformApiError("ENDPOINT_CREDENTIAL_REJECTED", 401)
       }
-      const issued = issueCredential({ tenantId, deviceId, subjectId: old.subjectId, kind: "RUNTIME" }, now())
-      old.revokedAt = now()
+      const at = now()
+      const issued = issueCredential({ tenantId, deviceId, subjectId, kind: "RUNTIME" }, at)
+      old.revokedAt = at
       credentials.set(issued.record.credentialId, issued.record)
+      events.push({ tenant_id: tenantId, device_id: deviceId, subject_id: subjectId,
+        correlation_id: correlationId, kind: "ROTATED", reason: null, at,
+        old_credential_id: credentialId, new_credential_id: issued.record.credentialId })
       return issued.credential
     },
     async list({ tenantId }) {

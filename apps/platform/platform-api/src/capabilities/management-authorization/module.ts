@@ -55,7 +55,7 @@ export interface ManagementAuthorizationModule {
     tenantId: string
     deviceId: string
     request: { principal?: Principal }
-  }): Promise<{ subjectId: string; credentialId: string }>
+  }): Promise<{ subjectId: string; credentialId: string; correlationId: string }>
 }
 
 export interface ManagementAuthorizationRequestContextInput {
@@ -442,7 +442,8 @@ export function createManagementAuthorization(
       })
       throw new PlatformApiError("ENDPOINT_CREDENTIAL_REJECTED", 401)
     }
-    return { subjectId: identity.subjectId, credentialId: identity.credentialId }
+    return { subjectId: identity.subjectId, credentialId: identity.credentialId,
+      correlationId: auditCorrelationId(request as FastifyRequest) }
   }
 
   const recordAuthenticationAttempt = async (

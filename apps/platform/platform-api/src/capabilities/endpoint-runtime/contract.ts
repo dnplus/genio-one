@@ -167,8 +167,10 @@ export const EndpointLifecycleEventSchema = Type.Object({
   device_id: Identifier,
   correlation_id: Identifier,
   subject_id: Identifier,
-  kind: Type.Union([Type.Literal("ENROLLED"), Type.Literal("REVOKED")]),
+  kind: Type.Union([Type.Literal("ENROLLED"), Type.Literal("ROTATED"), Type.Literal("REVOKED")]),
   reason: Type.Union([Type.String(), Type.Null()]),
+  old_credential_id: Type.Optional(Identifier),
+  new_credential_id: Type.Optional(Identifier),
   at: Type.Integer({ minimum: 0 }),
 }, { additionalProperties: false })
 

@@ -5994,6 +5994,10 @@
       "sha256": "634ed5f6f59392eacfc58066312e053709fc6619ec521e58d2604a79455406e5",
       "mode": 420
     },
+    "apps/platform/platform-api/migrations/024_endpoint_credential_rotation_event.sql": {
+      "sha256": "ad966c9931d1c7b6ff6d536401a776c434641a11dc962009142e8905d99c8ec8",
+      "mode": 420
+    },
     "apps/platform/platform-api/migrations/README.md": {
       "sha256": "49fc1848375d204b41ccd9c810bce9126516ff9c689553557114021030c64c15",
       "mode": 420
@@ -6327,7 +6331,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/endpoint-runtime/contract.ts": {
-      "sha256": "f96f5e01ba713b06f9ab36101ca942fe4cde8987825945180a8aeebf133410f0",
+      "sha256": "306e4fbd71cbc16598df6ff28fa42ba9bbe29d72329ec48decbf60227e751aa9",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/endpoint-runtime/credentials.ts": {
@@ -6335,19 +6339,19 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/endpoint-runtime/http.ts": {
-      "sha256": "503929a4eaa059162425b8ff16d156a70ad39d43523bcedb4d219e836c6f4372",
+      "sha256": "4532b887ff359cde3ff03dbab8826c41281a3a05f280fd24dfe6a6b2b01202ac",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/endpoint-runtime/memory.ts": {
-      "sha256": "d43f7c295d68b801e6a9e4240551cb8f5d23768b867b341a49c818ca6931fc7a",
+      "sha256": "5a95a6a2853cc1219eefd4941ebaef804c66bba0cc8d4bcab55ab702a51aad77",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/endpoint-runtime/module.ts": {
-      "sha256": "0669405c4cd1b69a0cdaf1a4cdf01809ae10aa07c9d654fa7fe6b18408c45b7c",
+      "sha256": "972e17ef525554c16fc15bf91766edbaf53840b408f71fa146e17fc86b07dba8",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/endpoint-runtime/postgres.ts": {
-      "sha256": "c57976e283b6666e07218f5ac74846800f725206dcbb9e2f5d36ebae04d7a129",
+      "sha256": "8fdc0ceb54946ee22928c846c6298dd4eb1dc331bdfe22bc3f53e39a5ae60b3f",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/endpoint-runtime/shared.ts": {
@@ -6643,7 +6647,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/management-authorization/module.ts": {
-      "sha256": "d65b52324a0e12d39c48e638236e458bcf1271b5667f12f5c0632e23ff4ab81a",
+      "sha256": "b471379afc26113c1fc9d3bde39bbb5b08b994e8c0d30372d6a537866a35a40d",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/mcp-discovery/candidates.ts": {
@@ -7467,11 +7471,11 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/endpoint-credentials.test.ts": {
-      "sha256": "43a42924c4ff006657bc4693f9aa52255e5067642e6a0a4ce76bbb79e2a09a2e",
+      "sha256": "d2bfbf094250757487d34839969e71cb7512dffbfe01c4e8be44e4b77e4ca24a",
       "mode": 420
     },
     "apps/platform/platform-api/test/endpoint-lifecycle-postgres.test.ts": {
-      "sha256": "b6286e2c517a03582c10e375a4748aa67ee9d159525f2c817be5b6b775b53f7a",
+      "sha256": "ca02202e2507735fe99746f6e7bbf0c33eaf1de32b86774a39f167ef76372cf3",
       "mode": 420
     },
     "apps/platform/platform-api/test/endpoint-lifecycle.test.ts": {
@@ -7479,7 +7483,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/endpoint-runtime-http.test.ts": {
-      "sha256": "1b08b7b519d5393acb1b484d26348dab9bd6c0f5ca1a89698f94d6f8c884c5a1",
+      "sha256": "dcfc38faef400cc392ff32f30330bb45b8c06e562b22a7ab75e08470479ec88e",
       "mode": 420
     },
     "apps/platform/platform-api/test/endpoint-websocket.test.ts": {
@@ -7771,7 +7775,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/persistence.test.ts": {
-      "sha256": "6cbde234f68878aa699f7b69e7b5e9d3729ff0e6cbd2a97ea6f00bd8fa384bd8",
+      "sha256": "e2f5a4c688f9630124d9d0de2db4ebde3ece1283b7d9f620f93b3431bdae70f7",
       "mode": 420
     },
     "apps/platform/platform-api/test/personal-connections.test.ts": {
@@ -8587,7 +8591,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/generated/management-api.ts": {
-      "sha256": "b0628c8e7edb1b813a91e50dcc9172d7292e8e250dd2c770ddd71455f54fb3c8",
+      "sha256": "52bf15955a9498dea574348146b687de9200d0c3c28bcf6051b48c28928a11eb",
       "mode": 420
     },
     "apps/platform/platform-web/src/hooks/use-demo-mode.ts": {

@@ -30625,6 +30625,7 @@ export type GetEndpointDevice200 = {
 };
 
 export const ListEndpointLifecycleEvents200ItemKind = {  ENROLLED: 'ENROLLED',
+  ROTATED: 'ROTATED',
   REVOKED: 'REVOKED',
 } as const
 export type ListEndpointLifecycleEvents200Item = {
@@ -30650,6 +30651,16 @@ export type ListEndpointLifecycleEvents200Item = {
   subject_id: string;
   kind: typeof ListEndpointLifecycleEvents200ItemKind[keyof typeof ListEndpointLifecycleEvents200ItemKind];
   reason: string | null;
+  /**
+     * @minLength 1
+     * @maxLength 512
+     */
+  old_credential_id?: string;
+  /**
+     * @minLength 1
+     * @maxLength 512
+     */
+  new_credential_id?: string;
   /** @minimum 0 */
   at: number;
 };

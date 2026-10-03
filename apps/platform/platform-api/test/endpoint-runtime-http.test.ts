@@ -21,7 +21,7 @@ test("Endpoint Runtime enrolls, applies desired state, heartbeats, and confirms 
   const deviceId = bootstrap.device_id
   await app.register(endpointRuntimeHttp, {
     store,
-    authorizeEndpoint: async () => ({ subjectId: "person-1", credentialId: credential.credentialId }),
+    authorizeEndpoint: async () => ({ subjectId: "person-1", credentialId: credential.credentialId, correlationId: "test-correlation" }),
   })
 
   const enrollment = await app.inject({
@@ -123,7 +123,7 @@ test("Endpoint Runtime rejects a submitted Subject that differs from authenticat
   const app = Fastify()
   await app.register(endpointRuntimeHttp, {
     store: createInMemoryEndpointRuntimeStore(),
-    authorizeEndpoint: async () => ({ subjectId: "person-2", credentialId: "invalid" }),
+    authorizeEndpoint: async () => ({ subjectId: "person-2", credentialId: "invalid", correlationId: "test-correlation" }),
   })
   const response = await app.inject({
     method: "POST",

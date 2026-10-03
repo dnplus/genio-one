@@ -94,15 +94,24 @@ export function createPostgresEndpointRuntimeStore(options: {
       const { tokenHash, consumedAt, revokedAt, ...identity } = record
       return identity
     },
-    async rotateCredential({ tenantId, deviceId, credentialId }) {
+    async rotateCredential({ tenantId, deviceId, credentialId, subjectId, correlationId }) {
       return options.sql.transaction(async (transaction) => {
         const device = await transaction.query(`select device_id from genio_one_endpoint_devices where tenant_id = $1 and device_id = $2 and lifecycle_state = 'ACTIVE' for update`, [tenantId, deviceId])
         const result = await transaction.query<Row>(`select * from genio_one_endpoint_credentials where tenant_id = $1 and credential_id = $2 for update`, [tenantId, credentialId])
-        const old = assertCredential(mapCredential(result.rows[0]), tenantId, now())
-        if (!device.rows.length || old.kind !== "RUNTIME" || old.deviceId !== deviceId) throw new PlatformApiError("ENDPOINT_CREDENTIAL_REJECTED", 401)
-        const issued = issueCredential({ tenantId, deviceId, subjectId: old.subjectId, kind: "RUNTIME" }, now())
-        await transaction.query(`update genio_one_endpoint_credentials set revoked_at = $2 where credential_id = $1`, [credentialId, now()])
+        const at = now()
+        const old = assertCredential(mapCredential(result.rows[0]), tenantId, at)
+        if (!device.rows.length || old.kind !== "RUNTIME" || old.deviceId !== deviceId || old.subjectId !== subjectId) {
+          throw new PlatformApiError("ENDPOINT_CREDENTIAL_REJECTED", 401)
+        }
+        const issued = issueCredential({ tenantId, deviceId, subjectId, kind: "RUNTIME" }, at)
+        await transaction.query(`update genio_one_endpoint_credentials set revoked_at = $2 where credential_id = $1`, [credentialId, at])
         await persistCredential(transaction, issued.record)
+        await transaction.query(
+          `insert into genio_one_endpoint_lifecycle_events
+             (tenant_id, device_id, subject_id, correlation_id, kind, reason, at, old_credential_id, new_credential_id)
+           values ($1,$2,$3,$4,'ROTATED',null,$5,$6,$7)`,
+          [tenantId, deviceId, subjectId, correlationId, at, credentialId, issued.record.credentialId],
+        )
         return issued.credential
       })
     },
@@ -126,9 +135,13 @@ export function createPostgresEndpointRuntimeStore(options: {
         [tenantId, deviceId])
       return result.rows.map((row): EndpointLifecycleEvent => {
         const kind = text(row, "kind")
-        if (kind !== "ENROLLED" && kind !== "REVOKED") throw new PlatformApiError("ENDPOINT_RUNTIME_DATA_INVALID", 500)
+        if (kind !== "ENROLLED" && kind !== "ROTATED" && kind !== "REVOKED") throw new PlatformApiError("ENDPOINT_RUNTIME_DATA_INVALID", 500)
         return { tenant_id: tenantId, device_id: deviceId, subject_id: text(row, "subject_id"),
-          correlation_id: text(row, "correlation_id"), kind, reason: nullable(row, "reason"), at: integer(row, "at") }
+          correlation_id: text(row, "correlation_id"), kind, reason: nullable(row, "reason"), at: integer(row, "at"),
+          ...(kind === "ROTATED" ? {
+            old_credential_id: text(row, "old_credential_id"),
+            new_credential_id: text(row, "new_credential_id"),
+          } : {}) }
       })
     },
     async revoke({ tenantId, deviceId, subjectId, correlationId, reason }) {
