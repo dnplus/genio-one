@@ -16,6 +16,7 @@ import {
   type RoutingRejectionObservation,
   type UsageRejectionObservation,
 } from "./grpc"
+import { activityRequestPath, createAuthorizationAuditObserver } from "./server"
 import { authorize } from "@genioone/policy/authorize"
 import { isCompiledAuthorizationBundle, verifyAuthorizationBundle } from "./signed-bundle"
 import type { AuthorizationBundleSnapshot } from "./bundle-store"
@@ -339,6 +340,14 @@ function checkRequest(overrides: Record<string, unknown> = {}): Record<string, u
   }
 }
 
+function authorizationDecisionEvent(): AuthorizationDecisionEvent {
+  return {
+    event: "genio.one.authorization-decision",
+    input,
+    decision: authorize(bundle, input),
+  }
+}
+
 function check(
   client: AuthorizationClient,
   request: Record<string, unknown>,
@@ -350,6 +359,65 @@ function check(
     })
   })
 }
+
+test("authorization audit observation requires a configured origin", async () => {
+  const observer = createAuthorizationAuditObserver(undefined, async () => {
+    throw new Error("fetch must not be called")
+  })
+  await assert.rejects(
+    observer(authorizationDecisionEvent()),
+    /authorization audit observation origin is not configured/,
+  )
+})
+
+test("authorizer activity paths omit query and fragment values", () => {
+  assert.equal(activityRequestPath("/v1/chat/completions?token=sentinel#fragment"), "/v1/chat/completions")
+  assert.equal(activityRequestPath("/v1/chat/completions#fragment"), "/v1/chat/completions")
+  assert.equal(activityRequestPath(undefined), "/")
+})
+
+test("authorization audit observation posts a decision event with a bounded request", async () => {
+  let requestUrl = ""
+  let requestInit: RequestInit | undefined
+  let requestBody: Record<string, any> | undefined
+  const observer = createAuthorizationAuditObserver(
+    "http://observer.test",
+    async (input, init) => {
+      requestUrl = String(input)
+      requestInit = init
+      requestBody = JSON.parse(String(init?.body)) as Record<string, any>
+      return new Response(null, { status: 202 })
+    },
+    10,
+  )
+  await observer(authorizationDecisionEvent())
+  assert.equal(requestUrl, "http://observer.test/audit-events")
+  assert.equal(requestInit?.method, "POST")
+  assert.ok(requestInit?.signal)
+  assert.equal(requestBody?.kind, "ONE_POLICY_DECISION")
+  assert.equal(requestBody?.audit_event_id, authorizationDecisionEvent().decision.decisionId)
+})
+
+test("authorization audit observation aborts a request that exceeds its timeout", async () => {
+  let aborted = false
+  const observer = createAuthorizationAuditObserver(
+    "http://observer.test",
+    async (_input, init) => {
+      const signal = init?.signal
+      assert.ok(signal)
+      await new Promise<void>((_resolve, reject) => {
+        signal.addEventListener("abort", () => {
+          aborted = true
+          reject(new Error("audit request aborted"))
+        }, { once: true })
+      })
+      throw new Error("audit request did not abort")
+    },
+    10,
+  )
+  await assert.rejects(observer(authorizationDecisionEvent()), /audit request aborted/)
+  assert.equal(aborted, true)
+})
 
 test("Envoy gRPC ext_authz allows with trusted context and fixed decision headers", async () => {
   const originalNow = Date.now
@@ -417,6 +485,148 @@ test("Envoy gRPC ext_authz allows with trusted context and fixed decision header
       ),
     )
     assert.equal(allowed.denied_response, undefined)
+  } finally {
+    Date.now = originalNow
+    await stop()
+  }
+})
+
+test("verified policy denials are emitted as One Policy decision events", async () => {
+  const originalNow = Date.now
+  Date.now = () => now * 1000
+  const decisions: AuthorizationDecisionEvent[] = []
+  const { client, stop } = await startAuthorizationClient(
+    { async current() { return bundleSnapshot() } },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    (event) => decisions.push(event),
+  )
+  try {
+    const denied = await check(client, checkRequest({
+      attributes: {
+        context_extensions: {
+          tenant_id: input.tenantId,
+          resource_id: input.resourceId,
+          capability_id: input.capabilityId,
+        },
+        request: {
+          http: {
+            headers: {
+              "x-request-id": input.correlationId,
+              "x-genio-verified-subject": input.subjectId,
+              "x-genio-verified-client": input.actingClientId,
+            },
+            body: JSON.stringify({ model: "provider-secret-model" }),
+          },
+        },
+      },
+    }))
+    assert.equal(denied.status.code, grpc.status.PERMISSION_DENIED)
+    assert.equal(denied.denied_response.status.code, 403)
+    assert.equal(decisions.at(-1)?.input.subjectId, input.subjectId)
+    assert.equal(decisions.at(-1)?.input.actingClientId, input.actingClientId)
+    assert.equal(decisions.at(-1)?.decision.disposition, "DENY")
+    assert.equal(decisions.at(-1)?.decision.reason, "MODEL_NOT_ENTITLED")
+    assert.equal(decisions.at(-1)?.decision.policyVersion, bundle.policy_version)
+  } finally {
+    Date.now = originalNow
+    await stop()
+  }
+})
+
+test("policy decision observer failures fail closed without an unhandled rejection", async () => {
+  const originalNow = Date.now
+  Date.now = () => now * 1000
+  const { client, stop } = await startAuthorizationClient(
+    { async current() { return bundleSnapshot() } },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    async () => { throw new Error("observer unavailable") },
+  )
+  try {
+    const denied = await check(client, checkRequest({
+      attributes: {
+        context_extensions: {
+          tenant_id: input.tenantId,
+          resource_id: input.resourceId,
+          capability_id: input.capabilityId,
+        },
+        request: {
+          http: {
+            headers: {
+              "x-request-id": input.correlationId,
+              "x-genio-verified-subject": input.subjectId,
+              "x-genio-verified-client": input.actingClientId,
+            },
+            body: JSON.stringify({ model: "provider-secret-model" }),
+          },
+        },
+      },
+    }))
+    assert.equal(denied.status.code, grpc.status.UNAVAILABLE)
+    assert.equal(denied.denied_response.status.code, 503)
+    assert.match(denied.denied_response.body, /AUTHORIZATION_AUDIT_UNAVAILABLE/)
+  } finally {
+    Date.now = originalNow
+    await stop()
+  }
+})
+
+test("allowed authorization waits for the decision observer acknowledgement", async () => {
+  const originalNow = Date.now
+  Date.now = () => now * 1000
+  const { client, stop } = await startAuthorizationClient(
+    { async current() { return bundleSnapshot() } },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    async () => {
+      await new Promise<void>((resolve) => setTimeout(resolve, 80))
+    },
+  )
+  try {
+    const startedAt = performance.now()
+    const allowed = await check(client, checkRequest())
+    const elapsed = performance.now() - startedAt
+    assert.equal(allowed.status.code, grpc.status.OK)
+    assert.ok(elapsed >= 60, `audit observer completed too early: ${elapsed}ms`)
+  } finally {
+    Date.now = originalNow
+    await stop()
+  }
+})
+
+test("missing policy context reports no One Policy decision event", async () => {
+  const originalNow = Date.now
+  Date.now = () => now * 1000
+  const decisions: AuthorizationDecisionEvent[] = []
+  const unavailableSubjectBundle: CompiledAuthorizationBundle = {
+    ...bundle,
+    subject_contexts: [{ subject_id: "person-not-requesting", kind: "PERSON" }],
+  }
+  const { client, stop } = await startAuthorizationClient(
+    { async current() { return { bundle: unavailableSubjectBundle, releaseReference, routingArtifact } } },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    (event) => decisions.push(event),
+  )
+  try {
+    const denied = await check(client, checkRequest())
+    assert.equal(denied.status.code, grpc.status.PERMISSION_DENIED)
+    assert.equal(denied.denied_response.status.code, 403)
+    assert.match(denied.denied_response.body, /SUBJECT_CONTEXT_UNAVAILABLE/)
+    assert.equal(decisions.length, 0)
   } finally {
     Date.now = originalNow
     await stop()
@@ -840,11 +1050,18 @@ test("Envoy gRPC ext_authz validates Usage Context and separates usage rejection
       organization_id: "org-resource-owner",
     }],
   }
+  let failUsageObservation = false
+  let usageObservationCompleted = false
   const { client, stop } = await startAuthorizationClient({
     async current() {
       return { bundle: governedBundle, releaseReference, routingArtifact: currentRoutingArtifact }
     },
-  }, undefined, usageStore, (event) => usageRejections.push(event))
+  }, undefined, usageStore, async (event) => {
+    await new Promise<void>((resolve) => setTimeout(resolve, 30))
+    if (failUsageObservation) throw new Error("usage relay unavailable")
+    usageRejections.push(event)
+    usageObservationCompleted = true
+  })
   const request = checkRequest({
     attributes: {
       context_extensions: {
@@ -888,13 +1105,25 @@ test("Envoy gRPC ext_authz validates Usage Context and separates usage rejection
 
     currentRoutingArtifact = pricedRoutingArtifact
     reject = true
+    const usageStartedAt = performance.now()
     const denied = await check(client, request)
+    const usageElapsed = performance.now() - usageStartedAt
     assert.equal(denied.status.code, grpc.status.RESOURCE_EXHAUSTED)
     assert.equal(denied.denied_response.status.code, 429)
     assert.deepEqual(JSON.parse(denied.denied_response.body), { code: "QUOTA_EXHAUSTED" })
+    assert.ok(usageElapsed >= 20, `usage observation completed too early: ${usageElapsed}ms`)
+    assert.equal(usageObservationCompleted, true)
     assert.equal(usageRejections.at(-1)?.reason, "QUOTA_EXHAUSTED")
     assert.equal(usageRejections.at(-1)?.authorizationDecision.disposition, "ALLOW")
     assert.equal(usageRejections.at(-1)?.statusCode, 429)
+
+    failUsageObservation = true
+    const requestAttributes = request.attributes as any
+    requestAttributes.request.http.headers["x-request-id"] = "usage-observation-failure"
+    const failedObservation = await check(client, request)
+    assert.equal(failedObservation.status.code, grpc.status.UNAVAILABLE)
+    assert.equal(failedObservation.denied_response.status.code, 503)
+    assert.match(failedObservation.denied_response.body, /AUTHORIZATION_AUDIT_UNAVAILABLE/)
 
     const missingContext = await check(client, checkRequest())
     assert.equal(missingContext.denied_response.status.code, 403)
@@ -1567,6 +1796,8 @@ test("Envoy gRPC ext_authz rejects an admitted route with zero healthy Connectio
     }],
   }
   let observation: RoutingRejectionObservation | undefined
+  let failRoutingObservation = false
+  let routingObservationCompleted = false
   const { client, stop } = await startAuthorizationClient(
     { async current() {
       return { bundle, releaseReference, routingArtifact: unavailableArtifact }
@@ -1574,16 +1805,49 @@ test("Envoy gRPC ext_authz rejects an admitted route with zero healthy Connectio
     undefined,
     undefined,
     undefined,
-    (event) => { observation = event },
+    async (event) => {
+      await new Promise<void>((resolve) => setTimeout(resolve, 30))
+      if (failRoutingObservation) throw new Error("routing relay unavailable")
+      observation = event
+      routingObservationCompleted = true
+    },
   )
   try {
+    const routingStartedAt = performance.now()
     const denied = await check(client, checkRequest())
+    const routingElapsed = performance.now() - routingStartedAt
     assert.equal(denied.status.code, grpc.status.UNAVAILABLE)
     assert.equal(denied.denied_response.status.code, 503)
     assert.match(denied.denied_response.body, /NO_HEALTHY_CONNECTION/)
+    assert.ok(routingElapsed >= 20, `routing observation completed too early: ${routingElapsed}ms`)
+    assert.equal(routingObservationCompleted, true)
     assert.equal(observation?.authorizationDecision.disposition, "ALLOW")
     assert.equal(observation?.routing.routing_revision, 8)
     assert.deepEqual(observation?.routing.candidate_connection_ids, [])
+
+    failRoutingObservation = true
+    const failedObservation = await check(client, checkRequest({
+      attributes: {
+        context_extensions: {
+          tenant_id: input.tenantId,
+          resource_id: input.resourceId,
+          capability_id: input.capabilityId,
+        },
+        request: {
+          http: {
+            headers: {
+              "x-request-id": "routing-observation-failure",
+              "x-genio-verified-subject": input.subjectId,
+              "x-genio-verified-client": input.actingClientId,
+            },
+            body: JSON.stringify({ model: input.requestedPublicModel }),
+          },
+        },
+      },
+    }))
+    assert.equal(failedObservation.status.code, grpc.status.UNAVAILABLE)
+    assert.equal(failedObservation.denied_response.status.code, 503)
+    assert.match(failedObservation.denied_response.body, /AUTHORIZATION_AUDIT_UNAVAILABLE/)
   } finally {
     Date.now = originalNow
     await stop()
@@ -1593,16 +1857,26 @@ test("Envoy gRPC ext_authz rejects an admitted route with zero healthy Connectio
 test("Envoy gRPC ext_authz fails closed when the signed bundle is unavailable", async () => {
   const originalNow = Date.now
   Date.now = () => now * 1000
-  const { client, stop } = await startAuthorizationClient({
-    async current() {
-      throw new Error("offline")
+  const decisions: AuthorizationDecisionEvent[] = []
+  const { client, stop } = await startAuthorizationClient(
+    {
+      async current() {
+        throw new Error("offline")
+      },
     },
-  })
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    (event) => decisions.push(event),
+  )
   try {
     const failed = await check(client, checkRequest())
     assert.equal(failed.status.code, grpc.status.UNAVAILABLE)
     assert.equal(failed.denied_response.status.code, 503)
     assert.match(failed.denied_response.body, /POLICY_BUNDLE_UNAVAILABLE/)
+    assert.equal(decisions.length, 0)
   } finally {
     Date.now = originalNow
     await stop()

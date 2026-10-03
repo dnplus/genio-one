@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process"
 import { createHash } from "node:crypto"
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import { join, resolve } from "node:path"
 
 import { mergeGatewayNativeResources } from "./native-resources"
@@ -34,6 +34,7 @@ import { Check } from "typebox/value"
 
 import type { GatewayComponentObservation } from "@genioone/protocol/gateway-release"
 import type { GatewayActivityIngest } from "../../../apps/platform/platform-api/src/capabilities/activities/contract"
+import type { GatewayAuthenticationFailureAuditIngest } from "../../../apps/platform/platform-api/src/capabilities/audit-events/contract"
 import { POLICY_RELEASE_FILES } from "../services/shared/policy-release"
 import { gatewayDetailActivityReference } from "@genioone/telemetry/otlp-detail-capture"
 import {
@@ -46,6 +47,11 @@ import {
   type SafetyDecisionReceipt,
 } from "../services/shared/safety-decision"
 import type { GatewayReleaseApplier } from "./runtime"
+import {
+  createNativeActivitySourceManager,
+  readNativeActivityReceipt,
+  writeNativeActivityReceipt,
+} from "./native-activity-source"
 
 export interface LocalAigwOptions {
   binary: string
@@ -62,6 +68,7 @@ export interface LocalAigwOptions {
   runtimeCommandKeyRingPath: string
   releaseRootKeyRingPath: string
   onActivity?(event: GatewayActivityIngest): Promise<void>
+  onAuthenticationFailure?(event: GatewayAuthenticationFailureAuditIngest): Promise<void>
 }
 
 interface ModelRouteLeaseObservation {
@@ -76,6 +83,14 @@ interface ModelRouteLeaseObservation {
   connection_id: string
   provider_model: string
   reused: boolean
+}
+
+interface ProcessorActivityReceipt {
+  bundle_revision: string
+  request_steps: Array<{ step_id: string; action: string }>
+  response_steps: Array<{ step_id: string; action: string }>
+  data_classifications: DataClassificationReceipt[]
+  safety_decisions: SafetyDecisionReceipt[]
 }
 
 export interface ProcessorHttpObservation {
@@ -173,6 +188,189 @@ export function aigwRunArguments(configPath: string, adminPort: number, runId: s
 /** A selected cluster is routing intent; only an upstream host proves an attempt. */
 export function activityUpstreamAttempted(raw: Record<string, unknown>): boolean {
   return typeof raw.upstream_host === "string" && raw.upstream_host.length > 0
+}
+
+type ActivityReaderIgnoredReason = "MALFORMED_NATIVE_EVENT" | "UNRECOGNIZED_NATIVE_EVENT"
+type ActivityReaderFailurePhase = "DELIVERY" | "CURSOR_PERSISTENCE"
+type ActivityReaderDeliveryKind = "ACTIVITY" | "AUTHENTICATION_FAILURE" | "CURSOR"
+
+const jwtAuthnAccessDeniedDetails = /^jwt_authn_access_denied(?:\{[^{}\r\n]*\})?$/
+
+export async function readActivityCursor(path: string): Promise<number> {
+  const value = (await readFile(path, "utf8")).trim()
+  if (!/^(0|[1-9]\d*)$/.test(value)) throw new Error("Activity cursor is invalid")
+  const cursor = Number(value)
+  if (!Number.isSafeInteger(cursor)) throw new Error("Activity cursor is invalid")
+  return cursor
+}
+
+export async function writeActivityCursor(path: string, cursor: number): Promise<void> {
+  if (!Number.isSafeInteger(cursor) || cursor < 0) throw new Error("Activity cursor is invalid")
+  const candidatePath = `${path}.candidate`
+  await writeFile(candidatePath, `${cursor}\n`, { encoding: "utf8", mode: 0o600 })
+  await rename(candidatePath, path)
+}
+
+export function authenticationFailureForNativeEvent(
+  releaseId: string,
+  value: unknown,
+  lineNumber: number,
+): GatewayAuthenticationFailureAuditIngest | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+  if (!Number.isSafeInteger(lineNumber) || lineNumber < 1) return null
+  const raw = value as Record<string, unknown>
+  if (Number(raw.response_code) !== 401) return null
+  if (typeof raw.response_code_details !== "string" || !jwtAuthnAccessDeniedDetails.test(raw.response_code_details)) {
+    return null
+  }
+  const correlationId = raw["x-request-id"]
+  if (typeof correlationId !== "string" || correlationId.length === 0 || correlationId.length > 256) {
+    return null
+  }
+  const parsedStartTime = Date.parse(String(raw.start_time ?? ""))
+  const occurredAt = Number.isFinite(parsedStartTime) ? Math.floor(parsedStartTime / 1_000) : 0
+  const auditEventId = `gateway-authentication-failure-${createHash("sha256")
+    .update(releaseId)
+    .update("\0")
+    .update(String(lineNumber))
+    .digest("hex")}`
+  return {
+    audit_event_id: auditEventId,
+    correlation_id: correlationId,
+    kind: "GATEWAY_AUTHENTICATION_FAILURE",
+    outcome: "DENY",
+    subject: null,
+    acting_client: null,
+    resource_id: null,
+    capability_id: null,
+    status: 401,
+    reason: "JWT_AUTHN_ACCESS_DENIED",
+    occurred_at: occurredAt,
+  }
+}
+
+export function activityPathWithoutQuery(value: unknown): string {
+  if (typeof value !== "string") return ""
+  const queryIndex = value.indexOf("?")
+  const fragmentIndex = value.indexOf("#")
+  const end = Math.min(
+    queryIndex >= 0 ? queryIndex : value.length,
+    fragmentIndex >= 0 ? fragmentIndex : value.length,
+  )
+  return value.slice(0, end)
+}
+
+export async function consumeActivityLogLines<T, A = never>(
+  lines: readonly string[],
+  consumed: number,
+  toActivity: (value: unknown, authenticationFailure: boolean) => T | null,
+  onActivity: ((event: T) => Promise<void>) | undefined,
+  persistCursor: (consumed: number) => Promise<void>,
+  onIgnored: (input: {
+    reason: ActivityReaderIgnoredReason
+    lineNumber: number
+    error?: unknown
+  }) => void,
+  onDeliveryFailed: (input: {
+    lineNumber: number
+    error: unknown
+    phase: ActivityReaderFailurePhase
+    kind: ActivityReaderDeliveryKind
+  }) => void,
+  toAuthenticationFailure?: (value: unknown, lineNumber: number) => A | null,
+  onAuthenticationFailure?: (event: A) => Promise<void>,
+  onLineAcknowledged?: (input: { activity: T | null; authenticationFailure: A | null }) => void,
+  lineOffset = 0,
+): Promise<number> {
+  let cursor = consumed
+  const advance = async (lineNumber: number): Promise<boolean> => {
+    const nextCursor = cursor + 1
+    try {
+      await persistCursor(nextCursor)
+    } catch (error) {
+      onDeliveryFailed({ lineNumber, error, phase: "CURSOR_PERSISTENCE", kind: "CURSOR" })
+      return false
+    }
+    cursor = nextCursor
+    return true
+  }
+  while (cursor < lines.length) {
+    const line = lines[cursor] ?? ""
+    if (!line.trim()) {
+      if (!(await advance(lineOffset + cursor + 1))) break
+      continue
+    }
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(line)
+    } catch (error) {
+      onIgnored({ reason: "MALFORMED_NATIVE_EVENT", lineNumber: lineOffset + cursor + 1, error })
+      if (!(await advance(lineOffset + cursor + 1))) break
+      continue
+    }
+    let authenticationFailure: A | null = null
+    if (toAuthenticationFailure) {
+      authenticationFailure = toAuthenticationFailure(parsed, lineOffset + cursor + 1)
+    }
+    let event: T | null
+    try {
+      event = toActivity(parsed, authenticationFailure !== null)
+    } catch (error) {
+      event = null
+      if (authenticationFailure === null) {
+        onIgnored({ reason: "UNRECOGNIZED_NATIVE_EVENT", lineNumber: lineOffset + cursor + 1, error })
+        if (!(await advance(lineOffset + cursor + 1))) break
+        continue
+      }
+    }
+    if (event === null && authenticationFailure === null) {
+      onIgnored({ reason: "UNRECOGNIZED_NATIVE_EVENT", lineNumber: lineOffset + cursor + 1 })
+      if (!(await advance(lineOffset + cursor + 1))) break
+      continue
+    }
+    if (event !== null && !onActivity) {
+      onDeliveryFailed({
+        lineNumber: lineOffset + cursor + 1,
+        error: new Error("Activity delivery callback is not configured"),
+        phase: "DELIVERY",
+        kind: "ACTIVITY",
+      })
+      break
+    }
+    if (event !== null && onActivity) {
+      try {
+        await onActivity(event)
+      } catch (error) {
+        onDeliveryFailed({ lineNumber: lineOffset + cursor + 1, error, phase: "DELIVERY", kind: "ACTIVITY" })
+        break
+      }
+    }
+    if (authenticationFailure !== null && !onAuthenticationFailure) {
+      onDeliveryFailed({
+        lineNumber: lineOffset + cursor + 1,
+        error: new Error("Authentication failure audit callback is not configured"),
+        phase: "DELIVERY",
+        kind: "AUTHENTICATION_FAILURE",
+      })
+      break
+    }
+    if (authenticationFailure !== null && onAuthenticationFailure) {
+      try {
+        await onAuthenticationFailure(authenticationFailure)
+      } catch (error) {
+        onDeliveryFailed({
+          lineNumber: lineOffset + cursor + 1,
+          error,
+          phase: "DELIVERY",
+          kind: "AUTHENTICATION_FAILURE",
+        })
+        break
+      }
+    }
+    if (!(await advance(lineOffset + cursor + 1))) break
+    onLineAcknowledged?.({ activity: event, authenticationFailure })
+  }
+  return cursor
 }
 
 export function localCredentialSecrets(
@@ -647,28 +845,85 @@ export function createLocalAigwApplier(options: LocalAigwOptions): GatewayReleas
     processor: ChildProcess | undefined
   } | undefined
   let processorStdout = ""
+  let observationReleaseId: string | undefined
+  let processorObservationPending = Promise.resolve()
+  let receiptPersistence = Promise.resolve()
+  const sourceByChild = new WeakMap<ChildProcess, string>()
   const routeLeaseByCorrelation = new Map<string, ModelRouteLeaseObservation>()
-  const processorReceiptByCorrelation = new Map<string, {
-    bundle_revision: string
-    request_steps: Array<{ step_id: string; action: string }>
-    response_steps: Array<{ step_id: string; action: string }>
-    data_classifications: DataClassificationReceipt[]
-    safety_decisions: SafetyDecisionReceipt[]
-  }>()
-  let stopActivityReader: (() => void) | undefined
+  const processorReceiptByCorrelation = new Map<string, ProcessorActivityReceipt>()
+  const activitySources = options.onActivity || options.onAuthenticationFailure
+    ? createNativeActivitySourceManager({
+        stateRoot: options.stateRoot,
+        runtimeCommandKeyRingPath: options.runtimeCommandKeyRingPath,
+        consume: consumeNativeActivityBatch,
+        onError({ releaseId, error }) {
+          writeOperationalEvent("gateway-runtime", "ERROR", "genio.one.gateway-runtime.activity-source-recovery-failed", {
+            release_id: releaseId,
+            ...operationalError(error),
+          })
+        },
+      })
+    : undefined
+
+  async function persistCorrelationReceipt(releaseId: string, correlationId: string): Promise<void> {
+    if (!activitySources) return
+    const operation = receiptPersistence.then(async () => {
+      if (observationReleaseId !== releaseId) return
+      const routeLease = routeLeaseByCorrelation.get(correlationId) ?? null
+      const processorReceipt = processorReceiptByCorrelation.get(correlationId) ?? null
+      if (!routeLease && !processorReceipt) return
+      await writeNativeActivityReceipt(join(options.stateRoot, releaseId), correlationId, {
+        schema_version: 1,
+        release_id: releaseId,
+        correlation_id: correlationId,
+        route_lease: routeLease,
+        processor_receipt: processorReceipt,
+      })
+    })
+    receiptPersistence = operation.then(() => undefined, () => undefined)
+    await operation
+  }
+
+  async function persistStoppedReceipts(releaseId: string): Promise<void> {
+    if (observationReleaseId !== releaseId) return
+    for (const correlationId of routeLeaseByCorrelation.keys()) await persistCorrelationReceipt(releaseId, correlationId)
+    for (const correlationId of processorReceiptByCorrelation.keys()) {
+      if (!routeLeaseByCorrelation.has(correlationId)) await persistCorrelationReceipt(releaseId, correlationId)
+    }
+  }
 
   function reapProcessTree(child: ChildProcess): Promise<void> {
     if (activeCleanup) return activeCleanup
-    const cleanup = stopProcessTree(child).finally(() => {
+    const cleanup = Promise.resolve().then(async () => {
+      await processorObservationPending
+      await receiptPersistence
+      await stopProcessTree(child)
+      await processorObservationPending
+      const releaseId = sourceByChild.get(child)
+      if (releaseId) {
+        await persistStoppedReceipts(releaseId)
+        await receiptPersistence
+        await activitySources?.seal(releaseId)
+        await receiptPersistence
+        sourceByChild.delete(child)
+        if (observationReleaseId === releaseId) {
+          routeLeaseByCorrelation.clear()
+          processorReceiptByCorrelation.clear()
+          observationReleaseId = undefined
+        }
+      }
+    }).finally(() => {
       if (activeCleanup === cleanup) activeCleanup = undefined
     })
     activeCleanup = cleanup
     return cleanup
   }
 
-  function stopActiveProcessTree(): Promise<void> {
-    if (activeCleanup) return activeCleanup
-    return active ? reapProcessTree(active) : Promise.resolve()
+  async function stopActiveProcessTree(): Promise<void> {
+    const child = active
+    if (activeCleanup) await activeCleanup
+    else if (child) await reapProcessTree(child)
+    if (active === child) active = undefined
   }
 
   async function bindReadyProcessorToTriageHandoff(child: ChildProcess): Promise<void> {
@@ -688,6 +943,11 @@ export function createLocalAigwApplier(options: LocalAigwOptions): GatewayReleas
   function activityForRelease(
     release: Parameters<GatewayReleaseApplier["apply"]>[0]["release"],
     value: unknown,
+    authenticationFailure: boolean,
+    observations: {
+      routeLease: ModelRouteLeaseObservation | null
+      processorReceipt: ProcessorActivityReceipt | null
+    },
   ): GatewayActivityIngest | null {
     if (!value || typeof value !== "object" || Array.isArray(value)) return null
     const raw = value as Record<string, unknown>
@@ -718,14 +978,11 @@ export function createLocalAigwApplier(options: LocalAigwOptions): GatewayReleas
     })?.projection
     const correlationId = typeof raw["x-request-id"] === "string" ? raw["x-request-id"] : ""
     const status = Number(raw.response_code)
-    const path = typeof raw.path === "string" ? raw.path : ""
+    const path = activityPathWithoutQuery(raw.path)
     const method = typeof raw.method === "string" ? raw.method : ""
     if (!projection || !correlationId || !path || !method || !Number.isInteger(status)) return null
     const projectionResources = projection.resources as Array<Record<string, any>>
-    const routeLease = routeLeaseByCorrelation.get(correlationId) ?? null
-    routeLeaseByCorrelation.delete(correlationId)
-    const processorReceipt = processorReceiptByCorrelation.get(correlationId) ?? null
-    processorReceiptByCorrelation.delete(correlationId)
+    const { routeLease, processorReceipt } = observations
     const stringOrNull = (field: string) => {
       const fieldValue = raw[field]
       return typeof fieldValue === "string" && fieldValue !== "" && fieldValue !== "-"
@@ -897,9 +1154,9 @@ export function createLocalAigwApplier(options: LocalAigwOptions): GatewayReleas
       correlation_id: correlationId,
       resource_id: projection.resource_id,
       capability_id: projection.capability_id,
-      application_id: stringOrNull("genio.client.id"),
-      subject_id: stringOrNull("genio.subject.id"),
-      acting_client_id: stringOrNull("genio.client.id"),
+      application_id: authenticationFailure ? null : stringOrNull("genio.client.id"),
+      subject_id: authenticationFailure ? null : stringOrNull("genio.subject.id"),
+      acting_client_id: authenticationFailure ? null : stringOrNull("genio.client.id"),
       entitlement_id: null,
       usage_admission_id: null,
       usage_admission_disposition: "NOT_APPLICABLE",
@@ -975,61 +1232,109 @@ export function createLocalAigwApplier(options: LocalAigwOptions): GatewayReleas
     }
   }
 
-  function startActivityReader(
-    path: string,
-    release: Parameters<GatewayReleaseApplier["apply"]>[0]["release"],
-  ): void {
-    stopActivityReader?.()
-    if (!options.onActivity) {
-      writeOperationalEvent("gateway-runtime", "WARN", "genio.one.gateway-runtime.activity-delivery-disabled", {
-        release_id: release.release_id,
-      })
-      return
+  async function observationsForLine(root: string, releaseId: string, line: string): Promise<{
+    routeLease: ModelRouteLeaseObservation | null
+    processorReceipt: ProcessorActivityReceipt | null
+  }> {
+    let raw: unknown
+    try { raw = JSON.parse(line) } catch { return { routeLease: null, processorReceipt: null } }
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { routeLease: null, processorReceipt: null }
+    const correlationId = (raw as Record<string, unknown>)["x-request-id"]
+    if (typeof correlationId !== "string" || !correlationId) return { routeLease: null, processorReceipt: null }
+    await processorObservationPending
+    if (observationReleaseId === releaseId) await persistCorrelationReceipt(releaseId, correlationId)
+    const stored = await readNativeActivityReceipt(root, correlationId)
+    if (stored === null) return { routeLease: null, processorReceipt: null }
+    if (!stored || typeof stored !== "object" || Array.isArray(stored)) throw new Error("Native activity receipt is invalid")
+    const record = stored as Record<string, unknown>
+    if (Object.keys(record).length !== 5 || record.schema_version !== 1 || record.release_id !== releaseId ||
+      record.correlation_id !== correlationId) throw new Error("Native activity receipt binding is invalid")
+    let routeLease: ModelRouteLeaseObservation | null = null
+    if (record.route_lease !== null) {
+      const observed = record.route_lease as Partial<ModelRouteLeaseObservation>
+      if (!observed || observed.event !== "genio.one.model-route-lease" || observed.correlation_id !== correlationId ||
+        typeof observed.lease_id !== "string" || typeof observed.routing_policy_id !== "string" ||
+        !Number.isSafeInteger(observed.routing_revision) || typeof observed.candidate_set_digest !== "string" ||
+        typeof observed.selected_public_model_id !== "string" || typeof observed.selected_public_model !== "string" ||
+        typeof observed.connection_id !== "string" || typeof observed.provider_model !== "string" || typeof observed.reused !== "boolean") {
+        throw new Error("Native activity route receipt is invalid")
+      }
+      routeLease = observed as ModelRouteLeaseObservation
     }
-    writeOperationalEvent("gateway-runtime", "INFO", "genio.one.gateway-runtime.activity-reader-started", {
-      release_id: release.release_id,
-      activity_path: path,
-    })
-    let consumed = 0
-    let queue = Promise.resolve()
-    const timer = setInterval(() => {
-      queue = queue.then(async () => {
-        let content: string
-        try {
-          content = await readFile(path, "utf8")
-        } catch {
-          return
-        }
-        const lastNewline = content.lastIndexOf("\n")
-        const completeContent = lastNewline >= 0 ? content.slice(0, lastNewline) : ""
-        const lines = completeContent ? completeContent.split("\n") : []
-        for (const line of lines.slice(consumed)) {
-          consumed += 1
-          if (!line.trim()) continue
-          try {
-            const event = activityForRelease(release, JSON.parse(line))
-            if (event) {
-              await options.onActivity!(event)
-              writeOperationalEvent("gateway-runtime", "INFO", "genio.one.gateway-runtime.activity-delivered", {
-                release_id: release.release_id,
-                correlation_id: event.correlation_id,
-              })
-            } else {
-              writeOperationalEvent("gateway-runtime", "WARN", "genio.one.gateway-runtime.activity-ignored", {
-                release_id: release.release_id,
-                reason: "UNRECOGNIZED_NATIVE_EVENT",
-              })
-            }
-          } catch (error) {
-            writeOperationalEvent("gateway-runtime", "ERROR", "genio.one.gateway-runtime.activity-delivery-failed", {
-              release_id: release.release_id,
-              ...operationalError(error),
-            })
-          }
-        }
-      })
-    }, 100)
-    stopActivityReader = () => clearInterval(timer)
+    let processorReceipt: ProcessorActivityReceipt | null = null
+    if (record.processor_receipt !== null) {
+      const observed = record.processor_receipt as ProcessorActivityReceipt
+      const request = parseProcessorHttpObservation({ ...observed, event: "genio.one.processor-http-request-completed",
+        correlation_id: correlationId, steps: observed?.request_steps })
+      const response = parseProcessorHttpObservation({ ...observed, event: "genio.one.processor-http-response-completed",
+        correlation_id: correlationId, steps: observed?.response_steps })
+      if (!request || !response) throw new Error("Native activity Processor receipt is invalid")
+      processorReceipt = { bundle_revision: request.bundle_revision, request_steps: request.steps, response_steps: response.steps,
+        data_classifications: request.data_classifications, safety_decisions: request.safety_decisions }
+    }
+    return { routeLease, processorReceipt }
+  }
+
+  async function consumeNativeActivityBatch(
+    batch: import("./native-activity-source").NativeActivityBatch,
+  ): Promise<number> {
+    const release = batch.context.release
+    let acknowledged = 0
+    for (const line of batch.lines) {
+      let observations: Awaited<ReturnType<typeof observationsForLine>>
+      try {
+        observations = await observationsForLine(batch.root, release.release_id, line)
+      } catch (error) {
+        writeOperationalEvent("gateway-runtime", "ERROR", "genio.one.gateway-runtime.activity-receipt-persist-failed", {
+          release_id: release.release_id,
+          line_number: batch.lineOffset + acknowledged + 1,
+          ...operationalError(error),
+        })
+        break
+      }
+      const consumed = await consumeActivityLogLines(
+        [line], 0,
+        (value, authenticationFailure) => activityForRelease(release, value, authenticationFailure, observations),
+        options.onActivity ? async (event) => {
+          await options.onActivity!(event)
+          writeOperationalEvent("gateway-runtime", "INFO", "genio.one.gateway-runtime.activity-delivered", {
+            release_id: release.release_id, correlation_id: event.correlation_id,
+          })
+        } : undefined,
+        (count) => batch.persistCursor(acknowledged + count),
+        ({ reason, lineNumber, error }) => {
+          writeOperationalEvent("gateway-runtime", "WARN", "genio.one.gateway-runtime.activity-ignored", {
+            release_id: release.release_id, line_number: lineNumber, reason,
+            ...(error === undefined ? {} : operationalError(error)),
+          })
+        },
+        ({ lineNumber, error, phase, kind }) => {
+          writeOperationalEvent("gateway-runtime", "ERROR", phase === "CURSOR_PERSISTENCE"
+            ? "genio.one.gateway-runtime.activity-cursor-persist-failed"
+            : kind === "AUTHENTICATION_FAILURE"
+              ? "genio.one.gateway-runtime.authentication-failure-audit-delivery-failed"
+              : "genio.one.gateway-runtime.activity-delivery-failed", {
+            release_id: release.release_id, line_number: lineNumber, ...operationalError(error),
+          })
+        },
+        authenticationFailureForNativeEvent.bind(null, release.release_id),
+        options.onAuthenticationFailure ? async (event) => {
+          await options.onAuthenticationFailure!(event)
+          writeOperationalEvent("gateway-runtime", "INFO", "genio.one.gateway-runtime.authentication-failure-audit-delivered", {
+            release_id: release.release_id, correlation_id: event.correlation_id, audit_event_id: event.audit_event_id,
+          })
+        } : undefined,
+        ({ activity }) => {
+          if (!activity || observationReleaseId !== release.release_id) return
+          routeLeaseByCorrelation.delete(activity.correlation_id)
+          processorReceiptByCorrelation.delete(activity.correlation_id)
+        },
+        batch.lineOffset + acknowledged,
+      )
+      if (consumed === 0) break
+      acknowledged += consumed
+    }
+    return acknowledged
   }
 
   async function materializePolicyRelease(
@@ -1134,7 +1439,7 @@ export function createLocalAigwApplier(options: LocalAigwOptions): GatewayReleas
         processorHandoff.processor = undefined
       }
     })
-    launchedProcessor.stdout?.on("data", (chunk) => {
+    const processProcessorStdout = async (chunk: Buffer) => {
       processorStdout += chunk.toString("utf8")
       const lines = processorStdout.split("\n")
       processorStdout = lines.pop() ?? ""
@@ -1173,6 +1478,13 @@ export function createLocalAigwApplier(options: LocalAigwOptions): GatewayReleas
               return merged
             })(),
           })
+          if (observationReleaseId) {
+            await persistCorrelationReceipt(observationReleaseId, receipt.correlation_id).catch((error) => {
+              writeOperationalEvent("gateway-runtime", "ERROR", "genio.one.gateway-runtime.activity-receipt-persist-failed", {
+                release_id: observationReleaseId, correlation_id: receipt.correlation_id, ...operationalError(error),
+              })
+            })
+          }
           process.stdout.write(`${line}\n`)
           continue
         }
@@ -1196,8 +1508,23 @@ export function createLocalAigwApplier(options: LocalAigwOptions): GatewayReleas
           observed.correlation_id,
           observed as ModelRouteLeaseObservation,
         )
+        if (observationReleaseId) {
+          await persistCorrelationReceipt(observationReleaseId, observed.correlation_id).catch((error) => {
+            writeOperationalEvent("gateway-runtime", "ERROR", "genio.one.gateway-runtime.activity-receipt-persist-failed", {
+              release_id: observationReleaseId, correlation_id: observed.correlation_id, ...operationalError(error),
+            })
+          })
+        }
         process.stdout.write(`${line}\n`)
       }
+    }
+    launchedProcessor.stdout?.on("data", (chunk) => {
+      launchedProcessor.stdout?.pause?.()
+      processorObservationPending = processProcessorStdout(chunk).catch((error) => {
+        writeOperationalEvent("gateway-runtime", "ERROR", "genio.one.gateway-runtime.processor-observation-persist-failed", {
+          ...operationalError(error),
+        })
+      }).finally(() => { launchedProcessor.stdout?.resume?.() })
     })
     await waitForListener(8082, launchedProcessor, options.readinessTimeoutMs ?? 120_000)
     await waitForListener(8083, launchedProcessor, options.readinessTimeoutMs ?? 120_000)
@@ -1206,12 +1533,12 @@ export function createLocalAigwApplier(options: LocalAigwOptions): GatewayReleas
 
   return {
     async apply({ command, release }) {
-      routeLeaseByCorrelation.clear()
-      processorReceiptByCorrelation.clear()
+      await activitySources?.start({ command, release })
 
       if (release.projections.length === 0) {
         await stopActiveProcessTree()
         active = undefined
+        activitySources?.clearCurrent()
         writeOperationalEvent("gateway-runtime", "INFO", "genio.one.gateway-runtime.release-applied", {
           release_id: release.release_id,
           head_revision: release.head_revision,
@@ -1252,6 +1579,7 @@ export function createLocalAigwApplier(options: LocalAigwOptions): GatewayReleas
           aigwDownloadAbort = undefined
         }
       }
+      observationReleaseId ??= release.release_id
       await ensureAuthorizer({ command, release }, policyRoot)
       await ensureProcessor({ command, release }, policyRoot)
 
@@ -1267,8 +1595,14 @@ export function createLocalAigwApplier(options: LocalAigwOptions): GatewayReleas
         options.telemetry,
       )
       await stopActiveProcessTree()
+      await activitySources?.register({ command, release })
+      if (activitySources) {
+        writeOperationalEvent("gateway-runtime", "INFO", "genio.one.gateway-runtime.activity-reader-started", {
+          release_id: release.release_id, activity_path: activityLogPath,
+        })
+      }
+      observationReleaseId = release.release_id
       await writeFile(join(policyRoot, "current"), `${release.release_id}\n`)
-      await rm(activityLogPath, { force: true })
       await writeFile(configPath, gatewayConfiguration, {
         encoding: "utf8",
         mode: 0o600,
@@ -1315,6 +1649,7 @@ export function createLocalAigwApplier(options: LocalAigwOptions): GatewayReleas
           stdio: "inherit",
         },
       )
+      sourceByChild.set(child, release.release_id)
       child.once("exit", () => {
         if (active === child) {
           active = undefined
@@ -1344,7 +1679,6 @@ export function createLocalAigwApplier(options: LocalAigwOptions): GatewayReleas
           child,
           options.readinessTimeoutMs ?? 120_000,
         )
-        startActivityReader(activityLogPath, release)
         writeOperationalEvent("gateway-runtime", "INFO", "genio.one.gateway-runtime.release-applied", {
           release_id: release.release_id,
           head_revision: release.head_revision,
@@ -1353,7 +1687,7 @@ export function createLocalAigwApplier(options: LocalAigwOptions): GatewayReleas
         await writeFile(join(policyRoot, "lkg"), `${release.release_id}\n`)
       } catch (error) {
         try {
-          await stopProcessTree(child)
+          await reapProcessTree(child)
           await removeRuntimeDirectory()
         } catch (cleanupError) {
           writeOperationalEvent("gateway-runtime", "WARN", "genio.one.gateway-runtime.aigw-process-group-cleanup-failed", {
@@ -1377,10 +1711,10 @@ export function createLocalAigwApplier(options: LocalAigwOptions): GatewayReleas
     },
 
     async close() {
-      stopActivityReader?.()
       aigwDownloadAbort?.abort()
       await aigwPreparation?.catch(() => undefined)
       await stopActiveProcessTree()
+      await activitySources?.close()
       if (activeRuntimeDirectory) {
         await removeAigwEphemeralRuntimeDirectory(activeRuntimeDirectory).catch(() => undefined)
         activeRuntimeDirectory = undefined

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto"
 import type { IdentityDirectory } from "../identity/module"
 import type { OrganizationDirectory } from "../organizations/module"
 import type { Principal, PrincipalAuthenticator } from "./contract"
+import { isRuntimeControlTransport, isRuntimeSelfRegistration, tenantRoute } from "./routes"
 
 /**
  * Replace mutable role and Organization scope claims with canonical Control
@@ -64,12 +65,13 @@ export function createCanonicalPrincipalAuthenticator(options: {
     async authenticate(input) {
       const authenticated = await options.delegate.authenticate(input)
       if (!authenticated) return null
-      if (input.request?.url.includes("/runtime-control/")) {
-        // Gateway Runtime identity is authorized by its runtime registration,
-        // not the human/agent directory. Avoid a directory round trip during
-        // the WebSocket upgrade and preserve the dedicated runtime boundary.
-        return authenticated
-      }
+      const route = input.request ? tenantRoute(input.request) : null
+      if (
+        route &&
+        input.request &&
+        (isRuntimeControlTransport(route, input.request.method) ||
+          isRuntimeSelfRegistration(route, input.request.method))
+      ) return authenticated
       let canonicalSubjectId = authenticated.external_identity
         ? await options.identity.subjectForExternalIdentity({
             tenantId: authenticated.tenant_id,

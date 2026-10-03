@@ -740,6 +740,40 @@ function failureResponse(): EnvoyCheckResponse {
   )
 }
 
+function decisionObservationFailureResponse(): EnvoyCheckResponse {
+  return deniedResponse(
+    grpc.status.UNAVAILABLE,
+    503,
+    "AUTHORIZATION_AUDIT_UNAVAILABLE",
+  )
+}
+
+function authorizationOperationalContext(input: AuthorizationInput) {
+  return {
+    correlation_id: input.correlationId,
+    tenant_id: input.tenantId,
+    subject_id: input.subjectId,
+    acting_client_id: input.actingClientId,
+    resource_id: input.resourceId,
+    capability_id: input.capabilityId,
+    request_protocol: input.requestProtocol,
+  }
+}
+
+function writePolicyContextFailure(
+  input: AuthorizationInput,
+  reason: string,
+  statusCode: number,
+  context: string,
+): void {
+  writeOperationalEvent("authorizer", "ERROR", "policy-context-rejected", {
+    ...authorizationOperationalContext(input),
+    context,
+    reason,
+    status_code: statusCode,
+  })
+}
+
 export type ExternalAuthorizationHandler = grpc.handleUnaryCall<
   EnvoyCheckRequest,
   EnvoyCheckResponse
@@ -784,6 +818,7 @@ function createExternalAuthorizerHandler(
           context.subject_id === input.subjectId
         )
         if ((bundle.subject_contexts?.length ?? 0) > 0 && !subjectContext) {
+          writePolicyContextFailure(input, "SUBJECT_CONTEXT_UNAVAILABLE", 403, "subject")
           callback(null, deniedResponse(grpc.status.PERMISSION_DENIED, 403, "SUBJECT_CONTEXT_UNAVAILABLE"))
           return
         }
@@ -822,10 +857,12 @@ function createExternalAuthorizerHandler(
         const selectedOrganization = input.consumerOrganizationId
         const selectedUseCase = input.useCaseId
         if ((selectedOrganization === undefined) !== (selectedUseCase === undefined)) {
+          writePolicyContextFailure(input, "USAGE_CONTEXT_INCOMPLETE", 403, "usage")
           callback(null, deniedResponse(grpc.status.PERMISSION_DENIED, 403, "USAGE_CONTEXT_INCOMPLETE"))
           return
         }
         if (basePolicies.length > 0 && (!selectedOrganization || !selectedUseCase)) {
+          writePolicyContextFailure(input, "USAGE_CONTEXT_REQUIRED", 403, "usage")
           callback(null, deniedResponse(grpc.status.PERMISSION_DENIED, 403, "USAGE_CONTEXT_REQUIRED"))
           return
         }
@@ -836,6 +873,7 @@ function createExternalAuthorizerHandler(
             context.use_case_id === selectedUseCase
           )
           if (!selectedContext) {
+            writePolicyContextFailure(input, "USAGE_CONTEXT_NOT_ALLOWED", 403, "usage")
             callback(null, deniedResponse(grpc.status.PERMISSION_DENIED, 403, "USAGE_CONTEXT_NOT_ALLOWED"))
             return
           }
@@ -878,19 +916,28 @@ function createExternalAuthorizerHandler(
           else executionGrantToConsume = grant
           if (reason) decision = { ...decision, disposition: "DENY", reason, allowedPublicModels: [], allowedMcpTools: [] }
         }
-        const observeDecision = () => {
-          void Promise.resolve(onDecision?.({
-            event: "genio.one.authorization-decision",
-            input,
-            decision,
-          })).catch((error) => {
+        const observeDecision = async (): Promise<boolean> => {
+          if (!onDecision) return true
+          try {
+            await onDecision({
+              event: "genio.one.authorization-decision",
+              input,
+              decision,
+            })
+            return true
+          } catch (error) {
             writeOperationalEvent("authorizer", "ERROR", "decision-observation-failed", {
               ...operationalError(error),
             })
-          })
+            return false
+          }
         }
         if (decision.disposition === "DENY") {
-          observeDecision()
+          const observed = await observeDecision()
+          if (!observed) {
+            callback(null, decisionObservationFailureResponse())
+            return
+          }
           const unavailable = decision.reason === "EXECUTION_GRANT_STORE_UNAVAILABLE"
           callback(
             null,
@@ -904,38 +951,58 @@ function createExternalAuthorizerHandler(
           return
         }
         if (input.requestProtocol === "MCP" && input.mcpMethod === "tools/list") {
-          observeDecision()
+          const observed = await observeDecision()
+          if (!observed) {
+            callback(null, decisionObservationFailureResponse())
+            return
+          }
           callback(null, mcpToolsListResponse(call.request, decision, input, bundle))
           return
         }
-        const observeUsageRejection = (reason: UsageAdmissionReason, statusCode: 429 | 503) => {
-          void Promise.resolve(onUsageRejection?.({
-            input,
-            authorizationDecision: decision,
-            reason,
-            statusCode,
-            releaseReference,
-          })).catch((error) => {
+        const observeUsageRejection = async (reason: UsageAdmissionReason, statusCode: 429 | 503): Promise<boolean> => {
+          try {
+            await onUsageRejection?.({
+              input,
+              authorizationDecision: decision,
+              reason,
+              statusCode,
+              releaseReference,
+            })
+            return true
+          } catch (error) {
             writeOperationalEvent("authorizer", "ERROR", "usage-rejection-observation-failed", {
               ...operationalError(error),
             })
-          })
+            return false
+          }
         }
         const unavailable = unavailableRouting(routingArtifact, input)
         if (unavailable) {
-          observeDecision()
-          void Promise.resolve(onRoutingRejection?.({
-            input,
-            authorizationDecision: decision,
-            reason: "NO_HEALTHY_CONNECTION",
-            statusCode: 503,
-            releaseReference,
-            routing: unavailable,
-          })).catch((error) => {
+          const observed = await observeDecision()
+          if (!observed) {
+            callback(null, decisionObservationFailureResponse())
+            return
+          }
+          let routingObserved = true
+          try {
+            await onRoutingRejection?.({
+              input,
+              authorizationDecision: decision,
+              reason: "NO_HEALTHY_CONNECTION",
+              statusCode: 503,
+              releaseReference,
+              routing: unavailable,
+            })
+          } catch (error) {
             writeOperationalEvent("authorizer", "ERROR", "routing-rejection-observation-failed", {
               ...operationalError(error),
             })
-          })
+            routingObserved = false
+          }
+          if (!routingObserved) {
+            callback(null, decisionObservationFailureResponse())
+            return
+          }
           callback(null, deniedResponse(
             grpc.status.UNAVAILABLE,
             503,
@@ -947,14 +1014,26 @@ function createExternalAuthorizerHandler(
         let usageAdmission: AdmittedUsageHandoff | undefined
         if (basePolicies.length > 0) {
           if (!resourceOwner) {
-            observeDecision()
+            const observed = await observeDecision()
+            if (!observed) {
+              callback(null, decisionObservationFailureResponse())
+              return
+            }
             callback(null, deniedResponse(grpc.status.UNAVAILABLE, 503, "USAGE_CONTEXT_UNAVAILABLE"))
             return
           }
           input.resourceOwnerOrganizationId = resourceOwner.organization_id
           if (!usageStore) {
-            observeDecision()
-            observeUsageRejection("STORE_UNAVAILABLE", 503)
+            const observed = await observeDecision()
+            if (!observed) {
+              callback(null, decisionObservationFailureResponse())
+              return
+            }
+            const usageObserved = await observeUsageRejection("STORE_UNAVAILABLE", 503)
+            if (!usageObserved) {
+              callback(null, decisionObservationFailureResponse())
+              return
+            }
             callback(null, deniedResponse(grpc.status.UNAVAILABLE, 503, "STORE_UNAVAILABLE"))
             return
           }
@@ -976,9 +1055,17 @@ function createExternalAuthorizerHandler(
             store: usageStore,
           })
           if (admission.disposition === "REJECT") {
-            observeDecision()
+            const observed = await observeDecision()
+            if (!observed) {
+              callback(null, decisionObservationFailureResponse())
+              return
+            }
             const unavailable = admission.reason === "STORE_UNAVAILABLE"
-            observeUsageRejection(admission.reason, unavailable ? 503 : 429)
+            const usageObserved = await observeUsageRejection(admission.reason, unavailable ? 503 : 429)
+            if (!usageObserved) {
+              callback(null, decisionObservationFailureResponse())
+              return
+            }
             callback(null, deniedResponse(
               unavailable ? grpc.status.UNAVAILABLE : grpc.status.RESOURCE_EXHAUSTED,
               unavailable ? 503 : 429,
@@ -994,7 +1081,11 @@ function createExternalAuthorizerHandler(
             ? await resolveMcpOAuthHeaders(input)
             : []
         } catch {
-          observeDecision()
+          const observed = await observeDecision()
+          if (!observed) {
+            callback(null, decisionObservationFailureResponse())
+            return
+          }
           callback(
             null,
             deniedResponse(
@@ -1021,7 +1112,11 @@ function createExternalAuthorizerHandler(
             decision = { ...decision, disposition: "DENY", reason: "EXECUTION_GRANT_STORE_UNAVAILABLE", allowedPublicModels: [], allowedMcpTools: [] }
           }
           if (decision.disposition === "DENY") {
-            observeDecision()
+            const observed = await observeDecision()
+            if (!observed) {
+              callback(null, decisionObservationFailureResponse())
+              return
+            }
             const unavailable = decision.reason === "EXECUTION_GRANT_STORE_UNAVAILABLE"
             callback(null, deniedResponse(
               unavailable ? grpc.status.UNAVAILABLE : grpc.status.PERMISSION_DENIED,
@@ -1032,8 +1127,12 @@ function createExternalAuthorizerHandler(
             return
           }
         }
+        const observed = await observeDecision()
+        if (!observed) {
+          callback(null, decisionObservationFailureResponse())
+          return
+        }
         try {
-          observeDecision()
           callback(null, allowResponse(
             input,
             decision,
@@ -1053,7 +1152,13 @@ function createExternalAuthorizerHandler(
           )
         }
       })
-      .catch(() => {
+      .catch((error) => {
+        writeOperationalEvent("authorizer", "ERROR", "policy-bundle-unavailable", {
+          ...authorizationOperationalContext(input),
+          ...operationalError(error),
+          reason: "POLICY_BUNDLE_UNAVAILABLE",
+          status_code: 503,
+        })
         callback(
           null,
           deniedResponse(

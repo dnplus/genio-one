@@ -6,6 +6,11 @@ import { AutoGrantActivationAuditEventSchema, type AutoGrantActivationAuditEvent
 
 const Identifier = Type.String({ minLength: 1, maxLength: 256 })
 const NullableIdentifier = Type.Union([Identifier, Type.Null()])
+const StableCode = Type.String({ minLength: 1, maxLength: 128, pattern: "^[A-Z][A-Z0-9_:-]*$" })
+const HttpMethod = Type.String({ minLength: 1, maxLength: 16, pattern: "^[A-Z]+$" })
+const AuditRoute = Type.String({ minLength: 1, maxLength: 512 })
+
+export const SYSTEM_AUDIT_TENANT_ID = "__genioone_system__"
 
 export const AUDIT_EXPORT_MAX_RECORDS = 10_000
 
@@ -14,7 +19,15 @@ const EvidenceSchema = Type.Object({
   evidence_level: Type.Literal("VERIFIED"),
 })
 
-export const GatewayAuthorizationAuditIngestSchema = Type.Object({
+const ManagementAuthorizationRequestContextSchema = Type.Object({
+  requested_tenant_id: NullableIdentifier,
+  target: Type.Object({
+    resource_id: NullableIdentifier,
+    organization_id: NullableIdentifier,
+  }, { additionalProperties: false }),
+}, { additionalProperties: false })
+
+export const GatewayAuthorizationDecisionAuditIngestSchema = Type.Object({
   audit_event_id: Identifier,
   correlation_id: Identifier,
   kind: Type.Literal("ONE_POLICY_DECISION"),
@@ -95,9 +108,41 @@ export const GatewayAuthorizationAuditIngestSchema = Type.Object({
   occurred_at: Type.Integer({ minimum: 0 }),
 })
 
-export const GatewayAuthorizationAuditEventSchema = Type.Intersect([
-  GatewayAuthorizationAuditIngestSchema,
-  Type.Object({ tenant_id: Identifier }),
+const GatewayAuthenticationFailureAuditProperties = {
+  audit_event_id: Identifier,
+  correlation_id: Identifier,
+  kind: Type.Literal("GATEWAY_AUTHENTICATION_FAILURE"),
+  outcome: Type.Literal("DENY"),
+  subject: Type.Null(),
+  acting_client: Type.Null(),
+  resource_id: NullableIdentifier,
+  capability_id: NullableIdentifier,
+  status: Type.Integer({ minimum: 400, maximum: 599 }),
+  reason: StableCode,
+  occurred_at: Type.Integer({ minimum: 0 }),
+} as const
+
+export const GatewayAuthenticationFailureAuditIngestSchema = Type.Object(
+  GatewayAuthenticationFailureAuditProperties,
+  { additionalProperties: false },
+)
+
+export const GatewayAuthenticationFailureAuditEventSchema = Type.Object({
+  tenant_id: Identifier,
+  ...GatewayAuthenticationFailureAuditProperties,
+}, { additionalProperties: false })
+
+export const GatewayAuthorizationAuditIngestSchema = Type.Union([
+  GatewayAuthorizationDecisionAuditIngestSchema,
+  GatewayAuthenticationFailureAuditIngestSchema,
+])
+
+export const GatewayAuthorizationAuditEventSchema = Type.Union([
+  Type.Intersect([
+    GatewayAuthorizationDecisionAuditIngestSchema,
+    Type.Object({ tenant_id: Identifier }),
+  ]),
+  GatewayAuthenticationFailureAuditEventSchema,
 ])
 
 export const PolicyChangeAuditEventSchema = Type.Object({
@@ -129,10 +174,44 @@ export const PolicyChangeAuditEventSchema = Type.Object({
   occurred_at: Type.Integer({ minimum: 0 }),
 }, { additionalProperties: false })
 
+export const ManagementAuthorizationAuditEventSchema = Type.Object({
+  tenant_id: Identifier,
+  audit_event_id: Identifier,
+  correlation_id: Identifier,
+  kind: Type.Literal("MANAGEMENT_AUTHORIZATION"),
+  outcome: Type.Union([Type.Literal("ALLOW"), Type.Literal("DENY")]),
+  subject: EvidenceSchema,
+  acting_client: Type.Object({
+    acting_client_id: Identifier,
+    evidence_level: Type.Literal("VERIFIED"),
+  }, { additionalProperties: false }),
+  request_context: ManagementAuthorizationRequestContextSchema,
+  code: StableCode,
+  method: HttpMethod,
+  route: AuditRoute,
+  occurred_at: Type.Integer({ minimum: 0 }),
+}, { additionalProperties: false })
+
+export const AuthenticationAttemptReceiptSchema = Type.Object({
+  authentication_attempt_id: Identifier,
+  correlation_id: Identifier,
+  kind: Type.Literal("MANAGEMENT_AUTHENTICATION_ATTEMPT"),
+  scope: Type.Literal("SYSTEM"),
+  outcome: Type.Union([Type.Literal("SUCCESS"), Type.Literal("FAILURE")]),
+  code: StableCode,
+  method: HttpMethod,
+  route: AuditRoute,
+  verified_tenant_id: NullableIdentifier,
+  verified_subject_id: NullableIdentifier,
+  verified_client_id: NullableIdentifier,
+  occurred_at: Type.Integer({ minimum: 0 }),
+}, { additionalProperties: false })
+
 export const AuthorizationAuditEventSchema = Type.Union([
   GatewayAuthorizationAuditEventSchema,
   RuntimePolicyAuditEventSchema,
   PolicyChangeAuditEventSchema,
+  ManagementAuthorizationAuditEventSchema,
   AccessGroupAuditEventSchema,
   AccessGovernanceAuditEventSchema,
   AutoGrantActivationAuditEventSchema,
@@ -202,9 +281,14 @@ export const GatewayAuthorizationAuditQueryResponseSchema = Type.Object({
   }),
 })
 
-export type GatewayAuthorizationAuditIngest = Static<typeof GatewayAuthorizationAuditIngestSchema>
+export type GatewayAuthorizationAuditIngest = Static<typeof GatewayAuthorizationDecisionAuditIngestSchema>
+export type GatewayAuthorizationAuditIngestEvent = GatewayAuthorizationAuditIngest | GatewayAuthenticationFailureAuditIngest
 export type GatewayAuthorizationAuditEvent = Static<typeof GatewayAuthorizationAuditEventSchema>
+export type GatewayAuthenticationFailureAuditIngest = Static<typeof GatewayAuthenticationFailureAuditIngestSchema>
 export type PolicyChangeAuditEvent = Static<typeof PolicyChangeAuditEventSchema>
+export type ManagementAuthorizationRequestContext = Static<typeof ManagementAuthorizationRequestContextSchema>
+export type ManagementAuthorizationAuditEvent = Static<typeof ManagementAuthorizationAuditEventSchema>
+export type AuthenticationAttemptReceipt = Static<typeof AuthenticationAttemptReceiptSchema>
 export type { AccessGroupAuditEvent }
 export type { AccessGovernanceAuditEvent }
 export type { AutoGrantActivationAuditEvent }

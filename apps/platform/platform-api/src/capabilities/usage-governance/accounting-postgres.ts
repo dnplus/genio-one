@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto"
 
-import type { SqlAdapter } from "../../persistence/sql-adapter"
-import type { AccountingLedger } from "./accounting"
+import type { SqlAdapter, SqlTransaction } from "../../persistence/sql-adapter"
+import type { AccountingIngestInput, AccountingLedger, AccountingReceipt } from "./accounting"
 import type { CanonicalCharge, CostValuation, InvocationAccounting, UsageQuantity } from "./contract"
 import { canonicalJson } from "@genioone/protocol/canonical"
 
 type Row = Record<string, unknown>
+type SqlQueryExecutor = Pick<SqlAdapter, "query"> | SqlTransaction
 
 function timestamp(value: unknown): number {
   if (value instanceof Date) return Math.floor(value.getTime() / 1_000)
@@ -80,91 +81,159 @@ function equal(left: unknown, right: unknown): boolean {
   return canonicalJson(left) === canonicalJson(right)
 }
 
+async function recordInvocation(
+  executor: SqlQueryExecutor,
+  tenantId: string,
+  value: InvocationAccounting,
+): Promise<InvocationAccounting> {
+  if (value.tenant_id !== tenantId) throw new Error("INVOCATION_ACCOUNTING_TENANT_MISMATCH")
+  const inserted = await executor.query<Row>(
+    `insert into genio_one_canonical_invocation_accounting
+      (tenant_id, invocation_id, correlation_id, subject_id,
+       consumer_organization_id, resource_owner_organization_id,
+       resource_id, capability_id, use_case_id, usage_policy_revisions,
+       release_revision, accounting_key_id, created_at)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::text::jsonb,$11,$12,to_timestamp($13))
+     on conflict do nothing
+     returning *`,
+    [tenantId, value.invocation_id, value.correlation_id, value.subject_id,
+      value.consumer_organization_id, value.resource_owner_organization_id,
+      value.resource_id, value.capability_id, value.use_case_id,
+      JSON.stringify(value.usage_policy_revisions), value.release_revision,
+      value.accounting_key_id, value.created_at],
+  )
+  if (inserted.rows[0]) return invocation(inserted.rows[0])
+  const existing = await executor.query<Row>(
+    `select * from genio_one_canonical_invocation_accounting
+      where tenant_id = $1 and invocation_id = $2`,
+    [tenantId, value.invocation_id],
+  )
+  const previous = existing.rows[0] && invocation(existing.rows[0])
+  if (!previous || !equal(previous, value)) throw new Error("INVOCATION_ACCOUNTING_CONFLICT")
+  return previous
+}
+
+async function appendQuantity(
+  executor: SqlQueryExecutor,
+  tenantId: string,
+  value: UsageQuantity,
+): Promise<UsageQuantity> {
+  const inserted = await executor.query<Row>(
+    `insert into genio_one_usage_quantities
+      (tenant_id, quantity_id, invocation_id, quantity, unit, trusted_source, observed_at)
+     values ($1,$2,$3,$4,$5,$6,to_timestamp($7))
+     on conflict do nothing
+     returning *`,
+    [tenantId, value.quantity_id, value.invocation_id, value.quantity,
+      value.unit, value.trusted_source, value.observed_at],
+  )
+  if (inserted.rows[0]) return quantity(inserted.rows[0])
+  const existing = await executor.query<Row>(
+    `select * from genio_one_usage_quantities where tenant_id = $1 and quantity_id = $2`,
+    [tenantId, value.quantity_id],
+  )
+  const previous = existing.rows[0] && quantity(existing.rows[0])
+  if (!previous || !equal(previous, value)) throw new Error("USAGE_QUANTITY_CONFLICT")
+  return previous
+}
+
+async function recordCharge(
+  executor: SqlQueryExecutor,
+  tenantId: string,
+  input: { invocation_id: string; correlation_id: string; accounting_key_id: string; created_at: number },
+): Promise<CanonicalCharge> {
+  const id = chargeId(input.invocation_id, input.correlation_id, input.accounting_key_id)
+  const inserted = await executor.query<Row>(
+    `insert into genio_one_canonical_charges
+      (tenant_id, charge_id, invocation_id, correlation_id, accounting_key_id, created_at)
+     values ($1,$2,$3,$4,$5,to_timestamp($6))
+     on conflict do nothing
+     returning *`,
+    [tenantId, id, input.invocation_id, input.correlation_id, input.accounting_key_id, input.created_at],
+  )
+  if (inserted.rows[0]) return charge(inserted.rows[0])
+  const existing = await executor.query<Row>(
+    `select * from genio_one_canonical_charges where tenant_id = $1 and charge_id = $2`,
+    [tenantId, id],
+  )
+  if (!existing.rows[0]) throw new Error("CANONICAL_CHARGE_CONFLICT")
+  return charge(existing.rows[0])
+}
+
+async function appendValuation(
+  executor: SqlQueryExecutor,
+  tenantId: string,
+  value: CostValuation,
+): Promise<CostValuation> {
+  const inserted = await executor.query<Row>(
+    `insert into genio_one_cost_valuations
+      (tenant_id, valuation_id, charge_id, status, currency, amount_micros,
+       pricing_source, pricing_version, valued_at)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,to_timestamp($9))
+     on conflict do nothing
+     returning *`,
+    [tenantId, value.valuation_id, value.charge_id, value.status, value.currency,
+      value.amount_micros, value.pricing_source, value.pricing_version, value.valued_at],
+  )
+  if (inserted.rows[0]) return valuation(inserted.rows[0])
+  const existing = await executor.query<Row>(
+    `select * from genio_one_cost_valuations where tenant_id = $1 and valuation_id = $2`,
+    [tenantId, value.valuation_id],
+  )
+  const previous = existing.rows[0] && valuation(existing.rows[0])
+  if (!previous || !equal(previous, value)) throw new Error("COST_VALUATION_CONFLICT")
+  return previous
+}
+
+async function recordAccounting(
+  executor: SqlQueryExecutor,
+  tenantId: string,
+  input: AccountingIngestInput,
+): Promise<AccountingReceipt> {
+  if (input.invocation.tenant_id !== tenantId) throw new Error("INVOCATION_ACCOUNTING_TENANT_MISMATCH")
+  if (input.quantities.some((value) => value.invocation_id !== input.invocation.invocation_id)) {
+    throw new Error("INVOCATION_ACCOUNTING_MISMATCH")
+  }
+  const currentInvocation = await recordInvocation(executor, tenantId, input.invocation)
+  const currentCharge = await recordCharge(executor, tenantId, {
+    invocation_id: currentInvocation.invocation_id,
+    correlation_id: currentInvocation.correlation_id,
+    accounting_key_id: currentInvocation.accounting_key_id,
+    created_at: currentInvocation.created_at,
+  })
+  const currentQuantities = []
+  for (const value of input.quantities) currentQuantities.push(await appendQuantity(executor, tenantId, value))
+  const currentValuations = []
+  for (const value of input.valuations) {
+    currentValuations.push(await appendValuation(executor, tenantId, {
+      ...value,
+      charge_id: currentCharge.charge_id,
+    }))
+  }
+  return {
+    invocation: currentInvocation,
+    quantities: currentQuantities,
+    charge: currentCharge,
+    valuations: currentValuations,
+  }
+}
+
 export function createPostgresAccountingLedger(sql: SqlAdapter, tenantId: string): AccountingLedger {
   return {
+    async recordAccounting(input) {
+      return sql.transaction((transaction) => recordAccounting(transaction, tenantId, input))
+    },
     async recordInvocation(value) {
-      if (value.tenant_id !== tenantId) throw new Error("INVOCATION_ACCOUNTING_TENANT_MISMATCH")
-      const inserted = await sql.query<Row>(
-        `insert into genio_one_canonical_invocation_accounting
-          (tenant_id, invocation_id, correlation_id, subject_id,
-           consumer_organization_id, resource_owner_organization_id,
-           resource_id, capability_id, use_case_id, usage_policy_revisions,
-           release_revision, accounting_key_id, created_at)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::text::jsonb,$11,$12,to_timestamp($13))
-         on conflict do nothing
-         returning *`,
-        [tenantId, value.invocation_id, value.correlation_id, value.subject_id,
-          value.consumer_organization_id, value.resource_owner_organization_id,
-          value.resource_id, value.capability_id, value.use_case_id,
-          JSON.stringify(value.usage_policy_revisions), value.release_revision,
-          value.accounting_key_id, value.created_at],
-      )
-      if (inserted.rows[0]) return invocation(inserted.rows[0])
-      const existing = await sql.query<Row>(
-        `select * from genio_one_canonical_invocation_accounting
-          where tenant_id = $1 and invocation_id = $2`,
-        [tenantId, value.invocation_id],
-      )
-      const previous = existing.rows[0] && invocation(existing.rows[0])
-      if (!previous || !equal(previous, value)) throw new Error("INVOCATION_ACCOUNTING_CONFLICT")
-      return previous
+      return recordInvocation(sql, tenantId, value)
     },
     async appendQuantity(value) {
-      const inserted = await sql.query<Row>(
-        `insert into genio_one_usage_quantities
-          (tenant_id, quantity_id, invocation_id, quantity, unit, trusted_source, observed_at)
-         values ($1,$2,$3,$4,$5,$6,to_timestamp($7))
-         on conflict do nothing
-         returning *`,
-        [tenantId, value.quantity_id, value.invocation_id, value.quantity,
-          value.unit, value.trusted_source, value.observed_at],
-      )
-      if (inserted.rows[0]) return quantity(inserted.rows[0])
-      const existing = await sql.query<Row>(
-        `select * from genio_one_usage_quantities where tenant_id = $1 and quantity_id = $2`,
-        [tenantId, value.quantity_id],
-      )
-      const previous = existing.rows[0] && quantity(existing.rows[0])
-      if (!previous || !equal(previous, value)) throw new Error("USAGE_QUANTITY_CONFLICT")
-      return previous
+      return appendQuantity(sql, tenantId, value)
     },
     async charge(input) {
-      const id = chargeId(input.invocation_id, input.correlation_id, input.accounting_key_id)
-      const inserted = await sql.query<Row>(
-        `insert into genio_one_canonical_charges
-          (tenant_id, charge_id, invocation_id, correlation_id, accounting_key_id, created_at)
-         values ($1,$2,$3,$4,$5,to_timestamp($6))
-         on conflict do nothing
-         returning *`,
-        [tenantId, id, input.invocation_id, input.correlation_id, input.accounting_key_id, input.created_at],
-      )
-      if (inserted.rows[0]) return charge(inserted.rows[0])
-      const existing = await sql.query<Row>(
-        `select * from genio_one_canonical_charges where tenant_id = $1 and charge_id = $2`,
-        [tenantId, id],
-      )
-      if (!existing.rows[0]) throw new Error("CANONICAL_CHARGE_CONFLICT")
-      return charge(existing.rows[0])
+      return recordCharge(sql, tenantId, input)
     },
     async appendValuation(value) {
-      const inserted = await sql.query<Row>(
-        `insert into genio_one_cost_valuations
-          (tenant_id, valuation_id, charge_id, status, currency, amount_micros,
-           pricing_source, pricing_version, valued_at)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,to_timestamp($9))
-         on conflict do nothing
-         returning *`,
-        [tenantId, value.valuation_id, value.charge_id, value.status, value.currency,
-          value.amount_micros, value.pricing_source, value.pricing_version, value.valued_at],
-      )
-      if (inserted.rows[0]) return valuation(inserted.rows[0])
-      const existing = await sql.query<Row>(
-        `select * from genio_one_cost_valuations where tenant_id = $1 and valuation_id = $2`,
-        [tenantId, value.valuation_id],
-      )
-      const previous = existing.rows[0] && valuation(existing.rows[0])
-      if (!previous || !equal(previous, value)) throw new Error("COST_VALUATION_CONFLICT")
-      return previous
+      return appendValuation(sql, tenantId, value)
     },
     async getCharge(input) {
       const existing = await sql.query<Row>(

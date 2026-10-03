@@ -24,6 +24,14 @@ import { startLeaseHeartbeat } from "./lease-heartbeat"
 import { discoverMcpConnection, discoverMcpWithUserAuthorization } from "./mcp-discovery"
 import { materializeGatewayBootstrap } from "./bootstrap"
 import { operationalError, writeOperationalEvent } from "@genioone/telemetry/operational-log"
+import {
+  createObservationOutbox,
+  type ObservationOutbox,
+  ObservationOutboxCapacityError,
+  ObservationOutboxInputError,
+  type ObservationPath,
+  type ObservationRecord,
+} from "./observation-outbox"
 import type {
   CompleteMcpDiscoveryInput,
   McpDiscoveryOperation,
@@ -53,6 +61,8 @@ interface RuntimeConfiguration {
   listenerPort: number
   aigwDownloadTimeoutMs: number
   observationPort: number
+  observationOutboxMaxBytes: number
+  observationOutboxMaxFiles: number
   authorizerReadinessOrigin?: string
   processorReadinessOrigin?: string
   telemetry?: {
@@ -88,6 +98,16 @@ function positiveSeconds(name: string, fallback: number): number {
     throw new Error(`${name} must be an integer from 1 through 3600`)
   }
   return value * 1_000
+}
+
+function positiveInteger(name: string, fallback: number): number {
+  const raw = process.env[name]
+  if (raw === undefined) return fallback
+  const value = Number(raw)
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new Error(`${name} must be a positive integer`)
+  }
+  return value
 }
 
 function localCredentialValues(): Record<string, string> {
@@ -155,6 +175,14 @@ async function configuration(): Promise<RuntimeConfiguration> {
     listenerPort: port("GENIO_ONE_AIGW_LISTENER_PORT", 1975),
     aigwDownloadTimeoutMs: positiveSeconds("GENIO_ONE_AIGW_DOWNLOAD_TIMEOUT_SECONDS", 600),
     observationPort: port("GENIO_ONE_GATEWAY_OBSERVATION_PORT", 9090),
+    observationOutboxMaxBytes: positiveInteger(
+      "GENIO_ONE_GATEWAY_OBSERVATION_OUTBOX_MAX_BYTES",
+      512 * 1024 * 1024,
+    ),
+    observationOutboxMaxFiles: positiveInteger(
+      "GENIO_ONE_GATEWAY_OBSERVATION_OUTBOX_MAX_FILES",
+      10_000,
+    ),
     authorizerReadinessOrigin:
       process.env.GENIO_ONE_AUTHORIZER_READINESS_ORIGIN?.trim() || undefined,
     processorReadinessOrigin:
@@ -571,6 +599,12 @@ async function waitForDependency(
 function startObservationRelay(
   config: RuntimeConfiguration,
   tokens: RuntimeTokenSource,
+  observationOutbox: ObservationOutbox,
+  enqueueObservation: (
+    path: ObservationPath,
+    body: unknown,
+    correlationId?: string | null,
+  ) => Promise<ObservationRecord>,
 ) {
   return serve({
     hostname: "127.0.0.1",
@@ -578,6 +612,13 @@ function startObservationRelay(
     async fetch(request) {
       const url = new URL(request.url)
       const pathname = url.pathname
+      if (request.method === "GET" && (pathname === "/health" || pathname === "/healthz")) {
+        const health = await observationOutbox.health()
+        return new Response(JSON.stringify(health), {
+          status: health.blocked ? 503 : 200,
+          headers: { "content-type": "application/json", "cache-control": "no-store" },
+        })
+      }
       if (request.method === "GET" && pathname === "/mcp-oauth/headers") {
         const resourceId = url.searchParams.get("resource_id")?.trim()
         const subjectId = url.searchParams.get("subject_id")?.trim()
@@ -609,11 +650,11 @@ function startObservationRelay(
         })
       }
       const target = pathname === "/activities"
-        ? "activities"
+        ? "/activities"
         : pathname === "/audit-events"
-          ? "audit-events"
+          ? "/audit-events"
           : pathname === "/accounting"
-            ? "accounting"
+            ? "/accounting"
           : undefined
       if (request.method !== "POST" || !target) return new Response("Not Found", { status: 404 })
       const contentLength = Number(request.headers.get("content-length") ?? "0")
@@ -621,21 +662,41 @@ function startObservationRelay(
         return new Response("Payload Too Large", { status: 413 })
       }
       const body = await request.text()
-      if (body.length > 262_144) return new Response("Payload Too Large", { status: 413 })
-      let correlationId: string | undefined
-      try { const observation = JSON.parse(body); if (typeof observation.correlation_id === "string") correlationId = observation.correlation_id } catch { return new Response("Invalid JSON", { status: 400 }) }
-      const response = await observedFetch("genio-one-gateway-runtime",
-        `${config.platformOrigin}${runtimePath(config)}/${target}`,
-        {
-          method: "POST",
-          headers: { ...await tokens.headers(), "content-type": "application/json", ...(correlationId ? { "x-genio-correlation-id": correlationId } : {}) },
-          body,
-        },
-      )
-      return new Response(await response.text(), {
-        status: response.status,
-        headers: { "content-type": response.headers.get("content-type") ?? "application/json" },
-      })
+      if (Buffer.byteLength(body) > 262_144) return new Response("Payload Too Large", { status: 413 })
+      let observation: unknown
+      try {
+        observation = JSON.parse(body)
+      } catch {
+        return new Response("Invalid JSON", { status: 400 })
+      }
+      const correlationId = observation && typeof observation === "object" && !Array.isArray(observation)
+        ? (observation as Record<string, unknown>).correlation_id
+        : undefined
+      if (correlationId !== undefined && correlationId !== null && typeof correlationId !== "string") {
+        return new Response("Invalid correlation_id", { status: 400 })
+      }
+      try {
+        const accepted = await enqueueObservation(
+          target,
+          observation,
+          correlationId,
+        )
+        return new Response(JSON.stringify({ accepted: true, correlation_id: accepted.correlation_id }), {
+          status: 202,
+          headers: { "content-type": "application/json" },
+        })
+      } catch (error) {
+        const status = error instanceof ObservationOutboxInputError
+          ? error.status
+          : error instanceof ObservationOutboxCapacityError
+            ? error.status
+            : 503
+        writeOperationalEvent("gateway-runtime", "ERROR", "genio.one.gateway-observation.outbox.enqueue-failed", {
+          path: target,
+          ...(error instanceof Error ? operationalError(error) : { error_name: "Error", error_message: String(error) }),
+        })
+        return new Response(status === 507 ? "Observation outbox is full" : "Observation outbox unavailable", { status })
+      }
     },
   })
 }
@@ -650,7 +711,34 @@ async function main(): Promise<void> {
     clientSecretFile: config.oidcClientSecretFile,
     scope: config.oidcScope,
   })
-  const observationRelay = startObservationRelay(config, tokens)
+  const observationOutbox = await createObservationOutbox({
+    stateRoot: config.stateRoot,
+    maxBytes: config.observationOutboxMaxBytes,
+    maxFiles: config.observationOutboxMaxFiles,
+    async send(record, signal) {
+      const response = await observedFetch("genio-one-gateway-runtime",
+        `${config.platformOrigin}${runtimePath(config)}${record.path}`,
+        {
+          method: "POST",
+          signal,
+          headers: {
+            ...await tokens.headers(),
+            "content-type": "application/json",
+            ...(record.correlation_id ? { "x-genio-correlation-id": record.correlation_id } : {}),
+          },
+          body: JSON.stringify(record.body),
+        },
+      )
+      return response.status
+    },
+  })
+  const enqueueObservation = (
+    path: ObservationPath,
+    body: unknown,
+    correlationId?: string | null,
+  ) => observationOutbox.enqueue({ path, body, correlationId })
+  observationOutbox.start()
+  const observationRelay = startObservationRelay(config, tokens, observationOutbox, enqueueObservation)
   const commandKeyRing = JSON.parse(
     await readFile(config.commandKeyRingPath, "utf8"),
   ) as VerificationKeyRing
@@ -694,18 +782,11 @@ async function main(): Promise<void> {
         localCredentialValues: credentials,
         async onActivity(event) {
           return observeOperation("genio-one-gateway-runtime", "envoy.activity.materialize", event, async () => {
-          const response = await observedFetch("genio-one-gateway-runtime",
-            `${config.platformOrigin}${runtimePath(config)}/activities`,
-            {
-              method: "POST",
-              headers: { ...await tokens.headers(), "content-type": "application/json", "x-genio-correlation-id": event.correlation_id },
-              body: JSON.stringify(event),
-            },
-          )
-          if (!response.ok) {
-            throw new Error(`Gateway activity delivery failed (${response.status})`)
-          }
+            await enqueueObservation("/activities", event, event.correlation_id)
           })
+        },
+        async onAuthenticationFailure(event) {
+          await enqueueObservation("/audit-events", event, event.correlation_id)
         },
       })
   const runtime = createGatewayRuntime({
@@ -835,6 +916,7 @@ async function main(): Promise<void> {
   await leaseHeartbeat?.stop()
   await applier.close()
   await observationRelay.stop(true)
+  await observationOutbox.stop()
 }
 
 await main()

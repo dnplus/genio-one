@@ -1,7 +1,10 @@
 import type { EndpointCredentialIdentity, EndpointRuntimeStore } from "../endpoint-runtime/module"
 import type { FastifyRequest } from "fastify"
+import { randomUUID } from "node:crypto"
 
 import { PlatformApiError } from "../errors"
+import type { GatewayAuthorizationAuditStore } from "../audit-events/module"
+import { SYSTEM_AUDIT_TENANT_ID, type ManagementAuthorizationAuditEvent, type AuthenticationAttemptReceipt, type ManagementAuthorizationRequestContext } from "../audit-events/contract"
 import type { ResourceCatalog } from "../resources/module"
 import type { RuntimeControlStore } from "../runtime-control/contract"
 import type {
@@ -10,16 +13,17 @@ import type {
   PrincipalAuthenticator,
 } from "../tenancy-auth/contract"
 import { normalizePrincipal } from "../tenancy-auth/memory"
+import {
+  isRuntimeControlTransport,
+  isRuntimeSelfRegistration,
+  tenantRoute,
+  type TenantRoute,
+} from "../tenancy-auth/routes"
 
 const MANAGEMENT_SCOPE = "genioone-management"
 const INVOCATION_SCOPE = "genioone-invocation"
 const GATEWAY_RUNTIME_SCOPE = "genioone-gateway-runtime"
 const ENDPOINT_RUNTIME_SCOPE = "genioone-endpoint-runtime"
-
-interface TenantRoute {
-  tenantId: string
-  rest: string[]
-}
 
 export interface ManagementAuthorizationOptions {
   principalAuthenticator: PrincipalAuthenticator
@@ -27,12 +31,21 @@ export interface ManagementAuthorizationOptions {
   resourceCatalog: ResourceCatalog
   endpointRuntime: EndpointRuntimeStore
   runtimeControl: RuntimeControlStore
+  auditEvents: GatewayAuthorizationAuditStore
 }
 
 export interface ManagementAuthorizationModule {
   authenticate(request: FastifyRequest): Promise<void>
   normalize(request: FastifyRequest): Promise<void>
   authorize(request: FastifyRequest): Promise<void>
+  recordAuthenticationAttempt(request: FastifyRequest, input: {
+    outcome: AuthenticationAttemptReceipt["outcome"]
+    code: string
+    verifiedTenantId?: string | null
+    verifiedSubjectId?: string | null
+    verifiedClientId?: string | null
+  }): Promise<void>
+  recordAuthorizationDecision(request: FastifyRequest, principal: Principal, outcome: ManagementAuthorizationAuditEvent["outcome"], code: string, context?: ManagementAuthorizationRequestContextInput): Promise<void>
   authorizeGatewayRuntime(input: {
     tenantId: string
     runtimeId: string
@@ -45,6 +58,12 @@ export interface ManagementAuthorizationModule {
   }): Promise<{ subjectId: string; credentialId: string }>
 }
 
+export interface ManagementAuthorizationRequestContextInput {
+  requestedTenantId?: string | null
+  targetResourceId?: string | null
+  targetOrganizationId?: string | null
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
@@ -55,32 +74,58 @@ function extractBearerToken(value: string | undefined): string | null {
   return match?.[1] ?? null
 }
 
-function tenantRoute(request: { url: string }): TenantRoute | null {
-  const rawPath = request.url.split("?", 1)[0]
-  if (rawPath.includes("\\") || rawPath.includes("\0")) return null
-  const rawSegments = rawPath.split("/").filter(Boolean)
-  if (rawSegments[0] !== "v1" || rawSegments[1] !== "tenants" || !rawSegments[2]) return null
-  try {
-    const decodedSegments = rawSegments.map((segment) => decodeURIComponent(segment))
-    for (const segment of decodedSegments) {
-      if (
-        segment === ".." ||
-        segment === "." ||
-        segment.includes("/") ||
-        segment.includes("\\") ||
-        segment.includes("\0")
-      ) {
-        return null
-      }
-    }
-    const tenantId = decodedSegments[2]
-    if (!tenantId) return null
-    return {
-      tenantId,
-      rest: decodedSegments.slice(3),
-    }
-  } catch {
-    return null
+function auditMethod(request: FastifyRequest): string {
+  return /^[A-Z]+$/.test(request.method) && request.method.length <= 16
+    ? request.method
+    : "UNKNOWN"
+}
+
+function auditRoute(request: FastifyRequest): string {
+  const route = request.routeOptions?.url
+  return typeof route === "string" && route.startsWith("/") && route.length <= 512
+    ? route
+    : "UNRESOLVED"
+}
+
+function safeCorrelationId(value: unknown): string | null {
+  return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/.test(value)
+    ? value
+    : null
+}
+
+function auditCorrelationId(request: FastifyRequest): string {
+  const incoming = request.headers?.["x-genio-correlation-id"]
+  const headerValue = Array.isArray(incoming) ? null : safeCorrelationId(incoming)
+  return headerValue ?? safeCorrelationId(request.id) ?? `platform-api-${randomUUID()}`
+}
+
+function auditCode(error: unknown): string {
+  const code = error instanceof PlatformApiError ? error.code : "INTERNAL_ERROR"
+  return /^[A-Z][A-Z0-9_:-]{0,127}$/.test(code) ? code : "INTERNAL_ERROR"
+}
+
+function contextIdentifier(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 && value.length <= 256 && !/[\\/\0\r\n]/.test(value)
+    ? value
+    : null
+}
+
+function requestContext(request: FastifyRequest, override: ManagementAuthorizationRequestContextInput = {}): ManagementAuthorizationRequestContext {
+  const route = tenantRoute(request)
+  const resourceId = route?.rest[0] === "resources" && route.rest[1] !== "import-openapi"
+    ? contextIdentifier(route.rest[1])
+    : null
+  const organizationId = route?.rest[0] === "organizations" && route.rest.length >= 2
+    ? contextIdentifier(route.rest[1])
+    : null
+  return {
+    requested_tenant_id: override.requestedTenantId === undefined
+      ? contextIdentifier(route?.tenantId)
+      : contextIdentifier(override.requestedTenantId),
+    target: {
+      resource_id: override.targetResourceId === undefined ? resourceId : contextIdentifier(override.targetResourceId),
+      organization_id: override.targetOrganizationId === undefined ? organizationId : contextIdentifier(override.targetOrganizationId),
+    },
   }
 }
 
@@ -115,7 +160,7 @@ function assertOrganizationManager(principal: Principal, organizationId: string 
 }
 
 function principalHasScope(principal: Principal, allowed: readonly string[]): boolean {
-  return principal.scopes === undefined || allowed.some((scope) => principal.scopes!.includes(scope))
+  return allowed.some((scope) => principal.scopes?.includes(scope) === true)
 }
 
 export function principalHasManagementScope(principal: Principal): boolean {
@@ -175,78 +220,6 @@ function isPublicationReview(route: TenantRoute): boolean {
     route.rest[4] === "review"
 }
 
-function isRuntimeControlTransport(route: TenantRoute, method: string): boolean {
-  if (
-    route.rest[0] !== "runtime-control" ||
-    route.rest[1] !== "GATEWAY" ||
-    !route.rest[2]
-  ) return false
-  if (
-    method === "PUT" &&
-    route.rest.length === 4 &&
-    route.rest[3] === "capabilities"
-  ) return true
-  if (
-    method === "PUT" &&
-    route.rest.length === 5 &&
-    route.rest[3] === "aggregate" &&
-    route.rest[4] === "heartbeat"
-  ) return true
-  if (method === "POST") {
-    return (
-      route.rest.length === 4 &&
-      (
-        route.rest[3] === "activities" ||
-        route.rest[3] === "audit-events" ||
-        route.rest[3] === "accounting" ||
-        route.rest[3] === "connection-health-observations"
-      )
-    ) || (
-      route.rest.length === 5 &&
-      route.rest[3] === "aggregate" &&
-      route.rest[4] === "reports"
-    ) || (
-      route.rest.length === 7 &&
-      route.rest[3] === "operations" &&
-      route.rest[4] === "mcp-discovery" &&
-      route.rest[6] === "result"
-    )
-  }
-  if (method !== "GET") return false
-  return (
-    route.rest.length === 4 &&
-    route.rest[3] === "connection-health-targets"
-  ) || (
-    route.rest.length === 5 &&
-    route.rest[3] === "mcp-oauth" &&
-    route.rest[4] === "headers"
-  ) || (
-    route.rest.length === 6 &&
-    route.rest[3] === "operations" &&
-    route.rest[4] === "mcp-discovery" &&
-    route.rest[5] === "next"
-  ) || (
-    route.rest.length === 7 &&
-    route.rest[3] === "operations" &&
-    route.rest[4] === "mcp-discovery" &&
-    route.rest[6] === "credential"
-  ) || (
-    route.rest.length === 6 &&
-    route.rest[3] === "aggregate" &&
-    route.rest[4] === "commands" &&
-    route.rest[5] === "next"
-  ) || (
-    route.rest.length === 5 &&
-    route.rest[3] === "aggregate" &&
-    route.rest[4] === "connect"
-  ) || (
-    route.rest.length === 7 &&
-    route.rest[3] === "aggregate" &&
-    route.rest[4] === "releases" &&
-    route.rest[6] === "package"
-  )
-}
-
 function isConnectionHealthObservation(route: TenantRoute, method: string): boolean {
   return method === "POST" &&
     route.rest.length === 5 &&
@@ -270,15 +243,6 @@ function isInstalledConnectionLifecycleToggle(
     resource?.installation_owned !== true
   ) return false
   return isRecord(body) && (body.command === "ENABLE" || body.command === "DISABLE")
-}
-
-function isRuntimeSelfRegistration(route: TenantRoute, method: string): boolean {
-  return method === "PUT" &&
-    route.rest.length === 4 &&
-    route.rest[0] === "runtime-control" &&
-    route.rest[1] === "GATEWAY" &&
-    Boolean(route.rest[2]) &&
-    route.rest[3] === "registration"
 }
 
 function isEndpointRuntimeTransport(route: TenantRoute, method: string): boolean {
@@ -394,19 +358,29 @@ export function createManagementAuthorization(
   }) => {
     const principal = request.principal
     if (!principal) {
+      await recordAuthenticationAttempt(request as FastifyRequest, {
+        outcome: "FAILURE",
+        code: "UNAUTHENTICATED",
+      })
       throw new PlatformApiError("UNAUTHENTICATED", 401, "Runtime bearer token rejected")
     }
-    const registration = await options.runtimeControl.getGatewayRuntime({
-      tenantId,
-      runtimeKind: "GATEWAY",
-      runtimeId,
-    })
-    if (!registration || registration.status !== "ACTIVE") {
-      throw new PlatformApiError("RUNTIME_RUNTIME_NOT_ACTIVE", 403)
+    try {
+      const registration = await options.runtimeControl.getGatewayRuntime({
+        tenantId,
+        runtimeKind: "GATEWAY",
+        runtimeId,
+      })
+      if (!registration || registration.status !== "ACTIVE") {
+        throw new PlatformApiError("RUNTIME_RUNTIME_NOT_ACTIVE", 403)
+      }
+      if (principal.client_id !== registration.oidc_client_id) {
+        throw new PlatformApiError("RUNTIME_ACCESS_DENIED", 403)
+      }
+    } catch (error) {
+      await recordAuthorizationDecision(request as FastifyRequest, principal, "DENY", auditCode(error))
+      throw error
     }
-    if (principal.client_id !== registration.oidc_client_id) {
-      throw new PlatformApiError("RUNTIME_ACCESS_DENIED", 403)
-    }
+    await recordAuthorizationDecision(request as FastifyRequest, principal, "ALLOW", "AUTHORIZED")
   }
 
   const authorizeEndpoint = async ({ tenantId, deviceId, request }: {
@@ -416,17 +390,89 @@ export function createManagementAuthorization(
   }) => {
     const identity = endpointIdentities.get(request)
     if (!identity || identity.tenantId !== tenantId || identity.deviceId !== deviceId) {
+      await recordAuthenticationAttempt(request as FastifyRequest, {
+        outcome: "FAILURE",
+        code: "ENDPOINT_CREDENTIAL_REJECTED",
+        ...(identity
+          ? { verifiedTenantId: identity.tenantId, verifiedSubjectId: identity.subjectId }
+          : {}),
+      })
       throw new PlatformApiError("ENDPOINT_CREDENTIAL_REJECTED", 401)
     }
     return { subjectId: identity.subjectId, credentialId: identity.credentialId }
   }
 
+  const recordAuthenticationAttempt = async (
+    request: FastifyRequest,
+    input: {
+      outcome: AuthenticationAttemptReceipt["outcome"]
+      code: string
+      verifiedTenantId?: string | null
+      verifiedSubjectId?: string | null
+      verifiedClientId?: string | null
+    },
+  ): Promise<void> => {
+    if (typeof options.auditEvents.recordAuthenticationAttempt !== "function") {
+      throw new PlatformApiError("AUDIT_STORE_UNAVAILABLE", 503)
+    }
+    await options.auditEvents.recordAuthenticationAttempt({
+      receipt: {
+        authentication_attempt_id: `management-authn-${randomUUID()}`,
+        correlation_id: auditCorrelationId(request),
+        kind: "MANAGEMENT_AUTHENTICATION_ATTEMPT",
+        scope: "SYSTEM",
+        outcome: input.outcome,
+        code: /^[A-Z][A-Z0-9_:-]{0,127}$/.test(input.code) ? input.code : "INTERNAL_ERROR",
+        method: auditMethod(request),
+        route: auditRoute(request),
+        verified_tenant_id: input.verifiedTenantId ?? null,
+        verified_subject_id: input.verifiedSubjectId ?? null,
+        verified_client_id: input.verifiedClientId ?? null,
+        occurred_at: Math.floor(Date.now() / 1_000),
+      },
+    })
+  }
+
+  const recordAuthorizationDecision = async (
+    request: FastifyRequest,
+    principal: Principal,
+    outcome: ManagementAuthorizationAuditEvent["outcome"],
+    code: string,
+    context: ManagementAuthorizationRequestContextInput = {},
+  ): Promise<void> => {
+    const record = options.auditEvents?.record
+    if (!record) throw new PlatformApiError("AUDIT_STORE_UNAVAILABLE", 503)
+    await record({
+      tenantId: principal.tenant_id,
+      event: {
+        tenant_id: principal.tenant_id,
+        audit_event_id: `management-authz-${randomUUID()}`,
+        correlation_id: auditCorrelationId(request),
+        kind: "MANAGEMENT_AUTHORIZATION",
+        outcome,
+        subject: { subject_id: principal.subject_id, evidence_level: "VERIFIED" },
+        acting_client: { acting_client_id: principal.client_id, evidence_level: "VERIFIED" },
+        request_context: requestContext(request, context),
+        code: /^[A-Z][A-Z0-9_:-]{0,127}$/.test(code) ? code : "INTERNAL_ERROR",
+        method: auditMethod(request),
+        route: auditRoute(request),
+        occurred_at: Math.floor(Date.now() / 1_000),
+      },
+    })
+  }
+
   return {
+    recordAuthenticationAttempt,
+    recordAuthorizationDecision,
     async authenticate(request) {
       const route = tenantRoute(request)
       if (!route || isFederationTokenExchange(route, request.method)) return
       const token = extractBearerToken(request.headers.authorization)
       if (!token) {
+        await recordAuthenticationAttempt(request, {
+          outcome: "FAILURE",
+          code: "MISSING_BEARER_TOKEN",
+        })
         throw new PlatformApiError(
           "UNAUTHENTICATED",
           401,
@@ -434,16 +480,43 @@ export function createManagementAuthorization(
         )
       }
       if (isEndpointRuntimeTransport(route, request.method)) {
-        const identity = await options.endpointRuntime.authenticateCredential({ tenantId: route.tenantId, token })
+        let identity: EndpointCredentialIdentity
+        try {
+          identity = await options.endpointRuntime.authenticateCredential({ tenantId: route.tenantId, token })
+        } catch (error) {
+          await recordAuthenticationAttempt(request, {
+            outcome: "FAILURE",
+            code: auditCode(error),
+          })
+          throw error
+        }
         const enrolling = route.rest[0] === "endpoints" && route.rest[1] === "enroll" && route.rest.length === 2
         const deviceId = route.rest[0] === "runtime-control" ? route.rest[2] : route.rest[1]
         if (!enrolling && (identity.kind !== "RUNTIME" || identity.deviceId !== deviceId)) {
+          await recordAuthenticationAttempt(request, {
+            outcome: "FAILURE",
+            code: "ENDPOINT_CREDENTIAL_REJECTED",
+            verifiedTenantId: identity.tenantId,
+            verifiedSubjectId: identity.subjectId,
+          })
           throw new PlatformApiError("ENDPOINT_CREDENTIAL_REJECTED", 401)
         }
         endpointIdentities.set(request, identity)
+        await recordAuthenticationAttempt(request, {
+          outcome: "SUCCESS",
+          code: "ENDPOINT_CREDENTIAL_ACCEPTED",
+          verifiedTenantId: identity.tenantId,
+          verifiedSubjectId: identity.subjectId,
+        })
         return
       }
-      if (token.startsWith("genio_endpoint_")) throw new PlatformApiError("ENDPOINT_CREDENTIAL_REJECTED", 401)
+      if (token.startsWith("genio_endpoint_")) {
+        await recordAuthenticationAttempt(request, {
+          outcome: "FAILURE",
+          code: "ENDPOINT_CREDENTIAL_REJECTED",
+        })
+        throw new PlatformApiError("ENDPOINT_CREDENTIAL_REJECTED", 401)
+      }
       let principal: Principal | null = null
       try {
         principal = normalizePrincipal(
@@ -453,105 +526,145 @@ export function createManagementAuthorization(
             request,
           }),
         )
-      } catch {
-        principal = null
+      } catch (error) {
+        await recordAuthenticationAttempt(request, {
+          outcome: "FAILURE",
+          code: error instanceof PlatformApiError ? auditCode(error) : "AUTHENTICATION_BACKEND_FAILURE",
+        })
+        throw error
       }
       if (!principal) {
+        await recordAuthenticationAttempt(request, {
+          outcome: "FAILURE",
+          code: "UNAUTHENTICATED",
+        })
         throw new PlatformApiError("UNAUTHENTICATED", 401, "Bearer token rejected")
       }
+      request.principal = principal
+      await recordAuthenticationAttempt(request, {
+        outcome: "SUCCESS",
+        code: "AUTHENTICATED",
+        verifiedTenantId: principal.tenant_id,
+        verifiedSubjectId: principal.subject_id,
+        verifiedClientId: principal.client_id,
+      })
       if (principal.tenant_id !== route.tenantId) {
+        await recordAuthorizationDecision(request, principal, "DENY", "TENANT_ACCESS_DENIED")
         throw new PlatformApiError(
           "TENANT_ACCESS_DENIED",
           403,
           "The authenticated principal cannot access this tenant",
         )
       }
-      assertPrincipalScope(principal, requiredRouteScopes(route, request.method))
-      request.principal = principal
+      if (route.tenantId === SYSTEM_AUDIT_TENANT_ID) {
+        await recordAuthorizationDecision(request, principal, "DENY", "SYSTEM_SCOPE_RESERVED")
+        throw new PlatformApiError("TENANT_ACCESS_DENIED", 403)
+      }
+      try {
+        assertPrincipalScope(principal, requiredRouteScopes(route, request.method))
+        if (isAuditExportRead(route, request.method)) {
+          assertPrincipalScope(principal, ["audit.export"])
+        }
+        if (request.method === "POST" && route.rest.length === 1 && route.rest[0] === "applications") {
+          assertPrincipalScope(principal, ["application.create"])
+        }
+      } catch (error) {
+        await recordAuthorizationDecision(request, principal, "DENY", auditCode(error))
+        throw error
+      }
     },
 
     async normalize(request) {
       const route = tenantRoute(request)
-      if (!route || !request.principal) return
-      if (
-        request.method === "POST" &&
-        route.rest.length === 3 &&
-        route.rest[0] === "resources" &&
-        route.rest[2] === "publication-requests"
-      ) {
-        request.body = assertBodyActor(request.body, "requested_by", request.principal)
-      }
-      if (isPublicationReview(route)) {
-        request.body = assertBodyActor(request.body, "reviewer_id", request.principal)
-      }
-      if (!isModelRoutingResolve(route, request.method)) return
-      const body = isRecord(request.body) ? request.body : {}
-      if (body.subject_id !== undefined && body.subject_id !== request.principal.subject_id) {
-        throw new PlatformApiError(
-          "ACTOR_SPOOFED",
-          403,
-          "subject_id must match the authenticated principal",
+      const principal = request.principal
+      if (!route || !principal) return
+      const run = async () => {
+        if (
+          request.method === "POST" &&
+          route.rest.length === 3 &&
+          route.rest[0] === "resources" &&
+          route.rest[2] === "publication-requests"
+        ) {
+          request.body = assertBodyActor(request.body, "requested_by", principal)
+        }
+        if (isPublicationReview(route)) {
+          request.body = assertBodyActor(request.body, "reviewer_id", principal)
+        }
+        if (!isModelRoutingResolve(route, request.method)) return
+        const body = isRecord(request.body) ? request.body : {}
+        if (body.subject_id !== undefined && body.subject_id !== principal.subject_id) {
+          throw new PlatformApiError(
+            "ACTOR_SPOOFED",
+            403,
+            "subject_id must match the authenticated principal",
+          )
+        }
+        if (body.client_id !== undefined && body.client_id !== principal.client_id) {
+          throw new PlatformApiError(
+            "ACTOR_SPOOFED",
+            403,
+            "client_id must match the authenticated principal",
+          )
+        }
+        if (!options.entitlementResolver) {
+          throw new PlatformApiError(
+            "ENTITLEMENT_RESOLVER_UNAVAILABLE",
+            503,
+            "Model routing is unavailable until an entitlement resolver is configured",
+          )
+        }
+        let entitledModelIds: readonly string[]
+        try {
+          entitledModelIds = await options.entitlementResolver.resolve({
+            tenantId: route.tenantId,
+            subjectId: principal.subject_id,
+            clientId: principal.client_id,
+            ...(typeof body.public_model_id === "string"
+              ? { publicModelId: body.public_model_id }
+              : {}),
+            ...(typeof body.requested_public_model_id === "string"
+              ? { requestedModelId: body.requested_public_model_id }
+              : {}),
+          })
+        } catch {
+          throw new PlatformApiError(
+            "ENTITLEMENT_RESOLUTION_FAILED",
+            503,
+            "The effective model entitlement could not be resolved",
+          )
+        }
+        if (!Array.isArray(entitledModelIds)) {
+          throw new PlatformApiError(
+            "ENTITLEMENT_RESOLUTION_FAILED",
+            503,
+            "The effective model entitlement could not be resolved",
+          )
+        }
+        const uniqueModelIds = [...new Set(entitledModelIds)].filter(
+          (modelId): modelId is string => typeof modelId === "string" && modelId.length > 0,
         )
+        if (uniqueModelIds.length === 0) {
+          throw new PlatformApiError(
+            "NO_ENTITLED_MODELS",
+            403,
+            "The authenticated principal has no model entitlement",
+          )
+        }
+        const trustedBody = { ...body }
+        delete trustedBody.entitled_model_ids
+        delete trustedBody.entitled_public_model_ids
+        request.body = {
+          ...trustedBody,
+          subject_id: principal.subject_id,
+          client_id: principal.client_id,
+          entitled_public_model_ids: uniqueModelIds,
+        }
       }
-      if (body.client_id !== undefined && body.client_id !== request.principal.client_id) {
-        throw new PlatformApiError(
-          "ACTOR_SPOOFED",
-          403,
-          "client_id must match the authenticated principal",
-        )
-      }
-      if (!options.entitlementResolver) {
-        throw new PlatformApiError(
-          "ENTITLEMENT_RESOLVER_UNAVAILABLE",
-          503,
-          "Model routing is unavailable until an entitlement resolver is configured",
-        )
-      }
-      let entitledModelIds: readonly string[]
       try {
-        entitledModelIds = await options.entitlementResolver.resolve({
-          tenantId: route.tenantId,
-          subjectId: request.principal.subject_id,
-          clientId: request.principal.client_id,
-          ...(typeof body.public_model_id === "string"
-            ? { publicModelId: body.public_model_id }
-            : {}),
-          ...(typeof body.requested_public_model_id === "string"
-            ? { requestedModelId: body.requested_public_model_id }
-            : {}),
-        })
-      } catch {
-        throw new PlatformApiError(
-          "ENTITLEMENT_RESOLUTION_FAILED",
-          503,
-          "The effective model entitlement could not be resolved",
-        )
-      }
-      if (!Array.isArray(entitledModelIds)) {
-        throw new PlatformApiError(
-          "ENTITLEMENT_RESOLUTION_FAILED",
-          503,
-          "The effective model entitlement could not be resolved",
-        )
-      }
-      const uniqueModelIds = [...new Set(entitledModelIds)].filter(
-        (modelId): modelId is string => typeof modelId === "string" && modelId.length > 0,
-      )
-      if (uniqueModelIds.length === 0) {
-        throw new PlatformApiError(
-          "NO_ENTITLED_MODELS",
-          403,
-          "The authenticated principal has no model entitlement",
-        )
-      }
-      const trustedBody = { ...body }
-      delete trustedBody.entitled_model_ids
-      delete trustedBody.entitled_public_model_ids
-      request.body = {
-        ...trustedBody,
-        subject_id: request.principal.subject_id,
-        client_id: request.principal.client_id,
-        entitled_public_model_ids: uniqueModelIds,
+        await run()
+      } catch (error) {
+        await recordAuthorizationDecision(request, principal, "DENY", auditCode(error))
+        throw error
       }
     },
 
@@ -559,17 +672,18 @@ export function createManagementAuthorization(
       const route = tenantRoute(request)
       const principal = request.principal
       if (!route || !principal) return
-      const resourceId = route.rest[0] === "resources" && route.rest[1] !== "import-openapi"
-        ? route.rest[1]
-        : undefined
-      const resource = resourceId
-        ? await options.resourceCatalog.getResource({
-            tenantId: route.tenantId,
-            resourceId,
-            authorization: request.headers.authorization,
-          })
-        : null
-      if (resource) request.routeResource = resource
+      const run = async () => {
+        const resourceId = route.rest[0] === "resources" && route.rest[1] !== "import-openapi"
+          ? route.rest[1]
+          : undefined
+        const resource = resourceId
+          ? await options.resourceCatalog.getResource({
+              tenantId: route.tenantId,
+              resourceId,
+              authorization: request.headers.authorization,
+            })
+          : null
+        if (resource) request.routeResource = resource
       if (
         resource?.builtin_service &&
         !["GET", "HEAD"].includes(request.method) &&
@@ -808,11 +922,21 @@ export function createManagementAuthorization(
           }
         }
       }
-      if (
-        (route.rest[0] === "ai-gateway" || route.rest[0] === "model-routing") &&
-        isTenantMutation(route, request.method)
-      ) {
-        assertTenantAdministrator(principal)
+        if (
+          (route.rest[0] === "ai-gateway" || route.rest[0] === "model-routing") &&
+          isTenantMutation(route, request.method)
+        ) {
+          assertTenantAdministrator(principal)
+        }
+      }
+      try {
+        await run()
+      } catch (error) {
+        await recordAuthorizationDecision(request, principal, "DENY", auditCode(error))
+        throw error
+      }
+      if (!isRuntimeControlTransport(route, request.method)) {
+        await recordAuthorizationDecision(request, principal, "ALLOW", "AUTHORIZED")
       }
     },
 

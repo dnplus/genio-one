@@ -692,7 +692,7 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
       })
     }
 
-    const emitBlockedActivity = (
+    const emitBlockedActivity = async (
       code: string,
       statusCode: number,
       upstreamAttempted: boolean,
@@ -755,20 +755,24 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
         ),
         occurred_at: occurredAt,
       }
-      void Promise.resolve(options.onActivity(event)).catch((error) => {
+      try {
+        await Promise.resolve().then(() => options.onActivity!(event))
+      } catch (error) {
         writeOperationalEvent("processor", "ERROR", "genio.one.activity-observation-failed", {
           correlation_id: context?.correlationId ?? null,
           ...operationalError(error),
         })
-      })
+        throw error
+      }
     }
 
-    const rejectOversizedReceipt = (
+    const rejectOversizedReceipt = async (
       statusCode: number,
       upstreamAttempted: boolean,
-    ): boolean => {
+    ): Promise<boolean> => {
       if (!executionReceipt || receiptFitsMetadata(executionReceipt)) return false
       immediateResponseSent = true
+      await emitBlockedActivity("PROCESSOR_RECEIPT_LIMIT_EXCEEDED", statusCode, upstreamAttempted, false)
       call.write(immediateResponse(
         503,
         [],
@@ -776,7 +780,6 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
         "PROCESSOR_RECEIPT_LIMIT_EXCEEDED",
         false,
       ))
-      emitBlockedActivity("PROCESSOR_RECEIPT_LIMIT_EXCEEDED", statusCode, upstreamAttempted, false)
       return true
     }
 
@@ -1028,11 +1031,11 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
             ? "SAFETY_REQUEST_STREAM_UNSUPPORTED"
             : "SAFETY_RESPONSE_STREAM_UNSUPPORTED"
           immediateResponseSent = true
+          await emitBlockedActivity(code, 403, false)
           call.write(blocked([], executionReceipt, code))
-          emitBlockedActivity(code, 403, false)
           return
         }
-        if (rejectOversizedReceipt(503, false)) return
+        if (await rejectOversizedReceipt(503, false)) return
         call.write(continueHeaders(
           executionReceipt,
           routingScope?.route_mode === "SESSION_LEASE",
@@ -1062,11 +1065,11 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
         responseStatus = Number.isInteger(parsedStatus) ? parsedStatus : 200
         if (responseContentType.includes("text/event-stream") && responseRequiresBufferedBody) {
           immediateResponseSent = true
+          await emitBlockedActivity("SAFETY_RESPONSE_STREAM_UNSUPPORTED", 403, true)
           call.write(blocked([], executionReceipt, "SAFETY_RESPONSE_STREAM_UNSUPPORTED"))
-          emitBlockedActivity("SAFETY_RESPONSE_STREAM_UNSUPPORTED", 403, true)
           return
         }
-        if (rejectOversizedReceipt(503, true)) return
+        if (await rejectOversizedReceipt(503, true)) return
         call.write(continueResponseHeaders(
           executionReceipt,
           context.correlationId,
@@ -1102,13 +1105,13 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
             )
           } catch {
             immediateResponseSent = true
+            await emitBlockedActivity("SAFETY_BUFFER_LIMIT_EXCEEDED", 413, false)
             call.write(immediateResponse(
               413,
               [],
               executionReceipt,
               "SAFETY_BUFFER_LIMIT_EXCEEDED",
             ))
-            emitBlockedActivity("SAFETY_BUFFER_LIMIT_EXCEEDED", 413, false)
             return
           }
           if (!endOfStream) {
@@ -1148,11 +1151,11 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
           result.dataClassifications ?? [],
         )
         appendSafetyDecisions(executionReceipt, result.safetyDecisions, "request")
-        if (rejectOversizedReceipt(503, false)) return
+        if (await rejectOversizedReceipt(503, false)) return
         if (result.disposition === "CONTINUE" && responseRequiresBufferedBody && requestsStreamingResponse(result.body)) {
           immediateResponseSent = true
+          await emitBlockedActivity("SAFETY_RESPONSE_STREAM_UNSUPPORTED", 403, false)
           call.write(blocked([], executionReceipt, "SAFETY_RESPONSE_STREAM_UNSUPPORTED"))
-          emitBlockedActivity("SAFETY_RESPONSE_STREAM_UNSUPPORTED", 403, false)
           return
         }
         let outputBody = result.body
@@ -1193,8 +1196,8 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
         })}\n`)
         if (result.disposition === "BLOCK") {
           immediateResponseSent = true
+          await emitBlockedActivity("DATA_PROTECTION_BLOCKED", 403, false)
           call.write(blocked(result.matches, executionReceipt))
-          emitBlockedActivity("DATA_PROTECTION_BLOCKED", 403, false)
           return
         }
         call.write(
@@ -1227,13 +1230,13 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
               )
             } catch {
               immediateResponseSent = true
+              await emitBlockedActivity("SAFETY_BUFFER_LIMIT_EXCEEDED", 413, true)
               call.write(immediateResponse(
                 413,
                 [],
                 executionReceipt,
                 "SAFETY_BUFFER_LIMIT_EXCEEDED",
               ))
-              emitBlockedActivity("SAFETY_BUFFER_LIMIT_EXCEEDED", 413, true)
               return
             }
           } else {
@@ -1259,19 +1262,22 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
           result.dataClassifications ?? [],
         )
         appendSafetyDecisions(executionReceipt, result.safetyDecisions, "response")
-        if (rejectOversizedReceipt(503, true)) return
+        if (await rejectOversizedReceipt(503, true)) return
         if (result.disposition === "BLOCK") {
           immediateResponseSent = true
+          await emitBlockedActivity("DATA_PROTECTION_BLOCKED", responseStatus, true)
           call.write(blocked(result.matches, executionReceipt))
-          emitBlockedActivity("DATA_PROTECTION_BLOCKED", responseStatus, true)
           return
         }
-        call.write(
-          responseProcessingConfigured
-            ? continueBody("response_body", result.body, executionReceipt)
-            : continueWithoutMutation("response_body", executionReceipt),
-        )
+        const responseContinuation = responseProcessingConfigured
+          ? continueBody("response_body", result.body, executionReceipt)
+          : continueWithoutMutation("response_body", executionReceipt)
+        if (!endOfStream || !(options.onActivity || options.onAccounting)) {
+          call.write(responseContinuation)
+        }
         if (endOfStream && (options.onActivity || options.onAccounting)) {
+          const observationDeliveries: Promise<void>[] = []
+          const settlementDeliveries: Promise<void>[] = []
           const occurredAt = Math.floor(Date.now() / 1_000)
           let response: Record<string, any> | undefined
           if (!responseContentType.includes("text/event-stream")) {
@@ -1365,28 +1371,38 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
                       amount_micros: estimatedCostMicros,
                     }))
               if (estimatedCostMicros !== undefined && options.usageCounterStore) {
-                void Promise.all(currencySettlements.map((settlement) =>
-                  options.usageCounterStore!.settleCurrency(settlement)))
+                for (const settlement of currencySettlements) {
+                  settlementDeliveries.push(
+                    Promise.resolve()
+                      .then(() => options.usageCounterStore!.settleCurrency(settlement))
+                      .catch((error) => {
+                        writeOperationalEvent("processor", "ERROR", "genio.one.currency-settlement-failed", {
+                          correlation_id: context?.correlationId ?? null,
+                          accounting_key_id: accountingKeyId,
+                          ...operationalError(error),
+                        })
+                        throw error
+                      }),
+                  )
+                }
+              }
+              observationDeliveries.push(
+                Promise.resolve()
+                  .then(() => options.onAccounting!({
+                    invocation,
+                    quantities,
+                    valuations,
+                    currency_settlements: currencySettlements,
+                  }))
                   .catch((error) => {
-                    writeOperationalEvent("processor", "ERROR", "genio.one.currency-settlement-failed", {
+                    writeOperationalEvent("processor", "ERROR", "genio.one.accounting-observation-failed", {
                       correlation_id: context?.correlationId ?? null,
                       accounting_key_id: accountingKeyId,
                       ...operationalError(error),
                     })
-                  })
-              }
-              void Promise.resolve(options.onAccounting({
-                invocation,
-                quantities,
-                valuations,
-                currency_settlements: currencySettlements,
-              })).catch((error) => {
-                writeOperationalEvent("processor", "ERROR", "genio.one.accounting-observation-failed", {
-                  correlation_id: context?.correlationId ?? null,
-                  accounting_key_id: accountingKeyId,
-                  ...operationalError(error),
-                })
-              })
+                    throw error
+                  }),
+              )
             }
           }
           const event: GatewayActivityIngest = {
@@ -1449,12 +1465,21 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
             ),
             occurred_at: occurredAt,
           }
-          if (options.onActivity) void Promise.resolve(options.onActivity(event)).catch((error) => {
-            writeOperationalEvent("processor", "ERROR", "genio.one.activity-observation-failed", {
-              correlation_id: context?.correlationId ?? null,
-              ...operationalError(error),
-            })
-          })
+          if (options.onActivity) {
+            observationDeliveries.push(
+              Promise.resolve()
+                .then(() => options.onActivity!(event))
+                .catch((error) => {
+                  writeOperationalEvent("processor", "ERROR", "genio.one.activity-observation-failed", {
+                    correlation_id: context?.correlationId ?? null,
+                    ...operationalError(error),
+                  })
+                  throw error
+                }),
+            )
+          }
+          await Promise.all([...settlementDeliveries, ...observationDeliveries])
+          call.write(responseContinuation)
         }
       }
     }

@@ -86,7 +86,9 @@ export const gatewayAuthorizationAuditHttp: FastifyPluginAsync<GatewayAuthorizat
         tenantId: request.params.tenant_id,
         event: request.body,
       })
-      if (event.kind !== "ONE_POLICY_DECISION") throw new PlatformApiError("AUDIT_EVENT_KIND_INVALID", 500)
+      if (event.kind !== "ONE_POLICY_DECISION" && event.kind !== "GATEWAY_AUTHENTICATION_FAILURE") {
+        throw new PlatformApiError("AUDIT_EVENT_KIND_INVALID", 500)
+      }
       return reply.code(201).send(event)
     },
   )

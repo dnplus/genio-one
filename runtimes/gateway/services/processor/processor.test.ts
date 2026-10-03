@@ -194,6 +194,7 @@ type ProcessorRunResult = { destroyed?: Error; responses: unknown[] }
 async function runProcessorMessages(
   options: Parameters<typeof createExternalProcessorHandler>[0],
   messages: readonly unknown[],
+  onWrite?: (value: unknown) => void,
 ): Promise<ProcessorRunResult> {
   const listeners = new Map<string, ((value?: unknown) => void)[]>()
   let destroyed: Error | undefined
@@ -209,6 +210,7 @@ async function runProcessorMessages(
     },
     write(value: unknown) {
       responses.push(value)
+      onWrite?.(value)
       return true
     },
     end() {
@@ -1021,6 +1023,140 @@ test("ext_proc records OpenAI-compatible SSE usage split across response chunks"
     ["TOTAL_TOKENS", 46],
   ])
   assert.ok(accounting[0]?.quantities.every((value) => value.trusted_source === "PROVIDER_RESPONSE"))
+})
+
+test("ext_proc waits for accounting and activity delivery before closing the stream", async () => {
+  let releaseActivity!: () => void
+  let releaseAccounting!: () => void
+  const activityGate = new Promise<void>((resolve) => {
+    releaseActivity = resolve
+  })
+  const accountingGate = new Promise<void>((resolve) => {
+    releaseAccounting = resolve
+  })
+  let started = 0
+  const finished = runStreamingCompletion({
+    ...externalProcessorOptions(new MemoryVault()),
+    onActivity: async () => {
+      started += 1
+      await activityGate
+    },
+    onAccounting: async () => {
+      started += 1
+      await accountingGate
+    },
+  }, [
+    'data: {"choices":[],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}\n\ndata: [DONE]\n',
+  ])
+
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  assert.equal(started, 2)
+  let closed = false
+  void finished.then(() => {
+    closed = true
+  })
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  assert.equal(closed, false)
+
+  releaseActivity()
+  releaseAccounting()
+  const result = await finished
+  assert.equal(result.destroyed, undefined)
+})
+
+test("ext_proc exposes rejected accounting and activity delivery as stream failures", async () => {
+  for (const kind of ["activity", "accounting"] as const) {
+    const result = await runStreamingCompletion({
+      ...externalProcessorOptions(new MemoryVault()),
+      ...(kind === "activity"
+        ? { onActivity: async () => { throw new Error("activity delivery rejected") } }
+        : { onAccounting: async () => { throw new Error("accounting delivery rejected") } }),
+    }, [
+      'data: {"choices":[],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}\n\ndata: [DONE]\n',
+    ])
+
+    assert.ok(result.destroyed)
+  }
+})
+
+test("ext_proc waits for blocked activity delivery before writing the terminal response", async () => {
+  let release!: () => void
+  let started!: () => void
+  const activityGate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const activityStarted = new Promise<void>((resolve) => {
+    started = resolve
+  })
+  const block = async () => ({
+    disposition: "BLOCK" as const,
+    body: Buffer.alloc(0),
+    matches: ["SECRET"],
+  })
+  const writes: unknown[] = []
+  const finished = runProcessorMessages({
+    ...externalProcessorOptions(new MemoryVault(), () => ({
+      protectJson: block,
+      protectSseLine: block,
+      restoreJson: block,
+      restoreSseLine: block,
+    })),
+    onActivity: async () => {
+      started()
+      await activityGate
+    },
+  }, [
+    requestHeaderMessage(),
+    {
+      request_body: {
+        body: Buffer.from(JSON.stringify({ messages: [{ role: "user", content: "secret" }] })),
+        end_of_stream: true,
+      },
+    },
+  ], (value) => writes.push(value))
+
+  try {
+    await Promise.race([
+      activityStarted,
+      new Promise<void>((resolve) => setTimeout(resolve, 100)),
+    ])
+    assert.equal(writes.some((value: any) => value?.immediate_response), false)
+  } finally {
+    release()
+  }
+  const result = await finished
+  assert.equal(result.destroyed, undefined)
+  assert.equal(result.responses.some((value: any) => value?.immediate_response), true)
+})
+
+test("ext_proc does not write a blocked terminal response when activity delivery rejects", async () => {
+  const block = async () => ({
+    disposition: "BLOCK" as const,
+    body: Buffer.alloc(0),
+    matches: ["SECRET"],
+  })
+  const result = await runProcessorMessages({
+    ...externalProcessorOptions(new MemoryVault(), () => ({
+      protectJson: block,
+      protectSseLine: block,
+      restoreJson: block,
+      restoreSseLine: block,
+    })),
+    onActivity: async () => {
+      throw new Error("blocked activity delivery rejected")
+    },
+  }, [
+    requestHeaderMessage(),
+    {
+      request_body: {
+        body: Buffer.from(JSON.stringify({ messages: [{ role: "user", content: "secret" }] })),
+        end_of_stream: true,
+      },
+    },
+  ])
+
+  assert.ok(result.destroyed)
+  assert.equal(result.responses.some((value: any) => value?.immediate_response), false)
 })
 
 test("ext_proc does not invent usage for missing or malformed SSE usage", async () => {

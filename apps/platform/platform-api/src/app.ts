@@ -136,8 +136,7 @@ function originFromUrl(value: string): string | null {
 }
 
 function assertBrowserPrincipalScope(principal: Principal): void {
-  if (principal.scopes === undefined) return
-  if (BROWSER_IDENTITY_SCOPES.some((scope) => principal.scopes!.includes(scope))) return
+  if (BROWSER_IDENTITY_SCOPES.some((scope) => principal.scopes?.includes(scope) === true)) return
   throw new PlatformApiError(
     "INSUFFICIENT_SCOPE",
     403,
@@ -157,6 +156,7 @@ export async function createManagementApi(dependencies: ManagementApiDependencie
     resourceCatalog: dependencies.resourceCatalog,
     runtimeControl: dependencies.modules.runtimeControl,
     endpointRuntime: dependencies.modules.endpointRuntime,
+    auditEvents: dependencies.modules.auditEvents,
   })
   const authorizeGatewayRuntime = authorization.authorizeGatewayRuntime
   const authorizeEndpoint = authorization.authorizeEndpoint
@@ -351,16 +351,64 @@ export async function createManagementApi(dependencies: ManagementApiDependencie
     })
     app.get("/v1/identity/session", async (request) => {
       const token = extractBearerToken(request.headers.authorization)
-      if (!token) throw new PlatformApiError("UNAUTHENTICATED", 401)
-      const principal = normalizePrincipal(
-        await principalAuthenticator.authenticate({
-          token,
-          tenantId: browserIdentity.tenant_id,
+      if (!token) {
+        await authorization.recordAuthenticationAttempt(request, {
+          outcome: "FAILURE",
+          code: "MISSING_BEARER_TOKEN",
+        })
+        throw new PlatformApiError("UNAUTHENTICATED", 401)
+      }
+      let principal: Principal | null = null
+      try {
+        principal = normalizePrincipal(
+          await principalAuthenticator.authenticate({
+            token,
+            tenantId: browserIdentity.tenant_id,
+            request,
+          }),
+        )
+      } catch (error) {
+        await authorization.recordAuthenticationAttempt(request, {
+          outcome: "FAILURE",
+          code: error instanceof PlatformApiError ? error.code : "AUTHENTICATION_SERVICE_UNAVAILABLE",
+        })
+        throw error
+      }
+      if (!principal) {
+        await authorization.recordAuthenticationAttempt(request, {
+          outcome: "FAILURE",
+          code: "UNAUTHENTICATED",
+        })
+        throw new PlatformApiError("UNAUTHENTICATED", 401)
+      }
+      await authorization.recordAuthenticationAttempt(request, {
+        outcome: "SUCCESS",
+        code: "AUTHENTICATED",
+        verifiedTenantId: principal.tenant_id,
+        verifiedSubjectId: principal.subject_id,
+        verifiedClientId: principal.client_id,
+      })
+      if (principal.tenant_id !== browserIdentity.tenant_id) {
+        await authorization.recordAuthorizationDecision(request, principal, "DENY", "TENANT_ACCESS_DENIED", {
+          requestedTenantId: browserIdentity.tenant_id,
+        })
+        throw new PlatformApiError("TENANT_ACCESS_DENIED", 403)
+      }
+      try {
+        assertBrowserPrincipalScope(principal)
+      } catch (error) {
+        await authorization.recordAuthorizationDecision(
           request,
-        }),
-      )
-      if (!principal) throw new PlatformApiError("UNAUTHENTICATED", 401)
-      assertBrowserPrincipalScope(principal)
+          principal,
+          "DENY",
+          error instanceof PlatformApiError ? error.code : "INTERNAL_ERROR",
+          { requestedTenantId: browserIdentity.tenant_id },
+        )
+        throw error
+      }
+      await authorization.recordAuthorizationDecision(request, principal, "ALLOW", "AUTHORIZED", {
+        requestedTenantId: browserIdentity.tenant_id,
+      })
       return {
         tenant_id: principal.tenant_id,
         subject_id: principal.subject_id,
@@ -370,7 +418,7 @@ export async function createManagementApi(dependencies: ManagementApiDependencie
         role: principal.role,
         organization_ids: principal.organization_ids,
         administrator_organization_ids: principal.administrator_organization_ids ?? [],
-        scopes: principal.scopes ?? browserIdentity.management_scopes,
+        scopes: principal.scopes ?? [],
         acr: "oidc",
         amr: ["oidc"],
       }

@@ -29279,156 +29279,6 @@ export type GetGatewayMetrics200 = {
   response_bytes: number;
 };
 
-export type RecordGatewayAuthorizationAuditEventBodyKind = typeof RecordGatewayAuthorizationAuditEventBodyKind[keyof typeof RecordGatewayAuthorizationAuditEventBodyKind];
-
-
-export const RecordGatewayAuthorizationAuditEventBodyKind = {
-  ONE_POLICY_DECISION: 'ONE_POLICY_DECISION',
-} as const;
-
-export const RecordGatewayAuthorizationAuditEventBodyOutcome = {  ALLOW: 'ALLOW',
-  DENY: 'DENY',
-} as const
-export type RecordGatewayAuthorizationAuditEventBodySubjectEvidenceLevel = typeof RecordGatewayAuthorizationAuditEventBodySubjectEvidenceLevel[keyof typeof RecordGatewayAuthorizationAuditEventBodySubjectEvidenceLevel];
-
-
-export const RecordGatewayAuthorizationAuditEventBodySubjectEvidenceLevel = {
-  VERIFIED: 'VERIFIED',
-} as const;
-
-export type RecordGatewayAuthorizationAuditEventBodySubject = {
-  /**
-     * @minLength 1
-     * @maxLength 256
-     */
-  subject_id: string;
-  evidence_level: RecordGatewayAuthorizationAuditEventBodySubjectEvidenceLevel;
-};
-
-export type RecordGatewayAuthorizationAuditEventBodyActingClientEvidenceLevel = typeof RecordGatewayAuthorizationAuditEventBodyActingClientEvidenceLevel[keyof typeof RecordGatewayAuthorizationAuditEventBodyActingClientEvidenceLevel];
-
-
-export const RecordGatewayAuthorizationAuditEventBodyActingClientEvidenceLevel = {
-  VERIFIED: 'VERIFIED',
-} as const;
-
-export type RecordGatewayAuthorizationAuditEventBodyActingClient = {
-  /**
-     * @minLength 1
-     * @maxLength 256
-     */
-  acting_client_id: string;
-  evidence_level: RecordGatewayAuthorizationAuditEventBodyActingClientEvidenceLevel;
-};
-
-export type RecordGatewayAuthorizationAuditEventBodyRoute = typeof RecordGatewayAuthorizationAuditEventBodyRoute[keyof typeof RecordGatewayAuthorizationAuditEventBodyRoute];
-
-
-export const RecordGatewayAuthorizationAuditEventBodyRoute = {
-  MANAGED: 'MANAGED',
-} as const;
-
-export type RecordGatewayAuthorizationAuditEventBodyDecisionVisibility = typeof RecordGatewayAuthorizationAuditEventBodyDecisionVisibility[keyof typeof RecordGatewayAuthorizationAuditEventBodyDecisionVisibility];
-
-
-export const RecordGatewayAuthorizationAuditEventBodyDecisionVisibility = {
-  VISIBLE: 'VISIBLE',
-} as const;
-
-export const RecordGatewayAuthorizationAuditEventBodyDecisionAccess = {  ENTITLED: 'ENTITLED',
-  DENY: 'DENY',
-} as const
-export type RecordGatewayAuthorizationAuditEventBodyDecisionRoute = typeof RecordGatewayAuthorizationAuditEventBodyDecisionRoute[keyof typeof RecordGatewayAuthorizationAuditEventBodyDecisionRoute];
-
-
-export const RecordGatewayAuthorizationAuditEventBodyDecisionRoute = {
-  MANAGED: 'MANAGED',
-} as const;
-
-export type RecordGatewayAuthorizationAuditEventBodyDecisionObligationsItem = {
-  /**
-     * @minLength 1
-     * @maxLength 256
-     */
-  kind: string;
-  /**
-     * @minLength 1
-     * @maxLength 256
-     */
-  enforcement_point_id: string;
-  /** @items.minItems 2 */
-  parameters: unknown[][];
-};
-
-export type RecordGatewayAuthorizationAuditEventBodyDecisionEntitlementConditions = {
-  required_verified_acting_client_id: string | null;
-  requires_device: boolean;
-};
-
-export type RecordGatewayAuthorizationAuditEventBodyDecisionInputReceipt = {
-  requested_model_id: string | null;
-  effective_model_id: string | null;
-  mcp_method?: string | null;
-  mcp_tool?: string | null;
-  mcp_protocol_version?: string | null;
-  mcp_connection_id?: string | null;
-};
-
-export const RecordGatewayAuthorizationAuditEventBodyDecisionAgentAuthorityAuthorityMode = {  SELF: 'SELF',
-  DELEGATED: 'DELEGATED',
-} as const
-export type RecordGatewayAuthorizationAuditEventBodyDecisionAgentAuthority = {
-  authority_mode: typeof RecordGatewayAuthorizationAuditEventBodyDecisionAgentAuthorityAuthorityMode[keyof typeof RecordGatewayAuthorizationAuditEventBodyDecisionAgentAuthorityAuthorityMode];
-  /**
-     * @minLength 1
-     * @maxLength 256
-     */
-  agent_subject_id: string;
-  principal_subject_id: string | null;
-  delegation_id: string | null;
-  delegation_revision: number | null;
-  delegation_revocation_generation: number | null;
-  target_agent_subject_id: string | null;
-  execution_grant_id: string | null;
-  action_digest: string | null;
-} | null;
-
-export type RecordGatewayAuthorizationAuditEventBodyDecision = {
-  /**
-     * @minLength 1
-     * @maxLength 256
-     */
-  decision_id: string;
-  /**
-     * @minLength 1
-     * @maxLength 256
-     */
-  correlation_id: string;
-  /**
-     * @minLength 1
-     * @maxLength 256
-     */
-  policy_version: string;
-  winning_rule_id: string | null;
-  /**
-     * @minLength 1
-     * @maxLength 256
-     */
-  reason: string;
-  visibility: RecordGatewayAuthorizationAuditEventBodyDecisionVisibility;
-  access: typeof RecordGatewayAuthorizationAuditEventBodyDecisionAccess[keyof typeof RecordGatewayAuthorizationAuditEventBodyDecisionAccess];
-  route: RecordGatewayAuthorizationAuditEventBodyDecisionRoute;
-  obligations: RecordGatewayAuthorizationAuditEventBodyDecisionObligationsItem[];
-  entitlement_conditions: RecordGatewayAuthorizationAuditEventBodyDecisionEntitlementConditions;
-  entitlement_id: string | null;
-  auto_grant_valid_for: number | null;
-  input_receipt: RecordGatewayAuthorizationAuditEventBodyDecisionInputReceipt;
-  agent_authority?: RecordGatewayAuthorizationAuditEventBodyDecisionAgentAuthority;
-};
-
-export const RecordGatewayAuthorizationAuditEventBodyEnforcementPointId = {  AI_GATEWAY: 'AI_GATEWAY',
-  API_GATEWAY: 'API_GATEWAY',
-} as const
 export type RecordGatewayAuthorizationAuditEventBody = {
   /**
      * @minLength 1
@@ -29440,14 +29290,28 @@ export type RecordGatewayAuthorizationAuditEventBody = {
      * @maxLength 256
      */
   correlation_id: string;
-  kind: RecordGatewayAuthorizationAuditEventBodyKind;
-  outcome: typeof RecordGatewayAuthorizationAuditEventBodyOutcome[keyof typeof RecordGatewayAuthorizationAuditEventBodyOutcome];
-  subject: RecordGatewayAuthorizationAuditEventBodySubject;
+  kind: 'ONE_POLICY_DECISION';
+  outcome: 'ALLOW' | 'DENY';
+  subject: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  subject_id: string;
+  evidence_level: 'VERIFIED';
+};
   /** @nullable */
   target_subject_id: null;
   /** @nullable */
   actor_subject: null;
-  acting_client: RecordGatewayAuthorizationAuditEventBodyActingClient;
+  acting_client: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  acting_client_id: string;
+  evidence_level: 'VERIFIED';
+};
   /**
      * @minLength 1
      * @maxLength 256
@@ -29480,19 +29344,119 @@ export type RecordGatewayAuthorizationAuditEventBody = {
   /** @nullable */
   destination_host: null;
   routing_policy_rule_id: string | null;
-  route: RecordGatewayAuthorizationAuditEventBodyRoute;
+  route: 'MANAGED';
   /** @nullable */
   missing_deployment_capability: null;
-  decision: RecordGatewayAuthorizationAuditEventBodyDecision;
+  decision: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  decision_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  correlation_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  policy_version: string;
+  winning_rule_id: string | null;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  reason: string;
+  visibility: 'VISIBLE';
+  access: 'ENTITLED' | 'DENY';
+  route: 'MANAGED';
+  obligations: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  kind: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  enforcement_point_id: string;
+  /** @items.minItems 2 */
+  parameters: unknown[][];
+}[];
+  entitlement_conditions: {
+  required_verified_acting_client_id: string | null;
+  requires_device: boolean;
+};
+  entitlement_id: string | null;
+  auto_grant_valid_for: number | null;
+  input_receipt: {
+  requested_model_id: string | null;
+  effective_model_id: string | null;
+  mcp_method?: string | null;
+  mcp_tool?: string | null;
+  mcp_protocol_version?: string | null;
+  mcp_connection_id?: string | null;
+};
+  agent_authority?: {
+  authority_mode: 'SELF' | 'DELEGATED';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  agent_subject_id: string;
+  principal_subject_id: string | null;
+  delegation_id: string | null;
+  delegation_revision: number | null;
+  delegation_revocation_generation: number | null;
+  target_agent_subject_id: string | null;
+  execution_grant_id: string | null;
+  action_digest: string | null;
+} | null;
+};
   /** @nullable */
   access_request_id: null;
   entitlement_id: string | null;
-  enforcement_point_id: typeof RecordGatewayAuthorizationAuditEventBodyEnforcementPointId[keyof typeof RecordGatewayAuthorizationAuditEventBodyEnforcementPointId];
+  enforcement_point_id: 'AI_GATEWAY' | 'API_GATEWAY';
   /** @nullable */
   obligation_kind: null;
   /** @nullable */
   runaway_trigger: null;
   upstream_attempted: boolean;
+  /** @minimum 0 */
+  occurred_at: number;
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  audit_event_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  correlation_id: string;
+  kind: 'GATEWAY_AUTHENTICATION_FAILURE';
+  outcome: 'DENY';
+  /** @nullable */
+  subject: null;
+  /** @nullable */
+  acting_client: null;
+  resource_id: string | null;
+  capability_id: string | null;
+  /**
+     * @minimum 400
+     * @maximum 599
+     */
+  status: number;
+  /**
+     * @minLength 1
+     * @maxLength 128
+     * @pattern ^[A-Z][A-Z0-9_:-]*$
+     */
+  reason: string;
   /** @minimum 0 */
   occurred_at: number;
 };
@@ -29651,6 +29615,43 @@ export type RecordGatewayAuthorizationAuditEvent201 = ({
      * @maxLength 256
      */
   tenant_id: string;
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  audit_event_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  correlation_id: string;
+  kind: 'GATEWAY_AUTHENTICATION_FAILURE';
+  outcome: 'DENY';
+  /** @nullable */
+  subject: null;
+  /** @nullable */
+  acting_client: null;
+  resource_id: string | null;
+  capability_id: string | null;
+  /**
+     * @minimum 400
+     * @maximum 599
+     */
+  status: number;
+  /**
+     * @minLength 1
+     * @maxLength 128
+     * @pattern ^[A-Z][A-Z0-9_:-]*$
+     */
+  reason: string;
+  /** @minimum 0 */
+  occurred_at: number;
 };
 
 export type ListGatewayAuthorizationAuditEventsParams = {
@@ -29859,6 +29860,43 @@ export type ListGatewayAuthorizationAuditEvents200 = (({
      * @maxLength 256
      */
   tenant_id: string;
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  audit_event_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  correlation_id: string;
+  kind: 'GATEWAY_AUTHENTICATION_FAILURE';
+  outcome: 'DENY';
+  /** @nullable */
+  subject: null;
+  /** @nullable */
+  acting_client: null;
+  resource_id: string | null;
+  capability_id: string | null;
+  /**
+     * @minimum 400
+     * @maximum 599
+     */
+  status: number;
+  /**
+     * @minLength 1
+     * @maxLength 128
+     * @pattern ^[A-Z][A-Z0-9_:-]*$
+     */
+  reason: string;
+  /** @minimum 0 */
+  occurred_at: number;
 } | {
   /**
      * @minLength 1
@@ -30156,6 +30194,66 @@ export type ListGatewayAuthorizationAuditEvents200 = (({
   /** @pattern ^[a-f0-9]{64}$ */
   content_digest: string;
   enabled?: boolean;
+  /** @minimum 0 */
+  occurred_at: number;
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  audit_event_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  correlation_id: string;
+  kind: 'MANAGEMENT_AUTHORIZATION';
+  outcome: 'ALLOW' | 'DENY';
+  subject: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  subject_id: string;
+  evidence_level: 'VERIFIED';
+};
+  acting_client: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  acting_client_id: string;
+  evidence_level: 'VERIFIED';
+};
+  request_context: {
+  requested_tenant_id: string | null;
+  target: {
+  resource_id: string | null;
+  organization_id: string | null;
+};
+};
+  /**
+     * @minLength 1
+     * @maxLength 128
+     * @pattern ^[A-Z][A-Z0-9_:-]*$
+     */
+  code: string;
+  /**
+     * @minLength 1
+     * @maxLength 16
+     * @pattern ^[A-Z]+$
+     */
+  method: string;
+  /**
+     * @minLength 1
+     * @maxLength 512
+     */
+  route: string;
   /** @minimum 0 */
   occurred_at: number;
 } | {
@@ -30492,6 +30590,43 @@ export type ListGatewayAuthorizationAuditEvents200 = (({
      * @maxLength 256
      */
   correlation_id: string;
+  kind: 'GATEWAY_AUTHENTICATION_FAILURE';
+  outcome: 'DENY';
+  /** @nullable */
+  subject: null;
+  /** @nullable */
+  acting_client: null;
+  resource_id: string | null;
+  capability_id: string | null;
+  /**
+     * @minimum 400
+     * @maximum 599
+     */
+  status: number;
+  /**
+     * @minLength 1
+     * @maxLength 128
+     * @pattern ^[A-Z][A-Z0-9_:-]*$
+     */
+  reason: string;
+  /** @minimum 0 */
+  occurred_at: number;
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  audit_event_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  correlation_id: string;
   kind: 'RUNTIME_POLICY_DECISION';
   enforcement_point_id: 'AGENT_RUNTIME';
   phase: 'AUTHORIZE' | 'REPORT' | 'PREVIEW';
@@ -30773,6 +30908,66 @@ export type ListGatewayAuthorizationAuditEvents200 = (({
   /** @pattern ^[a-f0-9]{64}$ */
   content_digest: string;
   enabled?: boolean;
+  /** @minimum 0 */
+  occurred_at: number;
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  audit_event_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  correlation_id: string;
+  kind: 'MANAGEMENT_AUTHORIZATION';
+  outcome: 'ALLOW' | 'DENY';
+  subject: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  subject_id: string;
+  evidence_level: 'VERIFIED';
+};
+  acting_client: {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  acting_client_id: string;
+  evidence_level: 'VERIFIED';
+};
+  request_context: {
+  requested_tenant_id: string | null;
+  target: {
+  resource_id: string | null;
+  organization_id: string | null;
+};
+};
+  /**
+     * @minLength 1
+     * @maxLength 128
+     * @pattern ^[A-Z][A-Z0-9_:-]*$
+     */
+  code: string;
+  /**
+     * @minLength 1
+     * @maxLength 16
+     * @pattern ^[A-Z]+$
+     */
+  method: string;
+  /**
+     * @minLength 1
+     * @maxLength 512
+     */
+  route: string;
   /** @minimum 0 */
   occurred_at: number;
 } | {

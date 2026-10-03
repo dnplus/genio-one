@@ -109,6 +109,7 @@ test("Management UI request is claimed once by its Gateway Runtime group and rep
       role: principalRole,
       organization_ids: [],
       client_id: runtimeId,
+      scopes: ["genioone-management"],
     }
   })
   await app.register(mcpDiscoveryHttp, {

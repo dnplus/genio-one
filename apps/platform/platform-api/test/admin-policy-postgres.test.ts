@@ -97,6 +97,7 @@ test("PostgreSQL draft mutations roll back both state and inserted audits on an 
     const durableAudit = createPostgresGatewayAuthorizationAuditStore({ sql })
     const failingAudit: GatewayAuthorizationAuditStore = {
       record: durableAudit.record,
+      recordAuthenticationAttempt: durableAudit.recordAuthenticationAttempt,
       async recordInTransaction(input) {
         await durableAudit.recordInTransaction!(input)
         throw new Error("SIMULATED_AUDIT_FAILURE")
@@ -216,6 +217,7 @@ test("PostgreSQL first-party policy toggles atomically append attributed audits 
 
     const failingAudit: GatewayAuthorizationAuditStore = {
       record: durableAudit.record,
+      recordAuthenticationAttempt: durableAudit.recordAuthenticationAttempt,
       async recordInTransaction(input) {
         await durableAudit.recordInTransaction!(input)
         throw new Error("SIMULATED_TOGGLE_AUDIT_FAILURE")

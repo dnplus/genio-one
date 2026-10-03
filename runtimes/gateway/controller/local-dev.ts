@@ -180,6 +180,7 @@ async function main(): Promise<void> {
       role: "TENANT_ADMINISTRATOR",
       organization_ids: ["organization-local"],
       client_id: "platform-console",
+      scopes: ["genioone-management"],
     },
     [runtimeToken]: {
       tenant_id: tenantId,
@@ -187,6 +188,7 @@ async function main(): Promise<void> {
       role: "USER",
       organization_ids: [],
       client_id: runtimeId,
+      scopes: ["genioone-gateway-runtime"],
     },
     [apiRuntimeToken]: {
       tenant_id: tenantId,
@@ -194,6 +196,7 @@ async function main(): Promise<void> {
       role: "USER",
       organization_ids: [],
       client_id: apiRuntimeId,
+      scopes: ["genioone-gateway-runtime"],
     },
     [endpointRuntimeToken]: {
       tenant_id: tenantId,

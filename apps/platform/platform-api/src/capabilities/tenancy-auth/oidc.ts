@@ -174,14 +174,14 @@ function claim(payload: JWTPayload, path: string): unknown {
   return value
 }
 
-function oauthScopes(payload: JWTPayload): string[] | undefined {
+function oauthScopes(payload: JWTPayload): string[] {
   if (typeof payload.scope === "string") {
     return [...new Set(payload.scope.split(/\s+/).map((scope) => scope.trim()).filter(Boolean))]
   }
   if (Array.isArray(payload.scp) && payload.scp.every(nonEmptyString)) {
     return [...new Set(payload.scp.map((scope) => scope.trim()))]
   }
-  return undefined
+  return []
 }
 
 function principalFromPayload(
@@ -222,7 +222,7 @@ function principalFromPayload(
       role: mapped.role,
       organization_ids: mapped.organization_ids,
       client_id: client,
-      ...(scopes === undefined ? {} : { scopes }),
+      scopes,
       ...profile,
       external_identity,
     })
@@ -238,7 +238,7 @@ function principalFromPayload(
     client_id: claim(payload, configuration.claims.client),
     role: canonicalRoleFromClaim(claim(payload, configuration.claims.role)) ?? undefined,
     organization_ids: organizations,
-    ...(scopes === undefined ? {} : { scopes }),
+    scopes,
     ...profile,
     external_identity,
   })

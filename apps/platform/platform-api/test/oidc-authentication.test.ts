@@ -96,12 +96,45 @@ test("OIDC authentication preserves verified external identity without trusting 
       client_id: "management-ui",
       role: "USER",
       organization_ids: [],
+      scopes: [],
       external_identity: {
         provider_id: "keycloak-acme",
         external_subject_id: "external-person-1",
       },
     },
   )
+})
+
+test("OIDC scope claims preserve explicit grants and default missing or malformed grants to empty", async () => {
+  const cases = [
+    { claims: {}, scopes: [] },
+    { claims: { scope: "  " }, scopes: [] },
+    { claims: { scope: 42 }, scopes: [] },
+    { claims: { scp: "genioone-management" }, scopes: [] },
+    { claims: { scp: ["genioone-management", 42] }, scopes: [] },
+    { claims: { scp: [" genioone-management ", "genioone-management"] }, scopes: ["genioone-management"] },
+  ]
+  for (const { claims, scopes } of cases) {
+    for (const mapped of [false, true]) {
+      const authenticator = createOidcPrincipalAuthenticator({
+        tenants: [{
+          ...configuration,
+          ...(mapped ? { principal_mappings: [{
+            external_subject_id: "person-1",
+            subject_id: "mapped-person-1",
+            role: "TENANT_ADMINISTRATOR" as const,
+            organization_ids: [],
+          }] } : {}),
+        }],
+        async verifyToken() {
+          return { sub: "person-1", azp: "management-ui", ...claims }
+        },
+      })
+      const principal = await authenticator.authenticate({ token: "signed-token", tenantId: "tenant-acme" })
+      assert.ok(principal)
+      assert.deepEqual(principal.scopes, scopes)
+    }
+  }
 })
 
 test("OIDC authentication fails closed for invalid verified claims and verifier errors", async () => {

@@ -192,6 +192,7 @@ test(
             role: "TENANT_ADMINISTRATOR",
             organization_ids: [],
             client_id: "client-live",
+            scopes: ["genioone-management"],
           },
           "live-runtime-token": {
             tenant_id: tenantId,
@@ -199,6 +200,7 @@ test(
             role: "USER",
             organization_ids: [],
             client_id: runtimeId,
+            scopes: ["genioone-gateway-runtime"],
           },
         }),
         entitlementResolver: modules.entitlements,

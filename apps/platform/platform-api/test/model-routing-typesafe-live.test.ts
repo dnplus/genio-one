@@ -78,6 +78,7 @@ test("live TypeSafe decision returns a versioned route and labels through the Pl
         client_id: "application-typesafe-live",
         role: "TENANT_ADMINISTRATOR",
         organization_ids: [],
+        scopes: ["genioone-management"],
       },
     }),
     entitlementResolver: {

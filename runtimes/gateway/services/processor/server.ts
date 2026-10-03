@@ -26,6 +26,7 @@ const detailCaptureListen =
 const valkeyOrigin = process.env.GENIO_ONE_VALKEY_ORIGIN
 const encodedEncryptionKey = process.env.GENIO_ONE_TOKEN_VAULT_KEY
 const observationOrigin = process.env.GENIO_ONE_GATEWAY_OBSERVATION_ORIGIN?.replace(/\/$/, "")
+const OBSERVATION_DELIVERY_TIMEOUT_MS = 5_000
 const detailOtlpEndpoint = process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT?.trim()
 const detailCapture = detailOtlpEndpoint
   ? createOtlpGatewayDetailCapture({ endpoint: detailOtlpEndpoint })
@@ -42,6 +43,7 @@ async function deliverActivity(event: Parameters<NonNullable<
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(event),
+    signal: AbortSignal.timeout(OBSERVATION_DELIVERY_TIMEOUT_MS),
   })
   if (!response.ok) throw new Error(`activity delivery failed (${response.status})`)
 }
@@ -54,6 +56,7 @@ async function deliverAccounting(event: Parameters<NonNullable<
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(event),
+    signal: AbortSignal.timeout(OBSERVATION_DELIVERY_TIMEOUT_MS),
   })
   if (!response.ok) throw new Error(`accounting delivery failed (${response.status})`)
 }

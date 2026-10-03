@@ -63,6 +63,7 @@ async function createTestManagementApi() {
         role: "TENANT_ADMINISTRATOR",
         organization_ids: ["organization-commerce", "organization-ai"],
         client_id: "application-1",
+        scopes: ["genioone-management"],
       },
     }),
     entitlementResolver: modules.entitlements,

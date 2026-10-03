@@ -264,6 +264,77 @@ test("one invocation and accounting key reuse one charge while valuation provena
   assert.deepEqual((await ledger.listValuations({ charge_id: first.charge_id })).map((value) => value.status), ["ESTIMATED", "ACTUAL"])
 })
 
+test("atomic accounting ingest retries after a mid-batch conflict without leaving a partial ledger", async () => {
+  const ledger = createInMemoryAccountingLedger()
+  const invocation = {
+    invocation_id: "atomic-invocation",
+    correlation_id: "atomic-correlation",
+    tenant_id: context.tenant_id,
+    subject_id: context.subject_id,
+    consumer_organization_id: context.consumer_organization_id,
+    resource_owner_organization_id: context.resource_owner_organization_id,
+    resource_id: context.resource_id,
+    capability_id: context.capability_id,
+    use_case_id: context.use_case_id,
+    usage_policy_revisions: ["usage-policy-ai:1"],
+    release_revision: "release-atomic",
+    accounting_key_id: "accounting-key-shared-provider",
+    created_at: context.now,
+  }
+  const quantity = {
+    quantity_id: "atomic-quantity",
+    invocation_id: invocation.invocation_id,
+    quantity: 7,
+    unit: "INPUT_TOKENS",
+    trusted_source: "PROVIDER_RESPONSE",
+    observed_at: context.now + 1,
+  }
+  await assert.rejects(ledger.recordAccounting({
+    invocation,
+    quantities: [quantity, { ...quantity, quantity: 8 }],
+    valuations: [{
+      valuation_id: "atomic-valuation",
+      status: "ESTIMATED",
+      currency: "USD",
+      amount_micros: 12,
+      pricing_source: "LITELLM",
+      pricing_version: "pricebook-atomic",
+      valued_at: context.now + 2,
+    }],
+  }), /USAGE_QUANTITY_CONFLICT/)
+  assert.deepEqual(await ledger.getByCorrelation({ correlation_id: invocation.correlation_id }), [])
+
+  const first = await ledger.recordAccounting({
+    invocation,
+    quantities: [quantity],
+    valuations: [{
+      valuation_id: "atomic-valuation",
+      status: "ESTIMATED",
+      currency: "USD",
+      amount_micros: 12,
+      pricing_source: "LITELLM",
+      pricing_version: "pricebook-atomic",
+      valued_at: context.now + 2,
+    }],
+  })
+  const repeated = await ledger.recordAccounting({
+    invocation,
+    quantities: [quantity],
+    valuations: [{
+      valuation_id: "atomic-valuation",
+      status: "ESTIMATED",
+      currency: "USD",
+      amount_micros: 12,
+      pricing_source: "LITELLM",
+      pricing_version: "pricebook-atomic",
+      valued_at: context.now + 2,
+    }],
+  })
+  assert.equal(repeated.charge.charge_id, first.charge.charge_id)
+  assert.deepEqual((await ledger.getByCorrelation({ correlation_id: invocation.correlation_id }))[0]?.quantities, [quantity])
+  assert.equal((await ledger.listValuations({ charge_id: first.charge.charge_id })).length, 1)
+})
+
 test("Use Case is an Organization-owned managed entry and Usage Policy revisions are immutable", async () => {
   const directory = createInMemoryUsageGovernanceDirectory()
   await directory.createUseCase({

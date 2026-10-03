@@ -29,6 +29,7 @@ test("scoped Organization Administrator manages Use Cases and immutable Usage Po
         organization_ids: [organization.organization_id],
         administrator_organization_ids: [organization.organization_id],
         client_id: "platform-web",
+        scopes: ["genioone-management"],
       },
     }),
   })
@@ -277,5 +278,68 @@ test("runtime accounting ingest is retry-safe and creates one canonical charge",
   })
   assert.equal(budgetDecision.disposition, "REJECT")
   assert.equal(budgetDecision.reason, "COST_BUDGET_EXHAUSTED")
+  await app.close()
+})
+
+test("currency settlement failure is reported after ledger commit and retry completes the boundary", async () => {
+  const app = Fastify()
+  const ledger = createInMemoryAccountingLedger()
+  let failSettlement = true
+  const settlements: unknown[] = []
+  await app.register(usageGovernanceHttp, {
+    directory: createInMemoryUsageGovernanceDirectory(),
+    accountingLedger: () => ledger,
+    usageCounterStore: {
+      async admitBatch() { return { admitted: true, concurrency_lease_ids: [] } },
+      async releaseConcurrency() {},
+      async settleCurrency(value) {
+        if (failSettlement) {
+          failSettlement = false
+          throw new Error("SETTLEMENT_STORE_DOWN")
+        }
+        settlements.push(value)
+      },
+    },
+    async authorizeRuntime() {},
+  })
+  const payload = {
+    invocation: {
+      invocation_id: "boundary-invocation",
+      correlation_id: "boundary-correlation",
+      tenant_id: "tenant-acme",
+      subject_id: "person-alice",
+      consumer_organization_id: "organization-consumer",
+      resource_owner_organization_id: "organization-owner",
+      resource_id: "resource-ai",
+      capability_id: "chat",
+      use_case_id: "support",
+      usage_policy_revisions: ["usage-policy:3"],
+      release_revision: "release-3",
+      accounting_key_id: "accounting-shared",
+      created_at: 1_700_000_000,
+    },
+    quantities: [],
+    valuations: [],
+    currency_settlements: [{
+      settlement_id: "boundary-invocation",
+      accounting_key_id: "accounting-shared",
+      allocation_id: "currency-september",
+      window_seconds: 2_592_000,
+      window_bucket: 655,
+      amount_micros: 12,
+    }],
+  }
+  const url = "/v1/tenants/tenant-acme/runtime-control/GATEWAY/gateway-runtime-1/accounting"
+  const failed = await app.inject({ method: "POST", url, payload })
+  assert.equal(failed.statusCode, 503)
+  const committed = await app.inject({
+    method: "GET",
+    url: "/v1/tenants/tenant-acme/activities/boundary-correlation/accounting",
+  })
+  assert.equal(committed.statusCode, 200)
+  assert.equal(committed.json().length, 1)
+  const retried = await app.inject({ method: "POST", url, payload })
+  assert.equal(retried.statusCode, 201)
+  assert.equal(settlements.length, 1)
   await app.close()
 })

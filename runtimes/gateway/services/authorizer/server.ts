@@ -13,12 +13,15 @@ import { policyReleaseLoaderOptionsFromEnvironment } from "../shared/policy-rele
 import { startGatewaySidecarReadinessServer } from "../shared/release-readiness"
 import { createValkeyExecutionGrantConsumer, createValkeyUsageCounterStore } from "../shared/usage-governance-valkey"
 import type { GatewayActivityIngest } from "../shared/gateway-activity"
+import { writeOperationalEvent } from "@genioone/telemetry/operational-log"
 
 const listen = process.env.GENIO_ONE_AUTHORIZER_LISTEN ?? "0.0.0.0:8081"
 const readinessListen =
   process.env.GENIO_ONE_AUTHORIZER_READINESS_LISTEN ?? "127.0.0.1:9081"
 const observationOrigin = process.env.GENIO_ONE_GATEWAY_OBSERVATION_ORIGIN?.replace(/\/$/, "")
 const valkeyOrigin = process.env.GENIO_ONE_VALKEY_ORIGIN
+const AUDIT_REQUEST_TIMEOUT_MILLIS = 5_000
+type AuditFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 const separator = listen.lastIndexOf(":")
 const host = listen.slice(0, separator)
 const port = Number.parseInt(listen.slice(separator + 1), 10)
@@ -27,22 +30,6 @@ if (!host || !Number.isInteger(port) || port < 1 || port > 65_535) {
   throw new Error("GENIO_ONE_AUTHORIZER_LISTEN must be host:port")
 }
 
-const store = new FileAuthorizationBundleStore(
-  {
-    ...policyReleaseLoaderOptionsFromEnvironment(),
-    authorityFloorPath: process.env.GENIO_ONE_AUTHORITY_FLOOR_FILE?.trim() || undefined,
-  },
-)
-// The process may start before the supervisor establishes the first empty
-// release. Readiness remains UNKNOWN and each authorization request still
-// fails closed until CURRENT or LKG can be verified.
-const readiness = await startGatewaySidecarReadinessServer(
-  readinessListen,
-  "AUTHORIZER",
-  store,
-)
-const valkey = valkeyOrigin ? createClient({ url: valkeyOrigin }) : undefined
-if (valkey) await valkey.connect()
 function auditEvent(event: AuthorizationDecisionEvent) {
   const { input, decision } = event
   return {
@@ -114,6 +101,37 @@ function auditEvent(event: AuthorizationDecisionEvent) {
   }
 }
 
+export function activityRequestPath(requestPath: string | undefined): string {
+  const value = requestPath ?? "/"
+  const separator = value.search(/[?#]/)
+  const path = separator < 0 ? value : value.slice(0, separator)
+  return path || "/"
+}
+
+export function createAuthorizationAuditObserver(
+  origin: string | undefined = observationOrigin,
+  fetchImpl: AuditFetch = fetch,
+  timeoutMillis = AUDIT_REQUEST_TIMEOUT_MILLIS,
+) {
+  return async (event: AuthorizationDecisionEvent): Promise<void> => {
+    if (!origin) throw new Error("authorization audit observation origin is not configured")
+    const response = await fetchImpl(`${origin}/audit-events`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(auditEvent(event)),
+      signal: AbortSignal.timeout(timeoutMillis),
+    })
+    if (!response.ok) throw new Error(`authorization audit delivery failed (${response.status})`)
+    writeOperationalEvent("authorizer", "INFO", "authorization-audit-enqueued", {
+      correlation_id: event.input.correlationId,
+      decision_id: event.decision.decisionId,
+      disposition: event.decision.disposition,
+      policy_version: event.decision.policyVersion,
+      status_code: response.status,
+    })
+  }
+}
+
 async function resolveMcpOAuthHeaders(input: AuthorizationInput) {
   if (!observationOrigin) return []
   const url = new URL(`${observationOrigin}/mcp-oauth/headers`)
@@ -157,7 +175,7 @@ function usageRejectionActivity(event: UsageRejectionObservation): GatewayActivi
     enforcement_point_id: input.requestProtocol === "API" ? "API_GATEWAY" : "AI_GATEWAY",
     route: "MANAGED",
     method: input.requestMethod ?? "POST",
-    path: input.requestPath ?? "/",
+    path: activityRequestPath(input.requestPath),
     status_code: event.statusCode,
     outcome: event.statusCode === 429 ? "RATE_LIMITED" : "FAILED",
     error_code: event.reason,
@@ -195,11 +213,12 @@ function usageRejectionActivity(event: UsageRejectionObservation): GatewayActivi
 }
 
 async function deliverUsageRejection(event: UsageRejectionObservation) {
-  if (!observationOrigin) return
+  if (!observationOrigin) throw new Error("gateway observation origin is not configured")
   const response = await fetch(`${observationOrigin}/activities`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(usageRejectionActivity(event)),
+    signal: AbortSignal.timeout(AUDIT_REQUEST_TIMEOUT_MILLIS),
   })
   if (!response.ok) throw new Error(`usage rejection activity delivery failed (${response.status})`)
 }
@@ -223,7 +242,7 @@ function routingRejectionActivity(event: RoutingRejectionObservation): GatewayAc
     enforcement_point_id: input.requestProtocol === "API" ? "API_GATEWAY" : "AI_GATEWAY",
     route: "MANAGED",
     method: input.requestMethod ?? "POST",
-    path: input.requestPath ?? "/",
+    path: activityRequestPath(input.requestPath),
     status_code: event.statusCode,
     outcome: "FAILED",
     error_code: event.reason,
@@ -261,48 +280,65 @@ function routingRejectionActivity(event: RoutingRejectionObservation): GatewayAc
 }
 
 async function deliverRoutingRejection(event: RoutingRejectionObservation) {
-  if (!observationOrigin) return
+  if (!observationOrigin) throw new Error("gateway observation origin is not configured")
   const response = await fetch(`${observationOrigin}/activities`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(routingRejectionActivity(event)),
+    signal: AbortSignal.timeout(AUDIT_REQUEST_TIMEOUT_MILLIS),
   })
   if (!response.ok) throw new Error(`routing rejection activity delivery failed (${response.status})`)
 }
 
-const server = createExternalAuthorizerServer(store, async (event) => {
-  process.stdout.write(`${JSON.stringify(event)}\n`)
-  if (!observationOrigin) return
-  const response = await fetch(`${observationOrigin}/audit-events`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(auditEvent(event)),
-  })
-  if (!response.ok) throw new Error(`authorization audit delivery failed (${response.status})`)
-}, resolveMcpOAuthHeaders, valkey ? createValkeyUsageCounterStore(valkey) : undefined, deliverUsageRejection, deliverRoutingRejection, valkey ? createValkeyExecutionGrantConsumer(valkey) : undefined)
+async function startAuthorizerServer(): Promise<void> {
+  const store = new FileAuthorizationBundleStore(
+    {
+      ...policyReleaseLoaderOptionsFromEnvironment(),
+      authorityFloorPath: process.env.GENIO_ONE_AUTHORITY_FLOOR_FILE?.trim() || undefined,
+    },
+  )
+  const readiness = await startGatewaySidecarReadinessServer(
+    readinessListen,
+    "AUTHORIZER",
+    store,
+  )
+  const valkey = valkeyOrigin ? createClient({ url: valkeyOrigin }) : undefined
+  if (valkey) await valkey.connect()
+  const server = createExternalAuthorizerServer(
+    store,
+    createAuthorizationAuditObserver(observationOrigin),
+    resolveMcpOAuthHeaders,
+    valkey ? createValkeyUsageCounterStore(valkey) : undefined,
+    deliverUsageRejection,
+    deliverRoutingRejection,
+    valkey ? createValkeyExecutionGrantConsumer(valkey) : undefined,
+  )
 
-try {
-  await new Promise<void>((resolve, reject) => {
-    server.bindAsync(listen, grpc.ServerCredentials.createInsecure(), (error) => {
-      if (error) reject(error)
-      else resolve()
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.bindAsync(listen, grpc.ServerCredentials.createInsecure(), (error) => {
+        if (error) reject(error)
+        else resolve()
+      })
     })
-  })
-} catch (error) {
-  await readiness.close()
-  if (valkey?.isOpen) await valkey.quit()
-  throw error
-}
-
-let stopping = false
-const shutdown = () => {
-  if (stopping) return
-  stopping = true
-  void (async () => {
+  } catch (error) {
     await readiness.close()
     if (valkey?.isOpen) await valkey.quit()
-    await new Promise<void>((resolve) => server.tryShutdown(() => resolve()))
-  })().catch(() => process.exitCode = 1)
+    throw error
+  }
+
+  let stopping = false
+  const shutdown = () => {
+    if (stopping) return
+    stopping = true
+    void (async () => {
+      await readiness.close()
+      if (valkey?.isOpen) await valkey.quit()
+      await new Promise<void>((resolve) => server.tryShutdown(() => resolve()))
+    })().catch(() => process.exitCode = 1)
+  }
+  process.once("SIGTERM", shutdown)
+  process.once("SIGINT", shutdown)
 }
-process.once("SIGTERM", shutdown)
-process.once("SIGINT", shutdown)
+
+if (import.meta.main) await startAuthorizerServer()

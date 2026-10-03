@@ -49,6 +49,7 @@ test("Organization Administrator can revoke an Entitlement owned by its Organiza
         tenant_id: "tenant-acme",
         subject_id: "person-org-admin",
         client_id: "management-ui",
+        scopes: ["genioone-management"],
         role: "ORGANIZATION_ADMINISTRATOR",
         organization_ids: ["org-ai"],
         administrator_organization_ids: ["org-ai"],

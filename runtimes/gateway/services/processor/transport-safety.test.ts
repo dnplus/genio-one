@@ -717,6 +717,99 @@ test("HTTP processor bridge bounds remote safety bodies after verified scope sel
   }
 })
 
+test("HTTP processor bridge waits for activity delivery before replying", async () => {
+  const port = await unusedPort()
+  let release!: () => void
+  let started!: () => void
+  const activityGate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const activityStarted = new Promise<void>((resolve) => {
+    started = resolve
+  })
+  const bridge = startProcessorHttpBridge({
+    listen: `127.0.0.1:${port}`,
+    policySource: {
+      async current() {
+        return snapshot([{
+          step_id: "request-safety",
+          hooks: { request: { action: "SAFETY_CHECK", config: safetyConfig } },
+        }])
+      },
+    },
+    tokenVault: new MemoryVault(),
+    safetyBufferBytes: 8,
+    adapterRuntime: adapterRuntime(async () => safetyAnswer(0.1)),
+    onActivity: async () => {
+      started()
+      await activityGate
+    },
+  })
+  await new Promise<void>((resolve, reject) => {
+    bridge.once("listening", resolve)
+    bridge.once("error", reject)
+  })
+  try {
+    const responsePromise = postChunks(
+      port,
+      [Buffer.from("first"), Buffer.from("second")],
+      httpHeaders(),
+    )
+    await Promise.race([
+      activityStarted,
+      new Promise<void>((resolve) => setTimeout(resolve, 100)),
+    ])
+    let completed = false
+    void responsePromise.then(() => {
+      completed = true
+    })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    assert.equal(completed, false)
+    release()
+    const response = await responsePromise
+    assert.equal(response.statusCode, 413)
+  } finally {
+    release()
+    await new Promise<void>((resolve, reject) => bridge.close((error) => error ? reject(error) : resolve()))
+  }
+})
+
+test("HTTP processor bridge exposes rejected activity delivery as a request failure", async () => {
+  const port = await unusedPort()
+  const bridge = startProcessorHttpBridge({
+    listen: `127.0.0.1:${port}`,
+    policySource: {
+      async current() {
+        return snapshot([{
+          step_id: "request-safety",
+          hooks: { request: { action: "SAFETY_CHECK", config: safetyConfig } },
+        }])
+      },
+    },
+    tokenVault: new MemoryVault(),
+    safetyBufferBytes: 8,
+    adapterRuntime: adapterRuntime(async () => safetyAnswer(0.1)),
+    onActivity: async () => {
+      throw new Error("activity delivery rejected")
+    },
+  })
+  await new Promise<void>((resolve, reject) => {
+    bridge.once("listening", resolve)
+    bridge.once("error", reject)
+  })
+  try {
+    const response = await postChunks(
+      port,
+      [Buffer.from("first"), Buffer.from("second")],
+      httpHeaders(),
+    )
+    assert.equal(response.statusCode, 503)
+    assert.deepEqual(JSON.parse(response.body), { code: "PROCESSOR_REQUEST_REJECTED" })
+  } finally {
+    await new Promise<void>((resolve, reject) => bridge.close((error) => error ? reject(error) : resolve()))
+  }
+})
+
 test("HTTP processor bridge does not apply the remote safety cap to legacy redaction and deterministic routing", async () => {
   const port = await unusedPort()
   const bridge = startProcessorHttpBridge({

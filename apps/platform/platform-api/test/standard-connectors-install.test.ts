@@ -21,7 +21,7 @@ for (const provider of ["mail2000", "servicenow"] as const) test(`${provider} in
   const org = await modules.organizations.create({ tenantId, display_name: "Test", slug: "test" })
   await modules.runtimeControl.registerGatewayRuntime({ tenantId, runtimeId, targetId: gatewayId, oidcClientId: "runtime-client", reportKeyId: "report", reportPublicKeyPem: generateKeyPairSync("ed25519").publicKey.export({ type: "spki", format: "pem" }).toString() })
   await modules.gatewayAggregateRuntimeControl!.store.saveCapabilities({ tenantId, runtimeId, protocolVersions: ["genio.one.runtime.v1"], preferredProtocolVersion: "genio.one.runtime.v1", deliveryMode: "AGGREGATE_RELEASE" })
-  const app = await createManagementApi({ modules, resourceCatalog: modules.resources, principalAuthenticator: createStaticPrincipalAuthenticator({ "test-token": { tenant_id: tenantId, subject_id: "admin", role: "TENANT_ADMINISTRATOR", organization_ids: [org.organization_id], client_id: "test-client" } }), entitlementResolver: modules.entitlements })
+  const app = await createManagementApi({ modules, resourceCatalog: modules.resources, principalAuthenticator: createStaticPrincipalAuthenticator({ "test-token": { tenant_id: tenantId, subject_id: "admin", role: "TENANT_ADMINISTRATOR", organization_ids: [org.organization_id], client_id: "test-client", scopes: ["genioone-management"] } }), entitlementResolver: modules.entitlements })
   const handler = provider === "mail2000" ? createMail2000Handler({
     ...createMail2000Imap({ host: "mail.test", port: 993 }), sendMail: createMail2000Smtp({ host: "mail.test", port: 465 }),
     caldav: createMail2000Dav({ url: "https://mail.test/cal/", kind: "caldav" }), carddav: createMail2000Dav({ url: "https://mail.test/contacts/", kind: "carddav" }),

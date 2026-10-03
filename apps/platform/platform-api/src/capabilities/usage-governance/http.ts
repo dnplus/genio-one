@@ -172,21 +172,19 @@ export const usageGovernanceHttp: FastifyPluginAsync<{
       throw new PlatformApiError("INVOCATION_ACCOUNTING_MISMATCH", 409)
     }
     const ledger = options.accountingLedger(request.params.tenant_id)
-    const invocation = await ledger.recordInvocation(request.body.invocation)
-    const charge = await ledger.charge({
-      invocation_id: invocation.invocation_id,
-      correlation_id: invocation.correlation_id,
-      accounting_key_id: invocation.accounting_key_id,
-      created_at: invocation.created_at,
+    const receipt = await ledger.recordAccounting({
+      invocation: request.body.invocation,
+      quantities: request.body.quantities,
+      valuations: request.body.valuations,
     })
-    for (const quantity of request.body.quantities) await ledger.appendQuantity(quantity)
-    for (const valuation of request.body.valuations) {
-      await ledger.appendValuation({ ...valuation, charge_id: charge.charge_id })
+    try {
+      for (const settlement of request.body.currency_settlements) {
+        await options.usageCounterStore.settleCurrency(settlement)
+      }
+    } catch {
+      throw new PlatformApiError("CURRENCY_SETTLEMENT_STORE_UNAVAILABLE", 503)
     }
-    for (const settlement of request.body.currency_settlements) {
-      await options.usageCounterStore.settleCurrency(settlement)
-    }
-    return reply.code(201).send({ invocation, charge_id: charge.charge_id })
+    return reply.code(201).send({ invocation: receipt.invocation, charge_id: receipt.charge.charge_id })
   })
   routes.get("/v1/tenants/:tenant_id/activities/:correlation_id/accounting", {
     schema: {

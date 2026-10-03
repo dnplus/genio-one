@@ -3,6 +3,7 @@ import test from "node:test"
 import Fastify from "fastify"
 
 import { PlatformApiError } from "../src/capabilities/errors"
+import { createInMemoryGatewayAuthorizationAuditStore } from "../src/capabilities/audit-events/memory"
 import { createManagementAuthorization } from "../src/capabilities/management-authorization/module"
 import { postHogIntegrationHttp } from "../src/capabilities/posthog-integration/http"
 import { createInMemoryPostHogIntegrationStore } from "../src/capabilities/posthog-integration/memory"
@@ -275,6 +276,7 @@ test("PostHog browser configuration accepts an invocation token only for its ten
     resourceCatalog: {} as ResourceCatalog,
     endpointRuntime: {} as EndpointRuntimeStore,
     runtimeControl: {} as RuntimeControlStore,
+    auditEvents: createInMemoryGatewayAuthorizationAuditStore(),
   })
   const app = Fastify()
   app.decorateRequest("principal", undefined)

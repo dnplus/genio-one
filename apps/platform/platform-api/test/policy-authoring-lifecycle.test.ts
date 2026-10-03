@@ -79,6 +79,7 @@ test("draft mutations commit only with their audit event and transition retries 
       if (rejectWrites) throw new Error("AUDIT_WRITE_FAILED")
       return persisted.record(input)
     },
+    recordAuthenticationAttempt: persisted.recordAuthenticationAttempt,
     findById: persisted.findById,
     query: persisted.query,
     findRuntimeAuthorization: persisted.findRuntimeAuthorization,
@@ -254,6 +255,7 @@ test("authorization audit retries are idempotent and conflicting payloads cannot
 test("audit failure rolls back every in-memory draft publication", async () => {
   const failingAudit: GatewayAuthorizationAuditStore = {
     async record() { throw new Error("AUDIT_WRITE_FAILED") },
+    async recordAuthenticationAttempt() { throw new Error("AUDIT_WRITE_FAILED") },
     async findById() { return null },
     async query() { return { events: [], hasMore: false, sourceRevision: 0 } },
     async findRuntimeAuthorization() { return null },

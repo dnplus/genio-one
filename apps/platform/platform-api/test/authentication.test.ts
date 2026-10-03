@@ -4,12 +4,14 @@ import test from "node:test"
 import WebSocket from "ws"
 
 import { createManagementApi } from "../src/app"
+import { PlatformApiError } from "../src/capabilities/errors"
 import { createInMemoryPlatformModules } from "../src/capabilities/platform-modules"
 import { createInMemoryGatewayAggregateRuntimeControlStore } from "../src/capabilities/gateway-runtime-control/memory"
 import {
   createEnvironmentPrincipalAuthenticator,
   createStaticPrincipalAuthenticator,
 } from "../src/capabilities/tenancy-auth/memory"
+import { createOidcPrincipalAuthenticator } from "../src/capabilities/tenancy-auth/oidc"
 
 const principals = {
   "user-token": {
@@ -18,6 +20,7 @@ const principals = {
     role: "USER" as const,
     organization_ids: [],
     client_id: "client-user",
+    scopes: ["genioone-management"],
   },
   "org-token": {
     tenant_id: "tenant-acme",
@@ -25,6 +28,7 @@ const principals = {
     role: "ORGANIZATION_ADMINISTRATOR" as const,
     organization_ids: ["org-owned"],
     client_id: "client-org",
+    scopes: ["genioone-management"],
   },
   "tenant-token": {
     tenant_id: "tenant-acme",
@@ -32,6 +36,7 @@ const principals = {
     role: "TENANT_ADMINISTRATOR" as const,
     organization_ids: [],
     client_id: "client-tenant",
+    scopes: ["genioone-management"],
   },
   "other-tenant-token": {
     tenant_id: "tenant-other",
@@ -39,6 +44,7 @@ const principals = {
     role: "TENANT_ADMINISTRATOR" as const,
     organization_ids: [],
     client_id: "client-other",
+    scopes: ["genioone-management"],
   },
 }
 
@@ -82,11 +88,12 @@ async function inject(
   method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE",
   url: string,
   payload?: unknown,
+  extraHeaders?: Record<string, string>,
 ) {
   return app.inject({
     method,
     url,
-    ...(token ? { headers: { authorization: `Bearer ${token}` } } : {}),
+    ...(token || extraHeaders ? { headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...extraHeaders } } : {}),
     ...(payload === undefined ? {} : { payload: payload as object }),
   })
 }
@@ -141,8 +148,273 @@ test("Management API authenticates tenant routes and rejects cross-tenant access
   await app.close()
 })
 
+test("Management API preserves identity backend errors and records a stable failure code", async () => {
+  const deps = dependencies()
+  deps.principalAuthenticator = {
+    authenticate() {
+      throw new PlatformApiError("IDENTITY_PROVIDER_UNAVAILABLE", 503, "Identity provider unavailable")
+    },
+  }
+  const app = await createManagementApi(deps)
+
+  const response = await inject(
+    app,
+    "backend-failure-token",
+    "GET",
+    "/v1/tenants/tenant-acme/identity",
+  )
+  assert.equal(response.statusCode, 503)
+  assert.equal(response.json().code, "IDENTITY_PROVIDER_UNAVAILABLE")
+
+  const receipts = await deps.modules.auditEvents.queryAuthenticationAttempts!({
+    code: "IDENTITY_PROVIDER_UNAVAILABLE",
+    outcome: "FAILURE",
+    offset: 0,
+    limit: 10,
+  })
+  assert.equal(receipts.receipts.length, 1)
+  assert.equal(receipts.receipts[0]?.verified_tenant_id, null)
+  await app.close()
+})
+
+test("Management API persists safe authentication receipts and verified authorization decisions", async () => {
+  const deps = dependencies()
+  deps.principalAuthenticator = createStaticPrincipalAuthenticator({
+    ...principals,
+    "scope-token": {
+      ...principals["user-token"],
+      scopes: ["genioone-invocation"],
+    },
+  })
+  const app = await createManagementApi(deps)
+
+  try {
+    const missing = await inject(
+      app,
+      undefined,
+      "POST",
+      "/v1/tenants/tenant-acme/organizations",
+      { display_name: "Missing token" },
+      { "x-genio-correlation-id": "corr-missing-token" },
+    )
+    assert.equal(missing.statusCode, 401)
+
+    const missingReceipts = await deps.modules.auditEvents.queryAuthenticationAttempts!({
+      code: "MISSING_BEARER_TOKEN",
+      outcome: "FAILURE",
+      offset: 0,
+      limit: 10,
+    })
+    assert.equal(missingReceipts.receipts.length, 1)
+    assert.equal(missingReceipts.receipts[0]?.verified_tenant_id, null)
+    assert.equal(missingReceipts.receipts[0]?.verified_subject_id, null)
+    assert.equal(missingReceipts.receipts[0]?.verified_client_id, null)
+    assert.equal(missingReceipts.receipts[0]?.correlation_id, "corr-missing-token")
+    assert.equal(JSON.stringify(missingReceipts.receipts[0]).includes("tenant-acme"), false)
+
+    const invalidCorrelation = await inject(
+      app,
+      undefined,
+      "POST",
+      "/v1/tenants/tenant-acme/organizations",
+      { display_name: "Invalid correlation" },
+      { "x-genio-correlation-id": "tenant-acme/forged" },
+    )
+    assert.equal(invalidCorrelation.statusCode, 401)
+    const invalidCorrelationReceipts = await deps.modules.auditEvents.queryAuthenticationAttempts!({
+      code: "MISSING_BEARER_TOKEN",
+      outcome: "FAILURE",
+      offset: 0,
+      limit: 10,
+    })
+    assert.equal(invalidCorrelationReceipts.receipts.some((receipt) => receipt.correlation_id === "tenant-acme/forged"), false)
+
+    const crossTenant = await inject(
+      app,
+      "other-tenant-token",
+      "POST",
+      "/v1/tenants/tenant-acme/organizations",
+      { display_name: "Cross tenant" },
+    )
+    assert.equal(crossTenant.statusCode, 403)
+    const crossTenantAudit = await deps.modules.auditEvents.query({
+      tenantId: "tenant-other",
+      kind: "MANAGEMENT_AUTHORIZATION",
+      outcome: "DENY",
+      offset: 0,
+      limit: 10,
+    })
+    assert.equal(crossTenantAudit.events.length, 1)
+    assert.equal(crossTenantAudit.events[0]?.kind, "MANAGEMENT_AUTHORIZATION")
+    assert.equal(crossTenantAudit.events[0]?.code, "TENANT_ACCESS_DENIED")
+    assert.equal(crossTenantAudit.events[0]?.tenant_id, "tenant-other")
+    assert.equal(crossTenantAudit.events[0]?.request_context.requested_tenant_id, "tenant-acme")
+    assert.equal(crossTenantAudit.events[0]?.request_context.target.organization_id, null)
+
+    const crossTenantOrganization = await inject(
+      app,
+      "other-tenant-token",
+      "PUT",
+      "/v1/tenants/tenant-acme/organizations/organization-target",
+      { display_name: "Cross tenant organization" },
+    )
+    assert.equal(crossTenantOrganization.statusCode, 403)
+    const crossTenantOrganizationAudit = await deps.modules.auditEvents.query({
+      tenantId: "tenant-other",
+      kind: "MANAGEMENT_AUTHORIZATION",
+      outcome: "DENY",
+      offset: 0,
+      limit: 10,
+    })
+    const organizationTargetAudit = crossTenantOrganizationAudit.events.find((event) =>
+      event.kind === "MANAGEMENT_AUTHORIZATION" &&
+      event.request_context.target.organization_id === "organization-target"
+    )
+    assert.ok(organizationTargetAudit)
+    if (organizationTargetAudit.kind !== "MANAGEMENT_AUTHORIZATION") throw new Error("Expected management authorization audit")
+    assert.equal(organizationTargetAudit.request_context.requested_tenant_id, "tenant-acme")
+    assert.equal(organizationTargetAudit.tenant_id, "tenant-other")
+    assert.equal(JSON.stringify(organizationTargetAudit).includes("Cross tenant organization"), false)
+
+    const missingScope = await inject(
+      app,
+      "scope-token",
+      "GET",
+      "/v1/tenants/tenant-acme/identity",
+    )
+    assert.equal(missingScope.statusCode, 403)
+    const scopeAudit = await deps.modules.auditEvents.query({
+      tenantId: "tenant-acme",
+      kind: "MANAGEMENT_AUTHORIZATION",
+      outcome: "DENY",
+      offset: 0,
+      limit: 10,
+    })
+    assert.equal(scopeAudit.events.some((event) => event.kind === "MANAGEMENT_AUTHORIZATION" && event.code === "INSUFFICIENT_SCOPE"), true)
+
+    const roleDenied = await inject(
+      app,
+      "user-token",
+      "POST",
+      "/v1/tenants/tenant-acme/organizations",
+      { display_name: "Role denied" },
+    )
+    assert.equal(roleDenied.statusCode, 403)
+    const roleAudit = await deps.modules.auditEvents.query({
+      tenantId: "tenant-acme",
+      kind: "MANAGEMENT_AUTHORIZATION",
+      outcome: "DENY",
+      offset: 0,
+      limit: 10,
+    })
+    assert.equal(roleAudit.events.some((event) => event.kind === "MANAGEMENT_AUTHORIZATION" && event.code === "TENANT_ADMINISTRATOR_REQUIRED"), true)
+
+    const success = await inject(
+      app,
+      "tenant-token",
+      "GET",
+      "/v1/tenants/tenant-acme/identity",
+    )
+    assert.equal(success.statusCode, 200)
+    const successAudit = await deps.modules.auditEvents.query({
+      tenantId: "tenant-acme",
+      kind: "MANAGEMENT_AUTHORIZATION",
+      outcome: "ALLOW",
+      offset: 0,
+      limit: 10,
+    })
+    assert.equal(successAudit.events.length, 1)
+    assert.equal(successAudit.events[0]?.kind, "MANAGEMENT_AUTHORIZATION")
+    assert.equal(successAudit.events[0]?.code, "AUTHORIZED")
+    assert.equal(JSON.stringify(successAudit.events[0]).includes("tenant-token"), false)
+    assert.equal(JSON.stringify(successAudit.events[0]).includes("email"), false)
+  } finally {
+    await app.close()
+  }
+})
+
+test("audit export and application creation scope rejections persist authorization decisions", async () => {
+  const deps = dependencies()
+  const app = await createManagementApi(deps)
+
+  try {
+    for (const [method, url, payload, correlationId] of [
+      ["GET", "/v1/tenants/tenant-acme/audit-export?from=0&to=1&resource_id=resource-owned", undefined, "corr-audit-export-grant"],
+      ["POST", "/v1/tenants/tenant-acme/applications", {
+        display_name: "Missing creation grant",
+        owner_organization_id: "org-owned",
+      }, "corr-application-create-grant"],
+    ] as const) {
+      const response = await inject(app, "tenant-token", method, url, payload, {
+        "x-genio-correlation-id": correlationId,
+      })
+      assert.equal(response.statusCode, 403, response.body)
+      assert.equal(response.json().code, "INSUFFICIENT_SCOPE")
+      const audits = await deps.modules.auditEvents.query({
+        tenantId: "tenant-acme",
+        kind: "MANAGEMENT_AUTHORIZATION",
+        outcome: "DENY",
+        offset: 0,
+        limit: 10,
+      })
+      const event = audits.events.find((candidate) => candidate.correlation_id === correlationId)
+      assert.ok(event)
+      if (event.kind !== "MANAGEMENT_AUTHORIZATION") throw new Error("Expected management authorization audit")
+      assert.equal(event.code, "INSUFFICIENT_SCOPE")
+      assert.equal(event.subject.subject_id, "tenant-admin-1")
+      assert.equal(event.acting_client.acting_client_id, "client-tenant")
+      assert.equal(event.request_context.requested_tenant_id, "tenant-acme")
+    }
+  } finally {
+    await app.close()
+  }
+})
+
+test("identity session persists authentication and authorization evidence outside tenant hooks", async () => {
+  const deps = dependencies()
+  const app = await createManagementApi({
+    ...deps,
+    browserIdentity: {
+      tenant_id: "tenant-acme",
+      issuer: "https://identity.example.test/realms/genio-one",
+      authorization_endpoint: "https://identity.example.test/authorize",
+      token_endpoint: "https://identity.example.test/token",
+      client_id: "browser-client",
+      scopes: ["openid"],
+      management_client_id: "management-client",
+      management_scopes: ["genioone-management"],
+    },
+  })
+
+  try {
+    const missing = await inject(app, undefined, "GET", "/v1/identity/session")
+    assert.equal(missing.statusCode, 401)
+    const missingReceipts = await deps.modules.auditEvents.queryAuthenticationAttempts!({
+      code: "MISSING_BEARER_TOKEN",
+      outcome: "FAILURE",
+      offset: 0,
+      limit: 10,
+    })
+    assert.equal(missingReceipts.receipts.length, 1)
+
+    const success = await inject(app, "tenant-token", "GET", "/v1/identity/session")
+    assert.equal(success.statusCode, 200)
+    const successAudit = await deps.modules.auditEvents.query({
+      tenantId: "tenant-acme",
+      kind: "MANAGEMENT_AUTHORIZATION",
+      outcome: "ALLOW",
+      offset: 0,
+      limit: 10,
+    })
+    assert.equal(successAudit.events.some((event) => event.kind === "MANAGEMENT_AUTHORIZATION" && event.route === "/v1/identity/session"), true)
+  } finally {
+    await app.close()
+  }
+})
+
 test("Management API applies role checks and rejects body actor spoofing", async () => {
-  const app = await createManagementApi(dependencies())
+  const deps = dependencies()
+  const app = await createManagementApi(deps)
 
   const userCreate = await inject(
     app,
@@ -213,6 +485,15 @@ test("Management API applies role checks and rejects body actor spoofing", async
   )
   assert.equal(spoofedRoute.statusCode, 403)
   assert.equal(spoofedRoute.json().code, "ACTOR_SPOOFED")
+
+  const deniedAudits = await deps.modules.auditEvents.query({
+    tenantId: "tenant-acme",
+    kind: "MANAGEMENT_AUTHORIZATION",
+    outcome: "DENY",
+    offset: 0,
+    limit: 20,
+  })
+  assert.equal(deniedAudits.events.some((event) => event.kind === "MANAGEMENT_AUTHORIZATION" && event.code === "ACTOR_SPOOFED"), true)
 
   await app.close()
 })
@@ -286,10 +567,105 @@ test("OAuth scopes separate management, invocation, and Gateway Runtime routes",
   await app.close()
 })
 
+test("missing OAuth grants cannot access tenant routes or establish a browser session", async () => {
+  const modules = createInMemoryPlatformModules()
+  const { scopes: _scopes, ...unscoped } = principals["tenant-token"]
+  const issuer = "https://identity.example.test/realms/acme"
+  const app = await createManagementApi({
+    modules,
+    resourceCatalog: modules.resources,
+    principalAuthenticator: createStaticPrincipalAuthenticator({
+      missing: unscoped,
+      empty: { ...unscoped, scopes: [] },
+      unrelated: { ...unscoped, scopes: ["openid"] },
+      management: { ...unscoped, scopes: ["genioone-management"] },
+      invocation: { ...unscoped, scopes: ["genioone-invocation"] },
+    }),
+    browserIdentity: {
+      tenant_id: "tenant-acme",
+      issuer,
+      authorization_endpoint: `${issuer}/auth`,
+      token_endpoint: `${issuer}/token`,
+      client_id: "self-service-client",
+      scopes: ["genioone-invocation"],
+      management_client_id: "management-client",
+      management_scopes: ["genioone-management"],
+    },
+  })
+  try {
+    for (const token of ["missing", "empty", "unrelated"]) {
+      for (const url of [
+        "/v1/tenants/tenant-acme/identity",
+        "/v1/tenants/tenant-acme/catalog",
+        "/v1/tenants/tenant-acme/runtime-control/GATEWAY/gateway-auth-test/aggregate/commands/next",
+        "/v1/identity/session",
+      ]) {
+        const response = await inject(app, token, "GET", url)
+        assert.equal(response.statusCode, 403, `${token} ${url}: ${response.body}`)
+        assert.equal(response.json().code, "INSUFFICIENT_SCOPE")
+      }
+    }
+    for (const [token, scopes] of [
+      ["management", ["genioone-management"]],
+      ["invocation", ["genioone-invocation"]],
+    ] as const) {
+      const session = await inject(app, token, "GET", "/v1/identity/session")
+      assert.equal(session.statusCode, 200, session.body)
+      assert.deepEqual(session.json().scopes, scopes)
+    }
+  } finally {
+    await app.close()
+  }
+})
+
+test("verified OIDC identity without a scope claim is denied even with an administrator mapping", async () => {
+  const issuer = "https://identity.example.test/realms/acme"
+  const app = await createManagementApi({
+    ...dependencies(),
+    principalAuthenticator: createOidcPrincipalAuthenticator({
+      tenants: [{
+        tenant_id: "tenant-acme",
+        issuer,
+        audiences: ["management-client"],
+        jwks_uri: `${issuer}/certs`,
+        algorithms: ["RS256"],
+        claims: { subject: "sub", client: "azp", role: "role", organizations: "groups" },
+        principal_mappings: [{
+          external_subject_id: "external-admin",
+          subject_id: "tenant-admin-1",
+          role: "TENANT_ADMINISTRATOR",
+          organization_ids: [],
+        }],
+      }],
+      async verifyToken(token) {
+        return {
+          sub: "external-admin",
+          azp: "management-client",
+          ...(token === "scoped" ? { scope: "genioone-management" } : {}),
+        }
+      },
+    }),
+  })
+  try {
+    const denied = await inject(app, "unscoped", "GET", "/v1/tenants/tenant-acme/identity")
+    assert.equal(denied.statusCode, 403, denied.body)
+    assert.equal(denied.json().code, "INSUFFICIENT_SCOPE")
+    const accepted = await inject(app, "scoped", "GET", "/v1/tenants/tenant-acme/identity")
+    assert.equal(accepted.statusCode, 200, accepted.body)
+  } finally {
+    await app.close()
+  }
+})
+
 test("an Organization Administrator cannot self-register a Gateway Runtime", async () => {
   const deps = dependencies()
   await seedGatewayRuntime(deps.modules, "client-tenant")
-  const app = await createManagementApi(deps)
+  const app = await createManagementApi({
+    ...deps,
+    principalAuthenticator: createStaticPrincipalAuthenticator({
+      "org-runtime-token": { ...principals["org-token"], scopes: ["genioone-gateway-runtime"] },
+    }),
+  })
   const registrationBody = {
     target_id: "gateway-target-auth-test",
     oidc_client_id: "client-tenant",
@@ -299,7 +675,7 @@ test("an Organization Administrator cannot self-register a Gateway Runtime", asy
 
   const response = await inject(
     app,
-    "org-token",
+    "org-runtime-token",
     "PUT",
     "/v1/tenants/tenant-acme/runtime-control/GATEWAY/gateway-auth-test/registration",
     registrationBody,
@@ -324,6 +700,7 @@ test("a Gateway Runtime may self-register only its authenticated runtime id", as
         role: "USER",
         organization_ids: [],
         client_id: runtimeId,
+        scopes: ["genioone-gateway-runtime"],
       },
     }),
   })
@@ -376,6 +753,7 @@ test("aggregate runtime capability negotiation uses runtime identity instead of 
     role: "USER" as const,
     organization_ids: [],
     client_id: "client-runtime",
+    scopes: ["genioone-gateway-runtime"],
   }
   const app = await createManagementApi({
     modules,
@@ -383,6 +761,7 @@ test("aggregate runtime capability negotiation uses runtime identity instead of 
     principalAuthenticator: createStaticPrincipalAuthenticator({
       "runtime-token": runtimePrincipal,
       "wrong-runtime-token": { ...runtimePrincipal, client_id: "different-client" },
+      "management-runtime-token": { ...runtimePrincipal, scopes: ["genioone-management"] },
     }),
   })
 
@@ -408,6 +787,35 @@ test("aggregate runtime capability negotiation uses runtime identity instead of 
   )
   assert.equal(healthTargets.statusCode, 200, healthTargets.body)
   assert.deepEqual(healthTargets.json(), [])
+
+  for (const [token, status, code] of [
+    ["runtime-token", 201, undefined],
+    ["wrong-runtime-token", 403, "RUNTIME_ACCESS_DENIED"],
+    ["management-runtime-token", 403, "INSUFFICIENT_SCOPE"],
+  ] as const) {
+    const attempt = await inject(app, token, "POST", "/v1/tenants/tenant-acme/runtime-control/GATEWAY/gateway-auth-test/routing-attempts", {
+      correlation_id: "routing-auth", attempt_id: "routing-auth-1", order: 1,
+      connection_id: "connection-auth", connection_configuration_revision: 1, priority: 0,
+      outcome: "SELECTED", response_started: false, occurred_at: 1,
+    })
+    assert.equal(attempt.statusCode, status, attempt.body)
+    if (code) assert.equal(attempt.json().code, code)
+  }
+  for (const [token, code] of [
+    ["runtime-token", "RUNTIME_RELEASE_REFERENCE_UNKNOWN"],
+    ["wrong-runtime-token", "RUNTIME_ACCESS_DENIED"],
+    ["management-runtime-token", "INSUFFICIENT_SCOPE"],
+  ] as const) {
+    const credentials = await inject(app, token, "GET", "/v1/tenants/tenant-acme/runtime-control/GATEWAY/gateway-auth-test/aggregate/releases/release-auth/credentials?command_id=command-auth")
+    assert.equal(credentials.statusCode, 403, credentials.body)
+    assert.equal(credentials.json().code, code)
+  }
+  for (const suffix of ["observed-state", "report-history"]) {
+    const managementRead = await inject(app, "runtime-token", "GET", `/v1/tenants/tenant-acme/runtime-control/GATEWAY/gateway-auth-test/aggregate/${suffix}`)
+    assert.equal(managementRead.statusCode, 403, managementRead.body)
+    assert.equal(managementRead.json().code, "INSUFFICIENT_SCOPE")
+  }
+
 
   const healthBatch = await inject(
     app,
@@ -501,6 +909,7 @@ test("authenticated aggregate Runtime WebSocket establishes a leased session", a
       "runtime-websocket-token": {
         ...principals["tenant-token"],
         client_id: "runtime-websocket-client",
+        scopes: ["genioone-gateway-runtime"],
       },
     }),
   })

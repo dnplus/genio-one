@@ -4,6 +4,7 @@ import test from "node:test"
 import type { FastifyRequest } from "fastify"
 
 import { PlatformApiError } from "../src/capabilities/errors"
+import { createInMemoryGatewayAuthorizationAuditStore } from "../src/capabilities/audit-events/memory"
 import { createManagementAuthorization } from "../src/capabilities/management-authorization/module"
 import type { Principal } from "../src/capabilities/tenancy-auth/contract"
 import type { RuntimeControlStore } from "../src/capabilities/runtime-control/contract"
@@ -32,7 +33,7 @@ function request(value: {
   } as FastifyRequest
 }
 
-function authorization(principal = organizationPrincipal) {
+function authorization(principal = organizationPrincipal, auditEvents = createInMemoryGatewayAuthorizationAuditStore()) {
   return createManagementAuthorization({
     endpointRuntime: createInMemoryEndpointRuntimeStore(),
     principalAuthenticator: {
@@ -52,6 +53,7 @@ function authorization(principal = organizationPrincipal) {
     runtimeControl: {
       getGatewayRuntime: async () => null,
     } as unknown as RuntimeControlStore,
+    auditEvents,
   })
 }
 
@@ -71,6 +73,38 @@ test("Management authorization authenticates, derives the actor, and enforces Re
   assert.equal(input.principal?.subject_id, "person-owner")
   assert.deepEqual(input.body, { requested_by: "person-owner" })
   assert.equal(input.routeResource?.resource_id, "resource-owned")
+})
+
+test("Management authorization audit separates verified actors from requested resource context", async () => {
+  const auditEvents = createInMemoryGatewayAuthorizationAuditStore()
+  const module = authorization(organizationPrincipal, auditEvents)
+  const input = request({
+    url: "/v1/tenants/tenant-acme/resources/resource-owned/publication-requests",
+    method: "POST",
+    token: "accepted",
+    body: {},
+  })
+
+  await module.authenticate(input)
+  await module.normalize(input)
+  await module.authorize(input)
+
+  const result = await auditEvents.query({
+    tenantId: "tenant-acme",
+    kind: "MANAGEMENT_AUTHORIZATION",
+    outcome: "ALLOW",
+    offset: 0,
+    limit: 10,
+  })
+  assert.equal(result.events.length, 1)
+  const event = result.events[0]
+  assert.equal(event?.kind, "MANAGEMENT_AUTHORIZATION")
+  if (event?.kind !== "MANAGEMENT_AUTHORIZATION") return
+  assert.equal(event.tenant_id, "tenant-acme")
+  assert.equal(event.subject.subject_id, organizationPrincipal.subject_id)
+  assert.equal(event.request_context.requested_tenant_id, "tenant-acme")
+  assert.equal(event.request_context.target.resource_id, "resource-owned")
+  assert.equal(event.request_context.target.organization_id, null)
 })
 
 test("Management authorization rejects spoofed model actors before resolving entitlement", async () => {
@@ -126,6 +160,7 @@ test("Management authorization permits only lifecycle toggles for installed buil
       }) as never,
     },
     runtimeControl: { getGatewayRuntime: async () => null } as unknown as RuntimeControlStore,
+    auditEvents: createInMemoryGatewayAuthorizationAuditStore(),
   })
   const toggle = request({
     url: "/v1/tenants/tenant-acme/resources/genio-one-discovery/connections/genio-one-discovery/lifecycle",
@@ -274,7 +309,7 @@ test("audit event list requires Tenant Administrator authorization", async () =>
 
 test("audit export read requires Tenant Administrator authorization", async () => {
   for (const role of ["USER", "ORGANIZATION_ADMINISTRATOR", "TENANT_ADMINISTRATOR"] as const) {
-    const module = authorization({ ...organizationPrincipal, role })
+    const module = authorization({ ...organizationPrincipal, role, scopes: ["genioone-management", "audit.export"] })
     const input = request({
       url: "/v1/tenants/tenant-acme/audit-export",
       method: "GET",

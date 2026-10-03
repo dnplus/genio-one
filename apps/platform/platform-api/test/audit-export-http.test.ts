@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { randomUUID } from "node:crypto"
 import test from "node:test"
 
 import { createManagementApi } from "../src/app"
@@ -6,6 +7,10 @@ import { accessGovernanceAuditEvent, autoGrantActivationAuditEvent } from "../sr
 import type { GatewayAuthorizationAuditIngest } from "../src/capabilities/audit-events/contract"
 import type { GatewayAuthorizationAuditStore } from "../src/capabilities/audit-events/module"
 import { createInMemoryPlatformModules } from "../src/capabilities/platform-modules"
+import { createInMemoryGatewayAuthorizationAuditStore } from "../src/capabilities/audit-events/memory"
+import { createPostgresGatewayAuthorizationAuditStore } from "../src/capabilities/audit-events/postgres"
+import { runMigrations } from "../src/persistence/migration-runner"
+import { createPostgresSqlAdapter, type SqlAdapter, type SqlQueryResult } from "../src/persistence/sql-adapter"
 import { createStaticPrincipalAuthenticator } from "../src/capabilities/tenancy-auth/memory"
 
 const resourceId = "resource-c5a8149e-a059-4018-97b2-b0b6499a1b76"
@@ -82,7 +87,7 @@ function principals() {
       client_id: "management-ui",
       role: "TENANT_ADMINISTRATOR",
       organization_ids: [],
-      scopes: ["genioone-management"],
+      scopes: ["genioone-management", "audit.export"],
     },
     "admin-b": {
       tenant_id: tenantB,
@@ -90,7 +95,7 @@ function principals() {
       client_id: "management-ui",
       role: "TENANT_ADMINISTRATOR",
       organization_ids: [],
-      scopes: ["genioone-management"],
+      scopes: ["genioone-management", "audit.export"],
     },
     "org-admin-a": {
       tenant_id: tenantA,
@@ -98,7 +103,7 @@ function principals() {
       client_id: "management-ui",
       role: "ORGANIZATION_ADMINISTRATOR",
       organization_ids: ["organization-a"],
-      scopes: ["genioone-management"],
+      scopes: ["genioone-management", "audit.export"],
     },
   })
 }
@@ -295,7 +300,8 @@ test("audit export validates the time range and required resource", async () => 
 test("audit export rejects an over-limit result instead of truncating it", async () => {
   const total = 10_001
   const auditEvents: GatewayAuthorizationAuditStore = {
-    async record() { throw new Error("NOT_USED") },
+    async record({ tenantId, event }) { return { ...event, tenant_id: tenantId } },
+    async recordAuthenticationAttempt({ receipt }) { return receipt },
     async findById() { return null },
     async query(input) {
       const remaining = Math.max(0, total - input.offset)
@@ -330,7 +336,8 @@ test("audit export rejects an over-limit result instead of truncating it", async
 test("audit export fails closed when the audited source revision changes between pages", async () => {
   let queryCount = 0
   const auditEvents: GatewayAuthorizationAuditStore = {
-    async record() { throw new Error("NOT_USED") },
+    async record({ tenantId, event }) { return { ...event, tenant_id: tenantId } },
+    async recordAuthenticationAttempt({ receipt }) { return receipt },
     async findById() { return null },
     async query(_input) {
       queryCount += 1
@@ -357,4 +364,225 @@ test("audit export fails closed when the audited source revision changes between
   assert.equal(response.json().code, "AUDIT_EXPORT_SOURCE_CHANGED")
   assert.equal(queryCount, 2)
   await app.close()
+})
+
+const databaseUrl = process.env.GENIO_ONE_TEST_DATABASE_URL
+
+type AuditBackend = "memory" | "PostgreSQL"
+
+async function withAuditStore(
+  backend: AuditBackend,
+  work: (store: GatewayAuthorizationAuditStore, sql?: SqlAdapter) => Promise<void>,
+): Promise<void> {
+  if (backend === "memory") {
+    await work(createInMemoryGatewayAuthorizationAuditStore())
+    return
+  }
+  assert.ok(databaseUrl)
+  const schema = `audit_export_${randomUUID().replaceAll("-", "")}`
+  const admin = createPostgresSqlAdapter({ url: databaseUrl, options: { max: 1, onnotice: () => {} } })
+  const sql = createPostgresSqlAdapter({
+    url: databaseUrl,
+    options: { max: 1, connection: { search_path: schema }, onnotice: () => {} },
+  })
+  try {
+    await admin.query(`create schema ${schema}`)
+    await runMigrations(sql, { advisoryLockKey: schema })
+    await work(createPostgresGatewayAuthorizationAuditStore({ sql }), sql)
+  } finally {
+    await sql.end()
+    await admin.query(`drop schema if exists ${schema} cascade`)
+    await admin.end()
+  }
+}
+
+async function exportDuringAppend(
+  store: GatewayAuthorizationAuditStore,
+  count: number,
+  append: (app: Awaited<ReturnType<typeof createManagementApi>>) => Promise<void>,
+) {
+  for (let index = 0; index < count; index += 1) {
+    await store.record({
+      tenantId: tenantA,
+      event: auditEvent({ id: `audit-page-${index}`, correlationId: `decision-page-${index}`, occurredAt: exportFrom + index }),
+    })
+  }
+  let app: Awaited<ReturnType<typeof createManagementApi>> | undefined
+  let appended = false
+  let pageCount = 0
+  const observedStore: GatewayAuthorizationAuditStore = {
+    ...store,
+    async query(input) {
+      const page = await store.query(input)
+      pageCount += 1
+      if (!appended) {
+        assert.equal(page.hasMore, count > input.limit)
+        appended = true
+        assert.ok(app)
+        await append(app)
+      }
+      return page
+    },
+  }
+  app = (await createApp({ auditEvents: observedStore })).app
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: exportUrl(tenantA),
+      headers: { authorization: "Bearer admin-a" },
+    })
+    return { response, pageCount, appended }
+  } finally {
+    await app.close()
+  }
+}
+
+for (const backend of ["memory", "PostgreSQL"] as const) {
+  const options = {
+    skip: backend === "PostgreSQL" && !databaseUrl ? "GENIO_ONE_TEST_DATABASE_URL is not set" : false,
+    timeout: 60_000,
+  }
+
+  test(`${backend} audit source revision follows every query filter and preserves tenant-wide unfiltered counts`, options, async () => {
+    await withAuditStore(backend, async (store) => {
+      const matching = auditEvent({ id: "audit-revision-match", correlationId: "revision-target", occurredAt: exportFrom })
+      await store.record({ tenantId: tenantA, event: matching })
+      const input = {
+        tenantId: tenantA,
+        correlationId: matching.correlation_id,
+        enforcementPointId: matching.enforcement_point_id,
+        kind: matching.kind,
+        outcome: matching.outcome,
+        resourceId,
+        subjectId: matching.subject.subject_id,
+        from: exportFrom,
+        to: exportTo,
+        offset: 0,
+        limit: 1,
+      }
+      const excluded: Parameters<GatewayAuthorizationAuditStore["record"]>[0][] = [
+        { tenantId: tenantB, event: matching },
+        { tenantId: tenantA, event: { ...matching, correlation_id: "revision-other" } },
+        { tenantId: tenantA, event: { ...matching, enforcement_point_id: "API_GATEWAY" } },
+        { tenantId: tenantA, event: autoGrantActivationAuditEvent({
+          tenantId: tenantA,
+          subjectId: matching.subject.subject_id,
+          clientId: "management-ui",
+          correlationId: matching.correlation_id,
+          resourceId,
+          capabilityId: "model.invoke",
+          entitlementId: "entitlement-revision",
+          disposition: "GRANTED",
+          occurredAt: exportFrom,
+        }) },
+        { tenantId: tenantA, event: { ...matching, outcome: "DENY" } },
+        { tenantId: tenantA, event: { ...matching, resource_id: "resource-other" } },
+        { tenantId: tenantA, event: { ...matching, subject: { subject_id: "person-other", evidence_level: "VERIFIED" } } },
+        { tenantId: tenantA, event: { ...matching, occurred_at: exportFrom - 1 } },
+        { tenantId: tenantA, event: { ...matching, occurred_at: exportTo + 1 } },
+      ]
+      for (const [index, excludedEvent] of excluded.entries()) {
+        await store.record({ ...excludedEvent, event: { ...excludedEvent.event, audit_event_id: `audit-revision-excluded-${index}` } })
+        const page = await store.query(input)
+        assert.equal(page.sourceRevision, 1)
+        assert.deepEqual(page.events.map((event) => event.audit_event_id), [matching.audit_event_id])
+      }
+      const second = { ...matching, audit_event_id: "audit-revision-match-to", occurred_at: exportTo }
+      await store.record({ tenantId: tenantA, event: second })
+      await store.record({ tenantId: tenantA, event: second })
+      for (const offset of [0, 1, 99]) {
+        const page = await store.query({ ...input, offset })
+        assert.equal(page.sourceRevision, 2)
+        assert.equal(page.events.length, offset < 2 ? 1 : 0)
+        assert.equal(page.hasMore, offset === 0)
+      }
+      const tenantPage = await store.query({ tenantId: tenantA, offset: 99, limit: 1 })
+      assert.equal(tenantPage.sourceRevision, 10)
+      assert.deepEqual(tenantPage.events, [])
+      assert.equal(tenantPage.hasMore, false)
+      const decisions = await store.query({ tenantId: tenantA, kind: "ONE_POLICY_DECISION", offset: 99, limit: 1 })
+      assert.equal(decisions.sourceRevision, 9)
+      assert.deepEqual(decisions.events, [])
+      assert.equal((await store.query({ tenantId: "tenant-no-audit", offset: 0, limit: 1 })).sourceRevision, 0)
+    })
+  })
+
+  test(`${backend} audit export tolerates management requests and foreign tenant/resource/time appends between pages`, options, async () => {
+    await withAuditStore(backend, async (store) => {
+      const { response, pageCount, appended } = await exportDuringAppend(store, 501, async (app) => {
+        const management = await app.inject({
+          method: "GET",
+          url: `/v1/tenants/${tenantA}/organizations`,
+          headers: { authorization: "Bearer admin-a" },
+        })
+        assert.equal(management.statusCode, 200, management.body)
+        for (const input of [
+          { tenantId: tenantB, event: auditEvent({ id: "audit-append-tenant", correlationId: "append-tenant", occurredAt: exportFrom }) },
+          { tenantId: tenantA, event: auditEvent({ id: "audit-append-resource", correlationId: "append-resource", resourceId: "resource-other", occurredAt: exportFrom }) },
+          { tenantId: tenantA, event: auditEvent({ id: "audit-append-before", correlationId: "append-before", occurredAt: exportFrom - 1 }) },
+          { tenantId: tenantA, event: auditEvent({ id: "audit-append-after", correlationId: "append-after", occurredAt: exportTo + 1 }) },
+        ]) await store.record(input)
+      })
+      assert.equal(appended, true)
+      assert.equal(pageCount, 3)
+      assert.equal(response.statusCode, 200, response.body)
+      assert.equal(response.json().record_count, 501)
+      assert.deepEqual(new Set(response.json().records.map((record: { audit_event_id: string }) => record.audit_event_id)),
+        new Set(Array.from({ length: 501 }, (_, index) => `audit-page-${index}`)))
+      const management = await store.query({ tenantId: tenantA, kind: "MANAGEMENT_AUTHORIZATION", offset: 0, limit: 10 })
+      assert.ok(management.events.some((event) => event.kind === "MANAGEMENT_AUTHORIZATION" && event.route.endsWith("/organizations")))
+    })
+  })
+
+  for (const count of [501, 2]) {
+    test(`${backend} audit export rejects a matching append before ${count > 500 ? "the next page" : "final verification"}`, options, async () => {
+      await withAuditStore(backend, async (store) => {
+        const { response, appended } = await exportDuringAppend(store, count, async () => {
+          await store.record({
+            tenantId: tenantA,
+            event: auditEvent({ id: "audit-append-matching", correlationId: "append-matching", occurredAt: exportFrom + count }),
+          })
+        })
+        assert.equal(appended, true)
+        assert.equal(response.statusCode, 409, response.body)
+        assert.equal(response.json().code, "AUDIT_EXPORT_SOURCE_CHANGED")
+      })
+    })
+  }
+}
+
+test("PostgreSQL audit page and revision use the same statement snapshot when a matching append follows the page read", {
+  skip: !databaseUrl ? "GENIO_ONE_TEST_DATABASE_URL is not set" : false,
+  timeout: 60_000,
+}, async () => {
+  await withAuditStore("PostgreSQL", async (store, sql) => {
+    assert.ok(sql)
+    await store.record({
+      tenantId: tenantA,
+      event: auditEvent({ id: "audit-snapshot-initial", correlationId: "snapshot-initial", occurredAt: exportFrom }),
+    })
+    let appended = false
+    const observedSql: SqlAdapter = {
+      async query<Row extends Record<string, unknown>>(text: string, parameters?: readonly unknown[]): Promise<SqlQueryResult<Row>> {
+        const result = await sql.query<Row>(text, parameters)
+        if (!appended && text.includes("order by") && text.includes("genio_one_gateway_authorization_audit_events")) {
+          appended = true
+          await store.record({
+            tenantId: tenantA,
+            event: auditEvent({ id: "audit-snapshot-appended", correlationId: "snapshot-appended", occurredAt: exportFrom + 1 }),
+          })
+        }
+        return result
+      },
+      transaction: (work) => sql.transaction(work),
+    }
+    const observedStore = createPostgresGatewayAuthorizationAuditStore({ sql: observedSql })
+    const input = { tenantId: tenantA, kind: "ONE_POLICY_DECISION", resourceId, from: exportFrom, to: exportTo, offset: 0, limit: 1 }
+    const page = await observedStore.query(input)
+    assert.equal(appended, true)
+    assert.equal(page.sourceRevision, 1)
+    assert.equal(page.hasMore, false)
+    assert.deepEqual(page.events.map((event) => event.audit_event_id), ["audit-snapshot-initial"])
+    assert.equal((await observedStore.query(input)).sourceRevision, 2)
+  })
 })

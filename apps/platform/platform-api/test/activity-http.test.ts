@@ -428,6 +428,7 @@ test("Routing Reconstruction returns ordered immutable attempts without upstream
       role: "TENANT_ADMINISTRATOR",
       organization_ids: [],
       client_id: "console",
+      scopes: ["genioone-management"],
     }
   })
   await app.register(gatewayActivityHttp, { store, authorizeRuntime: async () => {} })

@@ -143,17 +143,20 @@ function errorResponse(status: number, code: string): Response {
   return Response.json({ code }, { status })
 }
 
-function recordActivity(
+async function recordActivity(
   options: ProcessorHttpBridgeOptions,
   event: GatewayActivityIngest,
-): void {
+): Promise<void> {
   if (!options.onActivity) return
-  void Promise.resolve(options.onActivity(event)).catch((error) => {
+  try {
+    await options.onActivity(event)
+  } catch (error) {
     writeOperationalEvent("processor", "ERROR", "genio.one.activity-observation-failed", {
       correlation_id: event.correlation_id,
       ...operationalError(error),
     })
-  })
+    throw error
+  }
 }
 
 /**
@@ -295,7 +298,7 @@ export function startProcessorHttpBridge(
           const hook = direction === "request" ? step.hooks.request : step.hooks.response
           return hook ? [{ step_id: step.step_id, action: hook.action }] : []
         })
-        const emitBlockedActivity = (
+        const emitBlockedActivity = async (
           code: string,
           status: number,
           processedSteps: Array<{ step_id: string; action: string }>,
@@ -304,7 +307,7 @@ export function startProcessorHttpBridge(
           requestedModel: string | undefined,
         ) => {
           const occurredAt = Math.floor(Date.now() / 1_000)
-          recordActivity(options, {
+          await recordActivity(options, {
             correlation_id: context.correlationId,
             resource_id: context.resourceId,
             capability_id: context.capabilityId,
@@ -361,7 +364,7 @@ export function startProcessorHttpBridge(
           const code = direction === "request"
             ? "SAFETY_REQUEST_STREAM_UNSUPPORTED"
             : "SAFETY_RESPONSE_STREAM_UNSUPPORTED"
-          emitBlockedActivity(code, 403, configuredSteps, [], [], undefined)
+          await emitBlockedActivity(code, 403, configuredSteps, [], [], undefined)
           return errorResponse(403, code)
         }
         let originalBody: Uint8Array
@@ -369,7 +372,7 @@ export function startProcessorHttpBridge(
           originalBody = await readBody(requiresBufferedBody ? safetyBufferBytes : undefined)
         } catch (error) {
           if (!(error instanceof SafetyBufferLimitExceededError)) throw error
-          emitBlockedActivity(
+          await emitBlockedActivity(
             "SAFETY_BUFFER_LIMIT_EXCEEDED",
             413,
             configuredSteps,
@@ -387,7 +390,7 @@ export function startProcessorHttpBridge(
           ? requestPublicModelName(body)
           : undefined
         if (requiresBufferedBody && body.byteLength > safetyBufferBytes) {
-          emitBlockedActivity(
+          await emitBlockedActivity(
             "SAFETY_BUFFER_LIMIT_EXCEEDED",
             413,
             configuredSteps,
@@ -451,7 +454,7 @@ export function startProcessorHttpBridge(
             ? serializeSafetyDecisionReceipts(safetyDecisions)
             : undefined
         } catch {
-          emitBlockedActivity(
+          await emitBlockedActivity(
             "PROCESSOR_RECEIPT_LIMIT_EXCEEDED",
             503,
             executedSteps,
@@ -473,7 +476,7 @@ export function startProcessorHttpBridge(
           safety_decisions: safetyDecisions,
         })}\n`)
         if (result.disposition === "BLOCK") {
-          emitBlockedActivity(
+          await emitBlockedActivity(
             "DATA_PROTECTION_BLOCKED",
             403,
             executedSteps,

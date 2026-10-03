@@ -403,10 +403,10 @@ test("only a current workspace maintainer can approve a candidate", async () => 
     client_id: "genio-one-bot",
     scopes: ["genioone-invocation"],
   }
-  const legacyAdmin: Principal = {
+  const unscopedAdmin: Principal = {
     tenant_id: "tenant-acme",
-    subject_id: "legacy-admin",
-    client_id: "legacy-management",
+    subject_id: "unscoped-admin",
+    client_id: "management-ui",
     role: "TENANT_ADMINISTRATOR",
     organization_ids: [],
   }
@@ -427,7 +427,7 @@ test("only a current workspace maintainer can approve a candidate", async () => 
     principalAuthenticator: createStaticPrincipalAuthenticator({
       admin,
       "bot-admin": botAdmin,
-      "legacy-admin": legacyAdmin,
+      "unscoped-admin": unscopedAdmin,
       owner: principal("owner", ["genioone-invocation", "genioone-management"]),
       maintainer: principal("maintainer", ["genioone-management"]),
       "other-maintainer": principal("other-maintainer", ["genioone-management"]),
@@ -441,7 +441,7 @@ test("only a current workspace maintainer can approve a candidate", async () => 
     subjects: [
       { subject_id: "admin", kind: "PERSON", role: "TENANT_ADMINISTRATOR" },
       { subject_id: "bot-admin", kind: "PERSON", role: "TENANT_ADMINISTRATOR" },
-      { subject_id: "legacy-admin", kind: "PERSON", role: "TENANT_ADMINISTRATOR" },
+      { subject_id: "unscoped-admin", kind: "PERSON", role: "TENANT_ADMINISTRATOR" },
       { subject_id: "owner", kind: "PERSON" },
       { subject_id: "maintainer", kind: "PERSON" },
       { subject_id: "other-maintainer", kind: "PERSON" },
@@ -541,19 +541,18 @@ test("only a current workspace maintainer can approve a candidate", async () => 
     headers: { authorization: "Bearer admin" },
   })
   assert.equal(managementContributorWorkspace.statusCode, 403)
-  const legacyWorkspace = await app.inject({
+  const unscopedWorkspace = await app.inject({
     method: "GET",
     url: `/v1/tenants/tenant-acme/team-workspaces/${workspace.json().workspace_id}`,
-    headers: { authorization: "Bearer legacy-admin" },
+    headers: { authorization: "Bearer unscoped-admin" },
   })
-  assert.equal(legacyWorkspace.statusCode, 200)
-  assert.equal(legacyWorkspace.json().workspace_id, workspace.json().workspace_id)
-  const legacyContributorWorkspace = await app.inject({
+  assert.equal(unscopedWorkspace.statusCode, 403)
+  const unscopedContributorWorkspace = await app.inject({
     method: "GET",
     url: `/v1/tenants/tenant-acme/team-workspaces/${workspace.json().workspace_id}?access=contributor`,
-    headers: { authorization: "Bearer legacy-admin" },
+    headers: { authorization: "Bearer unscoped-admin" },
   })
-  assert.equal(legacyContributorWorkspace.statusCode, 403)
+  assert.equal(unscopedContributorWorkspace.statusCode, 403)
   const contributorWorkspace = await app.inject({
     method: "GET",
     url: `/v1/tenants/tenant-acme/team-workspaces/${workspace.json().workspace_id}`,
@@ -597,14 +596,12 @@ test("only a current workspace maintainer can approve a candidate", async () => 
   assert.equal(managementWorkspaces.statusCode, 200)
   assert.equal(managementWorkspaces.json().some((item: { workspace_id: string }) => item.workspace_id === workspace.json().workspace_id), true)
   assert.equal(managementWorkspaces.json().some((item: { workspace_id: string }) => item.workspace_id === otherWorkspace.json().workspace_id), true)
-  const legacyWorkspaces = await app.inject({
+  const unscopedWorkspaces = await app.inject({
     method: "GET",
     url: "/v1/tenants/tenant-acme/team-workspaces",
-    headers: { authorization: "Bearer legacy-admin" },
+    headers: { authorization: "Bearer unscoped-admin" },
   })
-  assert.equal(legacyWorkspaces.statusCode, 200)
-  assert.equal(legacyWorkspaces.json().some((item: { workspace_id: string }) => item.workspace_id === workspace.json().workspace_id), true)
-  assert.equal(legacyWorkspaces.json().some((item: { workspace_id: string }) => item.workspace_id === otherWorkspace.json().workspace_id), true)
+  assert.equal(unscopedWorkspaces.statusCode, 403)
   const botAdminWorkspaces = await app.inject({
     method: "GET",
     url: "/v1/tenants/tenant-acme/team-workspaces",

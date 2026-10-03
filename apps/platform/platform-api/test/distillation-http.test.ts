@@ -22,6 +22,7 @@ const principal: Principal = {
   tenant_id: "tenant-http",
   subject_id: "owner-http",
   client_id: "bot-http",
+  scopes: ["genioone-invocation"],
   role: "USER",
   organization_ids: [],
 }

@@ -47,6 +47,7 @@ test("Resources module exposes its validated route in OpenAPI", async () => {
         role: "TENANT_ADMINISTRATOR",
         organization_ids: [],
         client_id: "application-1",
+        scopes: ["genioone-management"],
       },
     }),
   })
@@ -232,6 +233,7 @@ test("Resource lifecycle HTTP permits EXTENSION publication and guards other kin
         role: "TENANT_ADMINISTRATOR",
         organization_ids: [],
         client_id: "application-1",
+        scopes: ["genioone-management"],
       },
     }),
   })
@@ -269,7 +271,7 @@ test("publication endpoint rejects invalid hostnames and paths before persistenc
     modules,
     resourceCatalog: modules.resources,
     principalAuthenticator: createStaticPrincipalAuthenticator({
-      "test-token": { tenant_id: "tenant-acme", subject_id: "person-owner", role: "TENANT_ADMINISTRATOR", organization_ids: [], client_id: "application-1" },
+      "test-token": { tenant_id: "tenant-acme", subject_id: "person-owner", role: "TENANT_ADMINISTRATOR", organization_ids: [], client_id: "application-1", scopes: ["genioone-management"] },
     }),
   })
   try {

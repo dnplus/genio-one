@@ -12,10 +12,15 @@ import {
   aigwSpanContentCapture,
   aigwRunArguments,
   activityUpstreamAttempted,
+  activityPathWithoutQuery,
+  authenticationFailureForNativeEvent,
   attachMcpRouteSecurityPolicies,
+  consumeActivityLogLines,
   gatewayServiceEntrypoint,
   localCredentialSecrets,
   parseProcessorHttpObservation,
+  readActivityCursor,
+  writeActivityCursor,
 } from "./local-aigw"
 import { stopProcessTree, waitForEnvoyRunReadiness } from "./process-lifecycle"
 
@@ -288,4 +293,252 @@ test("a concrete upstream host proves that the Gateway attempted the backend", (
     upstream_cluster: "httproute/default/resource/rule/0",
     upstream_host: "127.0.0.1:9856",
   }), true)
+})
+
+test("canonical activity paths do not retain query or fragment secrets", () => {
+  const secret = "sentinel-api-key-do-not-store"
+  assert.equal(
+    activityPathWithoutQuery(`/v1/chat/completions?api_key=${secret}#fragment`),
+    "/v1/chat/completions",
+  )
+  assert.equal(
+    activityPathWithoutQuery(`/v1/chat/completions#fragment?api_key=${secret}`),
+    "/v1/chat/completions",
+  )
+  assert.equal(activityPathWithoutQuery(`/v1/chat/${secret}`), `/v1/chat/${secret}`)
+})
+
+test("missing activity or authentication audit callbacks retain the native line", async () => {
+  const failures: Array<{ lineNumber: number; phase: string; kind: string; message: string }> = []
+  let cursor = 0
+  const onFailure = ({ lineNumber, phase, kind, error }: {
+    lineNumber: number
+    phase: string
+    kind: string
+    error: unknown
+  }) => failures.push({
+    lineNumber,
+    phase,
+    kind,
+    message: error instanceof Error ? error.message : String(error),
+  })
+  const persistCursor = async (nextCursor: number) => {
+    cursor = nextCursor
+  }
+  const activityConsumed = await consumeActivityLogLines(
+    [JSON.stringify({ event: "activity" })],
+    cursor,
+    () => ({ event: "activity" }),
+    undefined,
+    persistCursor,
+    () => undefined,
+    onFailure,
+  )
+  assert.equal(activityConsumed, 0)
+  assert.equal(cursor, 0)
+  assert.deepEqual(failures, [{
+    lineNumber: 1,
+    phase: "DELIVERY",
+    kind: "ACTIVITY",
+    message: "Activity delivery callback is not configured",
+  }])
+
+  failures.length = 0
+  const authConsumed = await consumeActivityLogLines(
+    [JSON.stringify({
+      "x-request-id": "authn-correlation",
+      response_code: 401,
+      response_code_details: "jwt_authn_access_denied",
+    })],
+    cursor,
+    () => null,
+    async () => undefined,
+    persistCursor,
+    () => undefined,
+    onFailure,
+    (value, lineNumber) => authenticationFailureForNativeEvent("release-1", value, lineNumber),
+    undefined,
+  )
+  assert.equal(authConsumed, 0)
+  assert.equal(cursor, 0)
+  assert.deepEqual(failures, [{
+    lineNumber: 1,
+    phase: "DELIVERY",
+    kind: "AUTHENTICATION_FAILURE",
+    message: "Authentication failure audit callback is not configured",
+  }])
+})
+
+test("native JWT authentication failures produce deterministic anonymous audit events", () => {
+  const value = {
+    "x-request-id": "authn-correlation",
+    response_code: "401",
+    response_code_details: "jwt_authn_access_denied{Jwt_is_expired}",
+    start_time: "2026-10-03T03:04:05.000Z",
+    "genio.subject.id": "unverified-subject",
+    "genio.client.id": "unverified-client",
+  }
+  const first = authenticationFailureForNativeEvent("release-1", value, 7)
+  const retry = authenticationFailureForNativeEvent("release-1", value, 7)
+  assert.ok(first)
+  assert.deepEqual(retry, first)
+  assert.deepEqual(first, {
+    audit_event_id: first.audit_event_id,
+    correlation_id: "authn-correlation",
+    kind: "GATEWAY_AUTHENTICATION_FAILURE",
+    outcome: "DENY",
+    subject: null,
+    acting_client: null,
+    resource_id: null,
+    capability_id: null,
+    status: 401,
+    reason: "JWT_AUTHN_ACCESS_DENIED",
+    occurred_at: Math.floor(Date.parse("2026-10-03T03:04:05.000Z") / 1_000),
+  })
+  assert.notEqual(
+    first.audit_event_id,
+    authenticationFailureForNativeEvent("release-2", value, 7)?.audit_event_id,
+  )
+  assert.notEqual(
+    first.audit_event_id,
+    authenticationFailureForNativeEvent("release-1", value, 8)?.audit_event_id,
+  )
+  assert.equal(authenticationFailureForNativeEvent("release-1", { ...value, response_code: 403 }, 7), null)
+  assert.equal(authenticationFailureForNativeEvent("release-1", {
+    ...value,
+    response_code_details: "jwt_authn_access_denied_extra",
+  }, 7), null)
+})
+
+test("activity and authentication audit ACKs both gate cursor progress", async () => {
+  const line = JSON.stringify({
+    "x-request-id": "authn-correlation",
+    response_code: 401,
+    response_code_details: "jwt_authn_access_denied{Jwt_is_expired}",
+    start_time: "2026-10-03T03:04:05.000Z",
+    "genio.subject.id": "unverified-subject",
+    "genio.client.id": "unverified-client",
+  })
+  let cursor = 0
+  let activityAttempts = 0
+  let auditAttempts = 0
+  const failures: Array<{ lineNumber: number; phase: string; kind: string }> = []
+  const toActivity = (value: unknown, authenticationFailure: boolean) =>
+    authenticationFailure && value ? { id: "sanitized-authentication-failure" } : null
+  const persistCursor = async (nextCursor: number) => {
+    cursor = nextCursor
+  }
+  const firstConsumed = await consumeActivityLogLines(
+    [line],
+    cursor,
+    toActivity,
+    async () => {
+      activityAttempts += 1
+    },
+    persistCursor,
+    () => undefined,
+    ({ lineNumber, phase, kind }) => failures.push({ lineNumber, phase, kind }),
+    (value, lineNumber) => authenticationFailureForNativeEvent("release-1", value, lineNumber),
+    async () => {
+      auditAttempts += 1
+      throw new Error("temporary audit delivery failure")
+    },
+  )
+  assert.equal(firstConsumed, 0)
+  assert.equal(cursor, 0)
+  assert.equal(activityAttempts, 1)
+  assert.equal(auditAttempts, 1)
+  assert.deepEqual(failures, [{ lineNumber: 1, phase: "DELIVERY", kind: "AUTHENTICATION_FAILURE" }])
+
+  const replayedAuditEvents: unknown[] = []
+  const secondConsumed = await consumeActivityLogLines(
+    [line],
+    cursor,
+    toActivity,
+    async () => {
+      activityAttempts += 1
+    },
+    persistCursor,
+    () => undefined,
+    () => undefined,
+    (value, lineNumber) => authenticationFailureForNativeEvent("release-1", value, lineNumber),
+    async (event) => {
+      auditAttempts += 1
+      replayedAuditEvents.push(event)
+    },
+  )
+  assert.equal(secondConsumed, 1)
+  assert.equal(cursor, 1)
+  assert.equal(activityAttempts, 2)
+  assert.equal(auditAttempts, 2)
+  assert.equal(replayedAuditEvents.length, 1)
+  assert.equal((replayedAuditEvents[0] as { audit_event_id: string }).audit_event_id,
+    authenticationFailureForNativeEvent("release-1", JSON.parse(line), 1)?.audit_event_id)
+})
+
+test("activity reader replays unacknowledged lines after a reader restart", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "g1aigw-activity-reader-"))
+  const logPath = join(directory, "activity.jsonl")
+  const cursorPath = join(directory, "activity.cursor")
+  const lines = [
+    JSON.stringify({ id: "first" }),
+    JSON.stringify({ id: "second" }),
+  ]
+  await writeFile(logPath, `${lines.join("\n")}\n`)
+  const toActivity = (value: unknown) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null
+    const id = (value as { id?: unknown }).id
+    return typeof id === "string" ? { id } : null
+  }
+  const readPersistedCursor = async () => {
+    try {
+      return await readActivityCursor(cursorPath)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return 0
+      throw error
+    }
+  }
+  const readCompleteLines = async () => {
+    const content = await readFile(logPath, "utf8")
+    const lastNewline = content.lastIndexOf("\n")
+    return content.slice(0, lastNewline).split("\n")
+  }
+  try {
+    const firstReaderDeliver = async () => {
+      throw new Error("temporary delivery failure")
+    }
+    const firstReaderFailures: Array<{ lineNumber: number; phase: string }> = []
+    const firstConsumed = await consumeActivityLogLines(
+      await readCompleteLines(),
+      await readPersistedCursor(),
+      toActivity,
+      firstReaderDeliver,
+      (nextCursor) => writeActivityCursor(cursorPath, nextCursor),
+      () => undefined,
+      ({ lineNumber, phase }) => firstReaderFailures.push({ lineNumber, phase }),
+    )
+    assert.equal(firstConsumed, 0)
+    assert.deepEqual(firstReaderFailures, [{ lineNumber: 1, phase: "DELIVERY" }])
+    assert.equal(await readPersistedCursor(), 0)
+    assert.equal(await readFile(logPath, "utf8"), `${lines.join("\n")}\n`)
+
+    const replayed: string[] = []
+    const secondReaderDeliver = async (event: { id: string }) => {
+      replayed.push(event.id)
+    }
+    const secondConsumed = await consumeActivityLogLines(
+      await readCompleteLines(),
+      await readPersistedCursor(),
+      toActivity,
+      secondReaderDeliver,
+      (nextCursor) => writeActivityCursor(cursorPath, nextCursor),
+      () => undefined,
+      () => undefined,
+    )
+    assert.equal(secondConsumed, 2)
+    assert.deepEqual(replayed, ["first", "second"])
+    assert.equal(await readActivityCursor(cursorPath), 2)
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
 })

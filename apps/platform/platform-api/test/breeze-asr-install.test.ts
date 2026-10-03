@@ -15,7 +15,7 @@ test("Breeze installer resumes and publishes a transcription model without dupli
   const org = await modules.organizations.create({ tenantId, display_name: "ASR Test", slug: "asr-test" })
   await modules.runtimeControl.registerGatewayRuntime({ tenantId, runtimeId, targetId: gatewayId, oidcClientId: "runtime-client", reportKeyId: "report", reportPublicKeyPem: generateKeyPairSync("ed25519").publicKey.export({ type: "spki", format: "pem" }).toString() })
   await modules.gatewayAggregateRuntimeControl!.store.saveCapabilities({ tenantId, runtimeId, protocolVersions: ["genio.one.runtime.v1"], preferredProtocolVersion: "genio.one.runtime.v1", deliveryMode: "AGGREGATE_RELEASE" })
-  const app = await createManagementApi({ modules, resourceCatalog: modules.resources, principalAuthenticator: createStaticPrincipalAuthenticator({ "test-token": { tenant_id: tenantId, subject_id: "admin", role: "TENANT_ADMINISTRATOR", organization_ids: [org.organization_id], client_id: "test-client" } }), entitlementResolver: modules.entitlements })
+  const app = await createManagementApi({ modules, resourceCatalog: modules.resources, principalAuthenticator: createStaticPrincipalAuthenticator({ "test-token": { tenant_id: tenantId, subject_id: "admin", role: "TENANT_ADMINISTRATOR", organization_ids: [org.organization_id], client_id: "test-client", scopes: ["genioone-management"] } }), entitlementResolver: modules.entitlements })
   let interrupt = true
   let writes = 0
   const api: Api = async <T>(path: string, init?: RequestInit): Promise<T> => {

@@ -99,7 +99,7 @@ function packageWithoutDigest(
   return value
 }
 
-function requireRelease(
+export function requireRelease(
   value: unknown,
   command: GatewayRuntimeCommand,
 ): GatewayReleasePackage {

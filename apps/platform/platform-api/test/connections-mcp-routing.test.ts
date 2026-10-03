@@ -44,6 +44,7 @@ test("MCP routing stores the stable native tool namespace", async () => {
         role: "TENANT_ADMINISTRATOR",
         organization_ids: [organization.organization_id],
         client_id: "application-1",
+        scopes: ["genioone-management"],
       },
     }),
   })
