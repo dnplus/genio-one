@@ -7807,11 +7807,11 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/components/data-table/data-table.tsx": {
-      "sha256": "bd65a1c093cd7d122615eec5c23909739b492f05b1b8ecb096173541457ad252",
+      "sha256": "444de451a36b409c45c036e6a8ca6f65dc0750b029deccdb23e599fea425e48c",
       "mode": 420
     },
     "apps/platform/platform-web/src/components/data-table/record-filter-bar.tsx": {
-      "sha256": "913f560fe7ee19da132f53c5aec4c6c7520433ac8db3037278ae3d464f6d68fc",
+      "sha256": "ed9084512d09b647fe5f965e8fe6a67bcf7484bf7f425d3cde1615882c4f8db8",
       "mode": 420
     },
     "apps/platform/platform-web/src/components/demo-page-guide.tsx": {
@@ -8591,7 +8591,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/test/data-table.dom.test.tsx": {
-      "sha256": "7f14f4b04f4089d501ea40182b0c2146ce38f74612208121b5f324d76e6e7e93",
+      "sha256": "6a25482eade42473fcff23f267456a6ea41a2ce79035f03ed9376a7cc5bf8f62",
       "mode": 420
     },
     "apps/platform/platform-web/test/demo-page-guide.dom.test.tsx": {
@@ -8663,7 +8663,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/test/record-filter-bar.dom.test.tsx": {
-      "sha256": "5c9cd489d6ee8b3aeb3f7a5a9805c9952d89b9f8394b6afae153a66a9c100d1e",
+      "sha256": "1661b030db97a567a00edcc9736214bc0b9386474db8e9b0c19ade6cc53f9320",
       "mode": 420
     },
     "apps/platform/platform-web/test/resource-enforcement-chain-card.dom.test.tsx": {

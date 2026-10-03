@@ -1,5 +1,6 @@
 import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
+import { XIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 
@@ -80,10 +81,24 @@ export function RecordFilterBar({
         filters.forEach((filter) => filter.onValueChange("ALL"))
       }}>{t("Clear filters")}</Button> : null}
       {activeFilters.length ? <div className="flex flex-wrap gap-2" aria-label={t("Active filters")}>
-        {activeFilters.map((filter) => <Badge key={filter.id} variant="secondary">
-          {filter.label}: {filter.options.find((option) => option.value === filter.value)?.label ?? filter.value}
-          <button type="button" aria-label={t("Remove filter {{name}}", { name: filter.label })} onClick={() => filter.onValueChange("ALL")} className="ml-1 cursor-pointer">×</button>
-        </Badge>)}
+        {activeFilters.map((filter) => {
+          const removeLabel = t("Remove filter {{name}}", { name: filter.label }).replace("{{name}}", filter.label)
+          return (
+            <Badge key={filter.id} variant="secondary" className="gap-1">
+              <span>
+                {filter.label}: {filter.options.find((option) => option.value === filter.value)?.label ?? filter.value}
+              </span>
+              <button
+                type="button"
+                aria-label={removeLabel}
+                onClick={() => filter.onValueChange("ALL")}
+                className="inline-flex size-3.5 items-center justify-center rounded-xs opacity-70 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
+              >
+                <XIcon className="size-3" />
+              </button>
+            </Badge>
+          )
+        })}
       </div> : null}
     </div>
   )

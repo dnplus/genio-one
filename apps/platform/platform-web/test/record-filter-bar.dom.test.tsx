@@ -37,3 +37,30 @@ test("record filters show readable labels before opening and after changing or c
   await waitFor(() => expect(trigger.textContent).toContain("All visibility"))
   expect(selected).toEqual(["ARCHIVED", "ALL"])
 })
+
+test("active filter badge displays accessible remove button that clears the filter when clicked", async () => {
+  const i18n = createInstance()
+  await i18n.init({ lng: "en", resources: { en: { translation: {} } } })
+  const selections: string[] = []
+  function ActiveFilterTest() {
+    const [value, setValue] = useState("ACTIVE")
+    return <RecordFilterBar filters={[{
+      id: "status",
+      label: "Status",
+      allLabel: "All statuses",
+      value,
+      options: [{ value: "ACTIVE", label: "Active" }, { value: "DISABLED", label: "Disabled" }],
+      onValueChange: (next) => { selections.push(next); setValue(next) },
+    }]} />
+  }
+  render(<I18nextProvider i18n={i18n}><ActiveFilterTest /></I18nextProvider>)
+
+  const removeButton = screen.getByRole("button", { name: "Remove filter Status" })
+  expect(removeButton).toBeTruthy()
+
+  const user = userEvent.setup()
+  await user.click(removeButton)
+
+  expect(selections).toEqual(["ALL"])
+  expect(screen.queryByRole("button", { name: "Remove filter Status" })).toBeNull()
+})

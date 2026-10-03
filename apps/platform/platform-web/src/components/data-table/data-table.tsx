@@ -189,19 +189,33 @@ export function TableView<TData extends RowData>({
           )}
         </TableBody>
       </Table>
-      {filteredRows > pagination.pageSize ? <div className="flex items-center justify-between gap-3 px-4 pb-4">
-        <div className="text-ui tabular-nums text-muted-foreground">
-          {t("{{from}}-{{to}} of {{count}}", { count: filteredRows, from: firstRow, to: lastRow })}
-        </div>
-        <div className="flex items-center gap-2">
-          <Button disabled={!table.getCanPreviousPage()} onClick={() => table.previousPage()} size="sm" variant="outline">
-            {t("Previous")}
-          </Button>
-          <Button disabled={!table.getCanNextPage()} onClick={() => table.nextPage()} size="sm" variant="outline">
-            {t("Next")}
-          </Button>
-        </div>
-      </div> : null}
+      {filteredRows > pagination.pageSize ? (
+        <nav aria-label={t("Pagination")} className="flex items-center justify-between gap-3 px-4 pb-4">
+          <div className="text-ui tabular-nums text-muted-foreground">
+            {t("{{from}}-{{to}} of {{count}}", { count: filteredRows, from: firstRow, to: lastRow })}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              aria-label={t("Go to previous page")}
+              disabled={!table.getCanPreviousPage()}
+              onClick={() => table.previousPage()}
+              size="sm"
+              variant="outline"
+            >
+              {t("Previous")}
+            </Button>
+            <Button
+              aria-label={t("Go to next page")}
+              disabled={!table.getCanNextPage()}
+              onClick={() => table.nextPage()}
+              size="sm"
+              variant="outline"
+            >
+              {t("Next")}
+            </Button>
+          </div>
+        </nav>
+      ) : null}
     </div>
   )
 }
