@@ -3,6 +3,7 @@ import { request as httpRequest } from "node:http"
 import Fastify from "fastify"
 import websocket from "@fastify/websocket"
 import WebSocket, { WebSocketServer } from "ws"
+import RealWebSocket from "../../node_modules/ws/wrapper.mjs"
 
 import { desktopBrowserGrants, DESKTOP_BROWSER_GRANT_QUERY } from "../desktop-proxy"
 import { proxyRoutes } from "./proxy"
@@ -54,6 +55,218 @@ function waitForListening(server: WebSocketServer) {
 function closeWebSocket(server: WebSocketServer) {
   return new Promise<void>((resolve) => server.close(() => resolve()))
 }
+
+function waitForClose(socket: WebSocket) {
+  return new Promise<number>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("RELAY_CLOSE_TIMEOUT")), 5_000)
+    socket.once("close", (code) => { clearTimeout(timer); resolve(code) })
+  })
+}
+
+async function desktopRelay(upstream: WebSocketServer) {
+  const address = upstream.address()
+  if (!address || typeof address === "string") throw new Error("UPSTREAM_ADDRESS_UNAVAILABLE")
+  const runtime = runtimeSession()
+  runtime.id = crypto.randomUUID()
+  runtime.leases.desktop!.proxy!.desktop!.url = `http://127.0.0.1:${address.port}/`
+  const runtimeBroker = { get: (id: string) => id === runtime.id ? runtime : undefined, accessTokenForBot: () => "access-token" } as any
+  const app = Fastify()
+  await app.register(websocket)
+  await proxyRoutes(app, {
+    runtimeBroker,
+    workspaces: { get: () => ({ workspaceId: "workspace-a", provider: "e2b-self-hosted" }) },
+    capabilityGate: createCapabilityGate({ mode: "open" }),
+    handsPlacement: { authorizeUse: async () => undefined, runCapability: async (_actor: unknown, _capability: unknown, _action: unknown, task: () => unknown) => task() },
+  } as any)
+  globalThis.fetch = (async () => new Response("<body>noVNC</body>")) as unknown as typeof fetch
+  const grant = desktopBrowserGrants.issue(runtimeBroker, runtime.id)!
+  const bootstrap = await app.inject({ method: "GET", url: `/api/desktop/${runtime.id}/vnc.html?${DESKTOP_BROWSER_GRANT_QUERY}=${grant}` })
+  expect(bootstrap.statusCode).toBe(200)
+  const cookie = String(bootstrap.headers["set-cookie"]).split(";")[0]!
+  await app.listen({ host: "127.0.0.1", port: 0 })
+  const proxyAddress = app.server.address()
+  if (!proxyAddress || typeof proxyAddress === "string") throw new Error("PROXY_ADDRESS_UNAVAILABLE")
+  const clients = new Set<WebSocket>()
+  const connect = async () => {
+    const client = await new Promise<WebSocket>((resolve, reject) => {
+      const socket = new WebSocket(`ws://127.0.0.1:${proxyAddress.port}/api/desktop/${runtime.id}/websockify`, { headers: { cookie } })
+      socket.once("open", () => resolve(socket))
+      socket.once("error", reject)
+    })
+    clients.add(client)
+    client.once("close", () => clients.delete(client))
+    return client
+  }
+  const close = async () => {
+    for (const client of clients) client.terminate()
+    for (const socket of upstream.clients) socket.terminate()
+    await app.close()
+    await closeWebSocket(upstream)
+  }
+  return { connect, close, browserPeer: () => [...app.websocketServer.clients].find((socket) => socket.readyState === WebSocket.OPEN) }
+}
+
+test("desktop relay preserves text and binary and closes both peers for oversized frames in either direction", async () => {
+  const upstream = new WebSocketServer({ host: "127.0.0.1", port: 0 })
+  await waitForListening(upstream)
+  const forwarded: Buffer[] = []
+  upstream.on("connection", (socket) => socket.on("message", (data, binary) => {
+    forwarded.push(Buffer.from(data as Buffer))
+    socket.send(data, { binary })
+  }))
+  const relay = await desktopRelay(upstream)
+  try {
+    const client = await relay.connect()
+    const text = new Promise<[string, boolean]>((resolve) => client.once("message", (data, binary) => resolve([data.toString(), binary])))
+    client.send("RFB text")
+    expect(await text).toEqual(["RFB text", false])
+    const binary = new Promise<[Buffer, boolean]>((resolve) => client.once("message", (data, isBinary) => resolve([Buffer.from(data as Buffer), isBinary])))
+    client.send(Buffer.from([0, 255, 3]))
+    expect(await binary).toEqual([Buffer.from([0, 255, 3]), true])
+    const closed = waitForClose(client)
+    client.send(Buffer.alloc(8 * 1024 * 1024 + 1))
+    expect(await closed).toBe(1009)
+    expect(forwarded).toEqual([Buffer.from("RFB text"), Buffer.from([0, 255, 3])])
+
+    const provider = new Promise<WebSocket>((resolve) => upstream.once("connection", resolve))
+    const second = await relay.connect()
+    const upstreamPeer = await provider
+    const secondClosed = waitForClose(second)
+    const originalWarn = console.warn
+    const parserWarnings: string[] = []
+    console.warn = (value) => { parserWarnings.push(String(value)) }
+    try {
+      upstreamPeer.send(Buffer.alloc(8 * 1024 * 1024 + 1))
+      expect(await secondClosed).toBe(1009)
+      expect(parserWarnings.some((warning) => warning.includes("Max payload size exceeded"))).toBe(true)
+    } finally {
+      console.warn = originalWarn
+    }
+
+    const third = await relay.connect()
+    const thirdClosed = waitForClose(third)
+    third.send(Buffer.alloc(16 * 1024 * 1024 + 1))
+    expect([1006, 1009]).toContain(await thirdClosed)
+    expect(forwarded).toEqual([Buffer.from("RFB text"), Buffer.from([0, 255, 3])])
+  } finally {
+    await relay.close()
+  }
+})
+
+test("desktop relay limits connecting upstream bytes before 500 frames", async () => {
+  const upstream = new WebSocketServer({ host: "127.0.0.1", port: 0, verifyClient: (_info, done) => { setTimeout(() => done(true), 1_000) } })
+  await waitForListening(upstream)
+  const relay = await desktopRelay(upstream)
+  try {
+    const client = await relay.connect()
+    const closed = waitForClose(client)
+    for (let index = 0; index < 9; index += 1) {
+      client.send(Buffer.alloc(1024 * 1024))
+      await new Promise((resolve) => setTimeout(resolve, 2))
+    }
+    expect(await closed).toBe(1009)
+  } finally {
+    await relay.close()
+  }
+})
+
+test("desktop relay forwards binary frames queued before the upstream handshake", async () => {
+  let releaseHandshake!: () => void
+  const handshake = new Promise<void>((resolve) => { releaseHandshake = resolve })
+  const upstream = new WebSocketServer({ host: "127.0.0.1", port: 0, verifyClient: (_info, done) => { void handshake.then(() => done(true)) } })
+  await waitForListening(upstream)
+  const received = new Promise<Buffer>((resolve) => upstream.once("connection", (socket) => socket.once("message", (data) => resolve(Buffer.from(data as Buffer)))))
+  const relay = await desktopRelay(upstream)
+  try {
+    const client = await relay.connect()
+    const browserPeer = relay.browserPeer()
+    expect(browserPeer).toBeDefined()
+    const ingested = new Promise<void>((resolve) => browserPeer!.once("message", () => resolve()))
+    const payload = Buffer.from([0, 255, 3])
+    client.send(payload)
+    await ingested
+    releaseHandshake()
+    expect(await received).toEqual(payload)
+    expect(client.readyState).toBe(WebSocket.OPEN)
+  } finally {
+    releaseHandshake()
+    await relay.close()
+  }
+})
+
+test("desktop relay closes a slow provider and a slow browser instead of retaining unlimited sends", async () => {
+  const upstream = new WebSocketServer({ host: "127.0.0.1", port: 0 })
+  await waitForListening(upstream)
+  const relay = await desktopRelay(upstream)
+  const bufferedAmount = Object.getOwnPropertyDescriptor(RealWebSocket.prototype, "bufferedAmount")
+  const saturate = () => Object.defineProperty(RealWebSocket.prototype, "bufferedAmount", { configurable: true, get: () => 8 * 1024 * 1024 })
+  const restore = () => {
+    if (bufferedAmount) Object.defineProperty(RealWebSocket.prototype, "bufferedAmount", bufferedAmount)
+    else Reflect.deleteProperty(RealWebSocket.prototype, "bufferedAmount")
+  }
+  try {
+    const firstProvider = new Promise<WebSocket>((resolve) => upstream.once("connection", resolve))
+    const client = await relay.connect()
+    const provider = await firstProvider
+    const providerClosed = waitForClose(provider)
+    const clientClosed = waitForClose(client)
+    saturate()
+    client.send(Buffer.from([1, 2, 3]))
+    expect([1006, 1009]).toContain(await clientClosed)
+    expect([1006, 1009]).toContain(await providerClosed)
+    restore()
+
+    const secondProvider = new Promise<WebSocket>((resolve) => upstream.once("connection", resolve))
+    const slowBrowser = await relay.connect()
+    const sendingProvider = await secondProvider
+    const browserPeer = relay.browserPeer()
+    expect(browserPeer).toBeDefined()
+    Object.defineProperty(browserPeer!, "bufferedAmount", { configurable: true, value: 8 * 1024 * 1024 })
+    const browserClosed = waitForClose(slowBrowser)
+    const sendingProviderClosed = waitForClose(sendingProvider)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    sendingProvider.send(Buffer.from([4, 5, 6]))
+    expect([1006, 1009]).toContain(await browserClosed)
+    expect([1006, 1009]).toContain(await sendingProviderClosed)
+  } finally {
+    restore()
+    await relay.close()
+  }
+}, 15_000)
+
+test("desktop relay closes both peers when automatic pong exceeds the send budget", async () => {
+  const upstream = new WebSocketServer({ host: "127.0.0.1", port: 0 })
+  await waitForListening(upstream)
+  const relay = await desktopRelay(upstream)
+  const originalBufferedAmount = Object.getOwnPropertyDescriptor(RealWebSocket.prototype, "bufferedAmount")
+  try {
+    const firstProvider = new Promise<WebSocket>((resolve) => upstream.once("connection", resolve))
+    const firstBrowser = await relay.connect()
+    const firstUpstream = await firstProvider
+    const browserPeer = relay.browserPeer()
+    expect(browserPeer).toBeDefined()
+    Object.defineProperty(browserPeer!, "bufferedAmount", { configurable: true, value: 8 * 1024 * 1024 + 1 })
+    const browserClosed = waitForClose(firstBrowser)
+    const upstreamClosed = waitForClose(firstUpstream)
+    firstBrowser.ping()
+    expect([1006, 1009]).toContain(await browserClosed)
+    expect([1006, 1009]).toContain(await upstreamClosed)
+
+    const secondProvider = new Promise<WebSocket>((resolve) => upstream.once("connection", resolve))
+    const secondBrowser = await relay.connect()
+    const providerPeer = await secondProvider
+    Object.defineProperty(RealWebSocket.prototype, "bufferedAmount", { configurable: true, get: () => 8 * 1024 * 1024 + 1 })
+    const secondBrowserClosed = waitForClose(secondBrowser)
+    const providerClosed = waitForClose(providerPeer)
+    providerPeer.ping()
+    expect([1006, 1009]).toContain(await secondBrowserClosed)
+    expect([1006, 1009]).toContain(await providerClosed)
+  } finally {
+    if (originalBufferedAmount) Object.defineProperty(RealWebSocket.prototype, "bufferedAmount", originalBufferedAmount)
+    else Reflect.deleteProperty(RealWebSocket.prototype, "bufferedAmount")
+    await relay.close()
+  }
+}, 15_000)
 
 test("desktop browser grant covers VNC bootstrap, relative assets, and websockify only", async () => {
   const previous = process.env.E2B_SANDBOX_URL
@@ -260,6 +473,68 @@ test("executor websocket denies shell frames before forwarding and reports an al
     allowed.close()
   } finally {
     finishReport()
+    globalThis.fetch = originalFetch
+    await app.close()
+    for (const socket of upstream.clients) socket.terminate()
+    await closeWebSocket(upstream)
+  }
+})
+
+test("executor relay queues Bun text frames and counts UTF-8 bytes before forwarding", async () => {
+  let releaseHandshake!: () => void
+  const handshake = new Promise<void>((resolve) => { releaseHandshake = resolve })
+  const upstream = new WebSocketServer({ host: "127.0.0.1", port: 0, verifyClient: (_info, done) => { void handshake.then(() => done(true)) } })
+  await waitForListening(upstream)
+  const upstreamAddress = upstream.address()
+  if (!upstreamAddress || typeof upstreamAddress === "string") throw new Error("UPSTREAM_ADDRESS_UNAVAILABLE")
+  const runtime = runtimeSession()
+  runtime.leases.desktop!.proxy!.executor.url = `http://127.0.0.1:${upstreamAddress.port}/`
+  const app = Fastify()
+  await app.register(websocket)
+  await proxyRoutes(app, {
+    runtimeBroker: { get: (id: string) => id === runtime.id ? runtime : undefined },
+    workspaces: { get: () => ({ workspaceId: "workspace-a", provider: "e2b-self-hosted" }) },
+    handsPlacement: { authorizeUse: async () => undefined },
+  } as any)
+  globalThis.fetch = (async () => Response.json(runtime.principal)) as unknown as typeof fetch
+  let client: WebSocket | undefined
+  try {
+    await app.listen({ host: "127.0.0.1", port: 0 })
+    const address = app.server.address()
+    if (!address || typeof address === "string") throw new Error("PROXY_ADDRESS_UNAVAILABLE")
+    const received = new Promise<string[]>((resolve) => upstream.once("connection", (socket) => {
+      const frames: string[] = []
+      socket.on("message", (data) => {
+        frames.push(data.toString())
+        if (frames.length === 2) resolve(frames)
+      })
+    }))
+    client = await new Promise<WebSocket>((resolve, reject) => {
+      const socket = new WebSocket(`ws://127.0.0.1:${address.port}/api/executor/${runtime.id}?tier=desktop`, { headers: { authorization: "Bearer actor" } })
+      socket.once("open", () => resolve(socket))
+      socket.once("error", reject)
+    })
+    const browserPeer = [...app.websocketServer.clients].find((socket) => socket.readyState === WebSocket.OPEN)
+    expect(browserPeer).toBeDefined()
+    const ingested = new Promise<void>((resolve) => browserPeer!.once("message", () => resolve()))
+    const networkPayload = JSON.stringify({ id: 1, method: "environment/info", params: { text: "network" } })
+    const shimPayload = JSON.stringify({ id: 2, method: "environment/info", params: { text: "界" } })
+    client.send(networkPayload)
+    await ingested
+    browserPeer!.emit("message", shimPayload, false)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(client.readyState).toBe(WebSocket.OPEN)
+    releaseHandshake()
+    expect(await received).toEqual([networkPayload, shimPayload])
+    expect(client.readyState).toBe(WebSocket.OPEN)
+    const oversized = "界".repeat(Math.floor(8 * 1024 * 1024 / 3) + 1)
+    expect(oversized.length).toBeLessThan(8 * 1024 * 1024)
+    const closed = waitForClose(client)
+    browserPeer!.emit("message", oversized, false)
+    expect(await closed).toBe(1009)
+  } finally {
+    releaseHandshake()
+    client?.terminate()
     globalThis.fetch = originalFetch
     await app.close()
     for (const socket of upstream.clients) socket.terminate()

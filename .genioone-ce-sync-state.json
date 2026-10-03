@@ -4527,11 +4527,11 @@
       "mode": 420
     },
     "apps/bot/server/routes/proxy.test.ts": {
-      "sha256": "34e1585884cd208f730db298199ccd120f53fc08cb6b0f45c14112d854dd8500",
+      "sha256": "6e3ee851b480b42c2c0deb445fbd163f1ac6c9a198983dc8a1d2c5a976717d65",
       "mode": 420
     },
     "apps/bot/server/routes/proxy.ts": {
-      "sha256": "53f0430db267bca1a63d8465659d6af11d0d3f5ad54e6c6d18fe97990b43912d",
+      "sha256": "6599e824dc732d22ab281225fe71af01cfcc49a070c6729f04cbaf8ba8a2eebb",
       "mode": 420
     },
     "apps/bot/server/routes/transcription.test.ts": {
@@ -4548,6 +4548,10 @@
     },
     "apps/bot/server/routes/workspaces.ts": {
       "sha256": "ce7765411c11b401816dc785f36b17385142f61a72776c922a594648e7a29134",
+      "mode": 420
+    },
+    "apps/bot/server/routes/ws-wrapper.d.ts": {
+      "sha256": "95de4cd0cc09b233ec081f87df748b5f2ab03e04cbed1a3b3e266b640a88850b",
       "mode": 420
     },
     "apps/bot/server/runtime-broker.test.ts": {

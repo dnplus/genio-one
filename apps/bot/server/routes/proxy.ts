@@ -1,5 +1,7 @@
 import { Readable } from "node:stream"
-import WebSocket from "ws"
+import type WebSocket from "ws"
+import "./ws-wrapper.d.ts"
+import RealWebSocket from "../../node_modules/ws/wrapper.mjs"
 import type { FastifyInstance } from "fastify"
 
 import { authenticateDesktopProxySession, authenticateExecutorProxySession, requestAccessToken, requestPrincipal } from "../auth"
@@ -8,6 +10,10 @@ import type { BotServerContext } from "../context"
 import { assertCapability, PERSONAL_BOT_COMPUTER_USE } from "../capability-gate"
 import { executorMethodCapability } from "../local-hands"
 import { defaultRuntimeCapabilityAction } from "@genioone/protocol/runtime-capability-actions"
+
+const RELAY_MAX_FRAME_BYTES = 8 * 1024 * 1024
+const RELAY_MAX_QUEUE_BYTES = 8 * 1024 * 1024
+const RELAY_MAX_QUEUE_FRAMES = 500
 
 export async function proxyRoutes(app: FastifyInstance, context: BotServerContext) {
   const authorizeDesktop = async (runtimeSessionId: string) => {
@@ -217,22 +223,82 @@ function bridgeProviderWebSocket(
   target: { url: string | URL; headers: Record<string, string> },
   authorizeFrame?: (message: Record<string, unknown>) => Promise<((outcome: "COMPLETED" | "FAILED", reasonCode?: string) => Promise<void>) | null>,
 ) {
-  const frame = (data: WebSocket.RawData) => Array.isArray(data) ? Buffer.concat(data) : Buffer.isBuffer(data) ? data : Buffer.from(data)
+  const frame = (data: WebSocket.RawData | string) => {
+    if (Array.isArray(data)) return Buffer.concat(data)
+    if (Buffer.isBuffer(data)) return data
+    if (typeof data === "string") return Buffer.from(data)
+    return Buffer.from(data as ArrayBuffer)
+  }
+  const frameBytes = (data: WebSocket.RawData | string) => typeof data === "string" ? Buffer.byteLength(data) : Array.isArray(data) ? data.reduce((total, part) => total + part.byteLength, 0) : data.byteLength
   const upstreamUrl = new URL(target.url)
   upstreamUrl.protocol = upstreamUrl.protocol === "https:" ? "wss:" : "ws:"
-  const upstream = new WebSocket(upstreamUrl, { headers: target.headers })
-  const pending: Array<{ data: WebSocket.RawData; binary: boolean }> = []
+  const upstream = new RealWebSocket(upstreamUrl, { headers: target.headers, maxPayload: RELAY_MAX_FRAME_BYTES })
+  const pending: Array<{ data: WebSocket.RawData | string; binary: boolean; bytes: number }> = []
   const decisions = new Map<string, { finish: (outcome: "COMPLETED" | "FAILED", reasonCode?: string) => Promise<void>; processId?: string }>()
   const processes = new Map<string, (outcome: "COMPLETED" | "FAILED", reasonCode?: string) => Promise<void>>()
   let inbound = Promise.resolve()
   let outbound = Promise.resolve()
-  socket.on("message", (data: WebSocket.RawData, binary: boolean) => {
+  let pendingBytes = 0
+  let inboundBytes = 0
+  let outboundBytes = 0
+  let inboundFrames = 0
+  let outboundFrames = 0
+  let closed = false
+  const failOutstanding = () => {
+    for (const { finish } of decisions.values()) void finish("FAILED", "EXECUTOR_PROXY_DISCONNECTED").catch(() => undefined)
+    for (const finish of processes.values()) void finish("FAILED", "EXECUTOR_RESULT_UNCONFIRMED").catch(() => undefined)
+    decisions.clear()
+    processes.clear()
+  }
+  const closeBridge = (code?: number, reason?: string) => {
+    if (closed) return
+    closed = true
+    pending.length = 0
+    pendingBytes = 0
+    failOutstanding()
+    for (const peer of [socket, upstream]) {
+      if (peer.readyState === RealWebSocket.CONNECTING || (code === 1009 && peer.bufferedAmount > 0)) peer.terminate()
+      else if (peer.readyState === RealWebSocket.OPEN) peer.close(code, reason)
+      else if (code === 1009 && peer.readyState === RealWebSocket.CLOSING) peer.terminate()
+    }
+  }
+  const sendWithinBudget = (destination: WebSocket, data: WebSocket.RawData | string, binary: boolean, bytes: number) => {
+    if (closed) return
+    if (destination.readyState !== RealWebSocket.OPEN) { closeBridge(); return }
+    if (!Number.isFinite(destination.bufferedAmount) || bytes > RELAY_MAX_QUEUE_BYTES - destination.bufferedAmount) {
+      closeBridge(1009, "RELAY_CAPACITY_EXCEEDED")
+      return
+    }
+    try { destination.send(data, { binary }) }
+    catch { closeBridge(1011, "RELAY_SEND_FAILED") }
+  }
+  const checkPongBudget = (peer: WebSocket) => {
+    if (!closed && (!Number.isFinite(peer.bufferedAmount) || peer.bufferedAmount > RELAY_MAX_QUEUE_BYTES)) {
+      closeBridge(1009, "RELAY_CAPACITY_EXCEEDED")
+    }
+  }
+  socket.on("ping", () => checkPongBudget(socket))
+  upstream.on("ping", () => checkPongBudget(upstream))
+  socket.on("message", (data: WebSocket.RawData | string, binary: boolean) => {
+    if (closed) return
+    const bytes = frameBytes(data)
+    if (bytes > RELAY_MAX_FRAME_BYTES || inboundFrames >= RELAY_MAX_QUEUE_FRAMES || bytes > RELAY_MAX_QUEUE_BYTES - inboundBytes) {
+      closeBridge(1009, "RELAY_CAPACITY_EXCEEDED")
+      return
+    }
+    inboundBytes += bytes
+    inboundFrames += 1
     inbound = inbound.then(async () => {
+      if (closed) return
       if (authorizeFrame) {
-        if (binary || frame(data).byteLength > 8 * 1024 * 1024) throw new Error("EXECUTOR_FRAME_INVALID")
+        if (binary) throw new Error("EXECUTOR_FRAME_INVALID")
         const message = JSON.parse(frame(data).toString("utf8")) as Record<string, unknown>
         if (!message || typeof message !== "object" || Array.isArray(message)) throw new Error("EXECUTOR_FRAME_INVALID")
         const finish = await authorizeFrame(message)
+        if (closed) {
+          if (finish) void finish("FAILED", "EXECUTOR_PROXY_DISCONNECTED").catch(() => undefined)
+          return
+        }
         if (finish) {
           const key = JSON.stringify(message.id)
           if (decisions.size >= 64 || decisions.has(key)) throw new Error("EXECUTOR_REQUEST_CONFLICT")
@@ -244,20 +310,38 @@ function bridgeProviderWebSocket(
           if (processId) processes.set(processId, finish)
         }
       }
-      if (upstream.readyState === WebSocket.OPEN) upstream.send(data, { binary })
-      else if (upstream.readyState === WebSocket.CONNECTING && pending.length < 500) pending.push({ data, binary })
+      if (upstream.readyState === RealWebSocket.OPEN) sendWithinBudget(upstream, data, binary, bytes)
+      else if (upstream.readyState === RealWebSocket.CONNECTING && pending.length < RELAY_MAX_QUEUE_FRAMES && bytes <= RELAY_MAX_QUEUE_BYTES - pendingBytes) {
+        pending.push({ data, binary, bytes })
+        pendingBytes += bytes
+      }
+      else if (upstream.readyState === RealWebSocket.CONNECTING) closeBridge(1009, "RELAY_CAPACITY_EXCEEDED")
       else throw new Error("EXECUTOR_UPSTREAM_UNAVAILABLE")
-    }).catch((error) => { socket.close(1008, error instanceof Error ? error.message.slice(0, 100) : "EXECUTOR_POLICY_DENIED"); upstream.close() })
+    }).catch((error) => closeBridge(1008, error instanceof Error ? error.message.slice(0, 100) : "EXECUTOR_POLICY_DENIED"))
+      .finally(() => { inboundBytes -= bytes; inboundFrames -= 1 })
   })
   socket.on("error", (err) => {
     console.warn(JSON.stringify({ event: "bridge.socket.error", error: err instanceof Error ? err.message : String(err) }))
-    upstream.close()
+    closeBridge()
   })
   upstream.on("open", () => {
-    for (const message of pending.splice(0)) upstream.send(message.data, { binary: message.binary })
+    while (!closed && pending.length) {
+      const message = pending.shift()!
+      pendingBytes -= message.bytes
+      sendWithinBudget(upstream, message.data, message.binary, message.bytes)
+    }
   })
-  upstream.on("message", (data: WebSocket.RawData, binary: boolean) => {
+  upstream.on("message", (data: WebSocket.RawData | string, binary: boolean) => {
+    if (closed) return
+    const bytes = frameBytes(data)
+    if (bytes > RELAY_MAX_FRAME_BYTES || outboundFrames >= RELAY_MAX_QUEUE_FRAMES || bytes > RELAY_MAX_QUEUE_BYTES - outboundBytes) {
+      closeBridge(1009, "RELAY_CAPACITY_EXCEEDED")
+      return
+    }
+    outboundBytes += bytes
+    outboundFrames += 1
     outbound = outbound.then(async () => {
+      if (closed) return
       if (authorizeFrame && !binary) {
         const message = JSON.parse(frame(data).toString("utf8")) as { id?: unknown; error?: { code?: unknown } }
         const notification = message as { method?: string; params?: { processId?: string; exitCode?: number } }
@@ -283,19 +367,15 @@ function bridgeProviderWebSocket(
           }
         }
       }
-      if (socket.readyState === socket.OPEN) socket.send(data, { binary })
-    }).catch(() => { socket.close(1011, "EXECUTOR_REPORT_UNAVAILABLE"); upstream.close() })
+      if (!closed) sendWithinBudget(socket, data, binary, bytes)
+    }).catch(() => closeBridge(1011, "EXECUTOR_REPORT_UNAVAILABLE"))
+      .finally(() => { outboundBytes -= bytes; outboundFrames -= 1 })
   })
-  const failOutstanding = () => {
-    for (const { finish } of decisions.values()) void finish("FAILED", "EXECUTOR_PROXY_DISCONNECTED").catch(() => undefined)
-    for (const finish of processes.values()) void finish("FAILED", "EXECUTOR_RESULT_UNCONFIRMED").catch(() => undefined)
-    decisions.clear()
-    processes.clear()
-  }
-  upstream.on("close", () => { failOutstanding(); socket.close() })
+  upstream.on("close", () => closeBridge())
   upstream.on("error", (err) => {
     console.warn(JSON.stringify({ event: "bridge.upstream.error", error: err instanceof Error ? err.message : String(err) }))
-    socket.close(1011, "DESKTOP_UPSTREAM_FAILED")
+    const oversized = (err as Error & { code?: string }).code === "WS_ERR_UNSUPPORTED_MESSAGE_LENGTH"
+    closeBridge(oversized ? 1009 : 1011, oversized ? "RELAY_CAPACITY_EXCEEDED" : "DESKTOP_UPSTREAM_FAILED")
   })
-  socket.on("close", () => { failOutstanding(); upstream.close() })
+  socket.on("close", () => closeBridge())
 }
