@@ -11,6 +11,17 @@ pnpm env:logs
 
 The normal startup output ends with `local-dev.ready`. If a local port is already occupied, do not assume its process belongs to this checkout; stop or inspect that process first, then rerun `pnpm dev`.
 
+## Another installation owns the supporting services
+
+The startup diagnostic identifies the conflicting project or checkout without starting containers or changing the existing installation. A healthy Keycloak at `58080` does not mean it belongs to this checkout. Stopping the containers also does not remove their retained data.
+
+Choose the matching path in [quickstart](quickstart.md):
+
+- For an independent installation, use a separate host or VM with its own Docker daemon and loopback network, and run the original quickstart there. A new directory or a different Compose project name alone is insufficient because the application addresses and identity redirects remain fixed.
+- For an intentional shared development installation, start compatible supporting services from their owning checkout, configure this checkout for the same identity and data, and run `pnpm dev --reuse-support`. The option does not repair mismatched configuration or start missing shared services.
+
+If only retained volumes remain and their ownership cannot be verified, recover the original checkout and its local installation state, or use an independent environment. Do not remove the volumes to get past the diagnostic unless you have separately chosen to discard that installation's data.
+
 ## Management sign-in or API health fails
 
 Check the identity discovery document and Platform API health:

@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { cleanLocalDev } from "./local-dev-clean.mjs"
+import { parseLocalDevArguments, preflightLocalSupport, recordLocalSupportOwnership } from "./local-dev-support.mjs"
 import {
   createDistillationTriageHandoff,
   parseDistillationTriageHandoff,
@@ -786,22 +787,19 @@ async function runCommand(command, args, cwd) {
   })
 }
 
-async function ensureIdentity() {
+async function ensureIdentity(support, { run = runCommand, wait = waitForHealthy } = {}) {
   if (stopping) return false
-  const identity = await probe({ url: "http://127.0.0.1:58080/realms/genio-one/.well-known/openid-configuration" })
-  if (stopping) return false
-  if (identity?.response.ok) {
+  if (support.shared) {
     process.stdout.write(`${JSON.stringify({ event: "local-dev.service-existing", service: "keycloak", port: 58080 })}\n`)
     return true
   }
-  if (!existsSync(resolve(platformDir, ".env.local"))) throw new Error("apps/platform/.env.local is required for local identity startup")
-  await runCommand("pnpm", ["env:up:identity"], platformDir)
-  const healthy = await waitForHealthy({
+  await run("pnpm", ["env:up:identity"], platformDir)
+  const healthy = await wait({
     name: "keycloak",
-    url: "http://127.0.0.1:58080/realms/genio-one/.well-known/openid-configuration",
+    url: `${support.issuer}/.well-known/openid-configuration`,
     port: 58080,
     healthTimeoutMs: 90_000,
-    healthy(_body, response) { return response.ok },
+    healthy(body, response) { return response.ok && body?.issuer === support.issuer },
   })
   if (!healthy) return false
   process.stdout.write(`${JSON.stringify({ event: "local-dev.service-started", service: "keycloak", port: 58080 })}\n`)
@@ -840,12 +838,29 @@ async function shutdown(code = 0) {
   process.exitCode = code
 }
 
-async function main() {
+export async function prepareLocalSupport({
+  reuseSupport = false,
+  preflightOptions = {},
+  signingKeys = ensureSigningKeys,
+  identity = ensureIdentity,
+  run = runCommand,
+  record = recordLocalSupportOwnership,
+} = {}) {
+  const support = await preflightLocalSupport({ checkoutRoot: root, ...preflightOptions, reuseSupport })
+  process.stdout.write(`${JSON.stringify({ event: "local-dev.support-verified", project: support.project, owner: support.owner, shared: support.shared })}\n`)
+  if (stopping) return false
+  signingKeys()
+  if (!(await identity(support)) || stopping) return false
+  if (!support.shared) {
+    await run("pnpm", ["env:up:analytics"], platformDir)
+    record(support)
+  }
+  return !stopping
+}
+
+async function main(options) {
   if (stopping) return
-  ensureSigningKeys()
-  if (!(await ensureIdentity()) || stopping) return
-  await runCommand("pnpm", ["env:up:analytics"], platformDir)
-  if (stopping) return
+  if (!(await prepareLocalSupport(options))) return
   const launchNames = configureDistillationLaunch(services, startupServiceNames, process.env, existsSync)
   const configuration = distillationLaunchConfiguration(services, readFileSync, process.env)
   const bot = services.find((service) => service.name === "bot-server")
@@ -879,8 +894,12 @@ async function main() {
 }
 
 async function commandMain() {
-  if (process.argv.slice(2).includes("clean")) return cleanLocalDev()
-  return main()
+  const options = parseLocalDevArguments(process.argv.slice(2))
+  if (options.clean) {
+    await preflightLocalSupport({ checkoutRoot: root, ...options })
+    return cleanLocalDev()
+  }
+  return main(options)
 }
 
 process.once("SIGINT", () => void shutdown())
@@ -888,7 +907,7 @@ process.once("SIGTERM", () => void shutdown())
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   commandMain().catch(async (error) => {
-    process.stderr.write(`${JSON.stringify({ event: "local-dev.failed", message: error instanceof Error ? error.message : String(error) })}\n`)
+    process.stderr.write(`${JSON.stringify(error.diagnostic ?? { event: "local-dev.failed", message: error instanceof Error ? error.message : String(error) })}\n`)
     await shutdown(1)
   })
 }

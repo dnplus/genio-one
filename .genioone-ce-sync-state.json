@@ -3,7 +3,7 @@
   "provenance": {
     "exporter": "genioone-ce-sync",
     "source": "git-committed-snapshot",
-    "manifestSha256": "1a3babeacdae47f5e9ded95687d45ec0d69fa035dc6e0c03dce36bd08a7bf07a"
+    "manifestSha256": "65d30d3aabc2ba82c5b73b3d9edddfa9ae96f2016d44c7cdd34cc704a79cb4dc"
   },
   "files": {
     ".dockerignore": {
@@ -4387,7 +4387,7 @@
       "mode": 420
     },
     "apps/bot/server/routes/bot-tools.test.ts": {
-      "sha256": "aede220b2331c6cb0178c949809ac3835968e54da335da3135acdcad8115db2b",
+      "sha256": "c231c4419e8beb482644fffc1cc8792d54e34e2ce0a63dab7729433611f711bb",
       "mode": 420
     },
     "apps/bot/server/routes/bot-tools.ts": {
@@ -8447,7 +8447,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/i18n.ts": {
-      "sha256": "75004d11f0887214192dd6110ae4ed59fe1dacdcddb3299315dcba082ba975e2",
+      "sha256": "3ff6acef46c1cf2444f38285a26ccfd4896e72b1c8d7065b150b4c726eeeeb8a",
       "mode": 420
     },
     "apps/platform/platform-web/src/i18n/admin-governance.ts": {
@@ -8971,7 +8971,7 @@
       "mode": 420
     },
     "docs/public/ce/quickstart.md": {
-      "sha256": "e813a4621420a547543e7d3bddad2b06dca93a76b284672eaf2a5028b011eccb",
+      "sha256": "e29859abf84a095092bb393796871a43bc34d605c2104bb8d460426b9966a26d",
       "mode": 420
     },
     "docs/public/ce/README.md": {
@@ -8983,7 +8983,7 @@
       "mode": 420
     },
     "docs/public/ce/troubleshooting.md": {
-      "sha256": "5c6d6d32590dfb11db4dd2348b9e1be34a12a8768dd8b946e934de876bfa4e0d",
+      "sha256": "69c2ebbb6a34fd47ef703bf56d757caf03405991bbd002786ba1b0896c18d42a",
       "mode": 420
     },
     "docs/public/product/en/core-concepts.md": {
@@ -9790,8 +9790,16 @@
       "sha256": "c8735b3432e839f8bc52215e9af8dd2444cd892a0ccfe72c371cd2ad65aba748",
       "mode": 420
     },
+    "tooling/local-dev-support.mjs": {
+      "sha256": "b8e3ce10559a07ee4e875ae14301263f188e8ed986cabda7d0fc2e71e0f59570",
+      "mode": 420
+    },
+    "tooling/local-dev-support.test.mjs": {
+      "sha256": "b3c1535aee64695e9f08582b1fe8d25fd37944dcb1a1a3a6b96792a391c1b10c",
+      "mode": 420
+    },
     "tooling/local-dev.mjs": {
-      "sha256": "046268c4d7406652c90142845f7243f2949c8ef0c2aeaf879851a39aa88bdeb6",
+      "sha256": "905e3e5cc84aaa5ebab4de2cf54875accacf0fb6b5ca3ee3760aebb01a015687",
       "mode": 420
     },
     "tooling/local-dev.test.mjs": {

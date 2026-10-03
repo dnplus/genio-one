@@ -16,6 +16,7 @@ import { BOT_WORK_SUMMARY_STATUS_GUIDANCE } from "../../shared/bot-work-summary"
 import { botToolRoutes } from "./bot-tools"
 
 test("Bot MCP binds the caller to its credential and preserves existing handoff authorization", async () => {
+  const scheduleAt = new Date(Date.now() + 24 * 60 * 60_000).toISOString()
   const dir = mkdtempSync(join(tmpdir(), "bot-tools-"))
   const registry = new BotRegistry(join(dir, "registry.sqlite"), join(dir, "artifacts"))
 
@@ -127,20 +128,20 @@ test("Bot MCP binds the caller to its credential and preserves existing handoff 
     })
     registry.connectionContinuations.markMcpReloaded("read-only-continuation", ["genio_mcp_notion"])
     expect(registry.connectionContinuations.claim("read-only-continuation")).toBe(true)
-    const blockedStartingSchedule = await call("create_schedule", { clientRequestId: "read-only-starting", prompt: "write", schedule: { kind: "once", at: "2026-10-01T00:00:00.000Z" } })
+    const blockedStartingSchedule = await call("create_schedule", { clientRequestId: "read-only-starting", prompt: "write", schedule: { kind: "once", at: scheduleAt } })
     expect(blockedStartingSchedule.json().result.content[0].text).toBe("CONNECTION_CONTINUATION_READ_ONLY")
     expect(registry.connectionContinuations.retryStarting("read-only-continuation")).toMatchObject({ state: "retrying" })
-    const blockedRetrySchedule = await call("create_schedule", { clientRequestId: "read-only-retrying", prompt: "write", schedule: { kind: "once", at: "2026-10-01T00:00:00.000Z" } })
+    const blockedRetrySchedule = await call("create_schedule", { clientRequestId: "read-only-retrying", prompt: "write", schedule: { kind: "once", at: scheduleAt } })
     expect(blockedRetrySchedule.json().result.content[0].text).toBe("CONNECTION_CONTINUATION_READ_ONLY")
     registry.timeline.putTurn(caller.id, "separate-thread", { id: "separate-turn", status: "inProgress", items: [] } as unknown as Turn)
-    const separateThreadSchedule = await call("create_schedule", { clientRequestId: "separate-thread", prompt: "write", schedule: { kind: "once", at: "2026-10-01T00:00:00.000Z" } })
+    const separateThreadSchedule = await call("create_schedule", { clientRequestId: "separate-thread", prompt: "write", schedule: { kind: "once", at: scheduleAt } })
     expect(separateThreadSchedule.json().result.content[0].text).toBe("CONNECTION_CONTINUATION_READ_ONLY")
     expect(registry.connectionContinuations.cancel("read-only-continuation", "CONNECTION_SOURCE_SUPERSEDED")).toMatchObject({ state: "guarded" })
-    const blockedGuardedSchedule = await call("create_schedule", { clientRequestId: "read-only-guarded", prompt: "write", schedule: { kind: "once", at: "2026-10-01T00:00:00.000Z" } })
+    const blockedGuardedSchedule = await call("create_schedule", { clientRequestId: "read-only-guarded", prompt: "write", schedule: { kind: "once", at: scheduleAt } })
     expect(blockedGuardedSchedule.json().result.content[0].text).toBe("CONNECTION_CONTINUATION_READ_ONLY")
     const guarded = registry.connectionContinuations.get("read-only-continuation")
     registry.connectionContinuations.reconcile(guarded, [{ id: "continued-turn", status: "completed", itemsView: "full", error: null, startedAt: 1, completedAt: 2, durationMs: 1, items: [{ type: "userMessage", id: "continued-input", clientId: guarded.clientId, content: [] }] } as Turn])
-    const terminalAfterGuardedSchedule = await call("create_schedule", { clientRequestId: "after-guarded-terminal", prompt: "write", schedule: { kind: "once", at: "2026-10-01T00:00:00.000Z" } })
+    const terminalAfterGuardedSchedule = await call("create_schedule", { clientRequestId: "after-guarded-terminal", prompt: "write", schedule: { kind: "once", at: scheduleAt } })
     expect(terminalAfterGuardedSchedule.json().result.isError).toBe(false)
     await broker.stop(runtime.id)
     const replacement = await broker.start(principal, { onMessage() {}, onExit() {} }, undefined, "replacement-owner-token")
