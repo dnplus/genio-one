@@ -7,7 +7,10 @@ import type { SqlAdapter, SqlQueryResult, SqlTransaction } from "../src/persiste
 type Row = Record<string, unknown>
 
 class UsageTransaction implements SqlAdapter, SqlTransaction {
-  async query<Result extends Row = Row>(text: string): Promise<SqlQueryResult<Result>> {
+  readonly calls: Array<{ text: string; parameters: readonly unknown[] }> = []
+
+  async query<Result extends Row = Row>(text: string, parameters: readonly unknown[] = []): Promise<SqlQueryResult<Result>> {
+    this.calls.push({ text, parameters })
     const rows = text.includes("insert into genio_one_use_cases")
       ? [{
           tenant_id: "tenant-acme",
@@ -74,6 +77,11 @@ test("Use Case and Usage Policy mutations publish a successor aggregate release 
     state: "ACTIVE",
     created_at: 100,
   })
+  const lockIndex = sql.calls.findIndex((call) => call.text.includes("pg_advisory_xact_lock"))
+  const headIndex = sql.calls.findIndex((call) => call.text.includes("order by revision desc limit 1"))
+  const insertIndex = sql.calls.findIndex((call) => call.text.includes("insert into genio_one_usage_policy_revisions"))
+  assert.ok(lockIndex >= 0 && lockIndex < headIndex && headIndex < insertIndex)
+  assert.equal(sql.calls[lockIndex]?.parameters[0], JSON.stringify(["usage-policy", "tenant-acme", "usage-support"]))
   assert.equal(reconciled.length, 2)
   assert.ok(reconciled.every((value) => value.transaction === sql))
   assert.ok(reconciled.every((value) => value.tenantId === "tenant-acme" && value.gatewayId === "gateway-ai"))

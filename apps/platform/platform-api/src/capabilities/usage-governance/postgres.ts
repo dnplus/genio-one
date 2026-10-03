@@ -1,7 +1,7 @@
 import type { SqlAdapter, SqlTransaction } from "../../persistence/sql-adapter"
 import type { ResourceLifecycleReleasePublisher } from "../resources/module"
 import type { UsagePolicyRevision } from "./contract"
-import type { UsageGovernanceDirectory, UseCase } from "./directory"
+import { assertUsagePolicyRevision, type UsageGovernanceDirectory, type UseCase } from "./directory"
 
 type Row = Record<string, unknown>
 
@@ -114,37 +114,58 @@ export function createPostgresUsageGovernanceDirectory(
     },
     async createPolicyRevision(value) {
       return sql.transaction(async (transaction) => {
+        await transaction.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [
+          JSON.stringify(["usage-policy", value.tenant_id, value.usage_policy_id]),
+        ])
+        const head = await transaction.query<Row>(
+          `select * from genio_one_usage_policy_revisions
+            where tenant_id = $1 and usage_policy_id = $2
+            order by revision desc limit 1`,
+          [value.tenant_id, value.usage_policy_id],
+        )
+        assertUsagePolicyRevision(value, head.rows[0] ? policy(head.rows[0]) : null)
         const result = await transaction.query<Row>(
           `insert into genio_one_usage_policy_revisions
             (tenant_id, usage_policy_id, display_name, revision, owner_organization_id,
              accounting_key_id, selectors, limits, state, created_at)
-           select $1,$2,$3,$4,$5,$6,$7::text::jsonb,$8::text::jsonb,$9,to_timestamp($10)
-            where $4 = coalesce((select max(revision) + 1 from genio_one_usage_policy_revisions
-              where tenant_id = $1 and usage_policy_id = $2), 1)
+           values ($1,$2,$3,$4,$5,$6,$7::text::jsonb,$8::text::jsonb,$9,to_timestamp($10))
            returning *`,
           [value.tenant_id, value.usage_policy_id, value.display_name ?? value.usage_policy_id, value.revision, value.owner_organization_id,
             value.accounting_key_id, JSON.stringify(value.selectors), JSON.stringify(value.limits),
             value.state, value.created_at],
         )
-        if (!result.rows[0]) throw new Error("USAGE_POLICY_REVISION_INVALID")
         await reconcileUsageReleases({
           transaction,
           tenantId: value.tenant_id,
           issuedAt: now(),
           releasePublisher: options.releasePublisher,
         })
-        return policy(result.rows[0])
+        return policy(result.rows[0]!)
       })
+    },
+    async getLatestPolicy(input) {
+      const result = await sql.query<Row>(
+        `select * from genio_one_usage_policy_revisions
+          where tenant_id = $1 and usage_policy_id = $2
+          order by revision desc limit 1`,
+        [input.tenant_id, input.usage_policy_id],
+      )
+      return result.rows[0] ? policy(result.rows[0]) : null
     },
     async listActivePolicies(input) {
       const result = await sql.query<Row>(
-        `select distinct on (usage_policy_id) *
-           from genio_one_usage_policy_revisions
-          where tenant_id = $1
-          order by usage_policy_id, revision desc`,
-        [input.tenant_id],
+        `select * from (
+           select distinct on (usage_policy_id) *
+             from genio_one_usage_policy_revisions
+            where tenant_id = $1
+            order by usage_policy_id, revision desc
+         ) latest
+         where state = 'ACTIVE'
+           and ($2::text[] is null or owner_organization_id = any($2::text[]))
+         order by usage_policy_id`,
+        [input.tenant_id, input.owner_organization_ids === undefined ? null : [...input.owner_organization_ids]],
       )
-      return result.rows.map(policy).filter((value) => value.state === "ACTIVE")
+      return result.rows.map(policy)
     },
   }
 }

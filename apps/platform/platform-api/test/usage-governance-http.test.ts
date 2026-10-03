@@ -281,6 +281,97 @@ test("runtime accounting ingest is retry-safe and creates one canonical charge",
   await app.close()
 })
 
+
+test("management Usage Policy lists use administrator ownership and revisions authorize the persisted owner", async () => {
+  const modules = createInMemoryPlatformModules({ now: () => 1_700_000_000 })
+  const tenantId = "tenant-usage-ownership"
+  const organizations = await Promise.all(["a", "b"].map((name) => modules.organizations.create({
+    tenantId,
+    display_name: `Organization ${name}`,
+    slug: `organization-${name}`,
+  })))
+  const [orgA, orgB] = organizations.map((organization) => organization.organization_id)
+  assert.ok(orgA && orgB)
+  const app = await createManagementApi({
+    modules,
+    resourceCatalog: modules.resources,
+    principalAuthenticator: createStaticPrincipalAuthenticator({
+      "admin-a": { tenant_id: tenantId, subject_id: "admin-a", role: "ORGANIZATION_ADMINISTRATOR", organization_ids: [orgA, orgB], administrator_organization_ids: [orgA], client_id: "platform-web", scopes: ["genioone-management"] },
+      "admin-b": { tenant_id: tenantId, subject_id: "admin-b", role: "ORGANIZATION_ADMINISTRATOR", organization_ids: [orgA, orgB], administrator_organization_ids: [orgB], client_id: "platform-web", scopes: ["genioone-management"] },
+      "member": { tenant_id: tenantId, subject_id: "member", role: "USER", organization_ids: [orgA, orgB], administrator_organization_ids: [], client_id: "platform-web", scopes: ["genioone-management"] },
+      "admin-empty": { tenant_id: tenantId, subject_id: "admin-empty", role: "ORGANIZATION_ADMINISTRATOR", organization_ids: [orgA, orgB], administrator_organization_ids: [], client_id: "platform-web", scopes: ["genioone-management"] },
+      "tenant-admin": { tenant_id: tenantId, subject_id: "tenant-admin", role: "TENANT_ADMINISTRATOR", organization_ids: [], client_id: "platform-web", scopes: ["genioone-management"] },
+    }),
+  })
+  const url = `/v1/tenants/${tenantId}/usage-policies`
+  const payload = {
+    usage_policy_id: "shared-policy-a",
+    owner_organization_id: orgA,
+    accounting_key_id: "stable-accounting-key",
+    selectors: { consumer_organization_id: orgB },
+    limits: { request_quota: { limit: 10, window_seconds: 60 } },
+    state: "ACTIVE",
+  }
+  const post = (token: string, changes: Record<string, unknown> = {}) => app.inject({ method: "POST", url, headers: { authorization: `Bearer ${token}` }, payload: { ...payload, ...changes } })
+  const list = (token: string) => app.inject({ method: "GET", url, headers: { authorization: `Bearer ${token}` } })
+  try {
+    assert.equal((await post("admin-a")).statusCode, 201)
+    assert.equal((await post("admin-b", { usage_policy_id: "policy-b", owner_organization_id: orgB, accounting_key_id: "key-b" })).statusCode, 201)
+    const listedA = await list("admin-a")
+    const listedB = await list("admin-b")
+    const listedAll = await list("tenant-admin")
+    assert.equal(listedA.statusCode, 200)
+    assert.equal(listedB.statusCode, 200)
+    assert.equal(listedAll.statusCode, 200)
+    assert.deepEqual(listedA.json().map((value: any) => value.usage_policy_id), ["shared-policy-a"])
+    assert.equal(listedA.json()[0].selectors.consumer_organization_id, orgB)
+    assert.deepEqual(listedB.json().map((value: any) => value.usage_policy_id), ["policy-b"])
+    assert.deepEqual(listedAll.json().map((value: any) => value.usage_policy_id), ["policy-b", "shared-policy-a"])
+    assert.equal((await list("member")).statusCode, 403)
+    assert.equal((await post("member")).statusCode, 403)
+    const emptyList = await list("admin-empty")
+    assert.equal(emptyList.statusCode, 200)
+    assert.deepEqual(emptyList.json(), [])
+    const takeover = await post("admin-b", { owner_organization_id: orgB, revision: 2 })
+    assert.equal(takeover.statusCode, 403)
+    assert.equal(takeover.json().code, "ORGANIZATION_ADMIN_REQUIRED")
+    for (const token of ["admin-a", "tenant-admin"]) {
+      const changedOwner = await post(token, { owner_organization_id: orgB, revision: 2 })
+      assert.equal(changedOwner.statusCode, 409)
+      assert.equal(changedOwner.json().code, "USAGE_POLICY_OWNER_IMMUTABLE")
+      const changedKey = await post(token, { accounting_key_id: "reset-accounting-key", revision: 2 })
+      assert.equal(changedKey.statusCode, 409)
+      assert.equal(changedKey.json().code, "USAGE_POLICY_ACCOUNTING_KEY_IMMUTABLE")
+    }
+    const updated = await post("admin-a", { accounting_key_id: undefined, limits: { request_quota: { limit: 20, window_seconds: 60 } } })
+    assert.equal(updated.statusCode, 201)
+    assert.equal(updated.json().revision, 2)
+    assert.equal(updated.json().accounting_key_id, payload.accounting_key_id)
+    const whitespaceKey = await post("admin-a", { accounting_key_id: "   " })
+    assert.equal(whitespaceKey.statusCode, 201)
+    assert.equal(whitespaceKey.json().revision, 3)
+    assert.equal(whitespaceKey.json().accounting_key_id, payload.accounting_key_id)
+    const retired = await post("admin-a", { accounting_key_id: undefined, state: "RETIRED" })
+    assert.equal(retired.statusCode, 201)
+    assert.equal(retired.json().revision, 4)
+    assert.deepEqual((await list("admin-a")).json(), [])
+    const retiredTakeover = await post("admin-b", { owner_organization_id: orgB, accounting_key_id: undefined })
+    assert.equal(retiredTakeover.statusCode, 403)
+    const retiredKeyChange = await post("tenant-admin", { accounting_key_id: "reset-accounting-key" })
+    assert.equal(retiredKeyChange.statusCode, 409)
+    const restored = await post("tenant-admin", { accounting_key_id: undefined })
+    assert.equal(restored.statusCode, 201)
+    assert.equal(restored.json().revision, 5)
+    assert.equal(restored.json().accounting_key_id, payload.accounting_key_id)
+    const gap = await post("admin-a", { revision: 7 })
+    assert.equal(gap.statusCode, 409)
+    assert.equal(gap.json().code, "USAGE_POLICY_REVISION_INVALID")
+    assert.equal((await modules.usageGovernance.getLatestPolicy({ tenant_id: tenantId, usage_policy_id: payload.usage_policy_id }))?.revision, 5)
+  } finally {
+    await app.close()
+  }
+})
+
 test("currency settlement failure is reported after ledger commit and retry completes the boundary", async () => {
   const app = Fastify()
   const ledger = createInMemoryAccountingLedger()

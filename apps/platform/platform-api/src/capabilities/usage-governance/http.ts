@@ -251,7 +251,20 @@ export const usageGovernanceHttp: FastifyPluginAsync<{
       params: Type.Object({ tenant_id: Identifier }),
       response: { 200: Type.Array(PolicySchema) },
     },
-  }, async (request) => options.directory.listActivePolicies({ tenant_id: request.params.tenant_id }))
+  }, async (request) => {
+    const principal = request.principal
+    if (!principal || principal.tenant_id !== request.params.tenant_id ||
+      (principal.role !== "TENANT_ADMINISTRATOR" && principal.role !== "ORGANIZATION_ADMINISTRATOR")) {
+      throw new PlatformApiError("ORGANIZATION_ADMIN_REQUIRED", 403)
+    }
+    return options.directory.listActivePolicies({
+      tenant_id: request.params.tenant_id,
+      ...(principal.role === "TENANT_ADMINISTRATOR" ? {} : {
+        owner_organization_ids: (principal.administrator_organization_ids ?? [])
+          .filter((organizationId) => canManageOrganization(principal, organizationId)),
+      }),
+    })
+  })
   routes.post("/v1/tenants/:tenant_id/usage-policies", {
     schema: {
       operationId: "createUsagePolicyRevision",
@@ -261,11 +274,20 @@ export const usageGovernanceHttp: FastifyPluginAsync<{
       response: { 201: PolicySchema },
     },
   }, async (request, reply) => {
-    if (!canManageOrganization(request.principal, request.body.owner_organization_id)) {
+    const principal = request.principal
+    if (!principal || principal.tenant_id !== request.params.tenant_id) {
       throw new PlatformApiError("ORGANIZATION_ADMIN_REQUIRED", 403)
     }
     const usagePolicyId = request.body.usage_policy_id?.trim() || `usage-policy-${crypto.randomUUID()}`
-    const accountingKeyId = request.body.accounting_key_id?.trim() || `accounting-key-${crypto.randomUUID()}`
+    const previous = await options.directory.getLatestPolicy({
+      tenant_id: request.params.tenant_id,
+      usage_policy_id: usagePolicyId,
+    })
+    if (!canManageOrganization(principal, previous?.owner_organization_id ?? request.body.owner_organization_id)) {
+      throw new PlatformApiError("ORGANIZATION_ADMIN_REQUIRED", 403)
+    }
+    const accountingKeyId = request.body.accounting_key_id?.trim() ||
+      previous?.accounting_key_id || `accounting-key-${crypto.randomUUID()}`
     const limits: UsagePolicyLimits = {
       ...(request.body.limits.request_quota ? { request_quota: request.body.limits.request_quota } : {}),
       ...(request.body.limits.concurrency ? { concurrency: request.body.limits.concurrency } : {}),
@@ -289,7 +311,7 @@ export const usageGovernanceHttp: FastifyPluginAsync<{
       ...request.body,
       usage_policy_id: usagePolicyId,
       display_name: request.body.display_name?.trim() || usagePolicyId,
-      revision: request.body.revision ?? 1,
+      revision: request.body.revision ?? (previous?.revision ?? 0) + 1,
       accounting_key_id: accountingKeyId,
       limits,
       tenant_id: request.params.tenant_id,

@@ -7123,11 +7123,11 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/usage-governance/directory.ts": {
-      "sha256": "62ab150f13aff4a7567ee0826b2859355481f0d643e4502ce15f35a179b8e76a",
+      "sha256": "0a6439d9ac57f639ebc618443d211f86758f50c52c1688cd421bd3ec8dc19d15",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/usage-governance/http.ts": {
-      "sha256": "8bd9357882913eda48ffc8c30cfd57e8910030f79ab9e1bacf6e74a0bf182b52",
+      "sha256": "56848812868a5615f9fd9ab4983398caea7a213d6fd49d30dcf9fb162eb135e2",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/usage-governance/memory-counter.ts": {
@@ -7135,7 +7135,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/usage-governance/postgres.ts": {
-      "sha256": "dc6b3929fbf855d6a8243ee40620ac96391ec08ccf7c0e6d28f79330ae4a4acc",
+      "sha256": "cdecef91ee02df4da95c638a2138e8d31de64c6c1fdb6d36fb8f00c23e622f5c",
       "mode": 420
     },
     "apps/platform/platform-api/src/keycloak/http.ts": {
@@ -7795,15 +7795,19 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/usage-governance-http.test.ts": {
-      "sha256": "68f71e685e9f577432358378ccc166b95d51c849fe5548727fa7ce1e14c1f34b",
+      "sha256": "28a242d54c506243e8dbe973e63f053c7c3fb7b8d6513b8deb8dc77d3f8e7d42",
       "mode": 420
     },
     "apps/platform/platform-api/test/usage-governance-postgres.test.ts": {
-      "sha256": "b4909ddfda94bcf2e304cddbdac9e06a306815034725660def3598ac4222820d",
+      "sha256": "3eb203503e4dae03eaa44e21ec67206cb5ebf796bfee2fed2bb68c4fa6232d6a",
       "mode": 420
     },
     "apps/platform/platform-api/test/usage-governance.test.ts": {
-      "sha256": "f43afa3b5faa3f0c6005333831eb1826c80a4d6a5a200dc6f2a7e28741b4a1d1",
+      "sha256": "50811d9fb3f6332b7c07b4c74a155a63be20521c5192f63ec8d09125f1436dfb",
+      "mode": 420
+    },
+    "apps/platform/platform-api/test/usage-policy-ownership-postgres.test.ts": {
+      "sha256": "68f18554c25149daf83680cb248677530408cbf3c9572f7f1f034a82ee09e80e",
       "mode": 420
     },
     "apps/platform/platform-api/test/workload-identity.test.ts": {

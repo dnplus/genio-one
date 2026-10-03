@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
+import { PlatformApiError } from "../src/capabilities/errors"
 import { createInMemoryAccountingLedger } from "../src/capabilities/usage-governance/accounting"
 import { admitUsage } from "../src/capabilities/usage-governance/admission"
 import type { UsageDecisionContext, UsagePolicyRevision } from "../src/capabilities/usage-governance/contract"
@@ -355,4 +356,51 @@ test("Use Case is an Organization-owned managed entry and Usage Policy revisions
   await assert.rejects(directory.createPolicyRevision(policy()), /USAGE_POLICY_REVISION_EXISTS/)
   await directory.createPolicyRevision(policy({ revision: 2 }))
   assert.deepEqual((await directory.listActivePolicies({ tenant_id: context.tenant_id })).map((value) => value.revision), [2])
+})
+
+
+test("Usage Policy identity survives updates and retirement without changing owner or accounting key", async () => {
+  const directory = createInMemoryUsageGovernanceDirectory()
+  const latest = { tenant_id: context.tenant_id, usage_policy_id: policy().usage_policy_id }
+  assert.equal(await directory.getLatestPolicy(latest), null)
+  const original = await directory.createPolicyRevision(policy())
+  for (const change of [
+    { owner_organization_id: "organization-other", code: "USAGE_POLICY_OWNER_IMMUTABLE" },
+    { accounting_key_id: "accounting-reset", code: "USAGE_POLICY_ACCOUNTING_KEY_IMMUTABLE" },
+  ]) {
+    await assert.rejects(
+      directory.createPolicyRevision(policy({ ...change, revision: 2 })),
+      (error: unknown) => error instanceof PlatformApiError && error.statusCode === 409 && error.code === change.code,
+    )
+  }
+  assert.deepEqual(await directory.getLatestPolicy(latest), original)
+  await assert.rejects(directory.createPolicyRevision(policy({ revision: 3 })), /USAGE_POLICY_REVISION_INVALID/)
+  const retired = await directory.createPolicyRevision(policy({ revision: 2, state: "RETIRED" }))
+  assert.deepEqual(await directory.listActivePolicies({ tenant_id: context.tenant_id }), [])
+  assert.deepEqual(await directory.getLatestPolicy(latest), retired)
+  await assert.rejects(
+    directory.createPolicyRevision(policy({ revision: 3, owner_organization_id: "organization-other" })),
+    /USAGE_POLICY_OWNER_IMMUTABLE/,
+  )
+  await assert.rejects(
+    directory.createPolicyRevision(policy({ revision: 3, accounting_key_id: "accounting-reset" })),
+    /USAGE_POLICY_ACCOUNTING_KEY_IMMUTABLE/,
+  )
+  const restored = await directory.createPolicyRevision(policy({ revision: 3, limits: { concurrency: { limit: 2, lease_ttl_seconds: 60 } } }))
+  assert.deepEqual(await directory.getLatestPolicy(latest), restored)
+  restored.owner_organization_id = "modified-return-value"
+  assert.equal((await directory.getLatestPolicy(latest))?.owner_organization_id, original.owner_organization_id)
+})
+
+test("Usage Policy owner filters preserve tenant-wide internal reads and empty administrator scope", async () => {
+  const directory = createInMemoryUsageGovernanceDirectory()
+  await directory.createPolicyRevision(policy({ usage_policy_id: "policy-a", selectors: { consumer_organization_id: "organization-other" } }))
+  await directory.createPolicyRevision(policy({ usage_policy_id: "policy-b", owner_organization_id: "organization-other" }))
+  await directory.createPolicyRevision(policy({ tenant_id: "another-tenant", usage_policy_id: "policy-a", owner_organization_id: "another-owner", accounting_key_id: "another-key" }))
+  const list = (owner_organization_ids?: readonly string[]) => directory.listActivePolicies({ tenant_id: context.tenant_id, owner_organization_ids })
+  assert.deepEqual((await list()).map((value) => value.usage_policy_id), ["policy-a", "policy-b"])
+  assert.deepEqual((await list([context.resource_owner_organization_id])).map((value) => value.usage_policy_id), ["policy-a"])
+  assert.deepEqual((await list(["organization-other"])).map((value) => value.usage_policy_id), ["policy-b"])
+  assert.deepEqual(await list([]), [])
+  assert.equal((await list([context.resource_owner_organization_id]))[0]?.selectors.consumer_organization_id, "organization-other")
 })
