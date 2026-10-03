@@ -366,7 +366,7 @@ test("projection emits native CRD shapes and a signed, secret-free policy bundle
           },
           {
             name: "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT",
-            value: "true",
+            value: "false",
           },
         ],
       },
@@ -807,7 +807,7 @@ test("selected GCP Vertex Connection projects exact credential profile strategie
   assert.equal(adcProjection.resources.some((item) => item.kind === "Secret"), false)
 })
 
-test("projection emits native GatewayConfig with message capture enabled for complete telemetry", async () => {
+test("projection keeps native message capture disabled when telemetry is configured", async () => {
   const gatewayProjector = projector(publicationSnapshot(), "/v1", {
     telemetry: {
       name: "genio-one-otel-collector",
@@ -832,7 +832,7 @@ test("projection emits native GatewayConfig with message capture enabled for com
           },
           {
             name: "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT",
-            value: "true",
+            value: "false",
           },
           {
             name: "OTEL_EXPORTER_OTLP_ENDPOINT",

@@ -6511,7 +6511,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/gateway-projection/memory.ts": {
-      "sha256": "07c11cf37803803542de3de4e990a52704c32020a7a8868f76174752e9a189ea",
+      "sha256": "3878e8a9cf8316fafd6651571c56adb536bf37ed0e4fea3bff990100adacddad",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/gateway-projection/module.ts": {
@@ -6571,7 +6571,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/gateway-settings/memory.ts": {
-      "sha256": "7983df25dcb35d6181b04eeb40c8e6f10143ee76337f32a99be52570ad6b9bae",
+      "sha256": "929ea1101dac5f659c17c673a244de11f6b04828ec6550d662697dba5c499050",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/gateway-settings/module.ts": {
@@ -6579,7 +6579,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/gateway-settings/postgres.ts": {
-      "sha256": "bc8d525182178ea1c8219d989fab3d797066f6c7c6f0d99bb62485eb44404acb",
+      "sha256": "628477a7c0908c550198bb9688970c0db0d01e08440f0aaded348e0ed325b302",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/identity-providers/contract.ts": {
@@ -7546,6 +7546,10 @@
       "sha256": "920e1f5c457dcb8c146b240ec8fd2da10bb4a00f3aad7c121a61df31aebf6ebd",
       "mode": 420
     },
+    "apps/platform/platform-api/test/gateway-diagnostic-settings.test.ts": {
+      "sha256": "247b8a48523915cd2d438fdb7cdb1cf515ef0d7b6a35451546b214027992c8c3",
+      "mode": 420
+    },
     "apps/platform/platform-api/test/gateway-policy-inputs-postgres.test.ts": {
       "sha256": "3d4197a4475f9543f9ccb0a7a8289e0915ccfe00c91447d7885ab1c754a28a9e",
       "mode": 420
@@ -7575,7 +7579,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/gateway-policy-release-publication-commit.test.ts": {
-      "sha256": "54a52a56fbe6a672e447650a515c36bea135c435eb8d82089faa48cc9f387af3",
+      "sha256": "80acbea739feba5e1b4bdbc0c5713ce7de6aeea456bc97f458a211a61f3767a2",
       "mode": 420
     },
     "apps/platform/platform-api/test/gateway-policy-release-renewal.test.ts": {
@@ -7587,7 +7591,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/gateway-projection.test.ts": {
-      "sha256": "6027c79c5da7c9ad07f4bde6c5bdde7c3a29b8d677bd57b2142a57a22d5e4356",
+      "sha256": "cb75aa364694e3f1e3179db54ca970d320c6d3cf7c25dca68e1890f58cb8c07f",
       "mode": 420
     },
     "apps/platform/platform-api/test/gateway-registration-keycloak.test.ts": {
@@ -9571,11 +9575,11 @@
       "mode": 420
     },
     "runtimes/gateway/controller/kubernetes.test.ts": {
-      "sha256": "4ca4c9fde5970998cc9b494e87beb77d7a648a9cf2a39ab821825914f20c13c9",
+      "sha256": "b84bc54a35f3bf3159b70dd011d63bb51bbaebb4815232d4553398cb860fb47b",
       "mode": 420
     },
     "runtimes/gateway/controller/kubernetes.ts": {
-      "sha256": "8149953e42bfa09813ddc12156526ffc4b031f811eeabb6b7c1980ba4ff26f1e",
+      "sha256": "420f42fb1e4a1a79fefa897d68138cad292314853cdc4fdb7995e4330033d6ad",
       "mode": 420
     },
     "runtimes/gateway/controller/lease-heartbeat.test.ts": {
@@ -9595,11 +9599,11 @@
       "mode": 420
     },
     "runtimes/gateway/controller/local-aigw.test.ts": {
-      "sha256": "96b2d8c432c8054033ec266691687120dca784e34c4085f443b7a0cb8e9a9a5f",
+      "sha256": "9718e7e86fb4d096bde002b420c3f0c9aecf21efe139ca1d67c5e368d80bc761",
       "mode": 420
     },
     "runtimes/gateway/controller/local-aigw.ts": {
-      "sha256": "25804db03ab4e94997dcf0d695fdd52e796f7b8411a527f8619ec56d40228f06",
+      "sha256": "9ebc2f57cc3d08b4134bcdb150a7013d06ba571c1cf68deb51a5d3144580c43f",
       "mode": 420
     },
     "runtimes/gateway/controller/local-dev.ts": {

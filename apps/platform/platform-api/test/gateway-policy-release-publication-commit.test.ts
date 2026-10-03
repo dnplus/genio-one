@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { createHash, generateKeyPairSync, sign as signPayload } from "node:crypto"
 import test from "node:test"
 
-import type { VerificationKeyRing } from "@genioone/protocol/compact-jws"
+import { verifyCompactEdDsaJws, type VerificationKeyRing } from "@genioone/protocol/compact-jws"
 import type { SqlTransaction } from "../src/persistence/sql-adapter"
 import type { ModelEntitlement } from "../src/capabilities/entitlements/contract"
 import type { CompiledEnforcementChain } from "../src/capabilities/enforcement/contract"
@@ -20,6 +20,7 @@ import type {
   SavedGatewayPolicyRelease,
 } from "../src/capabilities/gateway-policy-release/module"
 import { canonicalGatewayPolicyReleaseBytes } from "../src/capabilities/gateway-policy-release/planner"
+import { createInMemoryGatewayDiagnosticSettingsStore } from "../src/capabilities/gateway-settings/memory"
 import {
   createGatewayPublicationReleaseCoordinator,
 } from "../src/capabilities/gateway-policy-release/publication-commit"
@@ -407,6 +408,56 @@ test("commits one deterministic aggregate release in the owning transaction", as
   const secondDelivery = onlyDelivery(second)
   assert.equal(second.release_id, first.release_id)
   assert.equal(secondDelivery.package.package_digest, firstDelivery.package.package_digest)
+})
+
+test("signed gateway release disables content capture without settings and preserves explicit opt-in", async () => {
+  const deps = dependencies()
+  const gatewaySettings = createInMemoryGatewayDiagnosticSettingsStore()
+  const coordinator = createGatewayPublicationReleaseCoordinator({
+    activeProjections: deps.activeProjections,
+    runtimeSelector: deps.runtimeSelector,
+    policyInputs: deps.policyInputs,
+    gatewaySettings,
+    releases: deps.releases,
+    scheduler: deps.scheduler,
+    artifactSigner,
+    releaseRootSigner,
+    verificationKeys,
+    releaseTtlSeconds: 600,
+  })
+  const input = {
+    transaction: deps.transaction,
+    tenantId: TENANT_ID,
+    gatewayId: GATEWAY_ID,
+    candidate: projection(),
+    issuedAt: ISSUED_AT,
+  }
+  const rootKeyRing: VerificationKeyRing = {
+    schema_version: 1,
+    keys: [{ key_id: releaseRootSigner.keyId, public_key_pem: releaseRootSigner.publicKeyPem }],
+  }
+  const disabled = onlyDelivery(await coordinator.commitInTransaction(input))
+  assert.deepEqual(disabled.package.gateway_configuration, { capture_message_content: false })
+  assert.deepEqual(disabled.saved.manifest.manifest.gateway_configuration, { capture_message_content: false })
+  assert.deepEqual(
+    verifyCompactEdDsaJws(disabled.package.manifest_jws, rootKeyRing),
+    disabled.saved.manifest.manifest,
+  )
+
+  await gatewaySettings.update({
+    tenantId: TENANT_ID,
+    gatewayId: GATEWAY_ID,
+    updatedBy: "admin",
+    value: { capture_message_content: true },
+  })
+  const enabled = onlyDelivery(await coordinator.commitInTransaction(input))
+  assert.deepEqual(enabled.package.gateway_configuration, { capture_message_content: true })
+  assert.deepEqual(enabled.saved.manifest.manifest.gateway_configuration, { capture_message_content: true })
+  assert.deepEqual(
+    verifyCompactEdDsaJws(enabled.package.manifest_jws, rootKeyRing),
+    enabled.saved.manifest.manifest,
+  )
+  assert.notEqual(enabled.saved.release.release_id, disabled.saved.release.release_id)
 })
 
 test("fans one Gateway Group release out to every eligible replica", async () => {

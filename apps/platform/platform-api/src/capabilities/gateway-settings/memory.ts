@@ -11,7 +11,7 @@ export function createInMemoryGatewayDiagnosticSettingsStore(options: {
     structuredClone(values.get(key(tenantId, gatewayId)) ?? {
       tenant_id: tenantId,
       gateway_id: gatewayId,
-      capture_message_content: true,
+      capture_message_content: false,
       row_revision: 1,
       updated_at: 0,
     })

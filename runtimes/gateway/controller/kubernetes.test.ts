@@ -49,6 +49,84 @@ function release(releaseId: string, headRevision: number, gatewayName: string) {
   } as any
 }
 
+function captureGatewayConfig(value: string) {
+  return {
+    apiVersion: "aigateway.envoyproxy.io/v1beta1",
+    kind: "GatewayConfig",
+    metadata: {
+      name: "gateway-1-config",
+      namespace: "genio-one",
+      annotations: { "genio.one/global-contract-revision": "2" },
+      labels: { "genio.one/shared-component": "ai-gateway-config" },
+    },
+    spec: { extProc: { kubernetes: { env: [{
+      name: "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT",
+      value,
+    }] } } },
+  }
+}
+
+test("Kubernetes runtime disables native content capture in an existing projection without telemetry", async () => {
+  const stateRoot = await mkdtemp(join(tmpdir(), "genio-one-gateway-native-capture-old-"))
+  const commands: KubernetesCommandInput[] = []
+  const input = release("release-old-capture", 1, "gateway-1")
+  const existing = captureGatewayConfig("true")
+  input.release.projections[0].projection.resources.push(existing)
+  const applier = createKubernetesGatewayApplier({
+    stateRoot,
+    commandRunner: async (command) => { commands.push(structuredClone(command)) },
+    fetch: async () => new Response(JSON.stringify({
+      state: "READY",
+      release: { release_id: "release-old-capture" },
+    })),
+  })
+
+  await applier.apply(input)
+  const items = parse(commands.find((command) => command.args[0] === "apply")!.stdin!).items
+  const config = items.find((item: any) => item.kind === "GatewayConfig")
+  assert.equal(config.spec.extProc.kubernetes.env[0].value, "false")
+  assert.equal(existing.spec.extProc.kubernetes.env[0].value, "true")
+})
+
+test("Kubernetes runtime merges old and new capture projections while explicit opt-in uses bounded ExtProc", async () => {
+  const stateRoot = await mkdtemp(join(tmpdir(), "genio-one-gateway-native-capture-mixed-"))
+  const commands: KubernetesCommandInput[] = []
+  const input = release("release-mixed-capture", 2, "gateway-1")
+  input.release.gateway_configuration.capture_message_content = true
+  const route = input.release.projections[0].projection.resources[1]
+  input.release.projection_count = 2
+  input.release.projections = [{
+    projection: { operation: "APPLY", resources: [captureGatewayConfig("true"), route] },
+  }, {
+    projection: { operation: "APPLY", resources: [captureGatewayConfig("false")] },
+  }]
+  const applier = createKubernetesGatewayApplier({
+    stateRoot,
+    commandRunner: async (command) => { commands.push(structuredClone(command)) },
+    fetch: async () => new Response(JSON.stringify({
+      state: "READY",
+      release: { release_id: "release-mixed-capture" },
+    })),
+  })
+
+  await applier.apply(input)
+  const items = parse(commands.find((command) => command.args[0] === "apply")!.stdin!).items
+  const configs = items.filter((item: any) => item.kind === "GatewayConfig")
+  assert.equal(configs.length, 1)
+  assert.equal(configs[0].spec.extProc.kubernetes.env[0].value, "false")
+  const detailPolicies = items.filter((item: any) =>
+    item.kind === "EnvoyExtensionPolicy" && item.metadata.name.endsWith("-detail-capture")
+  )
+  assert.equal(detailPolicies.length, 2)
+  for (const policy of detailPolicies) {
+    assert.deepEqual(policy.spec.extProc[0].processingMode, {
+      request: { body: "Streamed" },
+      response: { body: "Streamed" },
+    })
+    assert.equal(policy.spec.extProc[0].failOpen, false)
+  }
+})
+
 test("Kubernetes applier advances policy pointers and removes stale native resources", async () => {
   const stateRoot = await mkdtemp(join(tmpdir(), "genio-one-gateway-runtime-"))
   const commands: KubernetesCommandInput[] = []
@@ -162,7 +240,7 @@ test("Kubernetes Runtime owns telemetry endpoints and keeps payload capture on t
   const commands: KubernetesCommandInput[] = []
   const input = release("release-telemetry", 3, "gateway-telemetry")
   input.release.gateway_configuration.capture_message_content = true
-  const sharedResources = (host: string, grpcPort: number, httpPort: number) => [{
+  const sharedResources = (host: string, grpcPort: number, httpPort: number, captureValue: string) => [{
     apiVersion: "gateway.envoyproxy.io/v1alpha1",
     kind: "Backend",
     metadata: {
@@ -184,7 +262,7 @@ test("Kubernetes Runtime owns telemetry endpoints and keeps payload capture on t
         kubernetes: {
           env: [{
             name: "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT",
-            value: "false",
+            value: captureValue,
           }, {
             name: "OTEL_EXPORTER_OTLP_ENDPOINT",
             value: `http://${host}:${httpPort}`,
@@ -223,9 +301,9 @@ test("Kubernetes Runtime owns telemetry endpoints and keeps payload capture on t
   }]
   input.release.projection_count = 2
   input.release.projections = [{
-    projection: { operation: "APPLY", resources: sharedResources("old.invalid", 14317, 14318) },
+    projection: { operation: "APPLY", resources: sharedResources("old.invalid", 14317, 14318, "true") },
   }, {
-    projection: { operation: "APPLY", resources: sharedResources("new.invalid", 24317, 24318) },
+    projection: { operation: "APPLY", resources: sharedResources("new.invalid", 24317, 24318, "false") },
   }]
   const applier = createKubernetesGatewayApplier({
     stateRoot,

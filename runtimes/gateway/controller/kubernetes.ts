@@ -240,6 +240,24 @@ function runtimeOwnedResource(
       delete normalized.metadata.labels["app.kubernetes.io/managed-by"]
     }
   }
+  if (normalized.kind === "GatewayConfig") {
+    const environment = normalized.spec?.extProc?.kubernetes?.env
+    if (Array.isArray(environment)) {
+      for (const entry of environment) {
+        if (entry?.name === "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT") {
+          entry.value = "false"
+        }
+        if (telemetry && sharedComponent === "ai-gateway-config") {
+          if (entry?.name === "OTEL_EXPORTER_OTLP_ENDPOINT") {
+            entry.value = `http://${telemetry.host}:${telemetry.httpPort}`
+          }
+          if (entry?.name === "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT") {
+            entry.value = `http://${telemetry.host}:${telemetry.httpPort}/v1/traces`
+          }
+        }
+      }
+    }
+  }
   if (!telemetry) return normalized
   if (
     normalized.kind === "Backend" &&
@@ -251,22 +269,6 @@ function runtimeOwnedResource(
       endpoints: [isIP(telemetry.host)
         ? { ip: { address: telemetry.host, port: telemetry.port } }
         : { fqdn: { hostname: telemetry.host, port: telemetry.port } }],
-    }
-  }
-  if (
-    normalized.kind === "GatewayConfig" &&
-    sharedComponent === "ai-gateway-config"
-  ) {
-    const environment = normalized.spec?.extProc?.kubernetes?.env
-    if (Array.isArray(environment)) {
-      for (const entry of environment) {
-        if (entry?.name === "OTEL_EXPORTER_OTLP_ENDPOINT") {
-          entry.value = `http://${telemetry.host}:${telemetry.httpPort}`
-        }
-        if (entry?.name === "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT") {
-          entry.value = `http://${telemetry.host}:${telemetry.httpPort}/v1/traces`
-        }
-      }
     }
   }
   if (normalized.kind === "EnvoyProxy") {

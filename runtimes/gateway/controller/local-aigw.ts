@@ -497,7 +497,7 @@ function localGatewayInfrastructure(input: {
   ]
 }
 
-function projectionDocuments(
+export function projectionDocuments(
   input: Parameters<GatewayReleaseApplier["apply"]>[0],
   listenerPort: number,
   activityLogPath?: string,
@@ -704,13 +704,13 @@ function projectionDocuments(
     }
     return local
   })
-  const resources = mergeGatewayNativeResources(normalizedResources).filter((resource) => {
+  const resources = mergeGatewayNativeResources(normalizedResources.filter((resource) => {
     // `aigw run` is a standalone file-provider process, not the Kubernetes
     // Envoy Gateway controller. GatewayConfig is a controller CRD and is not
     // registered in the standalone CLI scheme; its local-only environment
     // settings are applied below through the child process environment.
     return resource.kind !== "GatewayConfig"
-  })
+  }))
   attachMcpRouteSecurityPolicies(resources)
   for (const resource of resources) {
     const providers = resource.kind === "SecurityPolicy"

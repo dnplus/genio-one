@@ -25,7 +25,7 @@ function defaults(tenantId: string, gatewayId: string): GatewayDiagnosticSetting
   return {
     tenant_id: tenantId,
     gateway_id: gatewayId,
-    capture_message_content: true,
+    capture_message_content: false,
     row_revision: 1,
     updated_at: 0,
   }

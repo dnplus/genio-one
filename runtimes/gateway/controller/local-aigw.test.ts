@@ -19,6 +19,7 @@ import {
   gatewayServiceEntrypoint,
   localCredentialSecrets,
   parseProcessorHttpObservation,
+  projectionDocuments,
   readActivityCursor,
   writeActivityCursor,
 } from "./local-aigw"
@@ -70,6 +71,47 @@ test("local AIGW span content capture is disabled until explicitly enabled by it
   assert.equal(aigwSpanContentCapture(), "false")
   assert.equal(aigwSpanContentCapture({ OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: "false" }), "false")
   assert.equal(aigwSpanContentCapture({ OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: "true" }), "true")
+})
+
+test("standalone release skips old and new GatewayConfig for a truncated gateway name", () => {
+  const gatewayId = "g".repeat(252)
+  const config = (value: string) => ({
+    apiVersion: "aigateway.envoyproxy.io/v1beta1",
+    kind: "GatewayConfig",
+    metadata: {
+      name: gatewayId,
+      namespace: "default",
+      annotations: { "genio.one/global-contract-revision": "2" },
+      labels: { "genio.one/shared-component": "ai-gateway-config" },
+    },
+    spec: { extProc: { kubernetes: { env: [{
+      name: "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT",
+      value,
+    }] } } },
+  })
+  const route = {
+    apiVersion: "gateway.networking.k8s.io/v1",
+    kind: "HTTPRoute",
+    metadata: { name: "public-route", namespace: "default" },
+    spec: { rules: [{ backendRefs: [{ name: "upstream" }] }] },
+  }
+  const input = {
+    command: { tenant_id: "tenant-1", desired_release: { gateway_id: gatewayId } },
+    release: {
+      gateway_configuration: { capture_message_content: false },
+      projections: [{ projection: { operation: "APPLY", resources: [config("true"), route] } }],
+    },
+  } as any
+  const historical = projectionDocuments(input, 19000)
+  assert.doesNotMatch(historical, /kind: GatewayConfig/)
+
+  input.release.gateway_configuration.capture_message_content = true
+  input.release.projections.push({ projection: { operation: "APPLY", resources: [config("false")] } })
+  const mixed = projectionDocuments(input, 19000)
+  assert.doesNotMatch(mixed, /kind: GatewayConfig/)
+  assert.match(mixed, /name: genio-one-detail-capture/)
+  assert.match(mixed, /body: Streamed/)
+  assert.match(mixed, /failOpen: false/)
 })
 
 test("legacy processor stdout without safety decisions retains its classification receipt", () => {
