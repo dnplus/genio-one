@@ -259,7 +259,10 @@ export function managementApi(origin: string, token: string): Api {
   const url = new URL(origin)
   if (url.username || url.password || (url.protocol !== "https:" && !(url.protocol === "http:" && ["127.0.0.1", "localhost"].includes(url.hostname)))) throw new Error("STANDARD_PLATFORM_ORIGIN_INVALID")
   return async (path, init) => {
-    const response = await fetch(new URL(path, url), { ...init, redirect: "error", signal: AbortSignal.timeout(30_000), headers: { authorization: `Bearer ${token}`, accept: "application/json", ...(init?.body ? { "content-type": "application/json" } : {}) } })
+    if (!path.startsWith("/") || path.startsWith("//")) throw new Error("STANDARD_PLATFORM_PATH_INVALID")
+    const targetUrl = new URL(path, url)
+    if (targetUrl.origin !== url.origin) throw new Error("STANDARD_PLATFORM_PATH_INVALID")
+    const response = await fetch(targetUrl, { ...init, redirect: "error", signal: AbortSignal.timeout(30_000), headers: { authorization: `Bearer ${token}`, accept: "application/json", ...(init?.body ? { "content-type": "application/json" } : {}) } })
     if (!response.ok) throw new Error(`STANDARD_INSTALL_HTTP_${response.status}:${path}`)
     return response.status === 204 ? null : await response.json()
   }

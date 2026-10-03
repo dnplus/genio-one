@@ -5535,11 +5535,11 @@
       "mode": 420
     },
     "apps/connectors/install.test.ts": {
-      "sha256": "1a8fea24157899fe00b088a1d1ccb465ef027517e3e79e5e3585ac42c7bcd67f",
+      "sha256": "bded6beb7f72a6f70027446d6f57569b30cbd21c708a85cb1a48ef5fb3d1a258",
       "mode": 420
     },
     "apps/connectors/install.ts": {
-      "sha256": "14b8f0b06731019a61276395bb93864afedc41bd647ca9ff805d2ac8dffb041a",
+      "sha256": "a911a93e669fc0fbbc7ff776ee12ef2a02b3c9202bc10e4b6c5073235b98aa2e",
       "mode": 420
     },
     "apps/connectors/mail2000/dav.test.ts": {

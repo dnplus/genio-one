@@ -74,3 +74,12 @@ test("resource capability policy replaces a stale draft, publishes the reviewed 
   expect(repeated.one_policy_revision).toBe(1)
   expect(writes).toHaveLength(writeCount)
 })
+
+test("managementApi validates path structure and rejects origin override attempts", async () => {
+  const { managementApi } = await import("./install")
+  const api = managementApi("http://127.0.0.1:8080", "test-token")
+
+  await expect(api("//attacker.com/test")).rejects.toThrow("STANDARD_PLATFORM_PATH_INVALID")
+  await expect(api("https://attacker.com/test")).rejects.toThrow("STANDARD_PLATFORM_PATH_INVALID")
+  await expect(api("relative/path")).rejects.toThrow("STANDARD_PLATFORM_PATH_INVALID")
+})
