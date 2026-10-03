@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { readFile } from "node:fs/promises"
+import { createConnection } from "node:net"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { createArchifyHandler } from "./server"
@@ -71,4 +72,72 @@ test("Archify returns a bounded validation failure without revealing the specifi
   expect(body.result.isError).toBe(true)
   expect(body.result.content[0].text).toMatch(/^ARCHIFY_/)
   expect(JSON.stringify(body.result)).not.toContain("not-a-valid-spec")
+})
+
+test("Archify accepts a POST at the request size boundary and rejects a larger declared body", async () => {
+  const handler = createArchifyHandler({ bearerToken: token })
+  const message = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} })
+  const boundaryBody = message.padEnd(192 * 1024, " ")
+  const accepted = await handler(new Request("http://archify.test/mcp", {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json, text/event-stream", authorization: `Bearer ${token}`, "content-length": String(boundaryBody.length) },
+    body: boundaryBody,
+  }))
+  expect(accepted.status).toBe(200)
+  expect((await accepted.json() as any).result.tools).toBeDefined()
+
+  const rejected = await handler(new Request("http://archify.test/mcp", {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json, text/event-stream", authorization: `Bearer ${token}`, "content-length": String(boundaryBody.length + 1) },
+    body: boundaryBody,
+  }))
+  expect(rejected.status).toBe(413)
+  expect(await rejected.json()).toEqual({ error: "ARCHIFY_REQUEST_TOO_LARGE" })
+})
+
+test("Archify rejects an unlengthened stream before reading the remaining body", async () => {
+  let pulls = 0
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      pulls += 1
+      if (pulls === 1) controller.enqueue(new Uint8Array(192 * 1024))
+      else if (pulls === 2) controller.enqueue(new Uint8Array([32]))
+      else throw new Error("read past request limit")
+    },
+  }, { highWaterMark: 0 })
+  const response = await createArchifyHandler({ bearerToken: token })(new Request("http://archify.test/mcp", {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json, text/event-stream", authorization: `Bearer ${token}` },
+    body,
+  }))
+  expect(response.status).toBe(413)
+  expect(await response.json()).toEqual({ error: "ARCHIFY_REQUEST_TOO_LARGE" })
+  expect(pulls).toBe(2)
+})
+
+test("Archify rejects an oversized raw chunked HTTP request without Content-Length", async () => {
+  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: createArchifyHandler({ bearerToken: token }) })
+  try {
+    const body = `${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} })}${" ".repeat(192 * 1024)}`
+    const response = await new Promise<string>((resolve, reject) => {
+      const socket = createConnection({ host: "127.0.0.1", port: server.port! })
+      const chunks: Buffer[] = []
+      socket.setTimeout(5_000, () => socket.destroy(new Error("chunked response timeout")))
+      socket.on("connect", () => {
+        socket.write(`POST /mcp HTTP/1.1\r\nHost: 127.0.0.1:${server.port}\r\nTransfer-Encoding: chunked\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\nAuthorization: Bearer ${token}\r\nConnection: close\r\n\r\n`)
+        for (let offset = 0; offset < body.length; offset += 16 * 1024) {
+          const chunk = body.slice(offset, offset + 16 * 1024)
+          socket.write(`${chunk.length.toString(16)}\r\n${chunk}\r\n`)
+        }
+        socket.end("0\r\n\r\n")
+      })
+      socket.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)))
+      socket.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")))
+      socket.on("error", reject)
+    })
+    expect(response).toMatch(/^HTTP\/1\.1 413 /)
+    expect(response).toContain("ARCHIFY_REQUEST_TOO_LARGE")
+  } finally {
+    server.stop(true)
+  }
 })

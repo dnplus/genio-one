@@ -51,6 +51,34 @@ function serviceTokenMatches(header: string | null, expected: string) {
   return timingSafeEqual(Buffer.from(digest(token), "hex"), Buffer.from(digest(expected), "hex"))
 }
 
+async function boundedPostRequest(request: Request): Promise<Request | null> {
+  if (!request.body) return request
+  const reader = request.body.getReader()
+  const chunks: Uint8Array[] = []
+  let totalBytes = 0
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      totalBytes += value.byteLength
+      if (totalBytes > maxRequestBytes) {
+        await reader.cancel()
+        return null
+      }
+      chunks.push(value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+  const body = new Uint8Array(totalBytes)
+  let offset = 0
+  for (const chunk of chunks) {
+    body.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return new Request(request, { body })
+}
+
 function hasBoundedJson(value: unknown, state = { values: 0, depth: 0 }): boolean {
   state.values += 1
   if (state.values > maxSpecValues || state.depth > maxSpecDepth) return false
@@ -194,6 +222,8 @@ export function createArchifyHandler(options: ArchifyHandlerOptions = {}) {
     if (contentLength && (!/^[0-9]+$/.test(contentLength) || Number(contentLength) > maxRequestBytes)) return Response.json({ error: "ARCHIFY_REQUEST_TOO_LARGE" }, { status: 413 })
     if (!bearerToken) return Response.json({ error: "ARCHIFY_SERVICE_TOKEN_REQUIRED" }, { status: 503 })
     if (!serviceTokenMatches(request.headers.get("authorization"), bearerToken)) return Response.json({ error: "ARCHIFY_AUTHORIZATION_REQUIRED" }, { status: 401, headers: { "www-authenticate": "Bearer" } })
+    const boundedRequest = request.method === "POST" ? await boundedPostRequest(request) : request
+    if (!boundedRequest) return Response.json({ error: "ARCHIFY_REQUEST_TOO_LARGE" }, { status: 413 })
     const server = new McpServer({ name: "genio-archify", version: "0.1.0" })
     server.registerTool("archify_schema", {
       title: "取得 Archify 圖表規格",
@@ -231,7 +261,7 @@ export function createArchifyHandler(options: ArchifyHandlerOptions = {}) {
     const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true })
     await server.connect(transport)
     try {
-      return await transport.handleRequest(request)
+      return await transport.handleRequest(boundedRequest)
     } finally {
       await server.close()
     }

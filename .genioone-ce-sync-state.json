@@ -5311,11 +5311,11 @@
       "mode": 420
     },
     "apps/connectors/archify/server.test.ts": {
-      "sha256": "d89c2f5aad7609b84e00f34fc834e96bc33210056be9c23cd9b4a943352b844b",
+      "sha256": "0b539163bba7f2b7b1284f9b2db57ac4a4ca74caf431d0424b8dd9ce003460ea",
       "mode": 420
     },
     "apps/connectors/archify/server.ts": {
-      "sha256": "cdf06714200dfda5c84e8fea3c4f04545b427ea4eb759be6cf110a862a842391",
+      "sha256": "7408313352bcb4b20c85b07d690ffbc10f20d0af822a73b3f72971321715a107",
       "mode": 420
     },
     "apps/connectors/archify/vendor/ARCHIFY_SOURCE.json": {
