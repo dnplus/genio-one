@@ -5999,7 +5999,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/activities/detail-clickhouse.ts": {
-      "sha256": "4427c9e51b416480ff04e4e13f80202c1eed3784ddbd702f5fd096569c99a664",
+      "sha256": "466fbcae4ab3c6cd32c177788887a093787dc45b1f008cd2be48edce48d31abc",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/activities/detail-contract.ts": {
@@ -9195,7 +9195,7 @@
       "mode": 420
     },
     "packages/protocol/src/canonical.ts": {
-      "sha256": "0e4681e45ed5742fd87862e3c213ac1083ed603f88b4dd26b49a57d711dc443d",
+      "sha256": "c6fa5468b8b3c8e4b2d3b88ab2bd07d2a33779831524b47c72bb424c9a63a32e",
       "mode": 420
     },
     "packages/protocol/src/ce-demo-package.json": {

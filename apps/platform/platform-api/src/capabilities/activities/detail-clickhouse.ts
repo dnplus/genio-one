@@ -60,15 +60,19 @@ function messageBody(value: string): string | null {
   return hasPayload ? JSON.stringify(decoded, null, 2) : null
 }
 
+const INPUT_MESSAGE_ATTR_REGEX = /^llm\.input_messages\.(\d+)\.message\.(role|content)$/
+const OUTPUT_MESSAGE_ATTR_REGEX = /^llm\.output_messages\.(\d+)\.message\.(role|content)$/
+
 function messageAttributes(
   attributes: Record<string, string>,
   direction: "input" | "output",
 ): Record<string, string> {
   const prefix = direction === "input" ? "llm.input_messages." : "llm.output_messages."
+  const pattern = direction === "input" ? INPUT_MESSAGE_ATTR_REGEX : OUTPUT_MESSAGE_ATTR_REGEX
   const messages = new Map<number, Record<string, string>>()
   for (const [name, value] of Object.entries(attributes)) {
     if (!name.startsWith(prefix)) continue
-    const match = new RegExp(`^${prefix.replaceAll(".", "\\.")}(\\d+)\\.message\\.(role|content)$`).exec(name)
+    const match = pattern.exec(name)
     if (!match) continue
     const index = Number(match[1])
     if (!Number.isSafeInteger(index) || index < 0) continue
@@ -178,19 +182,25 @@ export function createClickHouseGatewayActivityDetailStore(options: {
       )
       if (rows.length === 0) return null
 
-      const requestBodies = rows.map((row) => bodyFor(row.attributes, "request")).filter(
-        (value): value is NonNullable<ReturnType<typeof bodyFor>> => value !== null,
-      )
-      const responseBodies = rows.map((row) => bodyFor(row.attributes, "response")).filter(
-        (value): value is NonNullable<ReturnType<typeof bodyFor>> => value !== null,
-      )
-      const redactedFields = [...new Set(rows.flatMap((row) => [
-        ...Object.entries(row.attributes)
-          .filter(([, value]) => value === "__REDACTED__")
-          .map(([name]) => name),
-        ...(bodyFor(row.attributes, "request")?.redacted ?? []),
-        ...(bodyFor(row.attributes, "response")?.redacted ?? []),
-      ]))]
+      const rowDetails = rows.map((row) => {
+        const req = bodyFor(row.attributes, "request")
+        const res = bodyFor(row.attributes, "response")
+        const redacted = [
+          ...Object.entries(row.attributes)
+            .filter(([, value]) => value === "__REDACTED__")
+            .map(([name]) => name),
+          ...(req?.redacted ?? []),
+          ...(res?.redacted ?? []),
+        ]
+        return { req, res, redacted }
+      })
+      const requestBodies = rowDetails
+        .map((d) => d.req)
+        .filter((value): value is NonNullable<ReturnType<typeof bodyFor>> => value !== null)
+      const responseBodies = rowDetails
+        .map((d) => d.res)
+        .filter((value): value is NonNullable<ReturnType<typeof bodyFor>> => value !== null)
+      const redactedFields = [...new Set(rowDetails.flatMap((d) => d.redacted))]
       const capturedAt = rows.map((row) => integer(row.captured_at_millis)).find(
         (value): value is number => value !== null,
       )
