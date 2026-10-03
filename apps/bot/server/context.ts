@@ -23,4 +23,5 @@ export interface BotServerContext {
   createCodexRuntime?: CodexRuntimeFactory
   runtimePolicy: RuntimePolicyResolver
   connectionInteractions?: BotConnectionInteractions
+  scheduleAuthority?: import("./schedule-authority").ScheduleAuthority
 }

@@ -207,6 +207,66 @@ describe("RuntimeBroker", () => {
     await broker.close()
   })
 
+  test("isolates schedule sessions from owner discovery and interactive token rotation", async () => {
+    const broker = new RuntimeBroker({ provision: async () => execDesktop("schedule-credentials") })
+    let scheduledClosed = 0
+    let interactiveClosed = 0
+    const updates: string[] = []
+    const callbacks = { onMessage() {}, onExit() {} }
+    const scheduled = await broker.startSchedule(principal, "schedule-run", callbacks, () => ({
+      async send() {},
+      async close() { scheduledClosed++ },
+    }), "schedule-token")
+    scheduled.initialized = true
+    expect(broker.findByPrincipal(principal)).toBeNull()
+    expect(broker.findBySubject(principal.tenant_id, principal.subject_id)).toBeNull()
+    expect(broker.activeSessionPrincipals()).toEqual([])
+
+    const opening = broker.start(principal, callbacks, () => ({
+      async send() {},
+      async close() { interactiveClosed++ },
+      async updateToken(token: string) { updates.push(token) },
+    }), "owner-token-a")
+    const otherScheduled = await broker.startSchedule(principal, "other-schedule-run", callbacks, () => ({ async send() {}, async close() {} }), "other-schedule-token")
+    const interactive = await opening
+    interactive.initialized = true
+    const release = broker.bindInvocationAccessToken(interactive.id, "bot", "invocation", "invocation-token")
+    await broker.start(principal, callbacks, undefined, "owner-token-b")
+
+    expect(new Set([scheduled.id, otherScheduled.id, interactive.id]).size).toBe(3)
+    expect(broker.findByPrincipal(principal)).toBe(interactive)
+    expect(broker.findBySubject(principal.tenant_id, principal.subject_id)).toBe(interactive)
+    expect(broker.activeSessionPrincipals()).toEqual([principal])
+    expect(interactive.accessToken).toBe("owner-token-b")
+    expect(updates).toEqual(["owner-token-b"])
+    expect(broker.accessTokenForBot(interactive.id, "bot")).toBe("invocation-token")
+    expect(scheduled.accessToken).toBe("schedule-token")
+
+    await broker.stop(scheduled.id)
+    expect(scheduledClosed).toBe(1)
+    expect(scheduled.accessToken).toBeUndefined()
+    expect(scheduled.codex).toBeUndefined()
+    expect(broker.get(scheduled.id)).toBeNull()
+    expect(broker.findByPrincipal(principal)).toBe(interactive)
+    expect(interactiveClosed).toBe(0)
+    release()
+    expect(broker.accessTokenForBot(interactive.id, "bot")).toBe("owner-token-b")
+    await broker.close()
+  })
+
+  test("stops a schedule child that exits before it can be registered", async () => {
+    const broker = new RuntimeBroker({ provision: async () => execDesktop("early-schedule-exit") })
+    let closed = 0
+    await expect(broker.startSchedule(principal, "schedule-run", { onMessage() {}, onExit() {} }, (callbacks) => {
+      callbacks.onExit("early exit")
+      return { async send() {}, async close() { closed++ } }
+    }, "schedule-token")).rejects.toThrow("RUNTIME_SESSION_ABORTED")
+    expect(closed).toBe(1)
+    expect(broker.activeCount()).toBe(0)
+    expect(broker.findByPrincipal(principal)).toBeNull()
+    await broker.close()
+  })
+
   test("keeps managed MCP mounts scoped to the Bot that created them", async () => {
     const broker = new RuntimeBroker({ provision: async () => execDesktop("bot-mounts") })
     const session = await broker.start(principal, { onMessage() {}, onExit() {} })

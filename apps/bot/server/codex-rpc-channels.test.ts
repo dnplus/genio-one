@@ -79,3 +79,21 @@ test("failed initialization notifies every waiter and permits a fresh attempt", 
   await b.send(JSON.stringify({ id: 3, method: "initialize" }))
   expect(sent).toHaveLength(2)
 })
+
+test("notifies pending initialization and request owners once on native exit", async () => {
+  const channels = new CodexRpcChannels()
+  const sent: Array<{ id: string }> = []
+  const exits: string[] = []
+  const received: string[] = []
+  const runtime = { send: async (line: string) => { sent.push(JSON.parse(line)) }, close: async () => {} }
+  const owner = { onMessage: (line: string) => received.push(line), onExit: (reason: string) => exits.push(reason) }
+  const channel = channels.channel(runtime, owner)
+  await channel.send(JSON.stringify({ id: 1, method: "initialize" }))
+  await channel.send(JSON.stringify({ id: 2, method: "initialize" }))
+  await channel.send(JSON.stringify({ id: 3, method: "turn/start" }))
+  channels.exit("native exited")
+  channels.exit("native exited again")
+  expect(exits).toEqual(["native exited"])
+  for (const request of sent) expect(channels.receive({ id: request.id, result: {} }, () => { throw new Error("late initialization") })).toBe(true)
+  expect(received).toEqual([])
+})

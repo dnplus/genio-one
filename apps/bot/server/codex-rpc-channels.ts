@@ -83,4 +83,16 @@ export class CodexRpcChannels {
       if (request.owner === owner) this.requests.delete(id)
     }
   }
+
+  exit(reason: string) {
+    const owners = new Set([
+      ...(this.initialization?.waiters.map((waiter) => waiter.owner) ?? []),
+      ...Array.from(this.requests.values(), (request) => request.owner),
+    ])
+    this.initialization = null
+    this.requests.clear()
+    for (const owner of owners) {
+      try { owner.onExit(reason) } catch {}
+    }
+  }
 }

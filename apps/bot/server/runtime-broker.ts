@@ -89,6 +89,7 @@ interface ManagedRuntimeSession {
   invocationAccessTokens: Map<string, { invocationId: string; accessToken: string }>
   session: RuntimeSession
   principalKey: string
+  scheduleRunId?: string
   listeners: Set<RuntimeCallbacks>
   disconnectTimer: ReturnType<typeof setTimeout> | null
   eventBuffer: string[]
@@ -241,6 +242,18 @@ export class RuntimeBroker {
     }
   }
 
+  async startSchedule(
+    principal: GenioPrincipal,
+    runId: string,
+    callbacks: RuntimeCallbacks,
+    codexFactory: (callbacks: RuntimeCallbacks, runtimeSessionId: string, relaySecret: string) => CodexRuntime,
+    accessToken: string,
+  ): Promise<RuntimeSession> {
+    if (this.closing) throw new Error("RUNTIME_BROKER_CLOSING")
+    if (!runId.trim()) throw new Error("RUNTIME_SCHEDULE_RUN_ID_INVALID")
+    return (await this.openSession(principal, this.principalKey(principal), callbacks, codexFactory, accessToken, runId)).session
+  }
+
   async ensure(
     id: string,
     tier: Exclude<RuntimeTier, "none"> = "headless",
@@ -361,6 +374,7 @@ export class RuntimeBroker {
     callbacks: RuntimeCallbacks,
     codexFactory?: (callbacks: RuntimeCallbacks, runtimeSessionId: string, relaySecret: string) => CodexRuntime,
     accessToken?: string,
+    scheduleRunId?: string,
   ) {
     const id = randomUUID()
     const relaySecret = randomBytes(32).toString("base64url")
@@ -417,6 +431,7 @@ export class RuntimeBroker {
       },
       onExit: (reason: string) => {
         exited = true
+        rpcChannels.exit(reason)
         for (const listener of listeners) {
           try {
             listener.onExit(reason)
@@ -443,11 +458,14 @@ export class RuntimeBroker {
       eventBuffer,
     }
     currentSession = session
-    const managed: ManagedRuntimeSession = { callbacks: brokerCallbacks, session, principalKey, listeners, disconnectTimer: null, eventBuffer, rpcChannels, interactions, invocationAccessTokens: new Map() }
-    if (!exited) {
-      this.sessions.set(id, managed)
-      this.principalSessions.set(principalKey, id)
+    const managed: ManagedRuntimeSession = { callbacks: brokerCallbacks, session, principalKey, scheduleRunId, listeners, disconnectTimer: null, eventBuffer, rpcChannels, interactions, invocationAccessTokens: new Map() }
+    if (exited || this.closing) {
+      session.accessToken = undefined
+      await codex?.close()
+      throw new Error("RUNTIME_SESSION_ABORTED")
     }
+    this.sessions.set(id, managed)
+    if (!scheduleRunId) this.principalSessions.set(principalKey, id)
     console.info(JSON.stringify({
       event: "runtime.broker.started",
       runtime_session_id: id,
@@ -457,6 +475,7 @@ export class RuntimeBroker {
       tier: "none",
       sandbox_id: pending.details.sandboxId,
       exec_ready: false,
+      ...(scheduleRunId ? { schedule_run_id: scheduleRunId } : {}),
     }))
     return managed
   }
@@ -655,21 +674,14 @@ export class RuntimeBroker {
   private async stopSession(id: string, expectedBotId?: string) {
     const managed = this.sessions.get(id)
     if (!managed) return
+    if (managed.scheduleRunId && !expectedBotId) await this.stopCodex(managed)
     const provisioning = this.tierProvisioning.get(id)
     if (provisioning) await provisioning.catch(() => undefined)
     if (this.workspaces?.unresolvedLeaseAttempt(managed.session.principal, id)) throw new Error("HANDS_PROVISION_UNCONFIRMED")
     if (expectedBotId && (this.hasOtherBotTurn(id, expectedBotId) || Object.values(managed.session.leases).some((lease) => lease && (lease.details.botId ?? lease.details.endpoint?.botId) !== expectedBotId))) throw new Error("RUNTIME_WORKSPACE_NOT_OWNED")
     const session = managed.session
     revokeHandsMcpGrants(session)
-    if (session.codex) {
-      try {
-        await session.codex.close()
-        session.codex = undefined
-        session.initialized = false
-      } catch (error) {
-        console.warn("Failed to close codex on session stop:", error)
-      }
-    }
+    await this.stopCodex(managed)
     for (const leaseTier of ["desktop", "headless"] as const) await this.stop(id, leaseTier)
     this.sessions.delete(id)
     if (this.principalSessions.get(managed.principalKey) === id) this.principalSessions.delete(managed.principalKey)
@@ -682,6 +694,25 @@ export class RuntimeBroker {
       provider: session.details.kind,
       sandbox_id: session.details.sandboxId,
     }))
+  }
+
+  private async stopCodex(managed: ManagedRuntimeSession) {
+    const session = managed.session
+    if (managed.scheduleRunId) {
+      revokeHandsMcpGrants(session)
+      session.accessToken = undefined
+      managed.invocationAccessTokens.clear()
+    }
+    managed.rpcChannels.exit("RUNTIME_SESSION_STOPPED")
+    if (!session.codex) return
+    try {
+      await session.codex.close()
+      session.codex = undefined
+      session.initialized = false
+    } catch (error) {
+      console.warn("Failed to close codex on session stop:", error)
+      if (managed.scheduleRunId) throw error
+    }
   }
 
   latestDetails() {
@@ -749,12 +780,14 @@ export class RuntimeBroker {
 
   findBySubject(tenantId: string, subjectId: string) {
     return Array.from(this.sessions.values()).find((managed) =>
+      !managed.scheduleRunId &&
       managed.session.principal.tenant_id === tenantId && managed.session.principal.subject_id === subjectId,
     )?.session ?? null
   }
 
   activeSessionPrincipals(): GenioPrincipal[] {
     return Array.from(this.sessions.values())
+      .filter((managed) => !managed.scheduleRunId)
       .map((managed) => managed.session)
       .filter((session) => session.initialized && Boolean(session.accessToken?.trim()))
       .map((session) => session.principal)

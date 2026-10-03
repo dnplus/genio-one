@@ -19,7 +19,7 @@
       "mode": 420
     },
     "apps/bot/.env.example": {
-      "sha256": "596057ffc25fea304e27dbdef029e3ed11a7ad09d6d95fc0fa466f95725dc6b4",
+      "sha256": "4e162bd76b9879f0f18463fc200394daa8034c4fb09b573ca7314b9c63e454ee",
       "mode": 420
     },
     "apps/bot/.walking-skeleton-continuity.json": {
@@ -191,7 +191,7 @@
       "mode": 420
     },
     "apps/bot/docs/default-tools-delivery.md": {
-      "sha256": "b812ed49ee02f8bcc8a2419e5b32a9b7d1c3f844939b206971779457d644b345",
+      "sha256": "26408e55d407792c214f21728dec6988238618906aeac2a6b09bf5ef852a1c0d",
       "mode": 420
     },
     "apps/bot/docs/e2b-175-development.md": {
@@ -323,7 +323,7 @@
       "mode": 420
     },
     "apps/bot/server/app.ts": {
-      "sha256": "d0c4f0e7865e17595d9791f9fdf4a5e7eaa8bad53e9811c95ffb801e47089028",
+      "sha256": "b757dd10db2b6122fc08db0c33f96ae1bc901d4668b17b95bea1530f9625b684",
       "mode": 420
     },
     "apps/bot/server/auth.test.ts": {
@@ -506,8 +506,12 @@
       "sha256": "48ed823d582923697ab49f9be8bd38e5da4a86199785a8969b834b017e8ada12",
       "mode": 420
     },
+    "apps/bot/server/bot-schedule-runner.test.ts": {
+      "sha256": "ac79aadb719b18f67d9d3c89397a67041669331e7e111c170b82fad224a06d47",
+      "mode": 420
+    },
     "apps/bot/server/bot-schedule-runner.ts": {
-      "sha256": "122d5c675538c6c0eb141ea58bcdc3ae7ff932a92fec8ab8273181bb458febd1",
+      "sha256": "3cbe121f46ed6c4f2cc0b4813592d26ca1ae9d3975e0811d14e065f2f0c0c0ea",
       "mode": 420
     },
     "apps/bot/server/bot-schedule-tools.ts": {
@@ -515,7 +519,7 @@
       "mode": 420
     },
     "apps/bot/server/bot-schedules.test.ts": {
-      "sha256": "d7861b57b8ece80eca4253c3da599b24c3a0baa5056e4a047900afa537724ef0",
+      "sha256": "1eb5546feddf10d192c2743ae83a926254a6b9495bce7643426405490eb7b757",
       "mode": 420
     },
     "apps/bot/server/bot-schedules.ts": {
@@ -583,11 +587,11 @@
       "mode": 420
     },
     "apps/bot/server/codex-rpc-channels.test.ts": {
-      "sha256": "47cd42575829957e2f6c5416a2c26f8f7c77ad8cb57198e54e5264e2c07af0ab",
+      "sha256": "463724bf8d11065e50ea8fcbb69eea68561326e344fb3085740f72dc3ff66a77",
       "mode": 420
     },
     "apps/bot/server/codex-rpc-channels.ts": {
-      "sha256": "c31866a2818f0333c9e603cac779fc5ec7242d4058414323345177ba29951d86",
+      "sha256": "1e47d8c70cf325774ad622cab26d16a1b1ddd5849d5dcf48284cc7d19516d3c8",
       "mode": 420
     },
     "apps/bot/server/codex-runtime-catalog.ts": {
@@ -603,7 +607,7 @@
       "mode": 420
     },
     "apps/bot/server/context.ts": {
-      "sha256": "aede83067ded25e16aa16cd0e2f6b04feacb92797c2ec62d5936ddbaa36209ab",
+      "sha256": "3964a2812dad91e852c6df718056504cd248e2a028fedd308888455e4d660213",
       "mode": 420
     },
     "apps/bot/server/desktop-driver.test.ts": {
@@ -4531,11 +4535,11 @@
       "mode": 420
     },
     "apps/bot/server/runtime-broker.test.ts": {
-      "sha256": "8b64f488969fa6c3c29b611e6fe15d157905c4a03f90c82a3832ea2a3b92cae9",
+      "sha256": "cc4375f5e428922b7895f1e44d56759b8d0508175f3fc4d6ef03ca97d454ccd1",
       "mode": 420
     },
     "apps/bot/server/runtime-broker.ts": {
-      "sha256": "260206db750f2927b0cc2d7829c1482358209d809a2df40e71a67087219bf8ef",
+      "sha256": "e1c0a9ed6d9bcd0fd315f42667c0a0ffe3842716d59253654962122ff34f08f8",
       "mode": 420
     },
     "apps/bot/server/runtime-capability.test.ts": {
@@ -4576,6 +4580,10 @@
     },
     "apps/bot/server/runtime.ts": {
       "sha256": "73e617299d985b259b79ab36266e81f332e629ec979216d1a7eab45337ebaf39",
+      "mode": 420
+    },
+    "apps/bot/server/schedule-authority.ts": {
+      "sha256": "d083966a9e3b176f2b850fe2ae341dfdf4db4653189c3be2bed1bddaa61f05c3",
       "mode": 420
     },
     "apps/bot/server/static-security.test.ts": {
@@ -6623,7 +6631,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/mcp-oauth/http.ts": {
-      "sha256": "c8db4720bf57576d96213909b531638e8a8fd8d33ccaf3f9be79af745df868b6",
+      "sha256": "d06d32df280429fbd0fe0ec63911f4eb1870679c3fc04f23345989a7e2d8519d",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/mcp-oauth/memory.ts": {
@@ -7599,7 +7607,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/mcp-oauth-return-url.test.ts": {
-      "sha256": "e6afb526fc5d1d4bb2eb7ac60cacc9d1206d7790af8e3b50ee25919ec18e22ed",
+      "sha256": "c98751c4781fb59e0d5eb46d85fd8aea870245025fe7b1e8d8b7703a69e66d91",
       "mode": 420
     },
     "apps/platform/platform-api/test/model-routing-decision-provider.test.ts": {

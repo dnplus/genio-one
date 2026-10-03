@@ -44,6 +44,7 @@ import { botDefaultToolRoutes } from "./routes/bot-default-tools"
 import { knowledgeEvidenceRoutes } from "./routes/knowledge-evidence"
 import { BotSchedules } from "./bot-schedules"
 import { runBotSchedules } from "./bot-schedule-runner"
+import { createScheduleAuthority } from "./schedule-authority"
 import { backfillDistillationTurn } from "./distillation/backfill"
 import { SQLiteDistillationBackfillProgressStore } from "./distillation/backfill-progress"
 import { turnReady } from "./distillation/history"
@@ -126,13 +127,14 @@ export async function createBotApp(
     runtimePolicy,
     botSchedules,
     botDeletionReconciler,
+    scheduleAuthority: contextOverrides?.scheduleAuthority ?? createScheduleAuthority(),
   }
   instrumentModuleGraph(context as unknown as Record<string, unknown>, "genio-one-bot")
   const scheduleRunner = runBotSchedules(context)
   void botDeletionReconciler.reconcile()
   context.localHands = new LocalHands(context)
   app.addHook("preClose", async () => {
-    scheduleRunner.stop()
+    await scheduleRunner.stop()
     await context.localHands?.close()
     await runtimeBroker.close()
   })

@@ -5,6 +5,8 @@ import { BotScheduleRunner } from "./bot-schedule-runner"
 import { executeScheduleTool } from "./bot-schedule-tools"
 import { createCapabilityGate } from "./capability-gate"
 import { selectBackgroundModel } from "./background-model-selection"
+import { RuntimeBroker } from "./runtime-broker"
+import { createScheduleAuthority } from "./schedule-authority"
 
 const principal = { tenant_id: "tenant", subject_id: "owner", acting_client_id: "genio-one-bot", scopes: [] }
 
@@ -79,6 +81,81 @@ async function executeNativeTerminal(status: "completed" | "failed" | "interrupt
     else process.env.GENIO_ONE_MCP_URL = originalMcpUrl
     if (originalRelayOrigin === undefined) delete process.env.GENIO_ONE_MCP_RELAY_ORIGIN
     else process.env.GENIO_ONE_MCP_RELAY_ORIGIN = originalRelayOrigin
+  }
+}
+
+async function executeWithoutLiveSession(issue: () => Promise<string | null>, personalBotAllowlist = ["tenant:owner"]) {
+  let now = Date.parse("2026-01-01T00:00:00.000Z")
+  const db = new Database(":memory:")
+  const schedules = new BotSchedules(db, () => now)
+  schedules.create(principal, "bot", { clientRequestId: "offline-owner", prompt: "執行一次", schedule: { kind: "once", at: "2026-01-01T00:01:00.000Z" } })
+  now = Date.parse("2026-01-01T00:01:00.000Z")
+  schedules.claimDue()
+  const [run] = schedules.claimRunnable()
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    const authorization = new Headers(init?.headers).get("authorization")
+    if (authorization === "Bearer issued-owner") return Response.json(principal)
+    if (authorization === "Bearer issued-other") return Response.json({ ...principal, subject_id: "other" })
+    return new Response(null, { status: 401 })
+  }) as unknown as typeof fetch
+  const bot = { id: "bot", name: "排程 Bot", title: "例行工作", description: "執行排程", antiJobs: "", voice: "", updatedAt: now, modelRoute: "codex-subscription", bindings: [] }
+  const broker = new RuntimeBroker({ provision: async () => { throw new Error("not used") } }, 0)
+  const runtimeTokens: string[] = []
+  const methods: string[] = []
+  let runtimeClosed = 0
+  const runner = new BotScheduleRunner({
+    botSchedules: schedules,
+    scheduleAuthority: { issue },
+    capabilityGate: createCapabilityGate({ mode: "fixture", personalBotAllowlist }),
+    runtimeBroker: broker,
+    createCodexRuntime: (accessToken: string, callbacks: { onMessage(line: string): void }) => {
+      runtimeTokens.push(accessToken)
+      return {
+        async send(line: string) {
+          const request = JSON.parse(line)
+          methods.push(request.method)
+          if (request.id === undefined) return
+          const result = request.method === "model/list" ? { data: [{ id: "astra-id", model: "gpt-6-astra", hidden: false, isDefault: true }], nextCursor: null }
+            : request.method === "thread/start" ? { thread: { id: "thread" } }
+            : request.method === "turn/start" ? { turn: { id: "turn" } }
+            : {}
+          callbacks.onMessage(JSON.stringify({ id: request.id, result }))
+        },
+        async close() { runtimeClosed++ },
+      }
+    },
+    runtimePolicy: {
+      authorize: async (input: any) => allowedPolicyDecision(input.botId, input.capabilityId, input.action, "runtime", now),
+      report: async () => undefined,
+      read: async (input: any) => ({ ...allowedPolicyDecision(input.botId, "shell.exec", "expose", "runtime", now), decisions: input.capabilityIds.map((capabilityId: string) => allowedPolicyDecision(input.botId, capabilityId, "expose", "runtime", now)) }),
+    },
+    modelDirectory: { resolve: async () => [{ publicModelId: "*", displayName: "test", route: { kind: "codex-subscription" } }] },
+    botToolSessions: { config: () => ({}) },
+    botRegistry: { getOwned: () => bot, materialize: () => ({ root: "/tmp", skillRoots: [], plugins: [] }), getSession: () => null, rememberThread: () => undefined, saveSession: () => undefined, recordRuntimeEvent: () => undefined, memory: { recall: () => ({ memories: [] }), workSummary: () => ({ revision: 0, status: "active" }) }, timeline: { hasRunningTurns: () => false, turnStatus: () => "completed", workContext: () => ({ turns: [] }) } },
+  } as any)
+  try {
+    await (runner as any).execute(run)
+    const stored = (db.query("select name from sqlite_master where type = 'table'").all() as Array<{ name: string }>)
+      .map(({ name }) => JSON.stringify(db.query(`select * from "${name}"`).all()))
+      .join("\n")
+    return {
+      run: schedules.getRun(run!.id)!,
+      turnRequests: methods.filter((method) => method === "turn/start").length,
+      methods,
+      runtimeTokens,
+      runtimeClosed,
+      activeRuntimes: broker.activeCount(),
+      runtimeOpened: Boolean(broker.findByPrincipal(principal)),
+      storeHoldsIssuedToken: stored.includes("issued-owner") || stored.includes("issued-other"),
+      storeHasCredentialColumn: ["bot_schedules", "bot_schedule_runs"].some((table) =>
+        (db.query(`pragma table_info("${table}")`).all() as Array<{ name: string }>).some((column) => column.name === "access_token" || column.name === "refresh_token"),
+      ),
+    }
+  } finally {
+    await runner.stop()
+    await broker.close()
+    globalThis.fetch = originalFetch
   }
 }
 
@@ -215,6 +292,49 @@ describe("BotSchedules", () => {
     expect(schedules.claimRunnable()).toHaveLength(1)
   })
 
+  test("starts a due run after the owner left by re-establishing the same person's authority", async () => {
+    const result = await executeWithoutLiveSession(async () => "issued-owner")
+    expect(result.run).toMatchObject({ state: "COMPLETED", turnId: "turn", error: null })
+    expect(result.turnRequests).toBe(1)
+    expect(result.runtimeTokens).toEqual(["issued-owner"])
+    expect(result.runtimeClosed).toBe(1)
+    expect(result.activeRuntimes).toBe(0)
+    expect(result.runtimeOpened).toBe(false)
+    expect(result.methods.indexOf("initialize")).toBeLessThan(result.methods.indexOf("turn/start"))
+    expect(result.storeHoldsIssuedToken).toBe(false)
+    expect(result.storeHasCredentialColumn).toBe(false)
+  })
+
+  test("keeps an ownerless due run AUTH_REQUIRED when authority cannot be established", async () => {
+    for (const issue of [async () => null, async () => { throw new Error("SCHEDULE_AUTHORITY_UNAVAILABLE") }, async () => "issued-expired", async () => "issued-other"]) {
+      const result = await executeWithoutLiveSession(issue)
+      expect(result.run).toMatchObject({ state: "AUTH_REQUIRED", error: "SCHEDULE_LOGIN_REQUIRED" })
+      expect(result).toMatchObject({ turnRequests: 0, runtimeTokens: [], runtimeOpened: false, storeHoldsIssuedToken: false, storeHasCredentialColumn: false })
+    }
+  })
+
+  test("keeps an ownerless due run AUTH_REQUIRED when the personal-bot capability gate denies the person", async () => {
+    const result = await executeWithoutLiveSession(async () => "issued-owner", ["tenant:someone-else"])
+    expect(result.run).toMatchObject({ state: "AUTH_REQUIRED", error: "SCHEDULE_LOGIN_REQUIRED" })
+    expect(result).toMatchObject({ turnRequests: 0, runtimeTokens: [], runtimeOpened: false, storeHoldsIssuedToken: false, storeHasCredentialColumn: false })
+  })
+
+  test("issues schedule authority only from a configured server-side exchange", async () => {
+    const request = { principal, botId: "bot", scheduleId: "schedule", runId: "run" }
+    await expect(createScheduleAuthority({}).issue(request)).resolves.toBeNull()
+    await expect(createScheduleAuthority({ GENIO_ONE_SCHEDULE_AUTHORITY_URL: "http://platform.test/token" }).issue(request)).rejects.toThrow("SCHEDULE_AUTHORITY_TOKEN_REQUIRED")
+    const originalFetch = globalThis.fetch
+    const sent: Array<{ authorization: string | null; body: unknown }> = []
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      sent.push({ authorization: new Headers(init?.headers).get("authorization"), body: JSON.parse(String(init?.body)) })
+      return Response.json({ access_token: "issued-owner" })
+    }) as unknown as typeof fetch
+    try {
+      await expect(createScheduleAuthority({ GENIO_ONE_SCHEDULE_AUTHORITY_URL: "http://platform.test/token", GENIO_ONE_SCHEDULE_AUTHORITY_TOKEN: "service" }).issue(request)).resolves.toBe("issued-owner")
+    } finally { globalThis.fetch = originalFetch }
+    expect(sent).toEqual([{ authorization: "Bearer service", body: { tenant_id: "tenant", subject_id: "owner", acting_client_id: "genio-one-bot", bot_id: "bot", schedule_id: "schedule", run_id: "run" } }])
+  })
+
   test("coalesces missed AUTH_REQUIRED slots to the latest one after login", () => {
     let now = Date.parse("2026-01-01T00:00:00.000Z")
     const schedules = new BotSchedules(new Database(":memory:"), () => now)
@@ -342,7 +462,9 @@ describe("BotSchedules", () => {
     const runner = new BotScheduleRunner({
       botSchedules: schedules,
       runtimeBroker: {
+        isClosing: () => false,
         findByPrincipal: (candidate: typeof principal) => candidate.subject_id === "available-owner" ? session : null,
+        listen: () => () => undefined,
         request: async () => ({ data: [{ id: "available-turn", status: "completed", items: [{ type: "userMessage", clientId: "available-message" }] }] }),
       },
       botRegistry: { timeline: { hasRunningTurns: () => false } },

@@ -182,6 +182,22 @@ export const mcpOAuthHttp: FastifyPluginAsync<McpOAuthHttpOptions> = async (
         iss: request.query.iss,
         error: request.query.error,
       })
+      if (
+        /[\u0000-\u001F\u007F-\u009F\\]/.test(target) ||
+        !/^https?:\/\/[^/]/i.test(target) ||
+        target !== target.trim()
+      ) {
+        throw new PlatformApiError("MCP_OAUTH_CALLBACK_INVALID", 400)
+      }
+      let targetUrl: URL
+      try {
+        targetUrl = new URL(target)
+      } catch {
+        throw new PlatformApiError("MCP_OAUTH_CALLBACK_INVALID", 400)
+      }
+      if (targetUrl.protocol !== "http:" && targetUrl.protocol !== "https:") {
+        throw new PlatformApiError("MCP_OAUTH_CALLBACK_INVALID", 400)
+      }
       return reply.redirect(target, 303)
     },
   )

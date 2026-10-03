@@ -22,7 +22,7 @@
 - Bot 後端持有設定、Skills、排程及執行紀錄；SQLite 是目前單實例部署的持久來源。
 - 設定與 Skills 只能修改目前 Bot；角色指示不授予資源、身分或執行權限。
 - Skill 原始碼保留版本與受限相對路徑，安裝套件保持原版本。自有 Skills 以 Bot 專屬工具讀取，每輪附上目前版本的目錄；不加入程序共用的 native extraRoots。腳本僅能透過原有授權的執行工具使用。
-- 排程每次執行重新檢查授權；目前需有記憶體中仍有效的擁有者登入，尚未提供長期離線憑證更新。憑證失效顯示需要登入；排程儲存不得持有明文 access/refresh token。錯過多次執行合併為一次，執行結果不確定時先對帳。
+- 排程每次執行重新檢查授權；擁有者離線時，Bot server 以 `GENIO_ONE_SCHEDULE_AUTHORITY_URL` 的伺服器端交換取得該擁有者本次執行的短期憑證，先驗證同一人與個人 Bot 權限，再開啟 runtime。Platform 尚未提供這個交換端點。未設定交換時仍需記憶體中有效的擁有者登入。無法確認授權或權限被拒時顯示需要登入且不送出回合；排程儲存不得持有明文 access/refresh token。錯過多次執行合併為一次，執行結果不確定時先對帳。
 - 排程支援自有 Skills 與預設工具。已安裝 native Skill、plugin 或 MCP 的 Bot 會明確顯示需要從聊天執行，避免共用 app-server 的套件設定影響另一隻 Bot；背景套件隔離尚未納入本次實作。這個限制適用於新工作的啟動，已送出工作仍可唯讀查詢 native history，以核對不確定的結果。
 - Bot 交接沿用現有 task/FYI 行為，不新增人類通知或臨時代理系統。
 - Codex app-server 由 Bot server 在本機啟動，持有模型與 MCP 工具回合；E2B sandbox 內執行 Codex exec-server，承接遠端執行環境。`genio_bot.computer_use` 由 Bot server 授權，再經 `E2BDesktopDriver` 呼叫 Desktop SDK 操作 E2B 桌面。現階段不宣稱 Codex 原生 Computer Use remote driver 已接通。
