@@ -29,7 +29,15 @@ import {
   RuntimePolicyReportBodySchema,
   RuntimePolicyRevisionSchema,
 } from "./runtime"
-import { RUNTIME_REPORT_KEY_ID_HEADER, RUNTIME_REPORT_SIGNATURE_HEADER } from "../../../../../../runtimes/gateway/services/shared/runtime-report-attestation"
+import {
+  isRuntimePolicyResponseNonce,
+  RUNTIME_POLICY_REQUEST_NONCE_HEADER,
+  RUNTIME_POLICY_RESPONSE_KEY_ID_HEADER,
+  RUNTIME_POLICY_RESPONSE_SIGNATURE_HEADER,
+  RUNTIME_REPORT_KEY_ID_HEADER,
+  RUNTIME_REPORT_SIGNATURE_HEADER,
+  type RuntimePolicyResponseSigner,
+} from "../../../../../../runtimes/gateway/services/shared/runtime-report-attestation"
 import { PlatformApiError } from "../errors"
 import { validateRuntimePolicyForPublication } from "./runtime-policy-validator"
 
@@ -73,7 +81,7 @@ function requireTenantAdministrator(role: string): void {
   if (role !== "TENANT_ADMINISTRATOR") throw new PlatformApiError("FORBIDDEN", 403)
 }
 
-export const onePolicyHttp: FastifyPluginAsync<{ policy: OnePolicy; drafts: PolicyDraftStore }> = async (app, options) => {
+export const onePolicyHttp: FastifyPluginAsync<{ policy: OnePolicy; drafts: PolicyDraftStore; responseSigner?: RuntimePolicyResponseSigner }> = async (app, options) => {
   const routes = app.withTypeProvider<TypeBoxTypeProvider>()
   const draftPath = "/v1/tenants/:tenant_id/one-policy/first-party-bot/draft"
   const key = "one-policy.first-party.bot-default"
@@ -351,15 +359,32 @@ export const onePolicyHttp: FastifyPluginAsync<{ policy: OnePolicy; drafts: Poli
       body: RuntimePolicyAuthorizeBodySchema,
       response: { 200: RuntimePolicyDecisionSchema },
     },
-  }, async (request) => options.policy.authorizeRuntime({
-    ...request.body,
-    tenantId: request.params.tenant_id,
-    principal: request.principal!,
-    ...(request.headers[RUNTIME_REPORT_KEY_ID_HEADER] !== undefined || request.headers[RUNTIME_REPORT_SIGNATURE_HEADER] !== undefined ? { reportAttestation: {
-      keyId: headerValue(request.headers[RUNTIME_REPORT_KEY_ID_HEADER]),
-      signature: headerValue(request.headers[RUNTIME_REPORT_SIGNATURE_HEADER]),
-    } } : {}),
-  }))
+  }, async (request, reply) => {
+    const attested = request.headers[RUNTIME_REPORT_KEY_ID_HEADER] !== undefined || request.headers[RUNTIME_REPORT_SIGNATURE_HEADER] !== undefined
+    const nonce = request.headers[RUNTIME_POLICY_REQUEST_NONCE_HEADER]
+    if (attested && !options.responseSigner) throw new PlatformApiError("RUNTIME_POLICY_RESPONSE_SIGNER_UNAVAILABLE", 503)
+    if (attested && !isRuntimePolicyResponseNonce(nonce)) throw new PlatformApiError("RUNTIME_POLICY_REQUEST_NONCE_INVALID", 400)
+    const decision = await options.policy.authorizeRuntime({
+      ...request.body,
+      tenantId: request.params.tenant_id,
+      principal: request.principal!,
+      ...(attested ? { reportAttestation: {
+        keyId: headerValue(request.headers[RUNTIME_REPORT_KEY_ID_HEADER]),
+        signature: headerValue(request.headers[RUNTIME_REPORT_SIGNATURE_HEADER]),
+      } } : {}),
+    })
+    if (attested && options.responseSigner) {
+      reply.header(RUNTIME_POLICY_RESPONSE_KEY_ID_HEADER, options.responseSigner.keyId)
+      reply.header(RUNTIME_POLICY_RESPONSE_SIGNATURE_HEADER, options.responseSigner.sign({
+        kind: "AUTHORIZE_RESPONSE",
+        tenantId: request.params.tenant_id,
+        nonce: nonce as string,
+        request: request.body,
+        response: decision,
+      }))
+    }
+    return decision
+  })
 
   routes.post("/v1/tenants/:tenant_id/one-policy/runtime-report", {
     schema: {
@@ -369,13 +394,25 @@ export const onePolicyHttp: FastifyPluginAsync<{ policy: OnePolicy; drafts: Poli
       body: RuntimePolicyReportBodySchema,
       response: { 201: RuntimePolicyAuditEventSchema },
     },
-  }, async (request, reply) => reply.code(201).send(await options.policy.reportRuntime({
-    ...request.body,
-    tenantId: request.params.tenant_id,
-    principal: request.principal,
-    reportAttestation: {
-      keyId: headerValue(request.headers[RUNTIME_REPORT_KEY_ID_HEADER]),
-      signature: headerValue(request.headers[RUNTIME_REPORT_SIGNATURE_HEADER]),
-    },
-  })))
+  }, async (request, reply) => {
+    const receipt = await options.policy.reportRuntime({
+      ...request.body,
+      tenantId: request.params.tenant_id,
+      principal: request.principal,
+      reportAttestation: {
+        keyId: headerValue(request.headers[RUNTIME_REPORT_KEY_ID_HEADER]),
+        signature: headerValue(request.headers[RUNTIME_REPORT_SIGNATURE_HEADER]),
+      },
+    })
+    if (options.responseSigner) {
+      reply.header(RUNTIME_POLICY_RESPONSE_KEY_ID_HEADER, options.responseSigner.keyId)
+      reply.header(RUNTIME_POLICY_RESPONSE_SIGNATURE_HEADER, options.responseSigner.sign({
+        kind: "REPORT_ACK",
+        tenantId: request.params.tenant_id,
+        request: request.body,
+        response: receipt,
+      }))
+    }
+    return reply.code(201).send(receipt)
+  })
 }

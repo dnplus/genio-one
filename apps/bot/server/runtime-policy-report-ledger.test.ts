@@ -7,6 +7,7 @@ import { join } from "node:path"
 
 import { createRuntimePolicyClient } from "./runtime-policy"
 import { RuntimePolicyReportLedger } from "./runtime-policy-report-ledger"
+import { runtimePolicyResponseVerificationKeys, signedRuntimePolicyReceipt } from "./runtime-policy-attestation-test-support"
 import { RUNTIME_REPORT_KEY_ID_HEADER, RUNTIME_REPORT_SIGNATURE_HEADER, verifyRuntimeReport } from "../../../runtimes/gateway/services/shared/runtime-report-attestation"
 
 const principal = { tenant_id: "tenant-report", subject_id: "user", acting_client_id: "genio-one-bot", scopes: ["genioone-invocation"] }
@@ -33,6 +34,27 @@ function receipt(body: Record<string, unknown>, tenantId = "tenant-report") {
 }
 
 describe("runtime policy report ledger", () => {
+  test("a persisted report stays pending without a Platform verifier and replays after configuration", async () => {
+    const db = new Database(":memory:")
+    try {
+      const ledger = new RuntimePolicyReportLedger(db)
+      let reportPosts = 0
+      const fetch = async (_url: URL, init?: RequestInit) => {
+        reportPosts++
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+        return signedRuntimePolicyReceipt(body, receipt(body))
+      }
+      const input = { principal, botId: "bot", capabilityId: "model.invoke" as const, action: "invoke" as const, correlationId: "verifier-later", outcome: "COMPLETED" as const }
+      const first = createRuntimePolicyClient({ environment: {}, reportKeyId: "bot-report", reportPrivateKeyPem: privateKey, reportLedger: ledger, fetch })
+      await first.report(input)
+      expect(ledger.pending()).toHaveLength(1)
+      const restarted = createRuntimePolicyClient({ environment: {}, reportKeyId: "bot-report", reportPrivateKeyPem: privateKey, responseVerificationKeys: runtimePolicyResponseVerificationKeys, reportLedger: ledger, fetch })
+      await restarted.replayPendingReports?.()
+      expect(ledger.pending()).toHaveLength(0)
+      expect(reportPosts).toBe(2)
+    } finally { db.close() }
+  })
+
   test("stores only a reason class when a caller supplies exception text", async () => {
     const db = new Database(":memory:")
     try {
@@ -41,8 +63,12 @@ describe("runtime policy report ledger", () => {
         origin: "http://platform.test",
         reportKeyId: "bot-report",
         reportPrivateKeyPem: privateKey,
+        responseVerificationKeys: runtimePolicyResponseVerificationKeys,
         reportLedger: ledger,
-        fetch: async (_url, init) => Response.json(receipt(JSON.parse(String(init?.body)) as Record<string, unknown>), { status: 201 }),
+        fetch: async (_url, init) => {
+          const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+          return signedRuntimePolicyReceipt(body, receipt(body))
+        },
       })
       await client.report({ principal, botId: "bot", capabilityId: "model.invoke", action: "invoke", correlationId: "classified-error", outcome: "FAILED", reasonCode: "Secret transcript from an exception" })
       const stored = db.query("select body from runtime_policy_report_delivery where correlation_id = 'classified-error'").get() as { body: string }
@@ -63,6 +89,7 @@ describe("runtime policy report ledger", () => {
         origin: "http://platform.test",
         reportKeyId: "bot-report",
         reportPrivateKeyPem: privateKey,
+        responseVerificationKeys: runtimePolicyResponseVerificationKeys,
         reportLedger: ledger,
         fetch: async (_url, init) => {
           attempts++
@@ -92,15 +119,16 @@ describe("runtime policy report ledger", () => {
           origin: "http://platform.test",
           reportKeyId: "rotated-key",
           reportPrivateKeyPem: rotatedPrivateKey,
+          responseVerificationKeys: runtimePolicyResponseVerificationKeys,
           reportLedger: restartedLedger,
           fetch: async (_url, init) => {
             const headers = new Headers(init?.headers)
             const body = String(init?.body)
             sent.push({ authorization: headers.get("authorization"), body, keyId: headers.get(RUNTIME_REPORT_KEY_ID_HEADER), signature: headers.get(RUNTIME_REPORT_SIGNATURE_HEADER) })
             const parsed = JSON.parse(body) as Record<string, unknown>
-            if (!acknowledged && sent.length === 1) return Response.json(receipt(parsed), { status: 200 })
-            if (!acknowledged) return Response.json({ ...receipt(parsed), correlation_id: "wrong" }, { status: 201 })
-            return Response.json(receipt(parsed), { status: 201 })
+            if (!acknowledged && sent.length === 1) return signedRuntimePolicyReceipt(parsed, receipt(parsed), 200)
+            if (!acknowledged) return signedRuntimePolicyReceipt(parsed, { ...receipt(parsed), correlation_id: "wrong" })
+            return signedRuntimePolicyReceipt(parsed, receipt(parsed))
           },
         })
         await restarted.replayPendingReports?.()

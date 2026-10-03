@@ -1,11 +1,15 @@
-import { randomUUID } from "node:crypto"
+import { createPublicKey, randomUUID } from "node:crypto"
 import type { HandsProvider } from "@genioone/protocol/hands"
 import { handsProviderDomain, isHandsExecutionPlacementTarget, readHandsExecutionPlacement } from "@genioone/protocol/hands-placement"
 
 import {
   RUNTIME_REPORT_KEY_ID_HEADER,
   RUNTIME_REPORT_SIGNATURE_HEADER,
+  RUNTIME_POLICY_REQUEST_NONCE_HEADER,
+  RUNTIME_POLICY_RESPONSE_KEY_ID_HEADER,
+  RUNTIME_POLICY_RESPONSE_SIGNATURE_HEADER,
   signRuntimeReport,
+  verifyRuntimePolicyResponse,
 } from "../../../runtimes/gateway/services/shared/runtime-report-attestation"
 
 import {
@@ -67,6 +71,7 @@ interface RuntimePolicyClientOptions {
   authorizePath?: string
   reportKeyId?: string
   reportPrivateKeyPem?: string
+  responseVerificationKeys?: Record<string, string>
   fetch?: (input: URL, init?: RequestInit) => Promise<Response>
   timeoutMs?: number
   reportLedger?: RuntimePolicyReportLedger
@@ -246,10 +251,41 @@ export function createRuntimePolicyClient(options: RuntimePolicyClientOptions = 
   const reportPath = environment.GENIO_ONE_RUNTIME_POLICY_REPORT_PATH?.trim() || "/v1/tenants/{tenant_id}/one-policy/runtime-report"
   const reportKeyId = options.reportKeyId?.trim() || environment.GENIO_ONE_RUNTIME_REPORT_KEY_ID?.trim() || ""
   const reportPrivateKeyPem = options.reportPrivateKeyPem ?? environment.GENIO_ONE_RUNTIME_REPORT_PRIVATE_KEY_PEM ?? ""
+  const responseVerificationKeysJson = environment.GENIO_ONE_RUNTIME_POLICY_RESPONSE_VERIFICATION_KEYS_JSON ?? ""
   const fetcher = options.fetch ?? fetch
   const timeoutMs = options.timeoutMs ?? 2_000
   const reportLedger = options.reportLedger
   const defaultHandsProvider = configuredHandsProvider(environment)
+  function verificationKeys(): Record<string, string> {
+    let keys: unknown = options.responseVerificationKeys
+    if (keys === undefined) {
+      try {
+        keys = JSON.parse(responseVerificationKeysJson)
+      } catch {
+        throw new RuntimePolicyUnavailableError("RUNTIME_POLICY_RESPONSE_VERIFIER_INVALID")
+      }
+    }
+    if (!plainRecord(keys) || Object.keys(keys).length === 0) throw new RuntimePolicyUnavailableError("RUNTIME_POLICY_RESPONSE_VERIFIER_INVALID")
+    for (const [keyId, publicKeyPem] of Object.entries(keys)) {
+      if (!/^[A-Za-z0-9_.:-]{1,128}$/.test(keyId) || !nonEmptyString(publicKeyPem)) throw new RuntimePolicyUnavailableError("RUNTIME_POLICY_RESPONSE_VERIFIER_INVALID")
+      try {
+        if (createPublicKey(publicKeyPem).asymmetricKeyType !== "ed25519") throw new Error("INVALID_KEY")
+      } catch {
+        throw new RuntimePolicyUnavailableError("RUNTIME_POLICY_RESPONSE_VERIFIER_INVALID")
+      }
+    }
+    return keys as Record<string, string>
+  }
+  function responseVerificationKey(response: Response, code: string): string {
+    const keys = verificationKeys()
+    const keyId = response.headers.get(RUNTIME_POLICY_RESPONSE_KEY_ID_HEADER) ?? ""
+    const signature = response.headers.get(RUNTIME_POLICY_RESPONSE_SIGNATURE_HEADER) ?? ""
+    const publicKeyPem = keys[keyId]
+    if (!/^[A-Za-z0-9_.:-]{1,128}$/.test(keyId) || !/^[A-Za-z0-9_-]{86}$/.test(signature) || !nonEmptyString(publicKeyPem)) {
+      throw new RuntimePolicyUnavailableError(code)
+    }
+    return publicKeyPem
+  }
   function signReport(body: Record<string, unknown>): string {
     if (!reportKeyId || !reportPrivateKeyPem) throw new RuntimePolicyUnavailableError("RUNTIME_POLICY_REPORT_SIGNER_UNAVAILABLE")
     try {
@@ -276,11 +312,14 @@ export function createRuntimePolicyClient(options: RuntimePolicyClientOptions = 
       ...(reportLedger ? { tenant_id: input.principal.tenant_id, operation: "AUTHORIZE" } : {}),
     } : undefined
     const authorizeSignature = authorizeBody && reportLedger ? signReport(authorizeBody) : undefined
+    if (authorizeSignature) verificationKeys()
+    const responseNonce = authorizeSignature ? randomUUID() : undefined
     const headers = {
       accept: "application/json",
       ...(method === "POST" ? { "content-type": "application/json" } : {}),
       ...(input.accessToken ? { authorization: `Bearer ${input.accessToken}` } : {}),
       ...(authorizeSignature ? { [RUNTIME_REPORT_KEY_ID_HEADER]: reportKeyId, [RUNTIME_REPORT_SIGNATURE_HEADER]: authorizeSignature } : {}),
+      ...(responseNonce ? { [RUNTIME_POLICY_REQUEST_NONCE_HEADER]: responseNonce } : {}),
     }
     if (method === "GET") {
       for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value)
@@ -304,6 +343,11 @@ export function createRuntimePolicyClient(options: RuntimePolicyClientOptions = 
       body = await response.json()
     } catch {
       throw new RuntimePolicyUnavailableError("RUNTIME_POLICY_RESPONSE_INVALID")
+    }
+    if (authorizeBody && responseNonce && reportLedger) {
+      if (!plainRecord(body) || !verifyRuntimePolicyResponse({ kind: "AUTHORIZE_RESPONSE", tenantId: input.principal.tenant_id, nonce: responseNonce, request: authorizeBody, response: body }, response.headers.get(RUNTIME_POLICY_RESPONSE_SIGNATURE_HEADER) ?? "", responseVerificationKey(response, "RUNTIME_POLICY_RESPONSE_ATTESTATION_INVALID"))) {
+        throw new RuntimePolicyUnavailableError("RUNTIME_POLICY_RESPONSE_ATTESTATION_INVALID")
+      }
     }
     const decision = parseDecision(body)
     if (!decision) throw new RuntimePolicyUnavailableError("RUNTIME_POLICY_RESPONSE_INVALID")
@@ -336,6 +380,9 @@ export function createRuntimePolicyClient(options: RuntimePolicyClientOptions = 
       receipt = await response.json() as Record<string, unknown>
     } catch {
       throw new RuntimePolicyUnavailableError("RUNTIME_POLICY_REPORT_ACK_INVALID")
+    }
+    if (!plainRecord(receipt) || !verifyRuntimePolicyResponse({ kind: "REPORT_ACK", tenantId: report.tenantId, request: body, response: receipt }, response.headers.get(RUNTIME_POLICY_RESPONSE_SIGNATURE_HEADER) ?? "", responseVerificationKey(response, "RUNTIME_POLICY_REPORT_ACK_ATTESTATION_INVALID"))) {
+      throw new RuntimePolicyUnavailableError("RUNTIME_POLICY_REPORT_ACK_ATTESTATION_INVALID")
     }
     if (response.status !== 201 || receipt.tenant_id !== report.tenantId || receipt.correlation_id !== report.correlationId || receipt.phase !== "REPORT" || receipt.audit_event_id !== `${report.correlationId}:authorize:report` || receipt.authorization_audit_event_id !== `${report.correlationId}:authorize` || receipt.report_outcome !== body.outcome || receipt.bot_id !== body.bot_id || receipt.runtime_id !== body.runtime_id || receipt.capability_id !== body.capability_id || receipt.action !== body.action || receipt.session_id !== (body.session_id ?? null) || (body.reason_code && receipt.reason_code !== body.reason_code)) {
       throw new RuntimePolicyUnavailableError("RUNTIME_POLICY_REPORT_ACK_INVALID")

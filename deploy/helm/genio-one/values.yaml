@@ -96,6 +96,8 @@ secrets:
   # Used only with runtimeReport.generatedKeyId and never shared with Gateway keys.
   botRuntimeReportPrivateKeyPem: ""
   botRuntimeReportPublicKeyPem: ""
+  platformRuntimePolicyResponsePrivateKeyPem: ""
+  platformRuntimePolicyResponseVerificationKeysJson: ""
 
 platform:
   replicas: 2
@@ -150,6 +152,7 @@ runtimeReport:
   # CE secret generation can provide this key ID with matching values above.
   # Leave empty when no chart-managed Bot report signer is configured.
   generatedKeyId: ""
+  generatedResponseKeyId: ""
 
 bot:
   enabled: true

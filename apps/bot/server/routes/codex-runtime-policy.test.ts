@@ -7,6 +7,7 @@ import { BotConnectionInteractions } from "../bot-connection-interactions"
 import { botToolText } from "../bot-tool-contract"
 import { createRuntimePolicyClient } from "../runtime-policy"
 import { RuntimePolicyReportLedger } from "../runtime-policy-report-ledger"
+import { runtimePolicyResponseVerificationKeys, signedRuntimePolicyReceipt } from "../runtime-policy-attestation-test-support"
 import type { RuntimePolicyReportInput } from "../runtime-policy-contract"
 
 const principal = {
@@ -247,6 +248,7 @@ describe("Codex runtime policy route", () => {
       origin: "http://platform.test",
       reportKeyId: "bot-report",
       reportPrivateKeyPem: privateKey,
+      responseVerificationKeys: runtimePolicyResponseVerificationKeys,
       reportLedger: ledger,
       fetch: async (_url, init) => {
         deliveries++
@@ -255,7 +257,7 @@ describe("Codex runtime policy route", () => {
           return Response.json({ error: "TEMPORARY_FAILURE" }, { status: 503 })
         }
         const body = JSON.parse(String(init?.body)) as Record<string, unknown>
-        return Response.json({
+        return signedRuntimePolicyReceipt(body, {
           tenant_id: body.tenant_id,
           correlation_id: body.correlation_id,
           audit_event_id: `${body.correlation_id}:authorize:report`,
@@ -268,7 +270,7 @@ describe("Codex runtime policy route", () => {
           action: body.action,
           session_id: body.session_id ?? null,
           reason_code: body.reason_code ?? "RULE_ALLOW",
-        }, { status: 201 })
+        })
       },
     })
     const context = createContext([], [])

@@ -6,6 +6,7 @@ import Fastify from "fastify"
 import { modelGatewayRelayRoutes, responsesToChatRequest } from "./model-gateway-relay"
 import { createRuntimePolicyClient } from "./runtime-policy"
 import { RuntimePolicyReportLedger } from "./runtime-policy-report-ledger"
+import { runtimePolicyResponseVerificationKeys, signedRuntimePolicyReceipt } from "./runtime-policy-attestation-test-support"
 import type { RuntimePolicyReportInput } from "./runtime-policy-contract"
 
 class Reply {
@@ -171,11 +172,12 @@ describe("model gateway relay governance context", () => {
         origin: "http://platform.test",
         reportKeyId: "model-report",
         reportPrivateKeyPem: keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+        responseVerificationKeys: runtimePolicyResponseVerificationKeys,
         reportLedger: ledger,
         fetch: async (_url, init) => {
           const body = JSON.parse(String(init?.body)) as Record<string, unknown>
           if (defer) return Response.json({ code: "UNAVAILABLE" }, { status: 503 })
-          return Response.json({ tenant_id: body.tenant_id, correlation_id: body.correlation_id, audit_event_id: `${body.correlation_id}:authorize:report`, authorization_audit_event_id: `${body.correlation_id}:authorize`, phase: "REPORT", report_outcome: body.outcome, bot_id: body.bot_id, runtime_id: body.runtime_id, capability_id: body.capability_id, action: body.action, session_id: body.session_id ?? null, reason_code: body.reason_code ?? "RULE_ALLOW:dylan.model.invoke" }, { status: 201 })
+          return signedRuntimePolicyReceipt(body, { tenant_id: body.tenant_id, correlation_id: body.correlation_id, audit_event_id: `${body.correlation_id}:authorize:report`, authorization_audit_event_id: `${body.correlation_id}:authorize`, phase: "REPORT", report_outcome: body.outcome, bot_id: body.bot_id, runtime_id: body.runtime_id, capability_id: body.capability_id, action: body.action, session_id: body.session_id ?? null, reason_code: body.reason_code ?? "RULE_ALLOW:dylan.model.invoke" })
         },
       })
       context.runtimePolicy.report = (input) => client.report(input as unknown as RuntimePolicyReportInput)
@@ -1187,12 +1189,13 @@ describe("managed MCP relay runtime policy", () => {
         origin: "http://platform.test",
         reportKeyId: "bot-report",
         reportPrivateKeyPem: privateKey,
+        responseVerificationKeys: runtimePolicyResponseVerificationKeys,
         reportLedger: ledger,
         fetch: async (_url, init) => {
           reportCalls++
           if (reportCalls === 1) return Response.json({ error: "TEMPORARY_FAILURE" }, { status: 503 })
           const body = JSON.parse(String(init?.body)) as Record<string, unknown>
-          return Response.json({
+          return signedRuntimePolicyReceipt(body, {
             tenant_id: body.tenant_id,
             correlation_id: body.correlation_id,
             audit_event_id: `${body.correlation_id}:authorize:report`,
@@ -1205,7 +1208,7 @@ describe("managed MCP relay runtime policy", () => {
             action: body.action,
             session_id: body.session_id ?? null,
             reason_code: body.reason_code ?? "RULE_ALLOW",
-          }, { status: 201 })
+          })
         },
       })
       const route = await routeFor(contextFor({

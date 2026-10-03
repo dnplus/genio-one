@@ -149,11 +149,15 @@ spec:
               valueFrom: { secretKeyRef: { name: {{ .Values.runtimeReport.existingSecret | quote }}, key: key-id } }
             - name: GENIO_ONE_RUNTIME_REPORT_PRIVATE_KEY_PEM
               valueFrom: { secretKeyRef: { name: {{ .Values.runtimeReport.existingSecret | quote }}, key: private-key.pem } }
+            - name: GENIO_ONE_RUNTIME_POLICY_RESPONSE_VERIFICATION_KEYS_JSON
+              valueFrom: { secretKeyRef: { name: {{ .Values.runtimeReport.existingSecret | quote }}, key: response-verification-keys.json } }
             {{- else if .Values.runtimeReport.generatedKeyId }}
             - name: GENIO_ONE_RUNTIME_REPORT_KEY_ID
               valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: bot-runtime-report-key-id } }
             - name: GENIO_ONE_RUNTIME_REPORT_PRIVATE_KEY_PEM
               valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: bot-runtime-report-private-key.pem } }
+            - name: GENIO_ONE_RUNTIME_POLICY_RESPONSE_VERIFICATION_KEYS_JSON
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: runtime-policy-response-verification-keys.json } }
             {{- end }}
             {{- if .Values.bot.modelGatewayBaseUrl }}
             {{- if regexMatch "^https?://genio-one-aigw-internal(:[0-9]+)?(/|$)" .Values.bot.modelGatewayBaseUrl }}

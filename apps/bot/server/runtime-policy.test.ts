@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { Database } from "bun:sqlite"
-import { createPublicKey, generateKeyPairSync, verify } from "node:crypto"
+import { createPublicKey, generateKeyPairSync, randomUUID, verify } from "node:crypto"
 
-import { canonicalRuntimeReportPayload, verifyRuntimeReport } from "../../../runtimes/gateway/services/shared/runtime-report-attestation"
+import { canonicalRuntimeReportPayload, createRuntimePolicyResponseSigner, RUNTIME_POLICY_REQUEST_NONCE_HEADER, RUNTIME_POLICY_RESPONSE_KEY_ID_HEADER, RUNTIME_POLICY_RESPONSE_SIGNATURE_HEADER, verifyRuntimeReport, type RuntimePolicyResponseInput } from "../../../runtimes/gateway/services/shared/runtime-report-attestation"
 
 import { createRuntimePolicyClient, requireRuntimePolicyDecision, RuntimePolicyUnavailableError } from "./runtime-policy"
 import { RuntimePolicyReportLedger } from "./runtime-policy-report-ledger"
@@ -19,6 +19,17 @@ const principal: GenioPrincipal = {
 }
 const reportKeys = generateKeyPairSync("ed25519")
 const reportPrivateKeyPem = reportKeys.privateKey.export({ type: "pkcs8", format: "pem" }).toString()
+const platformKeys = generateKeyPairSync("ed25519")
+const platformKeyId = "platform-response"
+const platformPublicKeyPem = platformKeys.publicKey.export({ type: "spki", format: "pem" }).toString()
+const platformSigner = createRuntimePolicyResponseSigner(platformKeyId, platformKeys.privateKey.export({ type: "pkcs8", format: "pem" }).toString())
+
+function signedResponse(input: RuntimePolicyResponseInput, status = 200): Response {
+  return Response.json(input.response, { status, headers: {
+    [RUNTIME_POLICY_RESPONSE_KEY_ID_HEADER]: platformSigner.keyId,
+    [RUNTIME_POLICY_RESPONSE_SIGNATURE_HEADER]: platformSigner.sign(input),
+  } })
+}
 
 function decision(overrides: Record<string, unknown> = {}): RuntimePolicyDecision {
   return {
@@ -61,6 +72,21 @@ describe("RuntimePolicyClient", () => {
     } finally { db.close() }
   })
 
+  test("requires a valid Platform response verifier before durable authorization", async () => {
+    const db = new Database(":memory:")
+    try {
+      const ledger = new RuntimePolicyReportLedger(db)
+      let requests = 0
+      const fetch = async () => { requests++; throw new Error("AUTHORIZATION_SHOULD_NOT_SEND") }
+      const input = { principal, botId: "bot-dylan", capabilityId: "shell.exec" as const, action: "expose" as const, correlationId: "verifier-preflight" }
+      const missing = createRuntimePolicyClient({ environment: {}, reportKeyId: "bot-report", reportPrivateKeyPem, reportLedger: ledger, fetch })
+      await expect(missing.authorize(input)).rejects.toThrow("RUNTIME_POLICY_RESPONSE_VERIFIER_INVALID")
+      const invalid = createRuntimePolicyClient({ environment: {}, reportKeyId: "bot-report", reportPrivateKeyPem, responseVerificationKeys: { "platform-bad": "invalid" }, reportLedger: ledger, fetch })
+      await expect(invalid.authorize(input)).rejects.toThrow("RUNTIME_POLICY_RESPONSE_VERIFIER_INVALID")
+      expect(requests).toBe(0)
+    } finally { db.close() }
+  })
+
   test("valid signer authorizes before execution and durably acknowledges the completion report", async () => {
     const db = new Database(":memory:")
     try {
@@ -71,6 +97,7 @@ describe("RuntimePolicyClient", () => {
         origin: "http://platform.test",
         reportKeyId: "bot-report",
         reportPrivateKeyPem,
+        responseVerificationKeys: { [platformKeyId]: platformPublicKeyPem },
         reportLedger: ledger,
         fetch: async (url, init) => {
           const body = JSON.parse(String(init?.body)) as Record<string, unknown>
@@ -81,11 +108,12 @@ describe("RuntimePolicyClient", () => {
             expect(headers.get("x-genio-runtime-report-key-id")).toBe("bot-report")
             expect(verifyRuntimeReport(body, headers.get("x-genio-runtime-report-signature") ?? "", reportKeys.publicKey.export({ type: "spki", format: "pem" }).toString())).toBe(true)
             requests.push("authorize")
-            return Response.json(decision({ correlation_id: body.correlation_id }))
+            const nonce = headers.get(RUNTIME_POLICY_REQUEST_NONCE_HEADER) ?? ""
+            return signedResponse({ kind: "AUTHORIZE_RESPONSE", tenantId: principal.tenant_id, nonce, request: body, response: decision({ correlation_id: body.correlation_id }) })
           }
           requests.push("report")
           expect(ledger.pending()).toHaveLength(1)
-          return Response.json({
+          const receipt = {
             tenant_id: body.tenant_id,
             correlation_id: body.correlation_id,
             audit_event_id: `${body.correlation_id}:authorize:report`,
@@ -98,7 +126,8 @@ describe("RuntimePolicyClient", () => {
             action: body.action,
             session_id: body.session_id ?? null,
             reason_code: body.reason_code ?? "RULE_ALLOW:shell",
-          }, { status: 201 })
+          }
+          return signedResponse({ kind: "REPORT_ACK", tenantId: principal.tenant_id, request: body, response: receipt }, 201)
         },
       })
       const input = { principal, botId: "bot-dylan", capabilityId: "shell.exec" as const, action: "expose" as const, correlationId: "signer-ready" }
@@ -106,6 +135,133 @@ describe("RuntimePolicyClient", () => {
       await client.report({ ...input, correlationId: authorized.correlation_id!, outcome: "COMPLETED" })
       expect(requests).toEqual(["authorize", "report"])
       expect(ledger.get(principal.tenant_id, "signer-ready")?.delivered).toBe(true)
+      expect(ledger.pending()).toHaveLength(0)
+    } finally { db.close() }
+  })
+
+  test("rejects a replayed ALLOW after policy revocation when the same correlation gets a fresh nonce", async () => {
+    const db = new Database(":memory:")
+    try {
+      const ledger = new RuntimePolicyReportLedger(db)
+      const nonces: string[] = []
+      let firstResponse: Response | undefined
+      let policyRevoked = false
+      const client = createRuntimePolicyClient({
+        environment: {}, reportKeyId: "bot-report", reportPrivateKeyPem, reportLedger: ledger,
+        responseVerificationKeys: { [platformKeyId]: platformPublicKeyPem },
+        fetch: async (_url, init) => {
+          const request = JSON.parse(String(init?.body)) as Record<string, unknown>
+          const nonce = new Headers(init?.headers).get(RUNTIME_POLICY_REQUEST_NONCE_HEADER) ?? ""
+          nonces.push(nonce)
+          if (!policyRevoked) firstResponse = signedResponse({ kind: "AUTHORIZE_RESPONSE", tenantId: principal.tenant_id, nonce, request, response: decision({ correlation_id: request.correlation_id }) })
+          return firstResponse!.clone()
+        },
+      })
+      const input = { principal, botId: "bot-dylan", capabilityId: "shell.exec" as const, action: "expose" as const, correlationId: "reused-correlation" }
+      expect((await client.authorize(input)).decision).toBe("ALLOW")
+      policyRevoked = true
+      await expect(client.authorize(input)).rejects.toThrow("RUNTIME_POLICY_RESPONSE_ATTESTATION_INVALID")
+      expect(nonces).toHaveLength(2)
+      expect(nonces[0]).not.toBe(nonces[1])
+    } finally { db.close() }
+  })
+
+  test("rejects unsigned, wrong-key, wrong-nonce, wrong-tenant, and altered decisions", async () => {
+    const db = new Database(":memory:")
+    try {
+      const ledger = new RuntimePolicyReportLedger(db)
+      let variant: "unsigned" | "wrong-key" | "wrong-nonce" | "wrong-tenant" | "altered" = "unsigned"
+      const client = createRuntimePolicyClient({
+        environment: {}, reportKeyId: "bot-report", reportPrivateKeyPem, reportLedger: ledger,
+        responseVerificationKeys: { [platformKeyId]: platformPublicKeyPem },
+        fetch: async (_url, init) => {
+          const request = JSON.parse(String(init?.body)) as Record<string, unknown>
+          const nonce = new Headers(init?.headers).get(RUNTIME_POLICY_REQUEST_NONCE_HEADER) ?? ""
+          const payload = decision({ correlation_id: request.correlation_id })
+          if (variant === "unsigned") return Response.json(payload)
+          const signed = signedResponse({ kind: "AUTHORIZE_RESPONSE", tenantId: variant === "wrong-tenant" ? "other-tenant" : principal.tenant_id, nonce: variant === "wrong-nonce" ? randomUUID() : nonce, request, response: payload })
+          if (variant === "wrong-key") signed.headers.set(RUNTIME_POLICY_RESPONSE_KEY_ID_HEADER, "untrusted-key")
+          if (variant === "altered") return Response.json({ ...payload, reason_code: "FORGED_ALLOW" }, { headers: signed.headers })
+          return signed
+        },
+      })
+      const input = { principal, botId: "bot-dylan", capabilityId: "shell.exec" as const, action: "expose" as const, correlationId: "attestation-variants" }
+      for (variant of ["unsigned", "wrong-key", "wrong-nonce", "wrong-tenant", "altered"] as const) {
+        await expect(client.authorize(input)).rejects.toThrow("RUNTIME_POLICY_RESPONSE_ATTESTATION_INVALID")
+      }
+    } finally { db.close() }
+  })
+
+  test("accepts a signed decision from an overlapping previous Platform key", async () => {
+    const db = new Database(":memory:")
+    try {
+      const previous = generateKeyPairSync("ed25519")
+      const previousSigner = createRuntimePolicyResponseSigner("platform-previous", previous.privateKey.export({ type: "pkcs8", format: "pem" }).toString())
+      const ledger = new RuntimePolicyReportLedger(db)
+      const client = createRuntimePolicyClient({
+        environment: {}, reportKeyId: "bot-report", reportPrivateKeyPem, reportLedger: ledger,
+        responseVerificationKeys: { [platformKeyId]: platformPublicKeyPem, [previousSigner.keyId]: previous.publicKey.export({ type: "spki", format: "pem" }).toString() },
+        fetch: async (url, init) => {
+          const request = JSON.parse(String(init?.body)) as Record<string, unknown>
+          if (url.pathname.endsWith("/runtime-report")) {
+            const response = {
+              tenant_id: request.tenant_id, correlation_id: request.correlation_id,
+              audit_event_id: `${request.correlation_id}:authorize:report`, authorization_audit_event_id: `${request.correlation_id}:authorize`,
+              phase: "REPORT", report_outcome: request.outcome, bot_id: request.bot_id, runtime_id: request.runtime_id,
+              capability_id: request.capability_id, action: request.action, session_id: request.session_id ?? null, reason_code: "RULE_ALLOW:shell",
+            }
+            return Response.json(response, { status: 201, headers: {
+              [RUNTIME_POLICY_RESPONSE_KEY_ID_HEADER]: previousSigner.keyId,
+              [RUNTIME_POLICY_RESPONSE_SIGNATURE_HEADER]: previousSigner.sign({ kind: "REPORT_ACK", tenantId: principal.tenant_id, request, response }),
+            } })
+          }
+          const nonce = new Headers(init?.headers).get(RUNTIME_POLICY_REQUEST_NONCE_HEADER) ?? ""
+          const response = decision({ correlation_id: request.correlation_id })
+          return Response.json(response, { headers: {
+            [RUNTIME_POLICY_RESPONSE_KEY_ID_HEADER]: previousSigner.keyId,
+            [RUNTIME_POLICY_RESPONSE_SIGNATURE_HEADER]: previousSigner.sign({ kind: "AUTHORIZE_RESPONSE", tenantId: principal.tenant_id, nonce, request, response }),
+          } })
+        },
+      })
+      const input = { principal, botId: "bot-dylan", capabilityId: "shell.exec" as const, action: "expose" as const, correlationId: "previous-key" }
+      expect((await client.authorize(input)).decision).toBe("ALLOW")
+      await client.report({ ...input, outcome: "COMPLETED" })
+      expect(ledger.pending()).toHaveLength(0)
+    } finally { db.close() }
+  })
+
+  test("keeps a report pending until a signed ACK binds the original report and full receipt", async () => {
+    const db = new Database(":memory:")
+    try {
+      const ledger = new RuntimePolicyReportLedger(db)
+      let variant: "unsigned" | "wrong-report" | "altered-receipt" | "valid" = "unsigned"
+      const client = createRuntimePolicyClient({
+        environment: {}, reportKeyId: "bot-report", reportPrivateKeyPem, reportLedger: ledger,
+        responseVerificationKeys: { [platformKeyId]: platformPublicKeyPem },
+        fetch: async (_url, init) => {
+          const request = JSON.parse(String(init?.body)) as Record<string, unknown>
+          const receipt = {
+            tenant_id: request.tenant_id, correlation_id: request.correlation_id,
+            audit_event_id: `${request.correlation_id}:authorize:report`, authorization_audit_event_id: `${request.correlation_id}:authorize`,
+            phase: "REPORT", report_outcome: request.outcome, bot_id: request.bot_id, runtime_id: request.runtime_id,
+            capability_id: request.capability_id, action: request.action, session_id: request.session_id ?? null,
+            reason_code: "RULE_ALLOW:shell", occurred_at: 100,
+          }
+          if (variant === "unsigned") return Response.json(receipt, { status: 201 })
+          const signed = signedResponse({ kind: "REPORT_ACK", tenantId: principal.tenant_id, request: variant === "wrong-report" ? { ...request, outcome: "FAILED" } : request, response: receipt }, 201)
+          if (variant === "altered-receipt") return Response.json({ ...receipt, occurred_at: 101 }, { status: 201, headers: signed.headers })
+          return signed
+        },
+      })
+      const input = { principal, botId: "bot-dylan", capabilityId: "shell.exec" as const, action: "expose" as const, correlationId: "report-ack-binding", outcome: "COMPLETED" as const }
+      await client.report(input)
+      expect(ledger.pending()).toHaveLength(1)
+      for (variant of ["wrong-report", "altered-receipt"] as const) {
+        await client.replayPendingReports?.()
+        expect(ledger.pending()).toHaveLength(1)
+      }
+      variant = "valid"
+      await client.replayPendingReports?.()
       expect(ledger.pending()).toHaveLength(0)
     } finally { db.close() }
   })

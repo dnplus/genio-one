@@ -42,6 +42,7 @@ import { createKeycloakApplicationOAuthClientProvisioner } from "./capabilities/
 import { createOidcWorkloadAssertionVerifier } from "./capabilities/federation/verifier"
 import type { DemoMcpGatewayIdentity, DemoMcpPublicationTarget } from "./capabilities/demo-project/provisioning"
 import { loadProcessorAdapterRegistryFromEnvironment } from "../../../../runtimes/gateway/services/shared/processor-adapters"
+import { createRuntimePolicyResponseSigner } from "../../../../runtimes/gateway/services/shared/runtime-report-attestation"
 
 export type PlatformApiMode = "postgres" | "memory-dev"
 
@@ -102,6 +103,16 @@ function runtimeReportAttestationOptionsFromEnvironment(
     throw new Error("GENIO_ONE_RUNTIME_REPORT_KEY_ID and GENIO_ONE_RUNTIME_REPORT_PUBLIC_KEY_PEM must be configured together")
   }
   return { runtimeReportKeyId: keyId, runtimeReportPublicKeyPem: publicKeyPem }
+}
+
+function runtimePolicyResponseSignerFromEnvironment(environment: NodeJS.ProcessEnv) {
+  const keyId = environment.GENIO_ONE_RUNTIME_POLICY_RESPONSE_KEY_ID?.trim() ?? ""
+  const privateKeyPem = environment.GENIO_ONE_RUNTIME_POLICY_RESPONSE_PRIVATE_KEY_PEM?.trim() ?? ""
+  if (!keyId && !privateKeyPem) return undefined
+  if (!keyId || !privateKeyPem) {
+    throw new Error("GENIO_ONE_RUNTIME_POLICY_RESPONSE_KEY_ID and GENIO_ONE_RUNTIME_POLICY_RESPONSE_PRIVATE_KEY_PEM must be configured together")
+  }
+  return createRuntimePolicyResponseSigner(keyId, privateKeyPem)
 }
 
 function browserIdentityFromEnvironment(environment: NodeJS.ProcessEnv) {
@@ -449,6 +460,7 @@ async function createMemoryDevApi(environment: NodeJS.ProcessEnv, logger: boolea
   })
   return createManagementApi({
     logger,
+    runtimePolicyResponseSigner: runtimePolicyResponseSignerFromEnvironment(environment),
     modules,
     resourceCatalog: modules.resources,
     principalAuthenticator,
@@ -690,6 +702,7 @@ export async function createConfiguredManagementApi(
       : undefined
     const app = await createManagementApi({
       logger,
+      runtimePolicyResponseSigner: runtimePolicyResponseSignerFromEnvironment(environment),
       modules: {
         ...modules,
         ...(activityMaterializer ? { activityMaterializer } : {}),

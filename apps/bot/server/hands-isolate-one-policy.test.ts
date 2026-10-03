@@ -6,7 +6,7 @@ import { join } from "node:path"
 import { createDefaultOnePolicy } from "../../platform/platform-api/src/capabilities/one-policy/default"
 import { createInMemoryRuntimePolicyStore } from "../../platform/platform-api/src/capabilities/one-policy/runtime-memory"
 import { RUNTIME_POLICY_ID } from "../../platform/platform-api/src/capabilities/one-policy/runtime"
-import { RUNTIME_REPORT_KEY_ID_HEADER, RUNTIME_REPORT_SIGNATURE_HEADER } from "../../../runtimes/gateway/services/shared/runtime-report-attestation"
+import { RUNTIME_POLICY_REQUEST_NONCE_HEADER, RUNTIME_REPORT_KEY_ID_HEADER, RUNTIME_REPORT_SIGNATURE_HEADER } from "../../../runtimes/gateway/services/shared/runtime-report-attestation"
 import { BotRegistry } from "./bot-registry"
 import { BotWorkspaceStore } from "./bot-workspace-store"
 import { createCapabilityGate } from "./capability-gate"
@@ -15,6 +15,7 @@ import { isolateToolDefinitions } from "./bot-isolate-tool"
 import { HandsPlacementGate } from "./hands-placement-gate"
 import { createRuntimePolicyClient } from "./runtime-policy"
 import { RuntimePolicyReportLedger } from "./runtime-policy-report-ledger"
+import { runtimePolicyResponseVerificationKeys, signedRuntimePolicyDecision, signedRuntimePolicyReceipt } from "./runtime-policy-attestation-test-support"
 
 test("isolate uses distinct real One Policy correlations and retries signed reports without rerunning JavaScript", async () => {
   const root = mkdtempSync(join(tmpdir(), "genio-isolate-policy-"))
@@ -46,19 +47,20 @@ test("isolate uses distinct real One Policy correlations and retries signed repo
         const signature = headers.get(RUNTIME_REPORT_SIGNATURE_HEADER)
         const result = await policy.authorizeRuntime({ ...body, tenantId: cpPrincipal.tenant_id, principal: cpPrincipal, ...(keyId !== null || signature !== null ? { reportAttestation: { keyId: keyId ?? "", signature: signature ?? "" } } : {}) })
         correlations.set(result.capability_id, result.correlation_id!)
-        return Response.json(result)
+        const nonce = headers.get(RUNTIME_POLICY_REQUEST_NONCE_HEADER)
+        return nonce ? signedRuntimePolicyDecision(body, nonce, result) : Response.json(result)
       }
       if (path.endsWith("/runtime-report")) {
         if (body.capability_id === "code.javascript" && failCodeReport) { failCodeReport = false; return Response.json({ error: "TEMPORARY_REPORT_FAILURE" }, { status: 503 }) }
         const headers = new Headers(init?.headers)
-        return Response.json(await policy.reportRuntime({ ...body, tenantId: cpPrincipal.tenant_id, principal: cpPrincipal, reportAttestation: { keyId: headers.get(RUNTIME_REPORT_KEY_ID_HEADER)!, signature: headers.get(RUNTIME_REPORT_SIGNATURE_HEADER)! } }), { status: 201 })
+        return signedRuntimePolicyReceipt(body, await policy.reportRuntime({ ...body, tenantId: cpPrincipal.tenant_id, principal: cpPrincipal, reportAttestation: { keyId: headers.get(RUNTIME_REPORT_KEY_ID_HEADER)!, signature: headers.get(RUNTIME_REPORT_SIGNATURE_HEADER)! } }))
       }
       throw new Error("UNEXPECTED_POLICY_PATH")
     } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "POLICY_FAILED" }, { status: typeof error === "object" && error && "statusCode" in error ? Number(error.statusCode) : 500 }) }
   }
   const registry = new BotRegistry(":memory:", join(root, "artifacts"))
   const reportLedger = new RuntimePolicyReportLedger(registry.db)
-  const runtimePolicy = createRuntimePolicyClient({ origin: "https://platform.example.test", reportKeyId: "fixture-key", reportPrivateKeyPem: privateKey, environment: { GENIO_BOT_RUNTIME: "cloudflare-hands" }, reportLedger, fetch: policyFetch })
+  const runtimePolicy = createRuntimePolicyClient({ origin: "https://platform.example.test", reportKeyId: "fixture-key", reportPrivateKeyPem: privateKey, responseVerificationKeys: runtimePolicyResponseVerificationKeys, environment: { GENIO_BOT_RUNTIME: "cloudflare-hands" }, reportLedger, fetch: policyFetch })
   const workspaces = new BotWorkspaceStore(registry.db, (botId, owner) => registry.getOwned(botId, owner), join(root, "workspaces"))
   const bot = registry.create(principal, { name: "Isolate", description: "Real One Policy receipt" })
   const workspace = workspaces.create(principal, bot.id, "cloudflare-hands")

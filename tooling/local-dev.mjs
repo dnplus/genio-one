@@ -303,6 +303,7 @@ export { distillationPortRole }
 const localPlatformOrigin = "http://127.0.0.1:58082"
 const localBotServiceEndpoint = "http://127.0.0.1:5181"
 const localRuntimeReportKeyId = "local-bot-runtime-report"
+const localRuntimePolicyResponseKeyId = "local-platform-runtime-response"
 const localMail2000Endpoint = "http://127.0.0.1:58111/mcp"
 
 const services = [
@@ -357,6 +358,8 @@ const services = [
         "GENIO_CONNECTOR_MAIL2000_ENDPOINT",
         "GENIO_ONE_CONNECTION_VERIFIER_ALLOW_HTTP",
         "GENIO_ONE_CONNECTION_VERIFIER_ALLOWED_HOSTS",
+        "GENIO_ONE_RUNTIME_POLICY_RESPONSE_KEY_ID",
+        "GENIO_ONE_RUNTIME_POLICY_RESPONSE_PRIVATE_KEY_PEM",
       ])
     },
   },
@@ -397,6 +400,11 @@ const services = [
       GENIO_ONE_DISTILLATION_TRIAGE_URL: "http://127.0.0.1:8182/v1/distillation-triage",
       GENIO_ONE_DISTILLATION_TRIAGE_TOKEN: "local-distillation-triage",
       GENIO_ONE_DISTILLATION_ADAPTER_ID: "jev-production",
+    },
+    launchConfiguration() {
+      return launchConfigurationDigest(serviceEnvironment(this), [
+        "GENIO_ONE_RUNTIME_POLICY_RESPONSE_VERIFICATION_KEYS_JSON",
+      ])
     },
   },
   {
@@ -468,7 +476,7 @@ let keepAlive
 
 function ensureSigningKeys() {
   mkdirSync(signingKeyDir, { recursive: true })
-  for (const name of ["projection", "runtime-command", "policy-artifact", "release-root", "runtime-report"]) {
+  for (const name of ["projection", "runtime-command", "policy-artifact", "release-root", "runtime-report", "runtime-policy-response"]) {
     const privateKeyPath = resolve(signingKeyDir, `${name}.pem`)
     const publicKeyPath = resolve(signingKeyDir, `${name}.pub.pem`)
     if (existsSync(privateKeyPath) && existsSync(publicKeyPath)) continue
@@ -538,6 +546,21 @@ export function runtimePolicyReportEnvironment(serviceName, privateKeyPem, publi
   return {}
 }
 
+export function runtimePolicyResponseEnvironment(serviceName, privateKeyPem, publicKeyPem) {
+  if (serviceName === "platform-api") {
+    return {
+      GENIO_ONE_RUNTIME_POLICY_RESPONSE_KEY_ID: localRuntimePolicyResponseKeyId,
+      GENIO_ONE_RUNTIME_POLICY_RESPONSE_PRIVATE_KEY_PEM: privateKeyPem,
+    }
+  }
+  if (serviceName === "bot-server") {
+    return {
+      GENIO_ONE_RUNTIME_POLICY_RESPONSE_VERIFICATION_KEYS_JSON: JSON.stringify({ [localRuntimePolicyResponseKeyId]: publicKeyPem }),
+    }
+  }
+  return {}
+}
+
 function serviceEnvironment(service) {
   const runtimeReport = service.name === "platform-api" || service.name === "bot-server"
     ? runtimePolicyReportEnvironment(
@@ -546,10 +569,18 @@ function serviceEnvironment(service) {
       readFileSync(resolve(signingKeyDir, "runtime-report.pub.pem"), "utf8"),
     )
     : {}
+  const runtimeResponse = service.name === "platform-api" || service.name === "bot-server"
+    ? runtimePolicyResponseEnvironment(
+      service.name,
+      readFileSync(resolve(signingKeyDir, "runtime-policy-response.pem"), "utf8"),
+      readFileSync(resolve(signingKeyDir, "runtime-policy-response.pub.pem"), "utf8"),
+    )
+    : {}
   if (service.name === "platform-api") {
     return {
       ...service.env,
       ...runtimeReport,
+      ...runtimeResponse,
       GENIO_CONNECTOR_CONFIGURATION_KEY: ensureConnectorConfigurationKey(),
       GENIO_CONNECTOR_MAIL2000_ENDPOINT: localMail2000Endpoint,
       GENIO_ONE_GATEWAY_SIGNING_PRIVATE_KEY_FILE: resolve(signingKeyDir, "projection.pem"),
@@ -561,7 +592,7 @@ function serviceEnvironment(service) {
   if (service.name === "mail2000-connector") {
     return { ...service.env, GENIO_CONNECTOR_CONFIGURATION_KEY: ensureConnectorConfigurationKey() }
   }
-  return { ...service.env, ...runtimeReport }
+  return { ...service.env, ...runtimeReport, ...runtimeResponse }
 }
 
 async function probe(service) {

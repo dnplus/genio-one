@@ -205,11 +205,19 @@ spec:
               valueFrom: { secretKeyRef: { name: {{ .Values.runtimeReport.existingSecret | quote }}, key: key-id } }
             - name: GENIO_ONE_RUNTIME_REPORT_PUBLIC_KEY_PEM
               valueFrom: { secretKeyRef: { name: {{ .Values.runtimeReport.existingSecret | quote }}, key: public-key.pem } }
+            - name: GENIO_ONE_RUNTIME_POLICY_RESPONSE_KEY_ID
+              valueFrom: { secretKeyRef: { name: {{ .Values.runtimeReport.existingSecret | quote }}, key: response-key-id } }
+            - name: GENIO_ONE_RUNTIME_POLICY_RESPONSE_PRIVATE_KEY_PEM
+              valueFrom: { secretKeyRef: { name: {{ .Values.runtimeReport.existingSecret | quote }}, key: response-private-key.pem } }
             {{- else if .Values.runtimeReport.generatedKeyId }}
             - name: GENIO_ONE_RUNTIME_REPORT_KEY_ID
               valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: bot-runtime-report-key-id } }
             - name: GENIO_ONE_RUNTIME_REPORT_PUBLIC_KEY_PEM
               valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: bot-runtime-report-public-key.pem } }
+            - name: GENIO_ONE_RUNTIME_POLICY_RESPONSE_KEY_ID
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: runtime-policy-response-key-id } }
+            - name: GENIO_ONE_RUNTIME_POLICY_RESPONSE_PRIVATE_KEY_PEM
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: runtime-policy-response-private-key.pem } }
             {{- end }}
             - { name: GENIO_ONE_KEYCLOAK_ORIGIN, value: {{ printf "http://%s-keycloak:8080" (include "genio-one.fullname" .) | quote }} }
             - { name: GENIO_ONE_KEYCLOAK_ISSUER_ORIGIN, value: {{ trimSuffix "/" .Values.global.keycloakPublicOrigin | quote }} }

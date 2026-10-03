@@ -73,6 +73,7 @@ import { agentDelegationHttp } from "./capabilities/agent-delegations/http"
 import { federationHttp } from "./capabilities/federation/http"
 import { executionGrantHttp } from "./capabilities/execution-grants/http"
 import { onePolicyHttp } from "./capabilities/one-policy/http"
+import type { RuntimePolicyResponseSigner } from "../../../../runtimes/gateway/services/shared/runtime-report-attestation"
 import { processorAdapterHttp } from "./capabilities/processor-adapters/http"
 import { demoProjectHttp } from "./capabilities/demo-project/http"
 import { DemoProjectService } from "./capabilities/demo-project/service"
@@ -120,6 +121,7 @@ export interface ManagementApiDependencies {
   demoProjectGatewayId?: string
   demoProjectGatewayIdentity?: DemoMcpGatewayIdentity
   demoProjectMcpPublicationTarget?: DemoMcpPublicationTarget
+  runtimePolicyResponseSigner?: RuntimePolicyResponseSigner
 }
 
 function extractBearerToken(value: string | undefined): string | null {
@@ -588,6 +590,7 @@ export async function createManagementApi(dependencies: ManagementApiDependencie
   await app.register(onePolicyHttp, {
     policy: dependencies.modules.botAccessPolicy,
     drafts: dependencies.modules.policyDrafts,
+    responseSigner: dependencies.runtimePolicyResponseSigner,
   })
   await app.register(enforcementHttp, {
     drafts: dependencies.modules.policyDrafts,

@@ -4,7 +4,7 @@ import { EventEmitter, once } from "node:events"
 import { resolve } from "node:path"
 import test from "node:test"
 
-import { adoptDistillationProcessor, canCompleteTriageRecovery, canRestartStandaloneDistillationTriage, configureDistillationLaunch, distillationLaunchConfiguration, distillationLaunchState, distillationPortRole, existingServiceLaunchIsCurrent, launchConfigurationDigest, nextTriageHandoffAction, nextTriageRestoreAction, reconcileDistillationLaunchConfiguration, runtimePolicyReportEnvironment, serviceLaunchState, services, serviceOwnerMatches, shouldMonitorUnmanagedTriageHandoff, signalVerifiedServiceOwner, startupServiceNames, syncPricingCatalogInBackground, triageHandoffPhase, triageHandoffStartupRecoveryOptions, triggerUnmanagedTriageRecovery, unmanagedTriageRecoveryOptions, waitForHealthy, watchServiceExit } from "./local-dev.mjs"
+import { adoptDistillationProcessor, canCompleteTriageRecovery, canRestartStandaloneDistillationTriage, configureDistillationLaunch, distillationLaunchConfiguration, distillationLaunchState, distillationPortRole, existingServiceLaunchIsCurrent, launchConfigurationDigest, nextTriageHandoffAction, nextTriageRestoreAction, reconcileDistillationLaunchConfiguration, runtimePolicyReportEnvironment, runtimePolicyResponseEnvironment, serviceLaunchState, services, serviceOwnerMatches, shouldMonitorUnmanagedTriageHandoff, signalVerifiedServiceOwner, startupServiceNames, syncPricingCatalogInBackground, triageHandoffPhase, triageHandoffStartupRecoveryOptions, triggerUnmanagedTriageRecovery, unmanagedTriageRecoveryOptions, waitForHealthy, watchServiceExit } from "./local-dev.mjs"
 
 function fixtureChild(script) {
   return spawn(process.execPath, ["-e", script], { stdio: "ignore" })
@@ -584,6 +584,20 @@ test("local runtime policy reports use a split Bot private key and Platform publ
   })
   assert.equal("GENIO_ONE_RUNTIME_REPORT_PRIVATE_KEY_PEM" in platform, false)
   assert.equal("GENIO_ONE_RUNTIME_REPORT_PUBLIC_KEY_PEM" in bot, false)
+})
+
+test("local runtime policy responses use a separate Platform private key and Bot verification ring", () => {
+  const bot = runtimePolicyResponseEnvironment("bot-server", "platform-private-key", "platform-public-key")
+  const platform = runtimePolicyResponseEnvironment("platform-api", "platform-private-key", "platform-public-key")
+  assert.deepEqual(platform, {
+    GENIO_ONE_RUNTIME_POLICY_RESPONSE_KEY_ID: "local-platform-runtime-response",
+    GENIO_ONE_RUNTIME_POLICY_RESPONSE_PRIVATE_KEY_PEM: "platform-private-key",
+  })
+  assert.deepEqual(bot, {
+    GENIO_ONE_RUNTIME_POLICY_RESPONSE_VERIFICATION_KEYS_JSON: JSON.stringify({ "local-platform-runtime-response": "platform-public-key" }),
+  })
+  assert.equal("GENIO_ONE_RUNTIME_POLICY_RESPONSE_PRIVATE_KEY_PEM" in bot, false)
+  assert.equal("GENIO_ONE_RUNTIME_POLICY_RESPONSE_VERIFICATION_KEYS_JSON" in platform, false)
 })
 
 test("an unexpected zero-exit fixture is reported and fails the supervisor", async () => {
