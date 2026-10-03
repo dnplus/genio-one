@@ -18,6 +18,7 @@ import type { BotDeletionReconciler } from "./bot-deletion-reconciler"
 import { modelGatewayRelayRoutes } from "./model-gateway-relay"
 import type { RuntimePolicyResolveInput } from "./runtime-policy-contract"
 import { runApprovedBotInvocation } from "./routes/invocations"
+import { createInvocationRuntimePolicy } from "./invocation-runtime-policy.test-support"
 
 test("interrupted native work recovers a failure instead of hanging or completing", () => {
   const registry = new BotRegistry(":memory:")
@@ -104,6 +105,7 @@ test("approved work survives reopen, waits for current authority, and dispatches
     registry = new BotRegistry(path)
     const context = {
       botRegistry: registry, runtimeBroker: broker, capabilityGate: createCapabilityGate({ mode: "open" }),
+      runtimePolicy: createInvocationRuntimePolicy(),
       modelDirectory: createBotModelDirectory({}), botToolSessions: new BotToolSessions(),
       createCodexRuntime: (_token, callbacks) => ({
         async send(line) {
@@ -187,7 +189,7 @@ test("cross-owner recovery supplies its exchanged target credential to the bound
       reason_code: "TEST",
       constraints: [],
       obligations: [],
-      correlation_id: input.correlationId ?? null,
+      correlation_id: input.correlationId ?? crypto.randomUUID(),
       session_id: input.sessionId ?? null,
       evaluated_at: Date.now(),
     })
@@ -362,7 +364,7 @@ test("one long handoff does not block another target or the next recovery scan",
     const first = registry.createHandoffs(principal, { fromBotId: caller.id, toBotId: targets[0]!.id, fact: "Long work" })[0]!
     const session = await broker.start(principal, { onMessage() {}, onExit() {} }, undefined, "current-token")
     session.initialized = true
-    const context = { botRegistry: registry, runtimeBroker: broker, capabilityGate: createCapabilityGate({ mode: "open" }), modelDirectory: createBotModelDirectory({}), botToolSessions: new BotToolSessions(),
+    const context = { botRegistry: registry, runtimeBroker: broker, capabilityGate: createCapabilityGate({ mode: "open" }), runtimePolicy: createInvocationRuntimePolicy(), modelDirectory: createBotModelDirectory({}), botToolSessions: new BotToolSessions(),
       createCodexRuntime: (_token, callbacks) => {
         return {
           async send(line) {
@@ -396,9 +398,11 @@ test("one long handoff does not block another target or the next recovery scan",
     expect(registry.getInvocationForService(first.invocationId)?.state).toBe("RUNNING")
     expect(registry.getInvocationForService(second.invocationId)?.state).toBe("RUNNING")
     finishByInvocation.get(`handoff-task:${second.invocationId}`)!()
+    await Bun.sleep(0)
     expect(registry.getInvocationForService(second.invocationId)?.state).toBe("COMPLETED")
     expect(registry.getInvocationForService(first.invocationId)?.state).toBe("RUNNING")
     finishByInvocation.get(`handoff-task:${first.invocationId}`)!()
+    await Bun.sleep(0)
     expect(registry.getInvocationForService(first.invocationId)?.state).toBe("COMPLETED")
   } finally { for (const release of releases) release(); await broker.close(); registry.close() }
 })
@@ -449,7 +453,7 @@ test("concurrent offline cross-owner handoffs keep each Bot's credential across 
       reason_code: "TEST",
       constraints: [],
       obligations: [],
-      correlation_id: input.correlationId ?? null,
+      correlation_id: input.correlationId ?? crypto.randomUUID(),
       session_id: input.sessionId ?? null,
       evaluated_at: Date.now(),
     }),
@@ -471,7 +475,7 @@ test("concurrent offline cross-owner handoffs keep each Bot's credential across 
         reason_code: "TEST",
         constraints: [],
         obligations: [],
-        correlation_id: input.correlationId ?? null,
+        correlation_id: input.correlationId ?? crypto.randomUUID(),
         session_id: input.sessionId ?? null,
         evaluated_at: Date.now(),
       }

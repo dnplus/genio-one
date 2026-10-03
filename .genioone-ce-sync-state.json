@@ -4247,15 +4247,23 @@
       "mode": 420
     },
     "apps/bot/server/invocation-lifecycle.test.ts": {
-      "sha256": "7c7b3a18099bcdb725eb0b8d05d1db9da29e90ec7f1d4f94ee59d83d1ef43319",
+      "sha256": "741fca0ae691bb6ba57a9862982d74b9a4a428a7d0c8591d43c18218890ba62b",
       "mode": 420
     },
     "apps/bot/server/invocation-recovery.test.ts": {
-      "sha256": "5a0cddb9224a572c8699ec00a64fcbf9f237bdbb7a3f352dd00b8d9f5e7e02fc",
+      "sha256": "800ffd6b888753b79eb5e7b9c0d6f2bb5d6486e59e044a784e9f6be7bdc75d39",
       "mode": 420
     },
     "apps/bot/server/invocation-recovery.ts": {
       "sha256": "c64a981fb535688ddbff0607588b87050b3923a6b4fad8214f2d4d832859b142",
+      "mode": 420
+    },
+    "apps/bot/server/invocation-runtime-policy.test-support.ts": {
+      "sha256": "46514e26b81df5d51ae58f918c5054d3e9dbaed2822576490990172d522a9bfa",
+      "mode": 420
+    },
+    "apps/bot/server/invocation-runtime-policy.test.ts": {
+      "sha256": "aa670c9b4700691da1468fd9ef213f56cf1102eb608ca9cb1730c0fe27e508ff",
       "mode": 420
     },
     "apps/bot/server/jsonl.test.ts": {
@@ -4451,7 +4459,7 @@
       "mode": 420
     },
     "apps/bot/server/routes/bots-handoff.test.ts": {
-      "sha256": "8b96067c759c6990f735b733d0fdbece62844456c584953d4b65ed09e37dd5b6",
+      "sha256": "625591980eb5734ac4727a71558ca3e92e1cbe792f06cbbb9c77f6bca42b0fdd",
       "mode": 420
     },
     "apps/bot/server/routes/bots-profile.test.ts": {
@@ -4499,7 +4507,7 @@
       "mode": 420
     },
     "apps/bot/server/routes/cross-owner-handoff.test.ts": {
-      "sha256": "035055c988fa13364241562e49de94223a6869486215fb43c8bf913d682c0122",
+      "sha256": "412237eb9f5d110746515705f09bdf99417437abfd2e8315f3263e8da5e150d8",
       "mode": 420
     },
     "apps/bot/server/routes/groups.ts": {
@@ -4515,7 +4523,7 @@
       "mode": 420
     },
     "apps/bot/server/routes/invocations.ts": {
-      "sha256": "9a718bd633d07f1d7e5a79a587d22f3a39551e2b346d535f09b8f8b1941b0c52",
+      "sha256": "55c2e4388bf685ce814b0c76efa7602e6dd63d46f24d01a3a6ce1b46d033ab36",
       "mode": 420
     },
     "apps/bot/server/routes/knowledge-evidence.test.ts": {
@@ -4559,7 +4567,7 @@
       "mode": 420
     },
     "apps/bot/server/runtime-broker.ts": {
-      "sha256": "e1c0a9ed6d9bcd0fd315f42667c0a0ffe3842716d59253654962122ff34f08f8",
+      "sha256": "81932020a7a817f4719820509ddb7ccb1ddb4efd9651eaf87c8833bb06da2a89",
       "mode": 420
     },
     "apps/bot/server/runtime-capability.test.ts": {

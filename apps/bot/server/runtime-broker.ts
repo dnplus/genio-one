@@ -131,10 +131,11 @@ export class RuntimeBroker {
     )
   }
   private readonly invocationTasks = new Set<Promise<void>>()
+  private readonly invocationAbortController = new AbortController()
 
-  runInvocationTask(task: () => Promise<void>): Promise<void> {
+  runInvocationTask(task: (signal: AbortSignal) => Promise<void>): Promise<void> {
     if (this.closing) return Promise.resolve()
-    const pending = Promise.resolve().then(() => this.closing ? undefined : task())
+    const pending = Promise.resolve().then(() => this.closing ? undefined : task(this.invocationAbortController.signal))
     this.invocationTasks.add(pending)
     void pending.finally(() => this.invocationTasks.delete(pending)).catch(() => {})
     return pending
@@ -183,11 +184,15 @@ export class RuntimeBroker {
     callbacks: RuntimeCallbacks,
     codexFactory?: (callbacks: RuntimeCallbacks, runtimeSessionId: string, relaySecret: string) => CodexRuntime,
     accessToken?: string,
+    expectedSessionId?: string,
   ): Promise<RuntimeSession> {
     if (this.closing) throw new Error("RUNTIME_BROKER_CLOSING")
     const principalKey = this.principalKey(principal)
     const existingId = this.principalSessions.get(principalKey)
     const existing = existingId ? this.sessions.get(existingId) : null
+    if (expectedSessionId && (!existing || existing.session.id !== expectedSessionId || this.stoppingSessions.has(expectedSessionId))) {
+      throw new Error("RUNTIME_SESSION_MISMATCH")
+    }
     if (existing) {
       const stopping = this.stoppingSessions.get(existing.session.id)
       if (stopping) { await stopping; return this.start(principal, callbacks, codexFactory, accessToken) }
@@ -799,6 +804,7 @@ export class RuntimeBroker {
 
   async close() {
     this.closing = true
+    this.invocationAbortController.abort()
     await Promise.allSettled([...this.opening.values(), ...this.tierProvisioning.values()])
     await Promise.allSettled([...this.sessions.keys()].map((id) => this.stop(id)))
     await Promise.allSettled([...this.invocationTasks])

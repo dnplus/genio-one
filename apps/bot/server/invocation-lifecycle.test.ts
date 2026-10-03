@@ -7,7 +7,7 @@ import { createCapabilityGate } from "./capability-gate"
 import { RuntimeBroker } from "./runtime-broker"
 import { BotToolSessions } from "./bot-tool-sessions"
 import { createBotModelDirectory } from "./model-directory"
-import { createRuntimePolicyClient } from "./runtime-policy"
+import { createInvocationRuntimePolicy } from "./invocation-runtime-policy.test-support"
 import { runApprovedBotInvocation } from "./routes/invocations"
 import type { BotServerContext } from "./context"
 import type { BotDeletionReconciler } from "./bot-deletion-reconciler"
@@ -22,7 +22,7 @@ test("turn send rejection settles failure while broker retains its runtime", asy
   const broker = new RuntimeBroker({ provision: async () => { throw new Error("not used") } })
   let closes = 0
   const sent: Array<{ method?: string; params?: Record<string, unknown> }> = []
-  const context = { botRegistry: registry, runtimeBroker: broker, botToolSessions: new BotToolSessions(), modelDirectory: createBotModelDirectory({}),
+  const context = { botRegistry: registry, runtimeBroker: broker, runtimePolicy: createInvocationRuntimePolicy(), botToolSessions: new BotToolSessions(), modelDirectory: createBotModelDirectory({}),
     createCodexRuntime: (_token, callbacks) => ({
       async send(line) {
         const request = JSON.parse(line)
@@ -82,6 +82,7 @@ test.each(["runtime-exit", "startup-timeout"] as const)("deferred memory fetch c
   const context = {
     botRegistry: registry,
     runtimeBroker: broker,
+    runtimePolicy: createInvocationRuntimePolicy(),
     botToolSessions: new BotToolSessions(),
     modelDirectory: createBotModelDirectory({}),
     createCodexRuntime: (_token, callbacks) => {
@@ -150,7 +151,7 @@ test("handoff binds a company model thread to its target Bot relay URL", async (
     runtimeBroker: broker,
     botToolSessions: new BotToolSessions(),
     modelDirectory,
-    runtimePolicy: createRuntimePolicyClient(),
+    runtimePolicy: createInvocationRuntimePolicy(),
     createCodexRuntime: (_token, callbacks, namespace, relaySecret) => {
       runtimeSessionId = namespace?.runtimeSessionId ?? ""
       runtimeRelaySecret = relaySecret ?? ""
@@ -213,7 +214,7 @@ test.each(["preparing", "initializing", "running"] as const)("shutdown waits for
   let closes = 0
   const sent: string[] = []
   const context = {
-    botRegistry: registry, runtimeBroker: broker, botToolSessions: new BotToolSessions(),
+    botRegistry: registry, runtimeBroker: broker, runtimePolicy: createInvocationRuntimePolicy(), botToolSessions: new BotToolSessions(),
     modelDirectory: createBotModelDirectory({}),
     createCodexRuntime: (_token, callbacks) => {
       spawned++
@@ -297,7 +298,7 @@ test("handoff waits for native work then reuses its owner writer without closing
     async close() { closes++ },
   }))
   session.initialized = true
-  const context = { botRegistry: registry, runtimeBroker: broker, botToolSessions: new BotToolSessions(), modelDirectory: createBotModelDirectory({}),
+  const context = { botRegistry: registry, runtimeBroker: broker, runtimePolicy: createInvocationRuntimePolicy(), botToolSessions: new BotToolSessions(), modelDirectory: createBotModelDirectory({}),
     createCodexRuntime: () => { spawned++; throw new Error("second writer forbidden") },
   } as unknown as BotServerContext
   try {
@@ -352,7 +353,7 @@ test("browser joining an offline handoff shares the initializing process", async
   let initializes = 0
   let closes = 0
   const received: any[] = []
-  const context = { botRegistry: registry, runtimeBroker: broker, modelDirectory: createBotModelDirectory({}), botToolSessions: new BotToolSessions(), createCodexRuntime: (_token, callbacks) => {
+  const context = { botRegistry: registry, runtimeBroker: broker, runtimePolicy: createInvocationRuntimePolicy(), modelDirectory: createBotModelDirectory({}), botToolSessions: new BotToolSessions(), createCodexRuntime: (_token, callbacks) => {
     spawned++
     return {
       async send(line) {

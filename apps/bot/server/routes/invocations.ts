@@ -12,6 +12,9 @@ import { emitBotInvocationFailure } from "../telemetry"
 import { botRuntimeInstructions } from "../bot-runtime-instructions"
 import { botBoundDiscoveryMcpConfig, botBoundModelProviderConfig } from "../bot-model-config"
 import type { InvocationBotToolSession } from "../bot-tool-sessions"
+import { createRuntimePolicyLifecycle } from "../runtime-policy-lifecycle"
+import { runtimePolicyReportAuthorization, type RuntimePolicyDecision } from "../runtime-policy-contract"
+import type { RuntimeSession } from "../runtime-broker"
 
 async function assertInvocationCapabilities(accessToken: string | undefined, invocation: BotInvocationRequest) {
   if (invocation.requestedCapabilityIds.length === 0) return
@@ -51,11 +54,11 @@ export async function runApprovedBotInvocation(context: BotServerContext, reques
   if (!invocation) return
   const release = context.runtimeBroker.claimBotTurn(invocation.targetBotId, context.runtimeBroker.findBySubject(invocation.tenantId, invocation.targetOwnerSubjectId)?.id)
   if (!release) return
-  try { await context.runtimeBroker.runInvocationTask(() => executeApprovedBotInvocation(context, requestId, accessToken, release)) }
+  try { await context.runtimeBroker.runInvocationTask((signal) => executeApprovedBotInvocation(context, requestId, accessToken, signal, release)) }
   finally { release() }
 }
 
-async function executeApprovedBotInvocation(context: BotServerContext, requestId: string, accessToken?: string, releaseStart?: () => void) {
+async function executeApprovedBotInvocation(context: BotServerContext, requestId: string, accessToken: string | undefined, signal: AbortSignal, releaseStart?: () => void) {
   const { botRegistry, runtimeBroker } = context
   const invocation = botRegistry.getInvocationForService(requestId)
   if (!invocation || invocation.state !== "APPROVED") return
@@ -121,32 +124,55 @@ async function executeApprovedBotInvocation(context: BotServerContext, requestId
   let invocationTools: InvocationBotToolSession | undefined
   let threadSetup: Record<string, unknown> | null = null
   let replacedMissingThread = false
+  let policyAuthorization: { session: RuntimeSession; decision: RuntimePolicyDecision } | null = null
+  const policyLifecycle = createRuntimePolicyLifecycle({
+    policy: context.runtimePolicy,
+    accessToken: () => tokens.owner ?? tokens.runtime,
+    onReportFailure: () => console.warn(JSON.stringify({ event: "bot.invocation.runtime_policy_report_unavailable", invocation_id: requestId, target_bot_id: targetBot.id })),
+  })
   await new Promise<void>((resolve, reject) => {
     let finished = false
+    let authorizationPending = false
     const timer = setTimeout(() => finish("交接尚未啟動，等待執行環境回應逾時。", "TARGET_STARTUP_TIMEOUT"), 120_000)
+    const onBrokerClose = () => {
+      if (finished || authorizationPending) return
+      if (targetThreadId && targetTurnId) botRegistry.interruptRuntimeTurn(targetBot.id, targetThreadId, targetTurnId)
+      finish("Target Bot runtime 已關閉。", "TARGET_RUNTIME_INTERRUPTED")
+    }
     const finish = (summary: string, reason: string) => {
       if (finished) return
       finished = true
+      signal.removeEventListener("abort", onBrokerClose)
       clearTimeout(timer)
-      let failure: unknown
-      try {
-        const succeeded = reason === "TARGET_TURN_COMPLETED"
-        if (succeeded) botRegistry.completeInvocation(requestId, isFyi ? "已讀取 FYI" : summary.trim().slice(0, 8_192))
-        else botRegistry.failInvocation(requestId, reason, summary.trim().slice(0, 8_192))
-        console.info(JSON.stringify({
-          event: succeeded ? "bot.invocation.completed" : "bot.invocation.failed",
-          invocation_id: requestId,
-          state: succeeded ? "COMPLETED" : "FAILED",
-          reason,
-          target_bot_id: targetBot.id,
-          target_agent_subject_id: targetBot.agentSubjectId,
-          thread_id: targetThreadId || undefined,
-          turn_id: targetTurnId || undefined,
-          correlation_id: requestId,
-        }))
-      } catch (error) { failure = error }
-      void (releaseInvocationRuntime?.() ?? Promise.resolve()).then(() => failure ? reject(failure) : resolve()).catch(reject)
+      void (async () => {
+        try {
+          const succeeded = reason === "TARGET_TURN_COMPLETED"
+          const reported = policyAuthorization
+            ? await policyLifecycle.report(policyAuthorization.session, targetBot.id, policyAuthorization.decision, succeeded ? "COMPLETED" : "FAILED", succeeded ? undefined : reason)
+            : true
+          const finalReason = reported ? reason : "RUNTIME_POLICY_REPORT_UNAVAILABLE"
+          if (succeeded && reported) botRegistry.completeInvocation(requestId, isFyi ? "已讀取 FYI" : summary.trim().slice(0, 8_192))
+          else botRegistry.failInvocation(requestId, finalReason, reported ? summary.trim().slice(0, 8_192) : "交接執行結果無法寫入治理稽核。")
+          console.info(JSON.stringify({
+            event: succeeded && reported ? "bot.invocation.completed" : "bot.invocation.failed",
+            invocation_id: requestId,
+            state: succeeded && reported ? "COMPLETED" : "FAILED",
+            reason: finalReason,
+            target_bot_id: targetBot.id,
+            target_agent_subject_id: targetBot.agentSubjectId,
+            runtime_session_id: policyAuthorization?.session.id,
+            policy_correlation_id: policyAuthorization?.decision.correlation_id,
+            thread_id: targetThreadId || undefined,
+            turn_id: targetTurnId || undefined,
+            correlation_id: requestId,
+          }))
+        } finally {
+          await releaseInvocationRuntime?.()
+        }
+      })().then(resolve, reject)
     }
+    signal.addEventListener("abort", onBrokerClose, { once: true })
+    if (signal.aborted) { onBrokerClose(); return }
     const sendTargetBotSetup = async (shared = false) => {
       if (finished || runtimeBroker.isClosing()) return
       if (!invocationRuntime) throw new Error("TARGET_RUNTIME_NOT_FOUND")
@@ -329,13 +355,51 @@ async function executeApprovedBotInvocation(context: BotServerContext, requestId
     }
     void (async () => {
       try {
-        const currentSession = await runtimeBroker.start(targetPrincipal, callbacks, (events, runtimeSessionId, relaySecret) =>
+        const currentSession = await runtimeBroker.start(targetPrincipal, callbacks)
+        releaseInvocationRuntime = async () => { runtimeBroker.detach(currentSession.id, callbacks) }
+        if (runtimeBroker.isClosing()) { onBrokerClose(); return }
+        if (finished) { await releaseInvocationRuntime(); return }
+        authorizationPending = true
+        try {
+          const decision = await policyLifecycle.authorize(
+            currentSession,
+            targetBot.id,
+            targetBot.modelRoute === "genio-gateway" ? "model.invoke" : "codex.subscription",
+            targetBot.modelRoute === "genio-gateway" ? "invoke" : "use",
+          )
+          if (!decision.session_id || decision.session_id !== currentSession.id) {
+            throw new Error("RUNTIME_POLICY_SESSION_MISMATCH")
+          }
+          runtimePolicyReportAuthorization(decision, currentSession.id)
+          policyAuthorization = { session: currentSession, decision }
+        } catch (error) {
+          authorizationPending = false
+          if (finished) return
+          finished = true
+          signal.removeEventListener("abort", onBrokerClose)
+          clearTimeout(timer)
+          const reason = error instanceof Error ? error.message : "RUNTIME_POLICY_UNAVAILABLE"
+          botRegistry.denyInvocationForService(requestId, reason)
+          console.info(JSON.stringify({ event: "bot.invocation.denied", invocation_id: requestId, state: "DENIED", reason, target_bot_id: targetBot.id, target_agent_subject_id: targetBot.agentSubjectId, runtime_session_id: currentSession.id, correlation_id: requestId }))
+          void releaseInvocationRuntime().then(resolve, reject)
+          return
+        }
+        authorizationPending = false
+        if (runtimeBroker.isClosing()) { onBrokerClose(); return }
+        if (finished) { await releaseInvocationRuntime(); return }
+        const activeSession = await runtimeBroker.start(targetPrincipal, callbacks, (events, runtimeSessionId, relaySecret) =>
           (context.createCodexRuntime ?? createCodexRuntime)(tokens.runtime, events, {
             tenantId: invocation.tenantId,
             subjectId: invocation.targetOwnerSubjectId,
             actingClientId: targetPrincipal.acting_client_id,
             runtimeSessionId,
-          }, relaySecret), tokens.owner)
+          }, relaySecret), tokens.owner, currentSession.id)
+        if (activeSession.id !== currentSession.id) {
+          runtimeBroker.detach(activeSession.id, callbacks)
+          throw new Error("RUNTIME_POLICY_SESSION_MISMATCH")
+        }
+        if (runtimeBroker.isClosing()) { onBrokerClose(); return }
+        if (finished) { await releaseInvocationRuntime(); return }
         let releaseInvocationAccessToken: (() => void) | undefined
         try {
           releaseInvocationAccessToken = runtimeBroker.bindInvocationAccessToken(currentSession.id, targetBot.id, requestId, tokens.runtime)
@@ -362,7 +426,8 @@ async function executeApprovedBotInvocation(context: BotServerContext, requestId
           runtimeBroker.detach(currentSession.id, callbacks)
           await channel.close()
         }
-        if (finished || runtimeBroker.isClosing()) { await releaseInvocationRuntime(); return }
+        if (runtimeBroker.isClosing()) { onBrokerClose(); return }
+        if (finished) { await releaseInvocationRuntime(); return }
         if (currentSession.initialized) {
           await sendTargetBotSetup(true)
           return

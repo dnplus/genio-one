@@ -5,6 +5,7 @@ import { join } from "node:path"
 
 import { createBotApp } from "../app"
 import { BotRegistry } from "../bot-registry"
+import { createInvocationRuntimePolicy } from "../invocation-runtime-policy.test-support"
 
 const principal = {
   tenant_id: "tenant-keycloak-local",
@@ -42,7 +43,7 @@ describe("UX P1-a handoff HTTP", () => {
     let finishTarget: (() => void) | undefined
     let started!: () => void
     const targetStarted = new Promise<void>((resolve) => { started = resolve })
-    app = await createBotApp({ botRegistry: registry, createCodexRuntime: (_token, callbacks) => ({
+    app = await createBotApp({ botRegistry: registry, runtimePolicy: createInvocationRuntimePolicy(), createCodexRuntime: (_token, callbacks) => ({
       async send(line) {
         const request = JSON.parse(line)
         if (request.method === "initialize") callbacks.onMessage(JSON.stringify({ id: request.id, result: {} }))

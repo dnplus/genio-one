@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { createBotApp } from "../app"
 import { BotRegistry } from "../bot-registry"
 import { RuntimeBroker } from "../runtime-broker"
+import { createInvocationRuntimePolicy } from "../invocation-runtime-policy.test-support"
 
 test("only target owner can approve a cold cross-owner handoff and target memory uses its per-Bot bound token", async () => {
   const registry = new BotRegistry(":memory:")
@@ -27,7 +28,7 @@ test("only target owner can approve a cold cross-owner handoff and target memory
     return new Response("not found", { status: 404 })
   }) as typeof fetch
   let starts=0
-  const app = await createBotApp({ botRegistry:registry, runtimeBroker:broker, createCodexRuntime: (_token, events) => ({
+  const app = await createBotApp({ botRegistry:registry, runtimeBroker:broker, runtimePolicy: createInvocationRuntimePolicy(), createCodexRuntime: (_token, events) => ({
     async send(line) {
       const request=JSON.parse(line)
       if(request.method==='initialize')events.onMessage(JSON.stringify({id:request.id,result:{}}))
