@@ -439,7 +439,7 @@
       "mode": 420
     },
     "apps/bot/server/bot-history-reader.ts": {
-      "sha256": "26817bf007ef1b050c5aa3e77fbc1b34af586a0b6a5e4fede7b55390238b086c",
+      "sha256": "23fb1636d83d2a2931d57669d3606d15274c3c56013d5f54045789c485e0b497",
       "mode": 420
     },
     "apps/bot/server/bot-invocation-store.ts": {
