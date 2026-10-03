@@ -218,11 +218,22 @@ export function isDistillationTriage(value: unknown): value is DistillationTriag
     expected.evidence.every((item, index) => sameEvidence(item, evidence[index]!))
 }
 
+const STATE_PREFIX_SUFFIX_BYTES = Buffer.byteLength(
+  JSON.stringify({ messages: [{ role: "user", content: "" }] }),
+  "utf8",
+) - 2
+const REQUEST_PREFIX_SUFFIX_BYTES = Buffer.byteLength(
+  JSON.stringify({ tenant_id: TRIAGE_TENANT_ID, adapter_id: TRIAGE_ADAPTER_ID, text: "" }),
+  "utf8",
+) - 2
+
+const MAX_TEXT_JSON_BYTES = Math.min(
+  DISTILLATION_TRIAGE_STATE_BYTE_LIMIT - STATE_PREFIX_SUFFIX_BYTES,
+  DISTILLATION_TRIAGE_REQUEST_BYTE_LIMIT - REQUEST_PREFIX_SUFFIX_BYTES,
+)
+
 function triageRequestFits(text: string): boolean {
-  const state = JSON.stringify({ messages: [{ role: "user", content: text }] })
-  const request = JSON.stringify({ tenant_id: TRIAGE_TENANT_ID, adapter_id: TRIAGE_ADAPTER_ID, text })
-  return Buffer.byteLength(state, "utf8") <= DISTILLATION_TRIAGE_STATE_BYTE_LIMIT
-    && Buffer.byteLength(request, "utf8") <= DISTILLATION_TRIAGE_REQUEST_BYTE_LIMIT
+  return Buffer.byteLength(JSON.stringify(text), "utf8") <= MAX_TEXT_JSON_BYTES
 }
 
 function trimToCodePoint(value: string): string {

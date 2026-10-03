@@ -3,6 +3,7 @@ import { expect, test } from "bun:test"
 import {
   DISTILLATION_QUESTIONS,
   DISTILLATION_TRIAGE_REQUEST_BYTE_LIMIT,
+  DISTILLATION_TRIAGE_STATE_BYTE_LIMIT,
   fitDistillationExcerpt,
   mapDistillationAnswers,
 } from "./distillation-triage"
@@ -55,6 +56,14 @@ test("a quote-heavy excerpt is shortened to the serialized triage budget", () =>
   expect(fitted.truncated).toBe(true)
   expect(fitted.text.length).toBeGreaterThan(0)
   expect(Buffer.byteLength(JSON.stringify({ messages: [{ role: "user", content: fitted.text }] }), "utf8")).toBeLessThanOrEqual(96_000)
+})
+
+test("an astral excerpt keeps the original complete-pair prefix at the state byte boundary", () => {
+  const fitted = fitDistillationExcerpt("😀".repeat(50_000))
+  expect(fitted.text).toBe("😀".repeat(23_989))
+  expect(fitted.truncated).toBe(true)
+  expect(Buffer.byteLength(JSON.stringify({ messages: [{ role: "user", content: fitted.text }] }), "utf8")).toBeLessThanOrEqual(DISTILLATION_TRIAGE_STATE_BYTE_LIMIT)
+  expect(Buffer.byteLength(JSON.stringify({ messages: [{ role: "user", content: fitted.text + "😀" }] }), "utf8")).toBeGreaterThan(DISTILLATION_TRIAGE_STATE_BYTE_LIMIT)
 })
 
 test("a fitted excerpt stays within the request limit for any valid 256-unit identifiers", () => {
