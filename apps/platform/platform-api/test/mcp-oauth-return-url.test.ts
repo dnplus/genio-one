@@ -12,6 +12,36 @@ test("MCP OAuth returns to the owning Resource connections", () => {
   )
 })
 
+test("mcpOAuthHttp disconnect forwards the Resource from the Connection path", async () => {
+  const disconnected: Array<{ tenantId: string; resourceId: string; connectionId: string; subjectId: string }> = []
+  const app = Fastify()
+  app.addHook("preHandler", async (request) => {
+    request.principal = { tenant_id: "tenant", subject_id: "alice" } as typeof request.principal
+  })
+  await app.register(mcpOAuthHttp, {
+    service: { async disconnect(input: typeof disconnected[number]) { disconnected.push(input) } } as any,
+    passwords: {} as any,
+    registrations: {} as any,
+    authorizeRuntime: async () => {},
+  })
+
+  try {
+    for (const resourceId of ["resource-one", "resource-two"]) {
+      const response = await app.inject({
+        method: "DELETE",
+        url: `/v1/tenants/tenant/resources/${resourceId}/connections/shared/mcp-oauth`,
+      })
+      assert.equal(response.statusCode, 204, response.body)
+    }
+    assert.deepEqual(disconnected, [
+      { tenantId: "tenant", resourceId: "resource-one", connectionId: "shared", subjectId: "alice" },
+      { tenantId: "tenant", resourceId: "resource-two", connectionId: "shared", subjectId: "alice" },
+    ])
+  } finally {
+    await app.close()
+  }
+})
+
 test("mcpOAuthHttp callback rejects invalid target URLs", async () => {
   let target = ""
   const app = Fastify()

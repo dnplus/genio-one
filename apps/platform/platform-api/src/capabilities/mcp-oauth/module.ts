@@ -53,8 +53,8 @@ export interface McpOAuthStore {
   deleteSession(input: { tenantId: string; sessionId: string }): Promise<void>
   putBinding(value: McpOAuthBindingRecord): Promise<void>
   updateBindingIfCurrent(previous: McpOAuthBindingRecord, value: McpOAuthBindingRecord): Promise<boolean>
-  getBinding(input: { tenantId: string; connectionId: string; subjectId: string }): Promise<McpOAuthBindingRecord | null>
-  deleteBinding(input: { tenantId: string; connectionId: string; subjectId: string }): Promise<void>
+  getBinding(input: { tenantId: string; resourceId: string; connectionId: string; subjectId: string }): Promise<McpOAuthBindingRecord | null>
+  deleteBinding(input: { tenantId: string; resourceId: string; connectionId: string; subjectId: string }): Promise<void>
   listBindings(input: { tenantId: string; resourceId: string; subjectId: string }): Promise<McpOAuthBindingRecord[]>
 }
 
@@ -204,8 +204,8 @@ export interface McpOAuthService {
   start(input: { tenantId: string; resourceId: string; connectionId: string; subjectId: string }): Promise<McpOAuthAuthorization>
   complete(input: { state: string; code?: string; iss?: string; error?: string }): Promise<string>
   status(input: { tenantId: string; resourceId: string; connectionId: string; subjectId: string }): Promise<McpOAuthBinding | null>
-  disconnect(input: { tenantId: string; connectionId: string; subjectId: string }): Promise<void>
-  resolveAccessToken(input: { tenantId: string; connectionId: string; subjectId: string }): Promise<{ accessToken: string; expiresAt: number | null }>
+  disconnect(input: { tenantId: string; resourceId: string; connectionId: string; subjectId: string }): Promise<void>
+  resolveAccessToken(input: { tenantId: string; resourceId: string; connectionId: string; subjectId: string }): Promise<{ accessToken: string; expiresAt: number | null }>
   resolveRequestHeaders(input: { tenantId: string; resourceId: string; subjectId: string; credentialsOptional?: boolean }): Promise<Array<{ name: string; value: string }>>
 }
 
@@ -438,6 +438,7 @@ export function createMcpOAuthService(options: {
       if (connection.connection_kind !== "MCP") throw new PlatformApiError("MCP_CONNECTION_NOT_FOUND", 404)
       const binding = await options.store.getBinding({
         tenantId: input.tenantId,
+        resourceId: input.resourceId,
         connectionId: input.connectionId,
         subjectId: input.subjectId,
       })
@@ -451,6 +452,7 @@ export function createMcpOAuthService(options: {
       }
       const current = await options.store.getBinding({
         tenantId: input.tenantId,
+        resourceId: input.resourceId,
         connectionId: input.connectionId,
         subjectId: input.subjectId,
       })
@@ -464,7 +466,7 @@ export function createMcpOAuthService(options: {
     async resolveAccessToken(input) {
       const binding = await options.store.getBinding(input)
       if (!binding) throw new PlatformApiError("MCP_OAUTH_AUTHORIZATION_REQUIRED", 412)
-      const connection = await options.connections.get({ tenantId: binding.tenant_id, resourceId: binding.resource_id, connectionId: binding.connection_id })
+      const connection = await options.connections.get({ tenantId: input.tenantId, resourceId: input.resourceId, connectionId: input.connectionId })
       return usableAccessToken(binding, connection)
     },
 

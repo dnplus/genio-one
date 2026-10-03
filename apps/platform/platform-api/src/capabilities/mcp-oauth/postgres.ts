@@ -104,9 +104,8 @@ export function createPostgresMcpOAuthStore(options: { sql: SqlAdapter }): McpOA
            (tenant_id, resource_id, connection_id, subject_id, issuer,
             resource_url, sealed_state, updated_at)
          values ($1, $2, $3, $4, $5, $6, $7, to_timestamp($8))
-         on conflict (tenant_id, connection_id, subject_id)
-         do update set resource_id = excluded.resource_id,
-                       issuer = excluded.issuer,
+         on conflict (tenant_id, resource_id, connection_id, subject_id)
+         do update set issuer = excluded.issuer,
                        resource_url = excluded.resource_url,
                        sealed_state = excluded.sealed_state,
                        updated_at = excluded.updated_at`,
@@ -115,26 +114,33 @@ export function createPostgresMcpOAuthStore(options: { sql: SqlAdapter }): McpOA
       )
     },
     async updateBindingIfCurrent(previous, value) {
+      if (
+        previous.tenant_id !== value.tenant_id ||
+        previous.resource_id !== value.resource_id ||
+        previous.connection_id !== value.connection_id ||
+        previous.subject_id !== value.subject_id
+      ) return false
       const result = await options.sql.query(
-        `update genio_one_mcp_oauth_bindings set sealed_state=$5, updated_at=to_timestamp($6)
-          where tenant_id=$1 and connection_id=$2 and subject_id=$3 and sealed_state=$4 returning connection_id`,
-        [previous.tenant_id, previous.connection_id, previous.subject_id, previous.sealed_state, value.sealed_state, value.updated_at],
+        `update genio_one_mcp_oauth_bindings set sealed_state=$6, updated_at=to_timestamp($7)
+          where tenant_id=$1 and resource_id=$2 and connection_id=$3 and subject_id=$4 and sealed_state=$5 returning connection_id`,
+        [previous.tenant_id, previous.resource_id, previous.connection_id, previous.subject_id,
+          previous.sealed_state, value.sealed_state, value.updated_at],
       )
       return result.rows.length === 1
     },
     async getBinding(input) {
       const result = await options.sql.query<DatabaseRow>(
         `select ${BINDING_COLUMNS} from genio_one_mcp_oauth_bindings
-          where tenant_id = $1 and connection_id = $2 and subject_id = $3`,
-        [input.tenantId, input.connectionId, input.subjectId],
+          where tenant_id = $1 and resource_id = $2 and connection_id = $3 and subject_id = $4`,
+        [input.tenantId, input.resourceId, input.connectionId, input.subjectId],
       )
       return result.rows[0] ? binding(result.rows[0]) : null
     },
     async deleteBinding(input) {
       await options.sql.query(
         `delete from genio_one_mcp_oauth_bindings
-          where tenant_id = $1 and connection_id = $2 and subject_id = $3`,
-        [input.tenantId, input.connectionId, input.subjectId],
+          where tenant_id = $1 and resource_id = $2 and connection_id = $3 and subject_id = $4`,
+        [input.tenantId, input.resourceId, input.connectionId, input.subjectId],
       )
     },
     async listBindings(input) {

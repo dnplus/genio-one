@@ -398,6 +398,96 @@ test("Connection reads include the optimistic row revision", async () => {
   assert.match(select.text, /row_revision/i)
 })
 
+test("Postgres Connection health writes require an active publication for the reporting Gateway", async () => {
+  const assigned: Row = { ...connectionRow, lifecycle: "ENABLED", verification_state: "VERIFIED" }
+  const other: Row = { ...assigned, resource_id: "resource-other", connection_id: "connection-other" }
+  const connectionsByResource = new Map<string, Row>([
+    ["resource-ai", assigned],
+    ["resource-other", other],
+  ])
+  const sql = new FakeSqlAdapter((text, parameters) => {
+    const resourceId = String(parameters[1] ?? "")
+    if (has(text, "from genio_one_resources")) return [{ ...resourceRow, resource_id: resourceId, lifecycle: "PUBLISHED" }]
+    if (has(text, "from genio_one_resource_connections")) {
+      const connection = connectionsByResource.get(resourceId)
+      return connection && connection.connection_id === parameters[2] ? [connection] : []
+    }
+    if (has(text, "from genio_one_publications")) {
+      return resourceId === "resource-ai" && parameters[2] === "gateway-b"
+        ? [{ publication_id: "publication-ai" }]
+        : []
+    }
+    if (has(text, "update genio_one_resource_connections")) {
+      const connection = connectionsByResource.get(resourceId)
+      return connection ? [{
+        ...connection,
+        health_state: parameters[3],
+        health_observed_at: parameters[4],
+        health_source_revision: parameters[5],
+      }] : []
+    }
+    return []
+  })
+  const reconciles: string[] = []
+  const connections = createPostgresResourceConnectionRegistry({
+    sql,
+    providers: {} as never,
+    now: () => 100,
+    releasePublisher: {
+      async reconcileInTransaction(input) {
+        reconciles.push(input.gatewayId)
+      },
+    },
+  })
+  const observation = { correlation_id: "health-single", source_revision: 1, state: "HEALTHY" as const, observed_at: 100 }
+  await assert.rejects(
+    connections.observeHealth({
+      tenantId: "tenant-acme",
+      gatewayId: "gateway-a",
+      resourceId: "resource-ai",
+      connectionId: "connection-1",
+      value: observation,
+    }),
+    (error: unknown) => errorCode(error) === "CONNECTION_HEALTH_TARGET_UNASSIGNED",
+  )
+  assert.equal(sql.calls.some((call) => has(call.text, "update genio_one_resource_connections")), false)
+  assert.deepEqual(reconciles, [])
+
+  await assert.rejects(
+    connections.observeHealthBatch({
+      tenantId: "tenant-acme",
+      gatewayId: "gateway-b",
+      value: {
+        correlation_id: "health-mixed-batch",
+        observations: [
+          { resource_id: "resource-ai", connection_id: "connection-1", source_revision: 1, state: "HEALTHY", observed_at: 100 },
+          { resource_id: "resource-other", connection_id: "connection-other", source_revision: 1, state: "HEALTHY", observed_at: 100 },
+        ],
+      },
+    }),
+    (error: unknown) => errorCode(error) === "CONNECTION_HEALTH_TARGET_UNASSIGNED",
+  )
+  assert.equal(sql.calls.some((call) => has(call.text, "update genio_one_resource_connections")), false)
+  assert.deepEqual(reconciles, [])
+  const assignment = sql.calls.find((call) => has(call.text, "from genio_one_publications"))
+  assert.ok(assignment)
+  assert.match(assignment.text, /tenant_id\s*=\s*\$1\s+and resource_id\s*=\s*\$2\s+and gateway_id\s*=\s*\$3/i)
+  assert.match(assignment.text, /publication_state in \('PUBLISHED', 'DEPRECATED'\)/i)
+  assert.match(assignment.text, /for share/i)
+  assert.deepEqual(assignment.parameters, ["tenant-acme", "resource-ai", "gateway-a"])
+
+  const valid = await connections.observeHealth({
+    tenantId: "tenant-acme",
+    gatewayId: "gateway-b",
+    resourceId: "resource-ai",
+    connectionId: "connection-1",
+    value: observation,
+  })
+  assert.equal(valid.health_state, "HEALTHY")
+  assert.equal(valid.health_source_revision, 1)
+  assert.deepEqual(reconciles, ["gateway-b"])
+})
+
 test("Connection update resets verification once when endpoint and credential profile change together", async () => {
   const digest = "a".repeat(64)
   const profile = {

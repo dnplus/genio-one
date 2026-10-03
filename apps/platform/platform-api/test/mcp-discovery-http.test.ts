@@ -7,6 +7,10 @@ import Fastify from "fastify"
 import type { McpDiscoveryOperation } from "../src/capabilities/mcp-discovery/contract"
 import { mcpDiscoveryHttp } from "../src/capabilities/mcp-discovery/http"
 import type { McpDiscoveryStore } from "../src/capabilities/mcp-discovery/module"
+import type { ResourceConnectionRegistry } from "../src/capabilities/connections/module"
+import { createMcpOAuthSecretCodec } from "../src/capabilities/mcp-oauth/crypto"
+import { createInMemoryMcpOAuthStore } from "../src/capabilities/mcp-oauth/memory"
+import { createMcpOAuthService } from "../src/capabilities/mcp-oauth/module"
 import type { McpOAuthService } from "../src/capabilities/mcp-oauth/module"
 import { createInMemoryRuntimeControlStore } from "../src/capabilities/runtime-control/memory"
 
@@ -204,6 +208,67 @@ test("Management UI request is claimed once by its Gateway Runtime group and rep
       executionMode: "AUTO_READ_ONLY",
       approvedBySubjectId: "person-admin",
     })
+  } finally {
+    await app.close()
+  }
+})
+
+test("Discovery resolves OAuth tokens only for the operation Resource", async () => {
+  const operation: McpDiscoveryOperation = {
+    ...fixtureOperation(),
+    resource_id: "resource-one",
+    connection_id: "shared",
+    state: "RUNNING",
+    runtime_id: runtimeId,
+    downstream_identity: { mode: "USER_OAUTH" },
+    claimed_at: 2,
+  }
+  const bindings = createInMemoryMcpOAuthStore()
+  const codec = createMcpOAuthSecretCodec(Buffer.alloc(32, 12))
+  const oauth = createMcpOAuthService({
+    store: bindings,
+    codec,
+    connections: { async get() { return { endpoint: "https://mcp.test", connection_kind: "MCP" } } } as unknown as ResourceConnectionRegistry,
+    identity: { async canonicalSubjectId(input) { return input.subjectId } },
+    publicOrigin: "https://cp.test",
+    managementUiOrigin: "https://ui.test",
+  })
+  const binding = {
+    tenant_id: tenantId,
+    connection_id: operation.connection_id,
+    subject_id: operation.requested_by_subject_id,
+    issuer: "https://auth.test",
+    resource_url: "https://mcp.test",
+    updated_at: 1,
+  }
+  await bindings.putBinding({ ...binding, resource_id: "resource-two", sealed_state: codec.seal({ tokens: { access_token: "token-two", token_type: "Bearer" } }) })
+  const registrations = createInMemoryRuntimeControlStore()
+  const { publicKey } = generateKeyPairSync("ed25519")
+  await registrations.registerGatewayRuntime({
+    tenantId,
+    runtimeId,
+    targetId: gatewayId,
+    oidcClientId: runtimeId,
+    reportKeyId: "runtime-report-key",
+    reportPublicKeyPem: publicKey.export({ type: "spki", format: "pem" }).toString(),
+  })
+  const app = Fastify({ logger: false })
+  await app.register(mcpDiscoveryHttp, {
+    store: { async get() { return operation } } as unknown as McpDiscoveryStore,
+    registrations,
+    authorizeRuntime: async () => true,
+    oauth,
+  })
+  try {
+    const url = `/v1/tenants/${tenantId}/runtime-control/GATEWAY/${runtimeId}/operations/mcp-discovery/${operation.operation_id}/credential`
+    const missing = await app.inject({ method: "GET", url })
+    assert.equal(missing.statusCode, 412, missing.body)
+    assert.equal(missing.json().code, "MCP_OAUTH_AUTHORIZATION_REQUIRED")
+
+    await bindings.putBinding({ ...binding, resource_id: operation.resource_id, sealed_state: codec.seal({ tokens: { access_token: "token-one", token_type: "Bearer" } }) })
+    const own = await app.inject({ method: "GET", url })
+    assert.equal(own.statusCode, 200, own.body)
+    assert.deepEqual(own.json(), { access_token: "token-one", expires_at: null })
   } finally {
     await app.close()
   }

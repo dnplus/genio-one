@@ -127,6 +127,7 @@ export const mcpOAuthHttp: FastifyPluginAsync<McpOAuthHttpOptions> = async (
     async (request, reply) => {
       await options.service.disconnect({
         tenantId: request.params.tenant_id,
+        resourceId: request.params.resource_id,
         connectionId: request.params.connection_id,
         subjectId: request.principal!.subject_id,
       })

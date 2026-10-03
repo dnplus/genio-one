@@ -7,6 +7,7 @@ import { createInMemoryOrganizationDirectory } from "../src/capabilities/organiz
 import { createInMemoryProviderProfileCatalog } from "../src/capabilities/providers/memory"
 import { createInMemoryResourceRegistry } from "../src/capabilities/resources/memory"
 import { createResourceMemoryState } from "../src/capabilities/resources/state"
+import type { GatewayProjection } from "../src/capabilities/gateway-projection/contract"
 
 test("published Resources stage optimistic Connection lifecycle and trusted health changes", async () => {
   const tenantId = "tenant-acme"
@@ -51,7 +52,26 @@ test("published Resources stage optimistic Connection lifecycle and trusted heal
   const verified = await connections.verify({ tenantId, resourceId: resource.resource_id, connectionId: created.connection_id })
   assert.equal(verified.lifecycle, "ENABLED")
   assert.equal(verified.configuration_revision, 2)
-  assert.deepEqual(await connections.listHealthTargets({ tenantId, gatewayId: "ai-gateway" }), [{
+  assert.deepEqual(await connections.listHealthTargets({ tenantId, gatewayId: "gateway-ai" }), [])
+  await assert.rejects(
+    connections.observeHealth({
+      tenantId,
+      gatewayId: "gateway-ai",
+      resourceId: resource.resource_id,
+      connectionId: created.connection_id,
+      value: { correlation_id: "health-before-publication", source_revision: 2, state: "UNAVAILABLE", observed_at: now() },
+    }),
+    (error: unknown) => error instanceof PlatformApiError && error.code === "CONNECTION_HEALTH_TARGET_UNASSIGNED",
+  )
+  state.resources.set(`${tenantId}:${resource.resource_id}`, { ...resource, lifecycle: "PUBLISHED" })
+  state.publicationProjections.set(`${tenantId}:publication-ai`, {
+    tenant_id: tenantId,
+    resource_id: resource.resource_id,
+    operation: "APPLY",
+    publication_endpoint: { gateway_id: "gateway-ai" },
+  } as GatewayProjection)
+  assert.deepEqual(await connections.listHealthTargets({ tenantId, gatewayId: "gateway-other" }), [])
+  assert.deepEqual(await connections.listHealthTargets({ tenantId, gatewayId: "gateway-ai" }), [{
     resource_id: resource.resource_id,
     connection_id: created.connection_id,
     endpoint: verified.endpoint,
@@ -72,8 +92,53 @@ test("published Resources stage optimistic Connection lifecycle and trusted heal
       status: "NOT_CONFIGURED",
     },
   }])
-
+  state.resources.set(`${tenantId}:${resource.resource_id}`, { ...resource, lifecycle: "DEPRECATED" })
+  assert.equal((await connections.listHealthTargets({ tenantId, gatewayId: "gateway-ai" })).length, 1)
+  state.resources.set(`${tenantId}:${resource.resource_id}`, { ...resource, lifecycle: "RETIRED" })
+  assert.deepEqual(await connections.listHealthTargets({ tenantId, gatewayId: "gateway-ai" }), [])
   state.resources.set(`${tenantId}:${resource.resource_id}`, { ...resource, lifecycle: "PUBLISHED" })
+  const otherResource = await resources.createResource({
+    tenantId,
+    value: {
+      display_name: "Other Gateway Resource",
+      kind: "MCP",
+      owner_organization_id: organization.organization_id,
+      authentication_strategy: "NONE",
+      environment_id: "local",
+      version: "1.0.0",
+      capabilities: [{ capability_id: "mcp.invoke", display_name: "Invoke" }],
+      enforcement_point_id: "gateway-other",
+    },
+  })
+  const otherConnection = await connections.create({
+    tenantId,
+    resourceId: otherResource.resource_id,
+    value: { display_name: "Other", connection_kind: "MCP", endpoint: "https://other.example.test" },
+  })
+  await connections.verify({ tenantId, resourceId: otherResource.resource_id, connectionId: otherConnection.connection_id })
+  state.resources.set(`${tenantId}:${otherResource.resource_id}`, { ...otherResource, lifecycle: "PUBLISHED" })
+  state.publicationProjections.set(`${tenantId}:publication-other`, {
+    tenant_id: tenantId,
+    resource_id: otherResource.resource_id,
+    operation: "APPLY",
+    publication_endpoint: { gateway_id: "gateway-other" },
+  } as GatewayProjection)
+  await assert.rejects(
+    connections.observeHealthBatch({
+      tenantId,
+      gatewayId: "gateway-ai",
+      value: {
+        correlation_id: "health-mixed-gateway-batch",
+        observations: [
+          { resource_id: resource.resource_id, connection_id: created.connection_id, source_revision: 2, state: "UNAVAILABLE", observed_at: now() },
+          { resource_id: otherResource.resource_id, connection_id: otherConnection.connection_id, source_revision: 2, state: "UNAVAILABLE", observed_at: now() },
+        ],
+      },
+    }),
+    (error: unknown) => error instanceof PlatformApiError && error.code === "CONNECTION_HEALTH_TARGET_UNASSIGNED",
+  )
+  assert.equal((await connections.get({ tenantId, resourceId: resource.resource_id, connectionId: created.connection_id })).health_source_revision, 1)
+
   const updated = await connections.update({
     tenantId,
     resourceId: resource.resource_id,
@@ -100,6 +165,37 @@ test("published Resources stage optimistic Connection lifecycle and trusted heal
     value: { correlation_id: "health-1", source_revision: 2, state: "HEALTHY", observed_at: now() },
   })
   assert.equal(observed.health_state, "HEALTHY")
+  await assert.rejects(
+    connections.observeHealth({
+      tenantId,
+      gatewayId: "gateway-other",
+      resourceId: resource.resource_id,
+      connectionId: created.connection_id,
+      value: { correlation_id: "health-wrong-gateway", source_revision: 2, state: "UNAVAILABLE", observed_at: now() },
+    }),
+    (error: unknown) => error instanceof PlatformApiError && error.code === "CONNECTION_HEALTH_TARGET_UNASSIGNED",
+  )
+  assert.equal((await connections.get({ tenantId, resourceId: resource.resource_id, connectionId: created.connection_id })).health_source_revision, 2)
+
+  await assert.rejects(
+    connections.observeHealthBatch({
+      tenantId,
+      gatewayId: "gateway-other",
+      value: {
+        correlation_id: "health-batch-wrong-gateway",
+        observations: [{
+          resource_id: resource.resource_id,
+          connection_id: created.connection_id,
+          source_revision: 2,
+          state: "UNAVAILABLE",
+          observed_at: now(),
+        }],
+      },
+    }),
+    (error: unknown) => error instanceof PlatformApiError && error.code === "CONNECTION_HEALTH_TARGET_UNASSIGNED",
+  )
+  assert.equal((await connections.get({ tenantId, resourceId: resource.resource_id, connectionId: created.connection_id })).health_source_revision, 2)
+
   await assert.rejects(
     connections.observeHealth({
       tenantId,

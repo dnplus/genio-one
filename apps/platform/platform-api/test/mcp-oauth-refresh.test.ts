@@ -14,8 +14,8 @@ import { createInMemoryMcpOAuthStore } from "../src/capabilities/mcp-oauth/memor
 test("OAuth refresh cannot restore a binding revoked while the provider request is pending", async () => {
   const store = createInMemoryMcpOAuthStore()
   const codec = createMcpOAuthSecretCodec(Buffer.alloc(32, 6))
-  const owner = { tenantId: "tenant", connectionId: "connection", subjectId: "alice" }
-  await store.putBinding({ tenant_id: owner.tenantId, resource_id: "resource", connection_id: owner.connectionId, subject_id: owner.subjectId, issuer: "https://auth.test", resource_url: "https://mcp.test", updated_at: 1,
+  const owner = { tenantId: "tenant", resourceId: "resource", connectionId: "connection", subjectId: "alice" }
+  await store.putBinding({ tenant_id: owner.tenantId, resource_id: owner.resourceId, connection_id: owner.connectionId, subject_id: owner.subjectId, issuer: "https://auth.test", resource_url: "https://mcp.test", updated_at: 1,
     sealed_state: codec.seal({ tokens: { access_token: "expired", refresh_token: "refresh", token_type: "Bearer", expires_in: 1 }, tokens_saved_at: 1, client_information: { client_id: "client" }, discovery_state: { authorizationServerUrl: "https://auth.test", authorizationServerMetadata: { issuer: "https://auth.test", token_endpoint: "https://auth.test/token", response_types_supported: ["code"] } } }),
   })
   let release!: () => void
@@ -31,6 +31,68 @@ test("OAuth refresh cannot restore a binding revoked while the provider request 
   release()
   await assert.rejects(refreshing, /MCP_OAUTH_BINDING_CHANGED/)
   assert.equal(await store.getBinding(owner), null)
+})
+
+test("same Connection ID keeps OAuth bindings isolated across Resources through refresh and disconnect", async () => {
+  const store = createInMemoryMcpOAuthStore()
+  const codec = createMcpOAuthSecretCodec(Buffer.alloc(32, 11))
+  const ownerOne = { tenantId: "tenant", resourceId: "resource-one", connectionId: "connection", subjectId: "alice" }
+  const ownerTwo = { ...ownerOne, resourceId: "resource-two" }
+  const base = { issuer: "https://auth.test", resource_url: "https://mcp.test", updated_at: 1 }
+  await store.putBinding({
+    ...base,
+    tenant_id: ownerOne.tenantId,
+    resource_id: ownerOne.resourceId,
+    connection_id: ownerOne.connectionId,
+    subject_id: ownerOne.subjectId,
+    sealed_state: codec.seal({
+      tokens: { access_token: "expired-one", refresh_token: "refresh-one", token_type: "Bearer", expires_in: 1 },
+      tokens_saved_at: 1,
+      client_information: { client_id: "client" },
+      discovery_state: {
+        authorizationServerUrl: "https://auth.test",
+        authorizationServerMetadata: { issuer: "https://auth.test", token_endpoint: "https://auth.test/token", response_types_supported: ["code"] },
+      },
+    }),
+  })
+  await store.putBinding({
+    ...base,
+    tenant_id: ownerTwo.tenantId,
+    resource_id: ownerTwo.resourceId,
+    connection_id: ownerTwo.connectionId,
+    subject_id: ownerTwo.subjectId,
+    sealed_state: codec.seal({ tokens: { access_token: "token-two", token_type: "Bearer", expires_in: 3600 }, tokens_saved_at: 1000 }),
+  })
+  let refreshCalls = 0
+  const service = createMcpOAuthService({
+    store,
+    codec,
+    connections: {
+      async get() { return { connection_kind: "MCP", endpoint: "https://mcp.test" } },
+      async list() { return [{ connection_id: "connection", connection_kind: "MCP", status: "READY", endpoint: "https://mcp.test", downstream_identity: { mode: "USER_OAUTH" } }] },
+    } as unknown as ResourceConnectionRegistry,
+    identity: { async canonicalSubjectId(input) { return input.subjectId } },
+    publicOrigin: "https://cp.test",
+    managementUiOrigin: "https://ui.test",
+    now: () => 1000,
+    refreshAuthorization: async (_url, input) => {
+      refreshCalls += 1
+      assert.equal(input.refreshToken, "refresh-one")
+      return { access_token: "token-one", refresh_token: "refresh-one-new", token_type: "Bearer", expires_in: 3600 }
+    },
+  })
+
+  assert.equal((await service.resolveAccessToken(ownerOne)).accessToken, "token-one")
+  assert.equal((await service.resolveAccessToken(ownerTwo)).accessToken, "token-two")
+  assert.deepEqual((await service.resolveRequestHeaders(ownerOne)).map((header) => header.value), ["Bearer token-one"])
+  assert.deepEqual((await service.resolveRequestHeaders(ownerTwo)).map((header) => header.value), ["Bearer token-two"])
+  assert.equal(refreshCalls, 1)
+  assert.equal(codec.open<{ tokens: { access_token: string } }>((await store.getBinding(ownerTwo))!.sealed_state).tokens.access_token, "token-two")
+
+  await service.disconnect(ownerOne)
+  assert.equal(await store.getBinding(ownerOne), null)
+  await assert.rejects(service.resolveAccessToken(ownerOne), /MCP_OAUTH_AUTHORIZATION_REQUIRED/)
+  assert.equal((await service.resolveAccessToken(ownerTwo)).accessToken, "token-two")
 })
 
 test("schema discovery without an OAuth binding is allowed while invocation remains denied", async () => {
@@ -163,6 +225,7 @@ test("expired MCP OAuth tokens refresh once and persist without a resource overr
 
   const resolved = await service.resolveAccessToken({
     tenantId: "tenant-acme",
+    resourceId: "resource-mcp",
     connectionId: "connection-mcp",
     subjectId: "person-1",
   })

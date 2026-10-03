@@ -259,6 +259,7 @@ export const mcpDiscoveryHttp: FastifyPluginAsync<McpDiscoveryHttpOptions> = asy
       }
       const credential = await options.oauth.resolveAccessToken({
         tenantId,
+        resourceId: operation.resource_id,
         connectionId: operation.connection_id,
         subjectId: operation.requested_by_subject_id,
       })

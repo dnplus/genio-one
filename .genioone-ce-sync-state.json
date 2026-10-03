@@ -5982,6 +5982,10 @@
       "sha256": "70290e19e2e110758f41589b9f40c403efdd3ae47770c35a1cc2e0eccb875f4f",
       "mode": 420
     },
+    "apps/platform/platform-api/migrations/022_mcp_oauth_resource_scope.sql": {
+      "sha256": "ccdd17a3649ba4ee3eca3bb948dc30ce8aef61c8353ff7b64a04fe496ca4c936",
+      "mode": 420
+    },
     "apps/platform/platform-api/migrations/README.md": {
       "sha256": "49fc1848375d204b41ccd9c810bce9126516ff9c689553557114021030c64c15",
       "mode": 420
@@ -6211,7 +6215,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/connections/memory.ts": {
-      "sha256": "7f7afa6d189bb7dee3705fb5e7388056a006d7b8c74ae1ffca14f128418e7c4b",
+      "sha256": "88fef7d435124195b1fcf1042187671234c0aa147349578a00c8901cb78d76ea",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/connections/module.ts": {
@@ -6219,7 +6223,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/connections/postgres.ts": {
-      "sha256": "7cb6e5389a0fb886e03d9d23b629c0d359037e865539cae49e461c1e76b5c8e5",
+      "sha256": "68e317ec95e6184649ee4eacc85be3429f675762717e6cef754fffe5f5417296",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/connections/registration.ts": {
@@ -6643,7 +6647,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/mcp-discovery/http.ts": {
-      "sha256": "77392540221c8dcd024513bd2fe3f53c6003be0b8a7aa7024f66ce29c8cd129a",
+      "sha256": "0b0e74aa14e9a404d3aa93a1a9c7256b13e35de45a86836a86e9aecc1982f9e2",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/mcp-discovery/memory.ts": {
@@ -6675,23 +6679,23 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/mcp-oauth/http.ts": {
-      "sha256": "d06d32df280429fbd0fe0ec63911f4eb1870679c3fc04f23345989a7e2d8519d",
+      "sha256": "52ea014834a3492569223101e616582eadfa8e4e4920b10cb0761c55013f4cfe",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/mcp-oauth/memory.ts": {
-      "sha256": "af4a74a86da0e5a3f5cccc292e5071be157e98febdb1278592e8df10197088bf",
+      "sha256": "0081f0668fe3524822775f25bc8064ea0d03b459db9ab8ff7526a61899ece032",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/mcp-oauth/module.ts": {
-      "sha256": "faf24f0301e9aac27ca705ea37c95ced9a4a54192f27e3cd1dc19f9a06189e2f",
+      "sha256": "1c533446b57f4677a6d22868181f034835bdc08ab3f132cdfbfc6ad05f440cdb",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/mcp-oauth/personal-http.ts": {
-      "sha256": "9f1fcfbc88018b6c3a4351ca94e1f141c5b61ede48a7070880c1cc131cddc645",
+      "sha256": "c4f2575bba4353580fd558f6a47c57cd6354b8828264cd0fd5a0636e6d979b8e",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/mcp-oauth/postgres.ts": {
-      "sha256": "9976986f80bf491db24e9cee58666b205396493a293ba92f9e5e68ecdcec0d38",
+      "sha256": "149b2b636156e04e02f8f4b971ff81e83cea0048c65caf9c450df9be6b52e3b5",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/memories/contract.ts": {
@@ -7355,7 +7359,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/authentication.test.ts": {
-      "sha256": "0ffdd50dd123a418e7b760d63c8946494f2c4124a165a7bc750c85598dcc9887",
+      "sha256": "486bf50703c4efcf788aa500725f681ab1c8b8ca8988b9e6bf060e115e91e954",
       "mode": 420
     },
     "apps/platform/platform-api/test/bootstrap.test.ts": {
@@ -7378,8 +7382,12 @@
       "sha256": "5fa6575c1bbecd8c1f97bb7bba29b08befcffcfc08017af490021abbe509a2d0",
       "mode": 420
     },
+    "apps/platform/platform-api/test/connection-health-postgres-live.test.ts": {
+      "sha256": "68ad0552bf1d841ffd83fc1547d4ad42c21d31535ade10243d942561e99067ff",
+      "mode": 420
+    },
     "apps/platform/platform-api/test/connection-lifecycle.test.ts": {
-      "sha256": "d5df4a4ddb36cd774a91c3f98f18b69017fd0b4714ac21968f0f3f692bbcc840",
+      "sha256": "bd7cbd562b2ae57ff9832b112af15863c7e399dde48b543802e9c00ed5cc1cb9",
       "mode": 420
     },
     "apps/platform/platform-api/test/connection-provider-federation.test.ts": {
@@ -7663,7 +7671,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/mcp-discovery-http.test.ts": {
-      "sha256": "2b94a1dd5c8668e619352c8f45b39c466d572af0b2827a9054846fc130568a6a",
+      "sha256": "d03bb7319eac758cab52b47847358d7034bb9f7485207778412ff570d182d5e1",
       "mode": 420
     },
     "apps/platform/platform-api/test/mcp-discovery-publication-recovery.test.ts": {
@@ -7671,7 +7679,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/mcp-oauth-configured.test.ts": {
-      "sha256": "aff5f9267237c119d2b3c45314513bc34ff8905378b864c21b28bf53af70eea1",
+      "sha256": "40e76a2e6dcbaedbec30ef75131f078d7408dc209bf7807128752129a0e5a8d1",
       "mode": 420
     },
     "apps/platform/platform-api/test/mcp-oauth-crypto.test.ts": {
@@ -7679,11 +7687,11 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/mcp-oauth-refresh.test.ts": {
-      "sha256": "b4606130620d24b740da9f3e1e9b5df033ea22fa78308b6d6acb7fb66eb4569b",
+      "sha256": "84bfb1b628a9940c467e1b3b961b47121c7b69c6506b248cfa74541615539075",
       "mode": 420
     },
     "apps/platform/platform-api/test/mcp-oauth-return-url.test.ts": {
-      "sha256": "c98751c4781fb59e0d5eb46d85fd8aea870245025fe7b1e8d8b7703a69e66d91",
+      "sha256": "b0e45d6d371380d7c0405eb3f5c77a12f18ed0c30fd4c43c0e589e325259abe6",
       "mode": 420
     },
     "apps/platform/platform-api/test/memories-postgres-live.test.ts": {
@@ -7747,11 +7755,11 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/persistence.test.ts": {
-      "sha256": "c5e05e88a94b077045f9459dc235239133ecb1dc1acb0b1c2695bacc5fce97e4",
+      "sha256": "8e9bcf247b8ebfb441929178ab3792591dd560d14c23f814f42fb7d928fc6117",
       "mode": 420
     },
     "apps/platform/platform-api/test/personal-connections.test.ts": {
-      "sha256": "0a998efdc72e20ad6ad226f2627260807dcf0e008b7428c02d8574923711d273",
+      "sha256": "737b3018b3566bb4c5c965217eb999ab9497d3d375c832f2d7f91e12480766bf",
       "mode": 420
     },
     "apps/platform/platform-api/test/personal-password-credentials.test.ts": {
@@ -7759,7 +7767,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/personal-password-postgres.test.ts": {
-      "sha256": "3b4ea968c9b39776d8a3e95cda732dc83340a2256d6a749c34d21d0b6e3cf19e",
+      "sha256": "e52375565fbfe2e1a88ac4f7b9b53fd3d12ad26701c2cfb93be29e1bc92bc43d",
       "mode": 420
     },
     "apps/platform/platform-api/test/platform-modules-live.test.ts": {
@@ -7779,7 +7787,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/postgres-capabilities.test.ts": {
-      "sha256": "e93d4c9851d93eb7a0a4a5ef61edbbae9e0539a9a2dee8f806ac35c48ccb96d7",
+      "sha256": "c7248b5a7bb985e1a2d9b0d51e1fc1a25a36424b48672c3ba28d0ebc290034e9",
       "mode": 420
     },
     "apps/platform/platform-api/test/postgres-live.test.ts": {

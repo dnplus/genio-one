@@ -7,6 +7,10 @@ import { createManagementApi } from "../src/app"
 import { PlatformApiError } from "../src/capabilities/errors"
 import { createInMemoryPlatformModules } from "../src/capabilities/platform-modules"
 import { createInMemoryGatewayAggregateRuntimeControlStore } from "../src/capabilities/gateway-runtime-control/memory"
+import { createInMemoryResourceConnectionRegistry } from "../src/capabilities/connections/memory"
+import { createInMemoryResourceRegistry } from "../src/capabilities/resources/memory"
+import { createResourceMemoryState } from "../src/capabilities/resources/state"
+import type { GatewayProjection } from "../src/capabilities/gateway-projection/contract"
 import {
   createEnvironmentPrincipalAuthenticator,
   createStaticPrincipalAuthenticator,
@@ -878,6 +882,127 @@ test("aggregate runtime capability negotiation uses runtime identity instead of 
   assert.equal(rejectedHealthBatch.statusCode, 403)
   assert.equal(rejectedHealthBatch.json().code, "RUNTIME_ACCESS_DENIED")
 
+  await app.close()
+})
+
+test("valid Gateway runtime token cannot report another Gateway's Connection health", async () => {
+  const base = createInMemoryPlatformModules({ now: () => 100 })
+  for (const [runtimeId, gatewayId] of [
+    ["gateway-health-a", "gateway-a"],
+    ["gateway-health-b", "gateway-b"],
+  ] as const) {
+    const { publicKey } = generateKeyPairSync("ed25519")
+    await base.runtimeControl.registerGatewayRuntime({
+      tenantId: "tenant-acme",
+      runtimeId,
+      targetId: gatewayId,
+      oidcClientId: runtimeId,
+      reportKeyId: `report-key-${runtimeId}`,
+      reportPublicKeyPem: publicKey.export({ type: "spki", format: "pem" }).toString(),
+    })
+  }
+  const state = createResourceMemoryState()
+  const resources = createInMemoryResourceRegistry({ state, organizations: base.organizations, now: () => 100 })
+  const connections = createInMemoryResourceConnectionRegistry({
+    state,
+    resources,
+    providers: base.providers,
+    now: () => 100,
+    verifier: { verify: () => true },
+  })
+  const organization = await base.organizations.create({
+    tenantId: "tenant-acme",
+    display_name: "Health owner",
+    slug: "health-owner",
+  })
+  const resource = await resources.createResource({
+    tenantId: "tenant-acme",
+    value: {
+      display_name: "Health target",
+      kind: "MCP",
+      owner_organization_id: organization.organization_id,
+      authentication_strategy: "NONE",
+      environment_id: "local",
+      version: "1.0.0",
+      capabilities: [{ capability_id: "mcp.invoke", display_name: "Invoke" }],
+      enforcement_point_id: "gateway-b",
+    },
+  })
+  const connection = await connections.create({
+    tenantId: "tenant-acme",
+    resourceId: resource.resource_id,
+    value: { display_name: "Backend", connection_kind: "MCP", endpoint: "https://backend.example.test" },
+  })
+  await connections.verify({ tenantId: "tenant-acme", resourceId: resource.resource_id, connectionId: connection.connection_id })
+  state.resources.set(`tenant-acme:${resource.resource_id}`, { ...resource, lifecycle: "PUBLISHED" })
+  state.publicationProjections.set(`tenant-acme:publication-health-b`, {
+    tenant_id: "tenant-acme",
+    resource_id: resource.resource_id,
+    operation: "APPLY",
+    publication_endpoint: { gateway_id: "gateway-b" },
+  } as GatewayProjection)
+  const runtimePrincipal = {
+    tenant_id: "tenant-acme",
+    subject_id: "gateway-runtime",
+    role: "USER" as const,
+    organization_ids: [],
+    scopes: ["genioone-gateway-runtime"],
+  }
+  const app = await createManagementApi({
+    modules: { ...base, connections },
+    resourceCatalog: resources,
+    principalAuthenticator: createStaticPrincipalAuthenticator({
+      "runtime-a-token": { ...runtimePrincipal, client_id: "gateway-health-a" },
+      "runtime-b-token": { ...runtimePrincipal, client_id: "gateway-health-b" },
+    }),
+  })
+  const observation = {
+    correlation_id: "health-gateway-binding",
+    source_revision: 2,
+    state: "UNAVAILABLE",
+    observed_at: 100,
+  }
+  const single = await inject(
+    app,
+    "runtime-a-token",
+    "POST",
+    `/v1/tenants/tenant-acme/resources/${resource.resource_id}/connections/${connection.connection_id}/health-observations`,
+    observation,
+  )
+  assert.equal(single.statusCode, 403, single.body)
+  assert.equal(single.json().code, "CONNECTION_HEALTH_TARGET_UNASSIGNED")
+  const batchPath = "/v1/tenants/tenant-acme/runtime-control/GATEWAY/gateway-health-a/connection-health-observations"
+  const batchBody = {
+    correlation_id: "health-scan-gateway-binding",
+    observations: [{
+      resource_id: resource.resource_id,
+      connection_id: connection.connection_id,
+      source_revision: 2,
+      state: "UNAVAILABLE",
+      observed_at: 100,
+    }],
+  }
+  const batch = await inject(app, "runtime-a-token", "POST", batchPath, batchBody)
+  assert.equal(batch.statusCode, 403, batch.body)
+  assert.equal(batch.json().code, "CONNECTION_HEALTH_TARGET_UNASSIGNED")
+  assert.equal((await connections.get({ tenantId: "tenant-acme", resourceId: resource.resource_id, connectionId: connection.connection_id })).health_source_revision, 1)
+  const targets = await inject(
+    app,
+    "runtime-a-token",
+    "GET",
+    "/v1/tenants/tenant-acme/runtime-control/GATEWAY/gateway-health-a/connection-health-targets",
+  )
+  assert.equal(targets.statusCode, 200, targets.body)
+  assert.deepEqual(targets.json(), [])
+  const valid = await inject(
+    app,
+    "runtime-b-token",
+    "POST",
+    "/v1/tenants/tenant-acme/runtime-control/GATEWAY/gateway-health-b/connection-health-observations",
+    batchBody,
+  )
+  assert.equal(valid.statusCode, 200, valid.body)
+  assert.equal((await connections.get({ tenantId: "tenant-acme", resourceId: resource.resource_id, connectionId: connection.connection_id })).health_source_revision, 2)
   await app.close()
 })
 

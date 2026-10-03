@@ -22,13 +22,15 @@ test("personal credential baseline persists sealed values and accepts configured
       authentication_strategy, environment_id, version, enforcement_point_id
     ) values
       ('tenant', 'mail2000', 'Mail2000', 'MCP', 'owner', 'USER', 'qa', '1', 'gateway'),
-      ('tenant', 'servicenow', 'ServiceNow', 'MCP', 'owner', 'USER', 'qa', '1', 'gateway')`)
+      ('tenant', 'servicenow', 'ServiceNow', 'MCP', 'owner', 'USER', 'qa', '1', 'gateway'),
+      ('tenant', 'servicenow-alt', 'ServiceNow Alt', 'MCP', 'owner', 'USER', 'qa', '1', 'gateway')`)
     await sql.query(`insert into genio_one_resource_connections (
       tenant_id, resource_id, connection_id, display_name, endpoint, connection_kind,
       downstream_identity, lifecycle, verification_state, health_state
     ) values
       ('tenant','mail2000','mail','Mail','https://mail.test','MCP','{"mode":"USER_PASSWORD"}'::jsonb,'ENABLED','VERIFIED','HEALTHY'),
-      ('tenant','servicenow','sn','ServiceNow','https://servicenow.test','MCP','{"mode":"USER_OAUTH","oauth_client":{"client_id":"client"}}'::jsonb,'ENABLED','VERIFIED','HEALTHY')`)
+      ('tenant','servicenow','sn','ServiceNow','https://servicenow.test','MCP','{"mode":"USER_OAUTH","oauth_client":{"client_id":"client"}}'::jsonb,'ENABLED','VERIFIED','HEALTHY'),
+      ('tenant','servicenow-alt','sn','ServiceNow Alt','https://servicenow-alt.test','MCP','{"mode":"USER_OAUTH","oauth_client":{"client_id":"client"}}'::jsonb,'ENABLED','VERIFIED','HEALTHY')`)
     const owner = { tenantId: "tenant", resourceId: "mail2000", connectionId: "mail", subjectId: "alice" }
     const codec = createMcpOAuthSecretCodec(Buffer.alloc(32, 7))
     const store = createPostgresPasswordCredentialStore(sql)
@@ -43,13 +45,28 @@ test("personal credential baseline persists sealed values and accepts configured
     assert.equal(await reloaded.get(owner), null)
     const oauth = createPostgresMcpOAuthStore({ sql })
     const binding = { tenant_id: "tenant", resource_id: "servicenow", connection_id: "sn", subject_id: "alice", issuer: "https://sn.test", resource_url: "https://mcp.test", sealed_state: codec.seal({ token: "old" }), updated_at: 1 }
-    await oauth.putBinding(binding)
-    await oauth.deleteBinding({ tenantId: "tenant", connectionId: "sn", subjectId: "alice" })
+    const bindingOwner = { tenantId: "tenant", resourceId: "servicenow", connectionId: "sn", subjectId: "alice" }
+    const otherOwner = { ...bindingOwner, resourceId: "servicenow-alt" }
+    await sql.query(
+      `insert into genio_one_mcp_oauth_bindings
+        (tenant_id, resource_id, connection_id, subject_id, issuer, resource_url, sealed_state, updated_at)
+       values ($1, $2, $3, $4, $5, $6, $7, to_timestamp($8))`,
+      [binding.tenant_id, binding.resource_id, binding.connection_id, binding.subject_id,
+        binding.issuer, binding.resource_url, binding.sealed_state, binding.updated_at],
+    )
+    await sql.query(await readFile(new URL("../migrations/022_mcp_oauth_resource_scope.sql", import.meta.url), "utf8"))
+    assert.equal((await oauth.getBinding(bindingOwner))?.sealed_state, binding.sealed_state)
+    const otherBinding = { ...binding, resource_id: otherOwner.resourceId, sealed_state: codec.seal({ token: "other" }) }
+    await oauth.putBinding(otherBinding)
+    assert.equal((await oauth.getBinding(otherOwner))?.sealed_state, otherBinding.sealed_state)
+    await oauth.deleteBinding(bindingOwner)
     assert.equal(await oauth.updateBindingIfCurrent(binding, { ...binding, sealed_state: codec.seal({ token: "new" }), updated_at: 2 }), false)
-    assert.equal(await oauth.getBinding({ tenantId: "tenant", connectionId: "sn", subjectId: "alice" }), null)
+    assert.equal(await oauth.getBinding(bindingOwner), null)
+    assert.equal((await oauth.getBinding(otherOwner))?.sealed_state, otherBinding.sealed_state)
     await oauth.putBinding(binding)
     assert.equal(await oauth.updateBindingIfCurrent(binding, { ...binding, sealed_state: codec.seal({ token: "new" }), updated_at: 2 }), true)
     assert.equal(await oauth.updateBindingIfCurrent(binding, { ...binding, sealed_state: codec.seal({ token: "stale" }), updated_at: 3 }), false)
+    assert.equal((await oauth.getBinding(otherOwner))?.sealed_state, otherBinding.sealed_state)
   } finally {
     await sql.end({ timeout: 1 })
     await setup.query(`drop schema ${schema} cascade`)

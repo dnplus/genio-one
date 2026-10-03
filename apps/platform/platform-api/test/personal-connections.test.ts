@@ -16,7 +16,7 @@ test("personal connection route uses authenticated user and Auto Grant without e
   let provisioned = false
   let connected = false
   let discoveryOwner = "person"
-  let disconnected = ""
+  const disconnected: Array<{ tenantId: string; resourceId: string; connectionId: string; subjectId: string }> = []
   await app.register(personalConnectionHttp, {
     passwords: { async resolveRequestHeaders() { return [] }, async save() { return { status: "SAVED" } }, async status() { return { status: "NEEDS_CONNECTION" } }, async remove() {}, async resolve() { throw new Error("not used") } },
     access: {
@@ -36,7 +36,7 @@ test("personal connection route uses authenticated user and Auto Grant without e
     oauth: {
       async status(input: { subjectId: string }) { actors.push(input.subjectId); return connected ? { state: "CONNECTED" } : null },
       async start(input: { subjectId: string }) { actors.push(input.subjectId); return { authorization_url: "https://sn.test/authorize", expires_at: 1000 } },
-      async disconnect(input: { subjectId: string }) { disconnected = input.subjectId },
+      async disconnect(input: { tenantId: string; resourceId: string; connectionId: string; subjectId: string }) { disconnected.push(input) },
     } as unknown as McpOAuthService,
     discovery: {
       async request() { return { operation_id: "discovery-1", state: "PENDING", error_code: null } },
@@ -69,7 +69,7 @@ test("personal connection route uses authenticated user and Auto Grant without e
     expect((await app.inject({ url: base })).statusCode).toBe(403)
     expect((await app.inject({ method: "POST", url: discoveryPath, payload: { correlation_id: "correlation-1" } })).statusCode).toBe(403)
     expect((await app.inject({ method: "DELETE", url: `${base}/connection` })).statusCode).toBe(204)
-    expect(disconnected).toBe("person")
+    expect(disconnected).toEqual([{ tenantId: "tenant", resourceId: "sn", connectionId: "connection", subjectId: "person" }])
     expect((await app.inject({ url: base.replace("/tenant/", "/another/") })).statusCode).toBe(401)
   } finally { await app.close() }
 })

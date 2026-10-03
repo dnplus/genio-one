@@ -95,7 +95,7 @@ export const personalConnectionHttp: FastifyPluginAsync<{
     const principal = request.principal
     if (!principal || principal.tenant_id !== tenantId) throw new PlatformApiError("UNAUTHENTICATED", 401)
     await options.connections.get({ tenantId, resourceId, connectionId })
-    await options.oauth.disconnect({ tenantId, connectionId, subjectId: principal.subject_id })
+    await options.oauth.disconnect({ tenantId, resourceId, connectionId, subjectId: principal.subject_id })
     await options.passwords.remove({ tenantId, resourceId, connectionId, subjectId: principal.subject_id })
     return reply.code(204).send(null)
   })

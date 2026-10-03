@@ -349,6 +349,26 @@ async function connectionById(
   return result.rows[0] ?? null
 }
 
+async function assertHealthPublicationAssignment(
+  transaction: SqlTransaction,
+  tenantId: string,
+  resourceId: string,
+  gatewayId: string,
+): Promise<void> {
+  const publication = await transaction.query(
+    `select 1
+       from genio_one_publications
+      where tenant_id = $1 and resource_id = $2 and gateway_id = $3
+        and publication_state in ('PUBLISHED', 'DEPRECATED')
+      limit 1
+      for share`,
+    [tenantId, resourceId, gatewayId],
+  )
+  if (publication.rows.length === 0) {
+    throw new PlatformApiError("CONNECTION_HEALTH_TARGET_UNASSIGNED", 403)
+  }
+}
+
 function isSqlError(error: unknown, code: string): boolean {
   return typeof error === "object" && error !== null && "code" in error && error.code === code
 }
@@ -1075,12 +1095,14 @@ export function createPostgresResourceConnectionRegistry(
 
     async observeHealth(input) {
       assertTenantId(input.tenantId)
+      assertIdentifier(input.gatewayId, "GATEWAY_ID_REQUIRED")
       assertIdentifier(input.resourceId, "RESOURCE_REQUIRED")
       assertIdentifier(input.connectionId, "CONNECTION_REQUIRED")
       return options.sql.transaction(async (transaction) => {
         await resourceForUpdate(transaction, input.tenantId, input.resourceId)
         const current = await connectionById(transaction, input.tenantId, input.resourceId, input.connectionId, true)
         if (!current) throw new PlatformApiError("CONNECTION_NOT_FOUND", 404)
+        await assertHealthPublicationAssignment(transaction, input.tenantId, input.resourceId, input.gatewayId)
         const currentSourceRevision = current.health_source_revision === null
           ? 0
           : rowValueNumber(current.health_source_revision, 0)
@@ -1118,6 +1140,7 @@ export function createPostgresResourceConnectionRegistry(
 
     async observeHealthBatch(input) {
       assertTenantId(input.tenantId)
+      assertIdentifier(input.gatewayId, "GATEWAY_ID_REQUIRED")
       return options.sql.transaction(async (transaction) => {
         const observed: ConnectionRegistration[] = []
         const keys = new Set<string>()
@@ -1126,6 +1149,7 @@ export function createPostgresResourceConnectionRegistry(
           compareUtf8(left.resource_id, right.resource_id) ||
           compareUtf8(left.connection_id, right.connection_id)
         )
+        const targets: Array<{ value: (typeof values)[number]; current: DatabaseRow }> = []
         for (const value of values) {
           assertIdentifier(value.resource_id, "RESOURCE_REQUIRED")
           assertIdentifier(value.connection_id, "CONNECTION_REQUIRED")
@@ -1141,6 +1165,10 @@ export function createPostgresResourceConnectionRegistry(
             true,
           )
           if (!current) throw new PlatformApiError("CONNECTION_NOT_FOUND", 404)
+          await assertHealthPublicationAssignment(transaction, input.tenantId, value.resource_id, input.gatewayId)
+          targets.push({ value, current })
+        }
+        for (const { value, current } of targets) {
           const evaluatedAt = now()
           const currentConnection = mapConnection(current, now)
           const currentSourceRevision = current.health_source_revision === null

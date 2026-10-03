@@ -66,6 +66,49 @@ test("pre-registered OAuth uses PKCE, seals credentials in CP and scopes access 
   await assert.rejects(service.complete({ state, code: "one-use-code" }))
 })
 
+test("configured OAuth completion retains separate bindings for equal Connection IDs on different Resources", async () => {
+  const store = createInMemoryMcpOAuthStore()
+  const codec = createMcpOAuthSecretCodec(Buffer.alloc(32, 13))
+  const service = createMcpOAuthService({
+    store,
+    codec,
+    connections: {
+      async get(input: { resourceId: string }) {
+        return {
+          connection_kind: "MCP",
+          endpoint: `https://connector.test/${input.resourceId}`,
+          downstream_identity: { mode: "USER_OAUTH", oauth_client: client },
+        }
+      },
+    } as unknown as ResourceConnectionRegistry,
+    identity: { async canonicalSubjectId(input) { return input.subjectId } },
+    publicOrigin: "https://cp.test",
+    managementUiOrigin: "https://ui.test",
+    exchangeConfiguredCode: async (input) => ({
+      access_token: `token-${input.code}`,
+      token_type: "Bearer",
+      issuer: client.issuer,
+    }),
+  })
+  const ownerOne = { tenantId: "tenant", resourceId: "resource-one", connectionId: "shared", subjectId: "alice" }
+  const ownerTwo = { ...ownerOne, resourceId: "resource-two" }
+  for (const owner of [ownerOne, ownerTwo]) {
+    const authorization = await service.start(owner)
+    const state = new URL(authorization.authorization_url).searchParams.get("state")!
+    await service.complete({ state, code: owner.resourceId })
+  }
+
+  assert.equal((await service.resolveAccessToken(ownerOne)).accessToken, "token-resource-one")
+  assert.equal((await service.resolveAccessToken(ownerTwo)).accessToken, "token-resource-two")
+  assert.equal((await service.status(ownerOne))?.resource_id, ownerOne.resourceId)
+  assert.equal((await service.status(ownerTwo))?.resource_id, ownerTwo.resourceId)
+  assert.equal((await store.getBinding(ownerOne))?.resource_id, ownerOne.resourceId)
+  assert.equal((await store.getBinding(ownerTwo))?.resource_id, ownerTwo.resourceId)
+  await service.disconnect(ownerOne)
+  await assert.rejects(service.resolveAccessToken(ownerOne), /MCP_OAUTH_AUTHORIZATION_REQUIRED/)
+  assert.equal((await service.resolveAccessToken(ownerTwo)).accessToken, "token-resource-two")
+})
+
 test("OAuth endpoints cannot redirect credentials to another origin or use another identity mode", () => {
   assert.ok(canonicalizeDownstreamIdentity({ mode: "USER_OAUTH", oauth_client: client }))
   assert.equal(canonicalizeDownstreamIdentity({ mode: "SERVICE", authentication: "API_KEY", oauth_client: client }), null)

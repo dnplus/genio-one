@@ -55,6 +55,33 @@ async function resolveCredentialProfile(
   })
 }
 
+function hasHealthPublicationAssignment(
+  state: ResourceMemoryState,
+  tenantId: string,
+  resourceId: string,
+  gatewayId: string,
+): boolean {
+  const resource = state.resources.get(`${tenantId}:${resourceId}`)
+  return (resource?.lifecycle === "PUBLISHED" || resource?.lifecycle === "DEPRECATED") &&
+    [...state.publicationProjections.values()].some((projection) =>
+      projection.tenant_id === tenantId &&
+      projection.resource_id === resourceId &&
+      projection.operation === "APPLY" &&
+      projection.publication_endpoint.gateway_id === gatewayId
+    )
+}
+
+function assertHealthPublicationAssignment(
+  state: ResourceMemoryState,
+  tenantId: string,
+  resourceId: string,
+  gatewayId: string,
+): void {
+  if (!hasHealthPublicationAssignment(state, tenantId, resourceId, gatewayId)) {
+    throw new PlatformApiError("CONNECTION_HEALTH_TARGET_UNASSIGNED", 403)
+  }
+}
+
 export function createInMemoryResourceConnectionRegistry(
   options: ConnectionMemoryOptions,
 ): ResourceConnectionRegistry {
@@ -67,7 +94,8 @@ export function createInMemoryResourceConnectionRegistry(
         .filter((connection) =>
           connection.tenant_id === input.tenantId &&
           connection.lifecycle === "ENABLED" &&
-          connection.verification_state === "VERIFIED"
+          connection.verification_state === "VERIFIED" &&
+          hasHealthPublicationAssignment(options.state, input.tenantId, connection.resource_id, input.gatewayId)
         )
         .map((connection) => ({
           resource_id: connection.resource_id,
@@ -474,6 +502,7 @@ export function createInMemoryResourceConnectionRegistry(
     async observeHealth(input) {
       await options.resources.getResource(input)
       const current = await this.get(input)
+      assertHealthPublicationAssignment(options.state, input.tenantId, input.resourceId, input.gatewayId)
       if (input.value.source_revision <= (current.health_source_revision ?? 0)) {
         throw new PlatformApiError("CONNECTION_HEALTH_REVISION_CONFLICT", 409)
       }
@@ -490,6 +519,7 @@ export function createInMemoryResourceConnectionRegistry(
     async observeHealthBatch(input) {
       const observed: ConnectionRegistration[] = []
       const keys = new Set<string>()
+      const targets: Array<{ value: (typeof input.value.observations)[number]; current: ConnectionRegistration }> = []
       for (const value of [...input.value.observations].sort((left, right) =>
         left.resource_id.localeCompare(right.resource_id) ||
         left.connection_id.localeCompare(right.connection_id)
@@ -503,6 +533,10 @@ export function createInMemoryResourceConnectionRegistry(
           resourceId: value.resource_id,
           connectionId: value.connection_id,
         })
+        assertHealthPublicationAssignment(options.state, input.tenantId, value.resource_id, input.gatewayId)
+        targets.push({ value, current })
+      }
+      for (const { value, current } of targets) {
         if (value.source_revision <= (current.health_source_revision ?? 0)) {
           observed.push(current)
           continue
