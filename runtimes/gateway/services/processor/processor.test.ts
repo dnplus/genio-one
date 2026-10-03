@@ -976,11 +976,111 @@ test("deterministic authorization keeps a single trusted public-model alias for 
     ["OUTPUT_TOKENS", 1],
     ["TOTAL_TOKENS", 2],
   ])
+  assert.deepEqual([
+    activity[0]?.input_tokens,
+    activity[0]?.output_tokens,
+    activity[0]?.total_tokens,
+  ], [1, 1, 2])
   assert.equal(accounting[0]?.valuations[0]?.status, "ESTIMATED")
   assert.equal(accounting[0]?.valuations[0]?.amount_micros, 10)
   assert.equal(accounting[0]?.valuations[0]?.pricing_source, "LITELLM")
+  assert.equal(accounting[0]?.currency_settlements[0]?.amount_micros, 10)
   assert.equal(settlements[0]?.amount_micros, 10)
   assert.equal(settlements[0]?.allocation_id, "currency-september")
+})
+
+test("ext_proc ignores invalid non-stream provider usage for activity, accounting, and settlement", async () => {
+  const snapshot: ProcessorPolicySnapshot = {
+    tenantId: context.tenantId,
+    bundleRevision,
+    releaseId: releaseReference.release_id,
+    releaseReference,
+    policyVersion: "test-policy",
+    captureMessageContent: false,
+    scopes: [],
+    stepsFor() {
+      return []
+    },
+    routingScopeFor() {
+      return deterministicRoutingScope()
+    },
+  }
+  const invalidUsage = [
+    ["negative", { prompt_tokens: -1, completion_tokens: 2, total_tokens: 1 }],
+    ["fractional", { prompt_tokens: 1.5, completion_tokens: 2, total_tokens: 3.5 }],
+    ["unsafe", { prompt_tokens: Number.MAX_SAFE_INTEGER + 1, completion_tokens: 2, total_tokens: 2 }],
+    ["incomplete", { prompt_tokens: 1, completion_tokens: 2 }],
+    ["wrong type", { prompt_tokens: "1", completion_tokens: 2, total_tokens: 3 }],
+  ] as const
+
+  for (const [label, usage] of invalidUsage) {
+    const activity: GatewayActivityIngest[] = []
+    const accounting: Array<Parameters<NonNullable<
+      Parameters<typeof createExternalProcessorHandler>[0]["onAccounting"]
+    >>[0]> = []
+    const settlements: Array<Parameters<UsageCounterStore["settleCurrency"]>[0]> = []
+    const result = await runProcessorMessages({
+      ...externalProcessorOptions(new MemoryVault()),
+      policySource: { async current() { return snapshot } },
+      onActivity(event) {
+        activity.push(event)
+      },
+      onAccounting(event) {
+        accounting.push(event)
+      },
+      usageCounterStore: {
+        async releaseConcurrency() {},
+        async settleCurrency(value) {
+          settlements.push(value)
+        },
+      },
+    }, [
+      requestHeaderMessage({
+        "x-genio-allowed-public-models": "genio-chat",
+        "x-genio-trusted-consumer-organization-id": "organization-consumer",
+        "x-genio-trusted-resource-owner-organization-id": "organization-owner",
+        "x-genio-trusted-use-case-id": "support-assistant",
+        "x-genio-usage-accounting-keys": '["accounting-shared"]',
+        "x-genio-usage-policy-revisions": '["usage-policy:3"]',
+        "x-genio-usage-currency-allocations": '[{"accounting_key_id":"accounting-shared","allocation_id":"currency-september","currency":"USD","window_seconds":2592000,"window_bucket":659}]',
+      }),
+      {
+        request_body: {
+          body: Buffer.from(JSON.stringify({ model: "genio-chat", messages: [] })),
+          end_of_stream: true,
+        },
+      },
+      {
+        response_headers: {
+          headers: {
+            headers: [
+              { key: ":status", value: "200" },
+              { key: "content-type", value: "application/json" },
+            ],
+          },
+        },
+      },
+      {
+        response_body: {
+          body: Buffer.from(JSON.stringify({ model: "provider-model-1", usage })),
+          end_of_stream: true,
+        },
+      },
+    ])
+
+    assert.equal(result.destroyed, undefined, label)
+    assert.equal(activity.length, 1, label)
+    assert.deepEqual([
+      activity[0]?.input_tokens,
+      activity[0]?.output_tokens,
+      activity[0]?.total_tokens,
+    ], [null, null, null], label)
+    assert.equal(accounting.length, 1, label)
+    assert.deepEqual(accounting[0]?.quantities, [], label)
+    assert.deepEqual(accounting[0]?.valuations, [], label)
+    assert.deepEqual(accounting[0]?.currency_settlements, [], label)
+    assert.deepEqual(settlements, [], label)
+  }
 })
 
 test("ext_proc records OpenAI-compatible SSE usage split across response chunks", async () => {

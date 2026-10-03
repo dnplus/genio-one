@@ -1289,9 +1289,7 @@ export function createExternalProcessorHandler(options: ExternalProcessorOptions
           }
           const usage = responseContentType.includes("text/event-stream")
             ? responseSseUsage.usage()
-            : response?.usage && typeof response.usage === "object"
-              ? response.usage as Record<string, unknown>
-              : undefined
+            : providerUsage(response?.usage)
           const selectedCandidate = routingScope?.candidates.find(
             (candidate) => candidate.public_model_name === requestedPublicModel,
           )
