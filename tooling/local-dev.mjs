@@ -377,7 +377,7 @@ const services = [
   },
   {
     name: "bot-server",
-    url: "http://127.0.0.1:5181/api/runtime",
+    url: "http://127.0.0.1:5181/healthz",
     port: 5181,
     cwd: botDir,
     args: ["dev:server"],

@@ -319,7 +319,7 @@
       "mode": 420
     },
     "apps/bot/server/app.test.ts": {
-      "sha256": "6dc5311fa6e46f366d173bb0212c35695f713286236c49c6acedf7e9324c1d02",
+      "sha256": "80f417174f3a72debf11a21bbd3dd38969a8876267c17067c0eddd2b7187c0b2",
       "mode": 420
     },
     "apps/bot/server/app.ts": {
@@ -4495,7 +4495,7 @@
       "mode": 420
     },
     "apps/bot/server/routes/health.ts": {
-      "sha256": "411b2ee8a9e804aa29cefb27fa490fe996516a566376733ea0c6384e8979365d",
+      "sha256": "fa05722da171a6a317cb255f6dd4e0f9cf9fea15271602119881d6ef6b83a8b5",
       "mode": 420
     },
     "apps/bot/server/routes/invocations.ts": {
@@ -9847,11 +9847,11 @@
       "mode": 420
     },
     "tooling/local-dev.mjs": {
-      "sha256": "905e3e5cc84aaa5ebab4de2cf54875accacf0fb6b5ca3ee3760aebb01a015687",
+      "sha256": "514774bc5db1f7de3c572b18b10786a21c8838efa40a9c777f991d0179e83130",
       "mode": 420
     },
     "tooling/local-dev.test.mjs": {
-      "sha256": "2227a990b02fa471e966063c65cf2ede29545de503bcce2060d56989a3500797",
+      "sha256": "c1e6e64286f04f5f6c3370a0f750640526cc4bb8c61ca571b83c66480ca8f09d",
       "mode": 420
     },
     "tooling/oss-export.mjs": {
