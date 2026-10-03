@@ -14,6 +14,7 @@ import { executeHandsIsolate } from "./hands-isolate"
 import { isolateToolDefinitions } from "./bot-isolate-tool"
 import { HandsPlacementGate } from "./hands-placement-gate"
 import { createRuntimePolicyClient } from "./runtime-policy"
+import { RuntimePolicyReportLedger } from "./runtime-policy-report-ledger"
 
 test("isolate uses distinct real One Policy correlations and retries signed reports without rerunning JavaScript", async () => {
   const root = mkdtempSync(join(tmpdir(), "genio-isolate-policy-"))
@@ -40,20 +41,24 @@ test("isolate uses distinct real One Policy correlations and retries signed repo
     try {
       if (path.endsWith("/runtime-effective")) return Response.json(await policy.evaluateRuntime({ principal: cpPrincipal, bot_id: input.searchParams.get("bot_id")!, runtime_id: input.searchParams.get("runtime_id")!, capability_id: input.searchParams.get("capability_id")!, action: input.searchParams.get("action")! as "use", ...(input.searchParams.get("session_id") ? { session_id: input.searchParams.get("session_id")! } : {}) }))
       if (path.endsWith("/runtime-authorize")) {
-        const result = await policy.authorizeRuntime({ ...body, principal: cpPrincipal })
+        const headers = new Headers(init?.headers)
+        const keyId = headers.get(RUNTIME_REPORT_KEY_ID_HEADER)
+        const signature = headers.get(RUNTIME_REPORT_SIGNATURE_HEADER)
+        const result = await policy.authorizeRuntime({ ...body, tenantId: cpPrincipal.tenant_id, principal: cpPrincipal, ...(keyId !== null || signature !== null ? { reportAttestation: { keyId: keyId ?? "", signature: signature ?? "" } } : {}) })
         correlations.set(result.capability_id, result.correlation_id!)
         return Response.json(result)
       }
       if (path.endsWith("/runtime-report")) {
         if (body.capability_id === "code.javascript" && failCodeReport) { failCodeReport = false; return Response.json({ error: "TEMPORARY_REPORT_FAILURE" }, { status: 503 }) }
         const headers = new Headers(init?.headers)
-        return Response.json(await policy.reportRuntime({ ...body, principal: cpPrincipal, reportAttestation: { keyId: headers.get(RUNTIME_REPORT_KEY_ID_HEADER)!, signature: headers.get(RUNTIME_REPORT_SIGNATURE_HEADER)! } }), { status: 201 })
+        return Response.json(await policy.reportRuntime({ ...body, tenantId: cpPrincipal.tenant_id, principal: cpPrincipal, reportAttestation: { keyId: headers.get(RUNTIME_REPORT_KEY_ID_HEADER)!, signature: headers.get(RUNTIME_REPORT_SIGNATURE_HEADER)! } }), { status: 201 })
       }
       throw new Error("UNEXPECTED_POLICY_PATH")
     } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "POLICY_FAILED" }, { status: typeof error === "object" && error && "statusCode" in error ? Number(error.statusCode) : 500 }) }
   }
-  const runtimePolicy = createRuntimePolicyClient({ origin: "https://platform.example.test", reportKeyId: "fixture-key", reportPrivateKeyPem: privateKey, environment: { GENIO_BOT_RUNTIME: "cloudflare-hands" }, fetch: policyFetch })
   const registry = new BotRegistry(":memory:", join(root, "artifacts"))
+  const reportLedger = new RuntimePolicyReportLedger(registry.db)
+  const runtimePolicy = createRuntimePolicyClient({ origin: "https://platform.example.test", reportKeyId: "fixture-key", reportPrivateKeyPem: privateKey, environment: { GENIO_BOT_RUNTIME: "cloudflare-hands" }, reportLedger, fetch: policyFetch })
   const workspaces = new BotWorkspaceStore(registry.db, (botId, owner) => registry.getOwned(botId, owner), join(root, "workspaces"))
   const bot = registry.create(principal, { name: "Isolate", description: "Real One Policy receipt" })
   const workspace = workspaces.create(principal, bot.id, "cloudflare-hands")
@@ -76,13 +81,23 @@ test("isolate uses distinct real One Policy correlations and retries signed repo
   const context = { botRegistry: registry, workspaces, runtimeBroker: { findByPrincipal: () => null, hasActiveWorkspaceLease: () => false }, capabilityGate: createCapabilityGate({ mode: "open" }), runtimePolicy, handsPlacement: placement } as any
   try {
     const input = { workspaceId: workspace.workspaceId, requestId, code: "console.log('done')", workspaceAccess: "read-write" as const }
-    await expect(executeHandsIsolate(context, principal, bot.id, "actor-token", input)).rejects.toThrow("HANDS_RESULT_UNCONFIRMED")
+    const first = await executeHandsIsolate(context, principal, bot.id, "actor-token", input)
+    expect(first.revision).toBe(1)
     expect(executions).toBe(1)
+    expect(reportLedger.pending().map((entry) => JSON.parse(entry.body).capability_id)).toEqual(["code.javascript"])
+    await runtimePolicy.replayPendingReports?.()
+    expect(reportLedger.pending()).toHaveLength(0)
     const retry = await executeHandsIsolate(context, principal, bot.id, "actor-token", input)
     expect(retry.revision).toBe(1)
     expect(executions).toBe(1)
     expect(correlations.size).toBe(4)
     expect(new Set(correlations.values()).size).toBe(4)
+
+    const noLedgerPolicy = createRuntimePolicyClient({ origin: "https://platform.example.test", reportKeyId: "fixture-key", reportPrivateKeyPem: privateKey, environment: { GENIO_BOT_RUNTIME: "cloudflare-hands" }, fetch: policyFetch })
+    const noLedgerContext = { ...context, runtimePolicy: noLedgerPolicy, handsPlacement: new HandsPlacementGate(noLedgerPolicy, workspaces) }
+    failCodeReport = true
+    await expect(executeHandsIsolate(noLedgerContext, principal, bot.id, "actor-token", input)).rejects.toThrow("HANDS_RESULT_UNCONFIRMED")
+    expect(executions).toBe(1)
   } finally {
     globalThis.fetch = originalFetch
     if (originalOrigin === undefined) delete process.env.GENIO_CF_HANDS_ORIGIN

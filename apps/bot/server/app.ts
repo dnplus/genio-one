@@ -4,7 +4,7 @@ import { instrumentModuleGraph } from "@genioone/telemetry/operation-observabili
 import { registerHttpObservability } from "@genioone/telemetry/fastify-observability"
 import { transcriptionRoutes } from "./routes/transcription"
 import { LocalHands, localHandsRoutes } from "./local-hands"
-import { deliverQuestionAnswers } from "./question-delivery"
+import { deliverQuestionAnswers, replayDeliveredQuestionReports } from "./question-delivery"
 import { botQuestionRoutes } from "./routes/bot-questions"
 import { existsSync } from "node:fs"
 import { resolve } from "node:path"
@@ -40,6 +40,7 @@ import { botToolRoutes } from "./routes/bot-tools"
 import { botMemoryRoutes } from "./routes/bot-memory"
 import { modelGatewayRelayRoutes } from "./model-gateway-relay"
 import { createRuntimePolicyClient } from "./runtime-policy"
+import { RuntimePolicyReportLedger } from "./runtime-policy-report-ledger"
 import { botDefaultToolRoutes } from "./routes/bot-default-tools"
 import { knowledgeEvidenceRoutes } from "./routes/knowledge-evidence"
 import { BotSchedules } from "./bot-schedules"
@@ -65,7 +66,7 @@ export async function createBotApp(
   const distillationBackfillProgress = new SQLiteDistillationBackfillProgressStore(botRegistry.db)
   const capabilityGate = contextOverrides?.capabilityGate ?? createCapabilityGate()
   const modelDirectory = contextOverrides?.modelDirectory ?? createBotModelDirectory()
-  const runtimePolicy = contextOverrides?.runtimePolicy ?? createRuntimePolicyClient()
+  const runtimePolicy = contextOverrides?.runtimePolicy ?? createRuntimePolicyClient({ reportLedger: new RuntimePolicyReportLedger(botRegistry.db) })
   const handsPlacement = contextOverrides?.handsPlacement ?? new HandsPlacementGate(runtimePolicy, workspaces)
   const runtimeBroker = contextOverrides?.runtimeBroker ?? new RuntimeBroker(
     { provision: (request, callbacks) => createManagedDesktop(request, callbacks, workspaces) },
@@ -139,14 +140,18 @@ export async function createBotApp(
     await runtimeBroker.close()
   })
   reconcileTerminalInvocations(botRegistry)
+  void runtimePolicy.replayPendingReports?.()
+  void replayDeliveredQuestionReports(context)
   const continuationTimer = setInterval(() => {
     try { reconcileTerminalInvocations(botRegistry) }
     catch { console.warn(JSON.stringify({ event: "bot.invocation.recovery_deferred" })) }
     void deliverQuestionAnswers(context)
+    void replayDeliveredQuestionReports(context)
     void continueCallers(context)
     void continuePersonalConnections(context)
     void recoverApprovedInvocations(context)
     void recoverNativeInvocationResults(context)
+    void runtimePolicy.replayPendingReports?.()
     void botDeletionReconciler.reconcile()
   }, 2000)
   continuationTimer.unref()

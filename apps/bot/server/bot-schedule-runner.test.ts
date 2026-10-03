@@ -1,5 +1,8 @@
 import { Database } from "bun:sqlite"
 import { describe, expect, test } from "bun:test"
+import { mkdtempSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { BotScheduleRunner } from "./bot-schedule-runner"
 import { BotSchedules, type BotScheduleRun } from "./bot-schedules"
 import { createCapabilityGate } from "./capability-gate"
@@ -110,6 +113,7 @@ function scenario(options: ScenarioOptions = {}) {
   const decision = (input: any) => ({ tenant_id: principal.tenant_id, subject_id: principal.subject_id, client_id: principal.acting_client_id, bot_id: input.botId, runtime_id: "codex", policy_id: "test", policy_display_name: "test", policy_revision: 1, capability_id: input.capabilityId, action: input.action, target: `runtime:codex:${input.capabilityId}`, decision: "ALLOW" as const, reason_code: "TEST", constraints: [], obligations: [], correlation_id: "correlation", session_id: input.sessionId, evaluated_at: now })
   const bot = { id: "bot", name: "例行工作", title: "排程 Bot", description: "執行例行工作", antiJobs: "", voice: "", updatedAt: now, modelRoute: "codex-subscription", bindings: [] }
   let issueCalls = 0
+  const reports: Array<{ outcome: string; reasonCode?: string; correlationId: string }> = []
   const runner = new BotScheduleRunner({
     botSchedules: schedules,
     scheduleAuthority: { issue: async () => { issueCalls++; await options.beforeIssue?.(); return options.issueToken === undefined ? "issued-owner" : options.issueToken } },
@@ -118,7 +122,7 @@ function scenario(options: ScenarioOptions = {}) {
     createCodexRuntime: createRuntime,
     runtimePolicy: {
       authorize: async (input: any) => decision(input),
-      report: async () => undefined,
+      report: async (input: any) => { reports.push(input) },
       read: async (input: any) => ({ ...decision({ ...input, capabilityId: "shell.exec", action: "expose" }), decisions: input.capabilityIds.map((capabilityId: string) => decision({ ...input, capabilityId, action: "expose" })) }),
     },
     modelDirectory: { resolve: async () => [{ publicModelId: "*", displayName: "test", route: { kind: "codex-subscription" } }] },
@@ -135,7 +139,7 @@ function scenario(options: ScenarioOptions = {}) {
     },
   } as any)
   return {
-    broker, runner, schedules, children, activeTokens, dispatched,
+    broker, runner, schedules, children, activeTokens, dispatched, reports,
     issueCalls: () => issueCalls,
     nextRun() {
       now = now < Date.parse("2026-01-01T00:01:00.000Z") ? Date.parse("2026-01-01T00:01:00.000Z") : now + 86_400_000
@@ -293,6 +297,24 @@ describe("BotScheduleRunner authority runtime ownership", () => {
       expect(testCase.broker.get(child.id)).toBeNull()
       expect(testCase.broker.findByPrincipal(principal)).toBe(interactive)
       expect(testCase.children[1]!.closes).toBe(0)
+    } finally { await testCase.close() }
+  })
+
+  for (const status of ["completed", "failed", "interrupted"] as const) test(`reports the native ${status} result only after the running turn reaches a terminal state`, async () => {
+    const testCase = scenario()
+    try {
+      const run = testCase.nextRun()
+      await testCase.execute(run)
+      expect(testCase.schedules.getRun(run.id)?.state).toBe("RUNNING")
+      expect(testCase.reports).toHaveLength(0)
+      const child = testCase.children[0]!
+      child.callbacks.onMessage(JSON.stringify({ method: "turn/completed", params: { threadId: testCase.schedules.getRun(run.id)!.threadId, turn: { id: child.turnId, status } } }))
+      await testCase.runner.tick()
+      expect(testCase.reports).toHaveLength(1)
+      expect(testCase.reports[0]).toMatchObject({ outcome: status === "completed" ? "COMPLETED" : "FAILED", correlationId: "correlation" })
+      expect(testCase.reports[0]?.reasonCode).toBe(status === "completed" ? undefined : status === "failed" ? "SCHEDULE_RUN_FAILED" : "SCHEDULE_RUN_BLOCKED")
+      expect(testCase.dispatched).toHaveLength(1)
+      expect(testCase.schedules.confirmedReports()).toHaveLength(0)
     } finally { await testCase.close() }
   })
 
@@ -530,4 +552,57 @@ describe("BotScheduleRunner authority runtime ownership", () => {
       expect(testCase.dispatched).toHaveLength(1)
     } finally { paused.release(); await testCase.close() }
   })
+})
+
+test("terminal schedules retry their reports after restart without dispatching another turn", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "schedule-report-"))
+  const path = join(directory, "schedule.sqlite")
+  const states = ["COMPLETED", "FAILED", "BLOCKED"] as const
+  const first = new Database(path)
+  try {
+    const schedules = new BotSchedules(first)
+    for (const [index, state] of states.entries()) {
+      first.query("insert into bot_schedule_runs (id, schedule_id, tenant_id, owner_subject_id, acting_client_id, bot_id, slot_at, client_user_message_id, state, attempts, thread_id, turn_id, created_at, updated_at) values (?, 'schedule', 'tenant', 'owner', 'genio-one-bot', 'bot', ?, ?, ?, 1, 'thread', 'turn', 1, 1)").run(`run-${state}`, index + 1, `client-message-${state}`, state)
+      schedules.saveReportAuthorization(`run-${state}`, { correlationId: `schedule-report-${state}`, sessionId: "session", runtimeId: "codex", capabilityId: "codex.subscription", action: "use" })
+    }
+    const original = new BotScheduleRunner({ botSchedules: schedules, runtimePolicy: { report: async () => { throw new Error("HTTP_503") } }, runtimeBroker: { isClosing: () => false, request: () => { throw new Error("TURN_REPLAYED") } } } as any)
+    await (original as any).replayConfirmedReports()
+    expect(schedules.confirmedReports()).toHaveLength(states.length)
+  } finally { first.close() }
+  const second = new Database(path)
+  try {
+    const schedules = new BotSchedules(second)
+    const reports: any[] = []
+    const restored = new BotScheduleRunner({ botSchedules: schedules, runtimePolicy: { report: async (input: any) => { reports.push(input) } }, runtimeBroker: { isClosing: () => false, request: () => { throw new Error("TURN_REPLAYED") } } } as any)
+    await (restored as any).replayConfirmedReports()
+    await (restored as any).replayConfirmedReports()
+    expect(reports).toHaveLength(states.length)
+    expect(reports.map((report) => report.correlationId).sort()).toEqual(states.map((state) => `schedule-report-${state}`).sort())
+    expect(reports.every((report) => report.principal.tenant_id === principal.tenant_id && report.botId === "bot" && report.sessionId === "session" && report.outcome === (report.correlationId === "schedule-report-COMPLETED" ? "COMPLETED" : "FAILED") && report.accessToken === undefined)).toBe(true)
+    expect(reports.find((report) => report.correlationId === "schedule-report-FAILED")?.reasonCode).toBe("SCHEDULE_RUN_FAILED")
+    expect(reports.find((report) => report.correlationId === "schedule-report-BLOCKED")?.reasonCode).toBe("SCHEDULE_RUN_BLOCKED")
+    expect(schedules.confirmedReports()).toHaveLength(0)
+    for (const state of states) expect(schedules.getRun(`run-${state}`)?.state).toBe(state)
+  } finally {
+    second.close()
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("schedule authorization correlation is durable before native turn dispatch", async () => {
+  let runId = ""
+  let savedBeforeDispatch = false
+  const testCase = scenario({ beforeRequest: async (_child, request) => {
+    if (request.method !== "turn/start") return
+    const db = (testCase.schedules as any).db as Database
+    const row = db.query("select report_authorization_json from bot_schedule_runs where id = ?").get(runId) as { report_authorization_json: string } | null
+    savedBeforeDispatch = JSON.parse(row?.report_authorization_json ?? "null")?.correlationId === "correlation"
+  } })
+  try {
+    const run = testCase.nextRun()
+    runId = run.id
+    await testCase.execute(run)
+    expect(savedBeforeDispatch).toBe(true)
+    expect(testCase.dispatched).toHaveLength(1)
+  } finally { await testCase.close() }
 })

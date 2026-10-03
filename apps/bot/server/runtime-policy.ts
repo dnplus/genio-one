@@ -28,6 +28,7 @@ import {
   runtimePolicyDecisionTarget,
 } from "./runtime-policy-contract"
 import { configuredHandsProvider } from "./bot-workspace-store"
+import { RuntimePolicyReportLedger, type PendingRuntimePolicyReport } from "./runtime-policy-report-ledger"
 
 export class RuntimePolicyUnavailableError extends Error {
   readonly code: string
@@ -68,10 +69,16 @@ interface RuntimePolicyClientOptions {
   reportPrivateKeyPem?: string
   fetch?: (input: URL, init?: RequestInit) => Promise<Response>
   timeoutMs?: number
+  reportLedger?: RuntimePolicyReportLedger
 }
 
 function nonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0
+}
+
+function reportReasonCode(value: string | undefined): string | undefined {
+  if (!value) return undefined
+  return /^[A-Z][A-Z0-9_:-]{0,127}$/.test(value) ? value : "RUNTIME_ERROR"
 }
 
 function plainRecord(value: unknown): value is Record<string, unknown> {
@@ -241,6 +248,7 @@ export function createRuntimePolicyClient(options: RuntimePolicyClientOptions = 
   const reportPrivateKeyPem = options.reportPrivateKeyPem ?? environment.GENIO_ONE_RUNTIME_REPORT_PRIVATE_KEY_PEM ?? ""
   const fetcher = options.fetch ?? fetch
   const timeoutMs = options.timeoutMs ?? 2_000
+  const reportLedger = options.reportLedger
   const defaultHandsProvider = configuredHandsProvider(environment)
   function signReport(body: Record<string, unknown>): string {
     if (!reportKeyId || !reportPrivateKeyPem) throw new RuntimePolicyUnavailableError("RUNTIME_POLICY_REPORT_SIGNER_UNAVAILABLE")
@@ -255,17 +263,24 @@ export function createRuntimePolicyClient(options: RuntimePolicyClientOptions = 
     const runtimeId = input.runtimeId ?? RUNTIME_POLICY_RUNTIME_ID
     const url = new URL(pathFor(method === "GET" ? effectivePath : authorizePath, input.principal.tenant_id), origin)
     const correlationId = method === "POST" ? input.correlationId ?? randomUUID() : undefined
-    const headers = {
-      accept: "application/json",
-      ...(method === "POST" ? { "content-type": "application/json" } : {}),
-      ...(input.accessToken ? { authorization: `Bearer ${input.accessToken}` } : {}),
-    }
     const query = {
       bot_id: input.botId,
       runtime_id: runtimeId,
       capability_id: input.capabilityId,
       action: input.action,
       ...(input.sessionId ? { session_id: input.sessionId } : {}),
+    }
+    const authorizeBody = method === "POST" ? {
+      correlation_id: correlationId,
+      ...query,
+      ...(reportLedger ? { tenant_id: input.principal.tenant_id, operation: "AUTHORIZE" } : {}),
+    } : undefined
+    const authorizeSignature = authorizeBody && reportLedger ? signReport(authorizeBody) : undefined
+    const headers = {
+      accept: "application/json",
+      ...(method === "POST" ? { "content-type": "application/json" } : {}),
+      ...(input.accessToken ? { authorization: `Bearer ${input.accessToken}` } : {}),
+      ...(authorizeSignature ? { [RUNTIME_REPORT_KEY_ID_HEADER]: reportKeyId, [RUNTIME_REPORT_SIGNATURE_HEADER]: authorizeSignature } : {}),
     }
     if (method === "GET") {
       for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value)
@@ -276,7 +291,7 @@ export function createRuntimePolicyClient(options: RuntimePolicyClientOptions = 
         method,
         headers,
         ...(method === "GET" ? { signal: AbortSignal.timeout(timeoutMs) } : {
-          body: JSON.stringify({ correlation_id: correlationId, ...query }),
+          body: JSON.stringify(authorizeBody),
           signal: AbortSignal.timeout(timeoutMs),
         }),
       })
@@ -295,41 +310,93 @@ export function createRuntimePolicyClient(options: RuntimePolicyClientOptions = 
     return decisionForInput(decision, input, correlationId)
   }
 
+  async function sendReport(report: PendingRuntimePolicyReport): Promise<void> {
+    const url = new URL(pathFor(reportPath, report.tenantId), origin)
+    const body = JSON.parse(report.body) as Record<string, unknown>
+    let response: Response
+    try {
+      response = await fetcher(url, {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+          [RUNTIME_REPORT_KEY_ID_HEADER]: report.keyId,
+          [RUNTIME_REPORT_SIGNATURE_HEADER]: report.signature,
+        },
+        body: report.body,
+        signal: AbortSignal.timeout(timeoutMs),
+      })
+    } catch {
+      throw new RuntimePolicyUnavailableError("RUNTIME_POLICY_REPORT_UNAVAILABLE")
+    }
+    if (!response.ok) throw new RuntimePolicyUnavailableError(`RUNTIME_POLICY_REPORT_HTTP_${response.status}`)
+    if (!reportLedger) return
+    let receipt: Record<string, unknown>
+    try {
+      receipt = await response.json() as Record<string, unknown>
+    } catch {
+      throw new RuntimePolicyUnavailableError("RUNTIME_POLICY_REPORT_ACK_INVALID")
+    }
+    if (response.status !== 201 || receipt.tenant_id !== report.tenantId || receipt.correlation_id !== report.correlationId || receipt.phase !== "REPORT" || receipt.audit_event_id !== `${report.correlationId}:authorize:report` || receipt.authorization_audit_event_id !== `${report.correlationId}:authorize` || receipt.report_outcome !== body.outcome || receipt.bot_id !== body.bot_id || receipt.runtime_id !== body.runtime_id || receipt.capability_id !== body.capability_id || receipt.action !== body.action || receipt.session_id !== (body.session_id ?? null) || (body.reason_code && receipt.reason_code !== body.reason_code)) {
+      throw new RuntimePolicyUnavailableError("RUNTIME_POLICY_REPORT_ACK_INVALID")
+    }
+    reportLedger.acknowledge(report.tenantId, report.correlationId)
+  }
+
+  async function deliverReport(report: PendingRuntimePolicyReport): Promise<void> {
+    try {
+      await sendReport(report)
+    } catch (error) {
+      if (!reportLedger) throw error
+      console.warn(JSON.stringify({ event: "runtime.policy.report_delivery_deferred", tenant_id: report.tenantId, correlation_id: report.correlationId, reason: error instanceof RuntimePolicyUnavailableError ? error.code : "RUNTIME_POLICY_REPORT_UNAVAILABLE" }))
+    }
+  }
+
   async function requestReport(input: RuntimePolicyReportInput): Promise<void> {
     if (!nonEmptyString(input.correlationId)) throw new RuntimePolicyUnavailableError("RUNTIME_POLICY_CORRELATION_INVALID")
-    const url = new URL(pathFor(reportPath, input.principal.tenant_id), origin)
+    const reasonCode = reportReasonCode(input.reasonCode)
     const body = {
+      tenant_id: input.principal.tenant_id,
       correlation_id: input.correlationId,
       bot_id: input.botId,
       runtime_id: input.runtimeId ?? RUNTIME_POLICY_RUNTIME_ID,
       capability_id: input.capabilityId,
       action: input.action,
       outcome: input.outcome,
-      ...(input.reasonCode ? { reason_code: input.reasonCode } : {}),
+      ...(reasonCode ? { reason_code: reasonCode } : {}),
       ...(input.sessionId ? { session_id: input.sessionId } : {}),
     }
     const serializedBody = JSON.stringify(body)
+    const existing = reportLedger?.get(input.principal.tenant_id, input.correlationId)
+    if (existing) {
+      if (existing.body !== serializedBody) throw new RuntimePolicyUnavailableError("RUNTIME_POLICY_REPORT_CORRELATION_CONFLICT")
+      if (!existing.delivered) await deliverReport(existing)
+      return
+    }
+    const signed = { tenantId: input.principal.tenant_id, correlationId: input.correlationId, body: serializedBody, keyId: reportKeyId, signature: signReport(body) }
+    const report = reportLedger?.enqueue(signed) ?? { ...signed, delivered: false }
+    if (!report.delivered) await deliverReport(report)
+  }
+
+  let replayRunning = false
+  async function replayPendingReports(): Promise<void> {
+    if (!reportLedger || replayRunning) return
+    replayRunning = true
     try {
-      const response = await fetcher(url, {
-        method: "POST",
-        headers: {
-          accept: "application/json",
-          "content-type": "application/json",
-          [RUNTIME_REPORT_KEY_ID_HEADER]: reportKeyId,
-          [RUNTIME_REPORT_SIGNATURE_HEADER]: signReport(body),
-          ...(input.accessToken ? { authorization: `Bearer ${input.accessToken}` } : {}),
-        },
-        body: serializedBody,
-        signal: AbortSignal.timeout(timeoutMs),
-      })
-      if (!response.ok) throw new RuntimePolicyUnavailableError(`RUNTIME_POLICY_REPORT_HTTP_${response.status}`)
-    } catch (error) {
-      if (error instanceof RuntimePolicyUnavailableError) throw error
-      throw new RuntimePolicyUnavailableError("RUNTIME_POLICY_REPORT_UNAVAILABLE")
+      for (const report of reportLedger.pending()) {
+        try {
+          await sendReport(report)
+        } catch (error) {
+          console.warn(JSON.stringify({ event: "runtime.policy.report_replay_deferred", correlation_id: report.correlationId, reason: error instanceof RuntimePolicyUnavailableError ? error.code : "RUNTIME_POLICY_REPORT_UNAVAILABLE" }))
+        }
+      }
+    } finally {
+      replayRunning = false
     }
   }
 
   const resolver: RuntimePolicyResolver = {
+    replayPendingReports,
     async resolve(input) {
       return withEnforceableRuntimeRequirements(await requestDecision("GET", input), input.handsPlacement, defaultHandsProvider)
     },

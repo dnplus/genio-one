@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test"
+import { Database } from "bun:sqlite"
+import { generateKeyPairSync } from "node:crypto"
 import Fastify from "fastify"
 
 import { modelGatewayRelayRoutes, responsesToChatRequest } from "./model-gateway-relay"
+import { createRuntimePolicyClient } from "./runtime-policy"
+import { RuntimePolicyReportLedger } from "./runtime-policy-report-ledger"
+import type { RuntimePolicyReportInput } from "./runtime-policy-contract"
 
 class Reply {
   statusCode = 200
@@ -156,6 +161,52 @@ describe("model gateway relay governance context", () => {
     expect(reports[0]!.outcome).toBe("COMPLETED")
     expect(reply.statusCode).toBe(200)
     expect(reply.headers.get("x-request-id")).toBe(correlationId)
+
+    const db = new Database(":memory:")
+    try {
+      const keys = generateKeyPairSync("ed25519")
+      const ledger = new RuntimePolicyReportLedger(db)
+      let defer = true
+      const client = createRuntimePolicyClient({
+        origin: "http://platform.test",
+        reportKeyId: "model-report",
+        reportPrivateKeyPem: keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+        reportLedger: ledger,
+        fetch: async (_url, init) => {
+          const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+          if (defer) return Response.json({ code: "UNAVAILABLE" }, { status: 503 })
+          return Response.json({ tenant_id: body.tenant_id, correlation_id: body.correlation_id, audit_event_id: `${body.correlation_id}:authorize:report`, authorization_audit_event_id: `${body.correlation_id}:authorize`, phase: "REPORT", report_outcome: body.outcome, bot_id: body.bot_id, runtime_id: body.runtime_id, capability_id: body.capability_id, action: body.action, session_id: body.session_id ?? null, reason_code: body.reason_code ?? "RULE_ALLOW:dylan.model.invoke" }, { status: 201 })
+        },
+      })
+      context.runtimePolicy.report = (input) => client.report(input as unknown as RuntimePolicyReportInput)
+      const deferredReply = new Reply()
+      await handler!({ params: { runtimeSessionId: "runtime-session" }, headers: { authorization: "Bearer relay-secret" }, body: { model: "gemini-2.5-flash-lite", input: "second" } }, deferredReply)
+      let streamed = ""
+      for await (const chunk of deferredReply.body as AsyncIterable<Uint8Array>) streamed += Buffer.from(chunk).toString()
+      expect(streamed).toContain("response.completed")
+      expect(streamed).not.toContain("response.failed")
+      expect(upstream).toHaveLength(2)
+      expect(ledger.pending()).toHaveLength(1)
+      defer = false
+      await client.replayPendingReports?.()
+      expect(ledger.pending()).toHaveLength(0)
+      expect(upstream).toHaveLength(2)
+
+      const noLedger = createRuntimePolicyClient({
+        origin: "http://platform.test",
+        reportKeyId: "model-report",
+        reportPrivateKeyPem: keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+        fetch: async () => Response.json({ code: "UNAVAILABLE" }, { status: 503 }),
+      })
+      context.runtimePolicy.report = (input) => noLedger.report(input as unknown as RuntimePolicyReportInput)
+      const noLedgerReply = new Reply()
+      await handler!({ params: { runtimeSessionId: "runtime-session" }, headers: { authorization: "Bearer relay-secret" }, body: { model: "gemini-2.5-flash-lite", input: "third" } }, noLedgerReply)
+      let noLedgerStream = ""
+      for await (const chunk of noLedgerReply.body as AsyncIterable<Uint8Array>) noLedgerStream += Buffer.from(chunk).toString()
+      expect(noLedgerStream).toContain("response.failed")
+      expect(noLedgerStream).not.toContain("response.completed")
+      expect(upstream).toHaveLength(3)
+    } finally { db.close() }
   })
 
   test("connects through the gateway service while sending the configured public host", async () => {
@@ -1118,6 +1169,62 @@ describe("managed MCP relay runtime policy", () => {
     expect(reports).toHaveLength(1)
     expect(reports[0]).toMatchObject({ capabilityId: "mcp.invoke", action: "invoke", outcome: "COMPLETED", correlationId: authorizations[0]!.correlationId })
     expect(reply.statusCode).toBe(200)
+  })
+
+  test("delivers a completed managed MCP response when its signed report remains pending", async () => {
+    process.env.GENIO_ONE_MCP_URL = "https://gateway.example/mcp"
+    let upstreamCalls = 0
+    globalThis.fetch = managedMcpFetch(async () => {
+      upstreamCalls++
+      return Response.json({ jsonrpc: "2.0", id: 1, result: { ok: true } })
+    })
+    const db = new Database(":memory:")
+    try {
+      const ledger = new RuntimePolicyReportLedger(db)
+      const privateKey = generateKeyPairSync("ed25519").privateKey.export({ type: "pkcs8", format: "pem" }).toString()
+      let reportCalls = 0
+      const policy = createRuntimePolicyClient({
+        origin: "http://platform.test",
+        reportKeyId: "bot-report",
+        reportPrivateKeyPem: privateKey,
+        reportLedger: ledger,
+        fetch: async (_url, init) => {
+          reportCalls++
+          if (reportCalls === 1) return Response.json({ error: "TEMPORARY_FAILURE" }, { status: 503 })
+          const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+          return Response.json({
+            tenant_id: body.tenant_id,
+            correlation_id: body.correlation_id,
+            audit_event_id: `${body.correlation_id}:authorize:report`,
+            authorization_audit_event_id: `${body.correlation_id}:authorize`,
+            phase: "REPORT",
+            report_outcome: body.outcome,
+            bot_id: body.bot_id,
+            runtime_id: body.runtime_id,
+            capability_id: body.capability_id,
+            action: body.action,
+            session_id: body.session_id ?? null,
+            reason_code: body.reason_code ?? "RULE_ALLOW",
+          }, { status: 201 })
+        },
+      })
+      const route = await routeFor(contextFor({
+        async authorize(input: Record<string, unknown>) { return managedMcpDecision(String(input.correlationId)) },
+        async report(input: RuntimePolicyReportInput) { await policy.report(input) },
+      }))
+      const reply = new Reply()
+      await route(request(), reply)
+      const chunks: Uint8Array[] = []
+      for await (const chunk of reply.body as AsyncIterable<Uint8Array>) chunks.push(chunk)
+      expect(reply.statusCode).toBe(200)
+      expect(new TextDecoder().decode(Buffer.concat(chunks))).toContain('"ok":true')
+      expect(upstreamCalls).toBe(1)
+      expect(ledger.pending()).toHaveLength(1)
+      await policy.replayPendingReports?.()
+      expect(reportCalls).toBe(2)
+      expect(ledger.pending()).toHaveLength(0)
+      expect(upstreamCalls).toBe(1)
+    } finally { db.close() }
   })
 
   test("reports a failed managed MCP invocation when its response stream interrupts", async () => {

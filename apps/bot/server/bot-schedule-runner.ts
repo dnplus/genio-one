@@ -8,6 +8,7 @@ import type { BotServerContext } from "./context"
 import { canonicalizeNativeParams } from "./native-runtime-params"
 import { readNativeRuntimeExposure } from "./native-runtime-policy"
 import { createRuntimePolicyLifecycle } from "./runtime-policy-lifecycle"
+import { runtimePolicyReportAuthorization } from "./runtime-policy-contract"
 import { createCodexRuntime, type RuntimeCallbacks } from "./runtime"
 import { managedMcpConfig, resolveManagedMcpMounts, type ManagedMcpMounts } from "./managed-mcp"
 import { setManagedMcpMounts, type GenioPrincipal, type RuntimeSession } from "./runtime-broker"
@@ -114,6 +115,7 @@ export class BotScheduleRunner {
       this.retainActiveOwnerRuntimes()
       this.context.botSchedules.claimDue()
       await this.reconcileUncertainRuns()
+      await this.replayConfirmedReports()
       for (const run of this.context.botSchedules.claimRunnable()) void this.execute(run).catch((error) => console.warn(JSON.stringify({ event: "bot.schedule.run_unhandled", run_id: run.id, error: nativeError(error) })))
     } finally { this.ticking = false }
   }
@@ -133,6 +135,24 @@ export class BotScheduleRunner {
     for (const [sessionId, release] of this.retained) if (!wanted.has(sessionId)) {
       release()
       this.retained.delete(sessionId)
+    }
+  }
+
+  private async replayConfirmedReports() {
+    for (const { run, authorization } of this.context.botSchedules.confirmedReports()) {
+      if (this.stopped) return
+      try {
+        await this.context.runtimePolicy.report({
+          principal: schedulePrincipal(run),
+          botId: run.botId,
+          ...authorization,
+          outcome: run.state === "COMPLETED" ? "COMPLETED" : "FAILED",
+          ...(run.state === "COMPLETED" ? {} : { reasonCode: run.state === "FAILED" ? "SCHEDULE_RUN_FAILED" : "SCHEDULE_RUN_BLOCKED" }),
+        })
+        this.context.botSchedules.clearReportAuthorization(run.id, authorization.correlationId)
+      } catch (error) {
+        console.warn(JSON.stringify({ event: "bot.schedule.audit_deferred", run_id: run.id, correlation_id: authorization.correlationId, reason: nativeError(error) }))
+      }
     }
   }
 
@@ -395,6 +415,7 @@ export class BotScheduleRunner {
     const modelDecision = bot.modelRoute === "codex-subscription"
       ? await lifecycle.authorize(session, bot.id, "codex.subscription", "use")
       : await lifecycle.authorize(session, bot.id, "model.invoke", "invoke")
+    const reportAuthorization = runtimePolicyReportAuthorization(modelDecision, session.id)
     let sent = false
     let threadId = botRegistry.getSession(bot.id)?.appServerThreadId ?? undefined
     try {
@@ -492,6 +513,7 @@ export class BotScheduleRunner {
       if (!dispatch) throw new Error("SCHEDULE_DELETED")
       if (!dispatch.enabled) throw new Error("SCHEDULE_PAUSED")
       if (dispatch.revision !== current.revision) throw new Error("SCHEDULE_CHANGED_BEFORE_DISPATCH")
+      botSchedules.saveReportAuthorization(run.id, reportAuthorization)
       sent = true
       const started = await this.context.runtimeBroker.request(session.id, "turn/start", params)
       const turnId = started?.turn?.id ?? started?.turnId
@@ -503,13 +525,8 @@ export class BotScheduleRunner {
       logSchedule(saved, "bot.schedule.native_dispatched", { runtimeSessionId: session.id })
       if (state !== "RUNNING") logSchedule(saved, "bot.schedule.native_terminal", { runtimeSessionId: session.id })
       if (state === "RUNNING") this.activeRuns.set(`${session.id}:${turnId}`, run.id)
-      const audited = await lifecycle.report(session, bot.id, modelDecision, "ALLOW")
-      if (!audited) {
-        const latest = botSchedules.getRun(run.id)
-        if (latest) botSchedules.markRun(run.id, latest.state, { threadId, turnId, error: "SCHEDULE_AUDIT_REPORT_DEFERRED" })
-      }
     } catch (error) {
-      await lifecycle.report(session, bot.id, modelDecision, "FAILED", sent ? "SCHEDULE_TURN_UNCERTAIN" : "SCHEDULE_TURN_PREPARATION_FAILED")
+      if (!sent) await lifecycle.report(session, bot.id, modelDecision, "FAILED", "SCHEDULE_TURN_PREPARATION_FAILED")
       if (sent) {
         botSchedules.markRun(run.id, "UNCERTAIN", { threadId, error: nativeError(error) })
         return

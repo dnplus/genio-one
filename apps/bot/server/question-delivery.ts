@@ -7,6 +7,7 @@ import { botTurnContext } from "./bot-context"
 import { canonicalizeNativeParams } from "./native-runtime-params"
 import { readNativeRuntimeExposure } from "./native-runtime-policy"
 import { createRuntimePolicyLifecycle } from "./runtime-policy-lifecycle"
+import { runtimePolicyReportAuthorization } from "./runtime-policy-contract"
 
 export async function reconcileQuestionDelivery(context: BotServerContext, session: RuntimeSession, question: BotQuestion) {
   if (!question.deliveryThreadId) return question
@@ -25,6 +26,22 @@ export async function reconcileQuestionDelivery(context: BotServerContext, sessi
 }
 
 const scanning = new WeakSet<BotServerContext>()
+const reportScanning = new WeakSet<BotServerContext>()
+
+export async function replayDeliveredQuestionReports(context: BotServerContext) {
+  if (reportScanning.has(context)) return
+  reportScanning.add(context)
+  try {
+    for (const entry of context.botRegistry.questions.confirmedReports()) {
+      try {
+        await context.runtimePolicy.report({ principal: entry.principal, botId: entry.botId, ...entry.authorization, outcome: "ALLOW" })
+        context.botRegistry.questions.clearReportAuthorization(entry.botId, entry.questionId, entry.authorization.correlationId)
+      } catch (error) {
+        console.warn(JSON.stringify({ event: "bot.question.audit_deferred", question_id: entry.questionId, correlation_id: entry.authorization.correlationId, reason: error instanceof Error ? error.message : "RUNTIME_POLICY_REPORT_UNAVAILABLE" }))
+      }
+    }
+  } finally { reportScanning.delete(context) }
+}
 
 export async function deliverQuestionAnswers(context: BotServerContext) {
   if (scanning.has(context)) return
@@ -59,6 +76,7 @@ export async function deliverQuestionAnswers(context: BotServerContext) {
         if (!bot) continue
         const lifecycle = createRuntimePolicyLifecycle({ policy: context.runtimePolicy, accessToken: () => session.accessToken ?? null, onReportFailure: () => console.warn(JSON.stringify({ event: "bot.question.audit_deferred", question_id: question.id })) })
         const decision = bot.modelRoute === "codex-subscription" ? await lifecycle.authorize(session, bot.id, "codex.subscription", "use") : null
+        const reportAuthorization = decision ? runtimePolicyReportAuthorization(decision, session.id) : null
         let sent = false
         try {
           const exposure = await readNativeRuntimeExposure({ runtimePolicy: context.runtimePolicy, session, botId: bot.id, accessToken: session.accessToken })
@@ -81,16 +99,17 @@ export async function deliverQuestionAnswers(context: BotServerContext) {
           const params = originalStillActive
             ? { threadId, expectedTurnId: question.sourceTurnId, clientUserMessageId, input }
             : await canonical("turn/start", { threadId, clientUserMessageId, input, additionalContext: await botTurnContext(context.botRegistry, bot.id, threadId!, {}, bot, principal, context.runtimeBroker.accessTokenForBot(session.id, bot.id)) })
+          if (reportAuthorization) context.botRegistry.questions.saveReportAuthorization(bot.id, question.id, principal, reportAuthorization)
           context.botRegistry.questions.mark(bot.id, question.id, "sending", { deliveryThreadId: threadId, error: undefined })
           sent = true
           const result = await context.runtimeBroker.request(session.id, originalStillActive ? "turn/steer" : "turn/start", params)
           if (result.turn) context.botRegistry.recordRuntimeEvent(principal, JSON.stringify({ method: "turn/started", params: { threadId, turn: result.turn } }))
           context.botRegistry.questions.mark(bot.id, question.id, "delivered", { deliveryTurnId: result.turn?.id ?? result.turnId ?? question.sourceTurnId })
           console.info(JSON.stringify({ event: "bot.question.answer_delivered", bot_id: bot.id, question_id: question.id, thread_id: threadId, turn_id: result.turn?.id ?? result.turnId, correlation_id: decision?.correlation_id, transport: originalStillActive ? "steer" : "start" }))
-          if (decision) await lifecycle.report(session, bot.id, decision, "ALLOW")
+          if (decision && await lifecycle.report(session, bot.id, decision, "ALLOW")) context.botRegistry.questions.clearReportAuthorization(bot.id, question.id, reportAuthorization!.correlationId)
         } catch (error) {
-          if (decision) await lifecycle.report(session, bot.id, decision, "FAILED", sent ? "ANSWER_DELIVERY_UNCERTAIN" : "ANSWER_PREPARATION_FAILED")
           const rejectedSteer = originalStillActive && /no active turn|expected.*turn|turn.*mismatch/i.test(error instanceof Error ? error.message : "")
+          if (decision && (!sent || rejectedSteer) && await lifecycle.report(session, bot.id, decision, "FAILED", rejectedSteer ? "ANSWER_STEER_REJECTED" : "ANSWER_PREPARATION_FAILED") && reportAuthorization) context.botRegistry.questions.clearReportAuthorization(bot.id, question.id, reportAuthorization.correlationId)
           context.botRegistry.questions.mark(question.botId, question.id, rejectedSteer ? "queued" : sent ? "uncertain" : "failed", { error: rejectedSteer ? undefined : sent ? "送達結果待確認，請核對後重試。" : "目前無法接續，請確認模型與授權後重試。" })
         }
       } catch {

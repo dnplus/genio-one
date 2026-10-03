@@ -1,4 +1,5 @@
 import { expect, spyOn, test } from "bun:test"
+import { generateKeyPairSync } from "node:crypto"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -11,6 +12,8 @@ import type { BotServerContext } from "./context"
 import { RuntimeBroker, type GenioPrincipal } from "./runtime-broker"
 import type { ManagedDesktop, RuntimeProvisionRequest } from "./runtime"
 import type { RuntimePolicyAction, RuntimePolicyDecision, RuntimePolicyResolver } from "./runtime-policy-contract"
+import { createRuntimePolicyClient } from "./runtime-policy"
+import { RuntimePolicyReportLedger } from "./runtime-policy-report-ledger"
 
 const principal: GenioPrincipal = { tenant_id: "tenant", subject_id: "owner", acting_client_id: "genio-one-bot", scopes: [] }
 
@@ -101,6 +104,42 @@ test("computer tool returns an E2B screenshot and reports the same governed oper
     expect(result.content[1]).toMatchObject({ type: "text" })
     expect(value.reports).toHaveLength(2)
     expect(value.reports).toContainEqual(expect.objectContaining({ capabilityId: "computer.use", action: "invoke", outcome: "COMPLETED", botId: value.bot.id, sessionId: value.session.id }))
+  } finally { await cleanup(value) }
+})
+
+test("computer click result remains available while a durable report waits for replay", async () => {
+  const value = await fixture()
+  try {
+    const keys = generateKeyPairSync("ed25519")
+    const ledger = new RuntimePolicyReportLedger(value.registry.db)
+    let deferInvoke = true
+    const client = createRuntimePolicyClient({
+      origin: "http://platform.test",
+      reportKeyId: "computer-report",
+      reportPrivateKeyPem: keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+      reportLedger: ledger,
+      fetch: async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+        if (body.action === "invoke" && deferInvoke) return Response.json({ code: "UNAVAILABLE" }, { status: 503 })
+        return Response.json({ tenant_id: body.tenant_id, correlation_id: body.correlation_id, audit_event_id: `${body.correlation_id}:authorize:report`, authorization_audit_event_id: `${body.correlation_id}:authorize`, phase: "REPORT", report_outcome: body.outcome, bot_id: body.bot_id, runtime_id: body.runtime_id, capability_id: body.capability_id, action: body.action, session_id: body.session_id ?? null, reason_code: body.reason_code ?? "ALLOWED" }, { status: 201 })
+      },
+    })
+    value.context.runtimePolicy = { ...value.context.runtimePolicy, report: client.report }
+    await value.broker.ensure(value.session.id, "desktop", value.bot.id)
+    const computer = value.session.leases.desktop!.computer!
+    await computer.execute({ operation: "screenshot" }, { actorBotId: value.bot.id })
+    const execute = spyOn(computer, "execute")
+    try {
+      const result = await executeComputerTool("computer_use", { operation: "click", x: 1, y: 1, expectedRevision: 1 }, { context: value.context, botId: value.bot.id, principal, accessToken: "access-token" })
+      expect(result.content[0]).toMatchObject({ type: "text" })
+      expect(execute).toHaveBeenCalledTimes(1)
+      expect(execute.mock.calls[0]?.[0]).toEqual({ operation: "click", x: 1, y: 1 })
+      expect(ledger.pending().map((entry) => JSON.parse(entry.body).action)).toEqual(["invoke"])
+      deferInvoke = false
+      await client.replayPendingReports?.()
+      expect(ledger.pending()).toHaveLength(0)
+      expect(execute).toHaveBeenCalledTimes(1)
+    } finally { execute.mockRestore() }
   } finally { await cleanup(value) }
 })
 

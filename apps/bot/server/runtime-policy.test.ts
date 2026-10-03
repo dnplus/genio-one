@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test"
+import { Database } from "bun:sqlite"
 import { createPublicKey, generateKeyPairSync, verify } from "node:crypto"
 
-import { canonicalRuntimeReportPayload } from "../../../runtimes/gateway/services/shared/runtime-report-attestation"
+import { canonicalRuntimeReportPayload, verifyRuntimeReport } from "../../../runtimes/gateway/services/shared/runtime-report-attestation"
 
 import { createRuntimePolicyClient, requireRuntimePolicyDecision, RuntimePolicyUnavailableError } from "./runtime-policy"
+import { RuntimePolicyReportLedger } from "./runtime-policy-report-ledger"
 import type { GenioPrincipal } from "./runtime-broker"
 import type { RuntimePolicyDecision } from "./runtime-policy-contract"
 
@@ -43,6 +45,71 @@ function decision(overrides: Record<string, unknown> = {}): RuntimePolicyDecisio
 }
 
 describe("RuntimePolicyClient", () => {
+  test("rejects missing or invalid ledger report signers before authorization reaches Platform", async () => {
+    const db = new Database(":memory:")
+    try {
+      const ledger = new RuntimePolicyReportLedger(db)
+      let requests = 0
+      const fetch = async () => { requests++; throw new Error("AUTHORIZATION_SHOULD_NOT_SEND") }
+      const missing = createRuntimePolicyClient({ environment: {}, reportLedger: ledger, fetch })
+      const input = { principal, botId: "bot-dylan", capabilityId: "shell.exec" as const, action: "expose" as const, correlationId: "signer-preflight" }
+      await expect(missing.authorize(input)).rejects.toThrow("RUNTIME_POLICY_REPORT_SIGNER_UNAVAILABLE")
+      const invalid = createRuntimePolicyClient({ environment: {}, reportKeyId: "bot-report", reportPrivateKeyPem: "invalid-key", reportLedger: ledger, fetch })
+      await expect(invalid.authorize(input)).rejects.toThrow("RUNTIME_POLICY_REPORT_SIGNER_INVALID")
+      expect(requests).toBe(0)
+      expect(ledger.pending()).toHaveLength(0)
+    } finally { db.close() }
+  })
+
+  test("valid signer authorizes before execution and durably acknowledges the completion report", async () => {
+    const db = new Database(":memory:")
+    try {
+      const ledger = new RuntimePolicyReportLedger(db)
+      const requests: string[] = []
+      const client = createRuntimePolicyClient({
+        environment: {},
+        origin: "http://platform.test",
+        reportKeyId: "bot-report",
+        reportPrivateKeyPem,
+        reportLedger: ledger,
+        fetch: async (url, init) => {
+          const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+          if (url.pathname.endsWith("/runtime-authorize")) {
+            const headers = new Headers(init?.headers)
+            expect(body.tenant_id).toBe(principal.tenant_id)
+            expect(body.operation).toBe("AUTHORIZE")
+            expect(headers.get("x-genio-runtime-report-key-id")).toBe("bot-report")
+            expect(verifyRuntimeReport(body, headers.get("x-genio-runtime-report-signature") ?? "", reportKeys.publicKey.export({ type: "spki", format: "pem" }).toString())).toBe(true)
+            requests.push("authorize")
+            return Response.json(decision({ correlation_id: body.correlation_id }))
+          }
+          requests.push("report")
+          expect(ledger.pending()).toHaveLength(1)
+          return Response.json({
+            tenant_id: body.tenant_id,
+            correlation_id: body.correlation_id,
+            audit_event_id: `${body.correlation_id}:authorize:report`,
+            authorization_audit_event_id: `${body.correlation_id}:authorize`,
+            phase: "REPORT",
+            report_outcome: body.outcome,
+            bot_id: body.bot_id,
+            runtime_id: body.runtime_id,
+            capability_id: body.capability_id,
+            action: body.action,
+            session_id: body.session_id ?? null,
+            reason_code: body.reason_code ?? "RULE_ALLOW:shell",
+          }, { status: 201 })
+        },
+      })
+      const input = { principal, botId: "bot-dylan", capabilityId: "shell.exec" as const, action: "expose" as const, correlationId: "signer-ready" }
+      const authorized = await client.authorize(input)
+      await client.report({ ...input, correlationId: authorized.correlation_id!, outcome: "COMPLETED" })
+      expect(requests).toEqual(["authorize", "report"])
+      expect(ledger.get(principal.tenant_id, "signer-ready")?.delivered).toBe(true)
+      expect(ledger.pending()).toHaveLength(0)
+    } finally { db.close() }
+  })
+
   test("inspects placement without making a generic decision executable", async () => {
     const client = createRuntimePolicyClient({
       fetch: async () => new Response(JSON.stringify(decision({ capability_id: "remote_hands.use", action: "use", target: "runtime:codex:remote_hands.use", constraints: managedPlacement })), { status: 200 }),
@@ -219,10 +286,20 @@ describe("RuntimePolicyClient", () => {
       outcome: "COMPLETED",
     })
     expect(requests.map((request) => request.method)).toEqual(["POST", "POST"])
+    expect(requests[0]?.keyId).toBeNull()
+    expect(requests[0]?.signature).toBeNull()
+    expect(requests[0]?.body).toEqual({
+      correlation_id: "corr-audit",
+      bot_id: "bot-dylan",
+      runtime_id: "codex",
+      capability_id: "shell.exec",
+      action: "execute",
+    })
     expect(requests[1]?.signature).toBeTruthy()
     expect(requests[1]?.keyId).toBe("genio-one-bot-runtime")
     expect(verify(null, Buffer.from(canonicalRuntimeReportPayload(requests[1]!.body!)), createPublicKey(reportKeys.publicKey.export({ type: "spki", format: "pem" })), Buffer.from(requests[1]!.signature!, "base64url"))).toBe(true)
     expect(requests[1]?.body).toEqual({
+      tenant_id: principal.tenant_id,
       correlation_id: "corr-audit",
       bot_id: "bot-dylan",
       runtime_id: "codex",

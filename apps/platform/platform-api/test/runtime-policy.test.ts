@@ -77,7 +77,7 @@ test("published Hands placement resolves to the policy domain and ignores a requ
     const authorized = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-authorize`, headers: { authorization: "Bearer dylan" }, payload: { correlation_id: "hands-placement-1", bot_id: "managed-genio-bot", runtime_id: "codex", capability_id: "remote_hands.use", action: "use", provider: "e2b-self-hosted" } })
     assert.equal(authorized.statusCode, 200, authorized.body)
     assert.deepEqual(authorized.json().constraints, effective.json().constraints)
-    const reportBody = { correlation_id: "hands-placement-1", bot_id: "managed-genio-bot", runtime_id: "codex", capability_id: "remote_hands.use", action: "use", outcome: "FAILED", reason_code: "POLICY_PLACEMENT_CHANGED" }
+    const reportBody = { tenant_id: tenantId, correlation_id: "hands-placement-1", bot_id: "managed-genio-bot", runtime_id: "codex", capability_id: "remote_hands.use", action: "use", outcome: "FAILED", reason_code: "POLICY_PLACEMENT_CHANGED" }
     const report = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-report`, headers: {
       authorization: "Bearer dylan",
       [RUNTIME_REPORT_KEY_ID_HEADER]: "runtime-policy-test",
@@ -250,6 +250,36 @@ function platformModulesWithBotConnection(
   }
 }
 
+test("runtime authorization rejects mismatched report signers before recording an authorization", async () => {
+  const { modules } = platformModulesWithBotConnection("ENABLED", { runtimeReportKeyId: "runtime-policy-test", runtimeReportPublicKeyPem })
+  const app = await createManagementApi({ modules, resourceCatalog: modules.resources, principalAuthenticator: principals() })
+  const wrongKey = generateKeyPairSync("ed25519").privateKey.export({ type: "pkcs8", format: "pem" }).toString()
+  const body = (correlationId: string) => ({ tenant_id: tenantId, operation: "AUTHORIZE" as const, correlation_id: correlationId, bot_id: "managed-genio-bot", runtime_id: "codex", capability_id: "codex.subscription", action: "use" as const })
+  const signature = (payload: Record<string, unknown>) => signRuntimeReport(payload, runtimeReportPrivateKeyPem)
+  const keyHeader = { [RUNTIME_REPORT_KEY_ID_HEADER]: "runtime-policy-test" }
+  const cases = [
+    { payload: body("missing-key-id"), headers: { [RUNTIME_REPORT_SIGNATURE_HEADER]: signature(body("missing-key-id")) }, code: "RUNTIME_REPORT_ATTESTATION_REQUIRED" },
+    { payload: body("missing-signature"), headers: keyHeader, code: "RUNTIME_REPORT_ATTESTATION_REQUIRED" },
+    { payload: body("missing-headers"), headers: {}, code: "RUNTIME_REPORT_ATTESTATION_REQUIRED" },
+    { payload: body("wrong-key-id"), headers: { [RUNTIME_REPORT_KEY_ID_HEADER]: "other-key", [RUNTIME_REPORT_SIGNATURE_HEADER]: signature(body("wrong-key-id")) }, code: "RUNTIME_REPORT_ATTESTATION_INVALID" },
+    { payload: body("wrong-key-pair"), headers: { ...keyHeader, [RUNTIME_REPORT_SIGNATURE_HEADER]: signRuntimeReport(body("wrong-key-pair"), wrongKey) }, code: "RUNTIME_REPORT_ATTESTATION_INVALID" },
+    { payload: { ...body("tampered-body"), bot_id: "other-bot" }, headers: { ...keyHeader, [RUNTIME_REPORT_SIGNATURE_HEADER]: signature(body("tampered-body")) }, code: "RUNTIME_REPORT_ATTESTATION_INVALID" },
+    { payload: { ...body("wrong-tenant"), tenant_id: "other-tenant" }, headers: { ...keyHeader, [RUNTIME_REPORT_SIGNATURE_HEADER]: signature({ ...body("wrong-tenant"), tenant_id: "other-tenant" }) }, code: "RUNTIME_REPORT_TENANT_CONFLICT" },
+    { payload: { ...body("missing-operation"), operation: undefined }, headers: { ...keyHeader, [RUNTIME_REPORT_SIGNATURE_HEADER]: signature(body("missing-operation")) }, code: "RUNTIME_REPORT_ATTESTATION_REQUIRED" },
+    { payload: { correlation_id: "missing-marker", bot_id: "managed-genio-bot", runtime_id: "codex", capability_id: "codex.subscription", action: "use" }, headers: { ...keyHeader, [RUNTIME_REPORT_SIGNATURE_HEADER]: signature(body("missing-marker")) }, code: "RUNTIME_REPORT_ATTESTATION_REQUIRED" },
+  ]
+  try {
+    for (const item of cases) {
+      const result = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-authorize`, headers: { authorization: "Bearer dylan", ...item.headers }, payload: item.payload })
+      assert.equal(result.statusCode, 403, `${item.payload.correlation_id}: ${result.body}`)
+      assert.equal(result.json().code, item.code)
+      assert.equal(await modules.auditEvents.findRuntimeAuthorization({ tenantId, correlationId: item.payload.correlation_id }), null)
+    }
+  } finally {
+    await app.close()
+  }
+})
+
 test("runtime policy catalog composes scoped rows with deny precedence and nullable unconfigured revision", async () => {
   const { modules } = platformModulesWithBotConnection()
   const app = await createManagementApi({ modules, resourceCatalog: modules.resources, principalAuthenticator: principals() })
@@ -311,15 +341,23 @@ test("authorize is idempotent, report binds the verified decision, and policy di
     const published = await app.inject({ method: "POST", url: `${policyPath}/draft/publish`, headers: adminHeaders, payload: { expected_version: reviewed.version, expected_content_digest: reviewed.content_digest } })
     assert.equal(published.statusCode, 200, published.body)
 
-    const authorizeBody = { correlation_id: "corr-runtime-1", bot_id: "managed-genio-bot", runtime_id: "codex", capability_id: "codex.subscription", action: "use" }
-    const authorized = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-authorize`, headers: { authorization: "Bearer dylan" }, payload: authorizeBody })
+    const authorizeBody = { correlation_id: "corr-runtime-1", bot_id: "managed-genio-bot", runtime_id: "codex", capability_id: "codex.subscription", action: "use" as const }
+    const attestedAuthorizeBody = { tenant_id: tenantId, operation: "AUTHORIZE" as const, ...authorizeBody }
+    const authorizeHeaders = { authorization: "Bearer dylan", [RUNTIME_REPORT_KEY_ID_HEADER]: "runtime-policy-test", [RUNTIME_REPORT_SIGNATURE_HEADER]: signRuntimeReport(attestedAuthorizeBody, runtimeReportPrivateKeyPem) }
+    const authorized = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-authorize`, headers: authorizeHeaders, payload: attestedAuthorizeBody })
     assert.equal(authorized.statusCode, 200, authorized.body)
     assert.equal(authorized.json().decision, "ALLOW")
-    const retry = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-authorize`, headers: { authorization: "Bearer dylan" }, payload: authorizeBody })
+    const retry = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-authorize`, headers: authorizeHeaders, payload: attestedAuthorizeBody })
     assert.equal(retry.statusCode, 200, retry.body)
     assert.deepEqual(retry.json(), authorized.json())
 
-    const reportBody = { ...authorizeBody, outcome: "COMPLETED" as const }
+    const reportBody = { tenant_id: tenantId, ...authorizeBody, outcome: "COMPLETED" as const }
+    await assert.rejects(modules.botAccessPolicy.reportRuntime({
+      ...reportBody,
+      tenantId,
+      principal: { tenant_id: "another-tenant", subject_id: "person-uat-dylan", client_id: "genio-one-bot", role: "USER", organization_ids: [] },
+      reportAttestation: { keyId: "runtime-policy-test", signature: signRuntimeReport(reportBody, runtimeReportPrivateKeyPem) },
+    }), { code: "RUNTIME_REPORT_TENANT_CONFLICT", statusCode: 403 })
     const reportHeaders = {
       authorization: "Bearer dylan",
       [RUNTIME_REPORT_KEY_ID_HEADER]: "runtime-policy-test",
@@ -331,6 +369,97 @@ test("authorize is idempotent, report binds the verified decision, and policy di
     assert.equal(report.json().authorization_audit_event_id, "corr-runtime-1:authorize")
     assert.equal(report.json().policy_revision, 1)
 
+    const tokenlessAuthorization = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-authorize`, headers: { authorization: "Bearer dylan" }, payload: { ...authorizeBody, correlation_id: "corr-runtime-tokenless" } })
+    assert.equal(tokenlessAuthorization.statusCode, 200, tokenlessAuthorization.body)
+    const tokenlessBody = { ...reportBody, correlation_id: "corr-runtime-tokenless" }
+    const tokenlessReport = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-report`, headers: {
+      [RUNTIME_REPORT_KEY_ID_HEADER]: "runtime-policy-test",
+      [RUNTIME_REPORT_SIGNATURE_HEADER]: signRuntimeReport(tokenlessBody, runtimeReportPrivateKeyPem),
+    }, payload: tokenlessBody })
+    assert.equal(tokenlessReport.statusCode, 201, tokenlessReport.body)
+    assert.equal(tokenlessReport.json().subject.subject_id, authorized.json().subject_id)
+    assert.equal(tokenlessReport.json().acting_client.acting_client_id, authorized.json().client_id)
+
+    const replay = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-report`, headers: {
+      [RUNTIME_REPORT_KEY_ID_HEADER]: "runtime-policy-test",
+      [RUNTIME_REPORT_SIGNATURE_HEADER]: signRuntimeReport(reportBody, runtimeReportPrivateKeyPem),
+    }, payload: reportBody })
+    assert.equal(replay.statusCode, 201, replay.body)
+    assert.deepEqual(replay.json(), report.json())
+
+    const invalidBearer = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-report`, headers: {
+      authorization: "Bearer invalid",
+      [RUNTIME_REPORT_KEY_ID_HEADER]: "runtime-policy-test",
+      [RUNTIME_REPORT_SIGNATURE_HEADER]: signRuntimeReport(reportBody, runtimeReportPrivateKeyPem),
+    }, payload: reportBody })
+    assert.equal(invalidBearer.statusCode, 401)
+
+    const tampered = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-report`, headers: {
+      [RUNTIME_REPORT_KEY_ID_HEADER]: "runtime-policy-test",
+      [RUNTIME_REPORT_SIGNATURE_HEADER]: signRuntimeReport(reportBody, runtimeReportPrivateKeyPem),
+    }, payload: { ...reportBody, outcome: "FAILED" } })
+    assert.equal(tampered.statusCode, 403)
+
+    const unknownKey = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-report`, headers: {
+      [RUNTIME_REPORT_KEY_ID_HEADER]: "different-key",
+      [RUNTIME_REPORT_SIGNATURE_HEADER]: signRuntimeReport(reportBody, runtimeReportPrivateKeyPem),
+    }, payload: reportBody })
+    assert.equal(unknownKey.statusCode, 403)
+
+    const mismatchedActionBody = { ...reportBody, action: "invoke" }
+    const mismatchedAction = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-report`, headers: {
+      [RUNTIME_REPORT_KEY_ID_HEADER]: "runtime-policy-test",
+      [RUNTIME_REPORT_SIGNATURE_HEADER]: signRuntimeReport(mismatchedActionBody, runtimeReportPrivateKeyPem),
+    }, payload: mismatchedActionBody })
+    assert.equal(mismatchedAction.statusCode, 409)
+
+    const otherTenantPrincipal = { tenant_id: "another-tenant", subject_id: "person-uat-dylan", client_id: "genio-one-bot", role: "USER" as const, organization_ids: [] }
+    const otherTenantAuthorization = await modules.botAccessPolicy.authorizeRuntime({ ...authorizeBody, principal: otherTenantPrincipal })
+    assert.equal(otherTenantAuthorization.correlation_id, authorizeBody.correlation_id)
+    const wrongTenant = await app.inject({ method: "POST", url: "/v1/tenants/another-tenant/one-policy/runtime-report", headers: {
+      [RUNTIME_REPORT_KEY_ID_HEADER]: "runtime-policy-test",
+      [RUNTIME_REPORT_SIGNATURE_HEADER]: signRuntimeReport(reportBody, runtimeReportPrivateKeyPem),
+    }, payload: reportBody })
+    assert.equal(wrongTenant.statusCode, 403)
+    assert.equal(wrongTenant.json().code, "RUNTIME_REPORT_TENANT_CONFLICT")
+    assert.equal(await modules.auditEvents.findRuntimeReport({ tenantId: "another-tenant", correlationId: authorizeBody.correlation_id }), null)
+
+    const tamperedTenant = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-report`, headers: {
+      [RUNTIME_REPORT_KEY_ID_HEADER]: "runtime-policy-test",
+      [RUNTIME_REPORT_SIGNATURE_HEADER]: signRuntimeReport(reportBody, runtimeReportPrivateKeyPem),
+    }, payload: { ...reportBody, tenant_id: "another-tenant" } })
+    assert.equal(tamperedTenant.statusCode, 403)
+    assert.equal(tamperedTenant.json().code, "RUNTIME_REPORT_ATTESTATION_INVALID")
+
+    const signedOtherTenantBody = { ...reportBody, tenant_id: "another-tenant" }
+    const signedOtherTenant = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-report`, headers: {
+      [RUNTIME_REPORT_KEY_ID_HEADER]: "runtime-policy-test",
+      [RUNTIME_REPORT_SIGNATURE_HEADER]: signRuntimeReport(signedOtherTenantBody, runtimeReportPrivateKeyPem),
+    }, payload: signedOtherTenantBody })
+    assert.equal(signedOtherTenant.statusCode, 403)
+    assert.equal(signedOtherTenant.json().code, "RUNTIME_REPORT_TENANT_CONFLICT")
+
+    const unsignedTenantBody = { ...authorizeBody, outcome: "COMPLETED" as const }
+    const missingTenant = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-report`, headers: {
+      [RUNTIME_REPORT_KEY_ID_HEADER]: "runtime-policy-test",
+      [RUNTIME_REPORT_SIGNATURE_HEADER]: signRuntimeReport(unsignedTenantBody, runtimeReportPrivateKeyPem),
+    }, payload: unsignedTenantBody })
+    assert.equal(missingTenant.statusCode, 400)
+    assert.equal(missingTenant.json().code, "REQUEST_VALIDATION_FAILED")
+
+    const changedReasonBody = { ...reportBody, reason_code: "DIFFERENT_RESULT" }
+    const changedReason = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-report`, headers: {
+      [RUNTIME_REPORT_KEY_ID_HEADER]: "runtime-policy-test",
+      [RUNTIME_REPORT_SIGNATURE_HEADER]: signRuntimeReport(changedReasonBody, runtimeReportPrivateKeyPem),
+    }, payload: changedReasonBody })
+    assert.equal(changedReason.statusCode, 409)
+
+    const noBearerOtherRoute = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-authorize`, headers: {
+      [RUNTIME_REPORT_KEY_ID_HEADER]: "runtime-policy-test",
+      [RUNTIME_REPORT_SIGNATURE_HEADER]: signRuntimeReport(authorizeBody, runtimeReportPrivateKeyPem),
+    }, payload: authorizeBody })
+    assert.equal(noBearerOtherRoute.statusCode, 401)
+
     const spoofed = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-report`, headers: reportHeaders, payload: { ...reportBody, policy_revision: 999, constraints: [{ kind: "unknown", parameters: {} }] } })
     assert.equal(spoofed.statusCode, 201)
     assert.equal(spoofed.json().policy_revision, 1)
@@ -338,6 +467,9 @@ test("authorize is idempotent, report binds the verified decision, and policy di
 
     const missingAttestation = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-report`, headers: { authorization: "Bearer dylan" }, payload: reportBody })
     assert.equal(missingAttestation.statusCode, 403)
+
+    const missingBearerAndAttestation = await app.inject({ method: "POST", url: `/v1/tenants/${tenantId}/one-policy/runtime-report`, payload: reportBody })
+    assert.equal(missingBearerAndAttestation.statusCode, 401)
 
     const disabled = await app.inject({ method: "PATCH", url: policyPath, headers: adminHeaders, payload: { expected_revision: 1, enabled: false } })
     assert.equal(disabled.statusCode, 200, disabled.body)
@@ -375,7 +507,12 @@ test("authorize is idempotent, report binds the verified decision, and policy di
     assert.deepEqual(audit.json().map((event: { phase: string }) => event.phase), ["REPORT", "AUTHORIZE"])
     const runtimeOnly = await app.inject({ method: "GET", url: `/v1/tenants/${tenantId}/audit-events?enforcement_point_id=AGENT_RUNTIME`, headers: adminHeaders })
     assert.equal(runtimeOnly.statusCode, 200, runtimeOnly.body)
-    assert.equal(runtimeOnly.json().length, 2)
+    assert.deepEqual((runtimeOnly.json() as Array<{ audit_event_id: string }>).map((event) => event.audit_event_id).sort(), [
+      "corr-runtime-1:authorize",
+      "corr-runtime-1:authorize:report",
+      "corr-runtime-tokenless:authorize",
+      "corr-runtime-tokenless:authorize:report",
+    ])
   } finally {
     await app.close()
   }
@@ -417,7 +554,7 @@ test("computer use independently authorizes discovery and desktop invocation wit
     assert.equal(invocationAuthorization.statusCode, 200, invocationAuthorization.body)
     assert.equal(invocationAuthorization.json().decision, "ALLOW")
 
-    const reportBody = { ...invocation, outcome: "COMPLETED" as const }
+    const reportBody = { tenant_id: tenantId, ...invocation, outcome: "COMPLETED" as const }
     const report = await app.inject({
       method: "POST",
       url: `/v1/tenants/${tenantId}/one-policy/runtime-report`,

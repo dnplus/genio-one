@@ -21709,6 +21709,13 @@ export type GetRuntimePolicyEffective200 = {
   evaluated_at: number;
 };
 
+export type AuthorizeRuntimePolicyBodyOperation = typeof AuthorizeRuntimePolicyBodyOperation[keyof typeof AuthorizeRuntimePolicyBodyOperation];
+
+
+export const AuthorizeRuntimePolicyBodyOperation = {
+  AUTHORIZE: 'AUTHORIZE',
+} as const;
+
 export const AuthorizeRuntimePolicyBodyAction = {  expose: 'expose',
   invoke: 'invoke',
   load_extension: 'load_extension',
@@ -21716,6 +21723,12 @@ export const AuthorizeRuntimePolicyBodyAction = {  expose: 'expose',
   execute: 'execute',
 } as const
 export type AuthorizeRuntimePolicyBody = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id?: string;
+  operation?: AuthorizeRuntimePolicyBodyOperation;
   /**
      * @minLength 1
      * @maxLength 256
@@ -21989,6 +22002,11 @@ export const ReportRuntimePolicyOutcomeBodyOutcome = {  ALLOW: 'ALLOW',
   FAILED: 'FAILED',
 } as const
 export type ReportRuntimePolicyOutcomeBody = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
   /**
      * @minLength 1
      * @maxLength 256

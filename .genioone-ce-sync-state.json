@@ -323,7 +323,7 @@
       "mode": 420
     },
     "apps/bot/server/app.ts": {
-      "sha256": "b757dd10db2b6122fc08db0c33f96ae1bc901d4668b17b95bea1530f9625b684",
+      "sha256": "7b5c918a286b885676b29fd991bf167764e385ad7aebbf28e9086995a34a77b7",
       "mode": 420
     },
     "apps/bot/server/auth.test.ts": {
@@ -367,7 +367,7 @@
       "mode": 420
     },
     "apps/bot/server/bot-computer-tools.test.ts": {
-      "sha256": "f6355017664db9c6bd0e356f0967a38ee9d0df9c21235a0e2675c32ccdb937f5",
+      "sha256": "81acc4580f6eb2db9701b752eab2a76357ae69a2b07059fde1e107281704cd7b",
       "mode": 420
     },
     "apps/bot/server/bot-computer-tools.ts": {
@@ -483,7 +483,7 @@
       "mode": 420
     },
     "apps/bot/server/bot-questions.ts": {
-      "sha256": "3638b9ca2fd5ee0129894f68d87bec46e6bf77fd2f002971a1978d8f41daa9bc",
+      "sha256": "dbe2f4d7da76a633c8fbac0dd34b21039f1908c59450d5e6d2d47f26fb1498c5",
       "mode": 420
     },
     "apps/bot/server/bot-registry.test.ts": {
@@ -507,11 +507,11 @@
       "mode": 420
     },
     "apps/bot/server/bot-schedule-runner.test.ts": {
-      "sha256": "ac79aadb719b18f67d9d3c89397a67041669331e7e111c170b82fad224a06d47",
+      "sha256": "b53b06c56a6987af04382ab11512bea2bcad563fd82958c63dae8f9f097c5674",
       "mode": 420
     },
     "apps/bot/server/bot-schedule-runner.ts": {
-      "sha256": "b0a3a2f9c4afddfa9e05300fc14c6876f82da630190d00ea0ded23e56d8db068",
+      "sha256": "e753f15001a206d469163ba75cf6006db1f328b07893599579675970aa8a45ea",
       "mode": 420
     },
     "apps/bot/server/bot-schedule-tools.ts": {
@@ -519,11 +519,11 @@
       "mode": 420
     },
     "apps/bot/server/bot-schedules.test.ts": {
-      "sha256": "5543614c7a04d25e4dd99175e2446a27a6eb892774179e8c478b4ebddeee7e6c",
+      "sha256": "a8157bc42051c76f3bbac9e1614ee0cc99a56338770e06829e08fc2a6674e814",
       "mode": 420
     },
     "apps/bot/server/bot-schedules.ts": {
-      "sha256": "3ec3b66e604e7b240b677e478bb99838829ddd7aa900cb5ba356f9a4547d1c81",
+      "sha256": "2a1356cb7c43f3635a605de29cf43e20bb447a1e7d1a7536deae89e779c279b9",
       "mode": 420
     },
     "apps/bot/server/bot-self-tools.test.ts": {
@@ -4211,7 +4211,7 @@
       "mode": 420
     },
     "apps/bot/server/hands-isolate-one-policy.test.ts": {
-      "sha256": "3cee8eabd8b47a566bd67b5d271ff20253d6af48a967ef8297fb2d61adf2b6d3",
+      "sha256": "c6331d21c0da3951e503e687e0c01c17c4d67a5ea23ea5d594e4f16991130024",
       "mode": 420
     },
     "apps/bot/server/hands-isolate.ts": {
@@ -4295,7 +4295,7 @@
       "mode": 420
     },
     "apps/bot/server/model-gateway-relay.test.ts": {
-      "sha256": "79b8699134f5c699b444546f7259728226b89999a16878b4883539228c5f8734",
+      "sha256": "49ba9c66a2393856454d6ecad1f09a4cb20865f7f3ce8a2ab6d0071007a63037",
       "mode": 420
     },
     "apps/bot/server/model-gateway-relay.ts": {
@@ -4367,11 +4367,11 @@
       "mode": 420
     },
     "apps/bot/server/question-delivery.test.ts": {
-      "sha256": "d3b5b36771704a198780d26e4d22cf3170bab5a858de35ec407a296df8705290",
+      "sha256": "f5e2d7e607802c4f86c71d4061154240a402afd4307def65ef667f1cad056567",
       "mode": 420
     },
     "apps/bot/server/question-delivery.ts": {
-      "sha256": "0057416244ba0252a1e2097257f1140dbcda42f6f95629592df99eb3dd280e1a",
+      "sha256": "c690aa66a4bd3ba4d556d1321efea9c6706b879ace8baef19d30e5fbeca173b1",
       "mode": 420
     },
     "apps/bot/server/routes/artifacts.test.ts": {
@@ -4491,7 +4491,7 @@
       "mode": 420
     },
     "apps/bot/server/routes/codex-runtime-policy.test.ts": {
-      "sha256": "2b46890016edac45bd556611dc01feaf941137a386fbdb1ea08c01b57a27bcbb",
+      "sha256": "6069e022cb341a8716c091f79a37bb28c6991e8cd116cdc50c376ec5db661e15",
       "mode": 420
     },
     "apps/bot/server/routes/codex.ts": {
@@ -4575,19 +4575,27 @@
       "mode": 420
     },
     "apps/bot/server/runtime-policy-contract.ts": {
-      "sha256": "e57ec1bbc08e72ebba8514f6cc05ea3e17dda6b8485645071cc7cd7cbb3a7113",
+      "sha256": "64a5b1f2d1e3b62b1d054666cc18c252c1383a4e54bb6f01de008464a0846ead",
       "mode": 420
     },
     "apps/bot/server/runtime-policy-lifecycle.ts": {
       "sha256": "16a9f0bc28b47234cd549756018b78baa58c3e1587e93daea7f211e9f32403d9",
       "mode": 420
     },
+    "apps/bot/server/runtime-policy-report-ledger.test.ts": {
+      "sha256": "95294edc153488704798ed42e641c181c4413f1727ec68af8e740fb17d0e2b0c",
+      "mode": 420
+    },
+    "apps/bot/server/runtime-policy-report-ledger.ts": {
+      "sha256": "c422b1d7d6adf3685dba578dd034e155575739426dfef5e88bb9607c6e02e321",
+      "mode": 420
+    },
     "apps/bot/server/runtime-policy.test.ts": {
-      "sha256": "d27a06da2b1fbb263e2f523a8624d5ab3dd8385c9b5bcb9de4b2a383f6923b2f",
+      "sha256": "4932207dc86ca242e9dca853534f16a235464de864f526ef113142c962ef7f7d",
       "mode": 420
     },
     "apps/bot/server/runtime-policy.ts": {
-      "sha256": "930850faa53258a02619545eb27a5a11e27085ef0708bc0dd03ba7f0dbc499f9",
+      "sha256": "f1927a17afb31398e0bbfdccb98f2ccd4938fb786c4bbe0d5d502c3827181e2d",
       "mode": 420
     },
     "apps/bot/server/runtime-token-relay.test.ts": {
@@ -6647,7 +6655,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/management-authorization/module.ts": {
-      "sha256": "b471379afc26113c1fc9d3bde39bbb5b08b994e8c0d30372d6a537866a35a40d",
+      "sha256": "369f27df4e484f7e0b603523610e35e0d6410ca267b0cb725e186e4efa002b8d",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/mcp-discovery/candidates.ts": {
@@ -6851,7 +6859,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/one-policy/default.ts": {
-      "sha256": "a2580e2193ed81a0d1038b6acd4dc9bf1e27e080ea5a38608adc5e0ae9909886",
+      "sha256": "43174d66cac487872425bec56338f612ed1966b113d06e278302260dcb0e60ea",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/one-policy/drafts.ts": {
@@ -6859,7 +6867,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/one-policy/http.ts": {
-      "sha256": "e369ddbdaa4387a5207afb59b2df05541df106eab037da8f1df54b0823709b6a",
+      "sha256": "340c5c28f4037a51f7cb31955924c21111e4eae2c5721fe0043a1abc41403788",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/one-policy/lifecycle.ts": {
@@ -6867,7 +6875,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/one-policy/module.ts": {
-      "sha256": "31a6a58d6c94c1d2fb171aaf04ae5ee9a4395d03507544cd137046df86ced527",
+      "sha256": "6119486d5e574f86646b09673c096ebe367a981a323de00c7c4298c955777b5a",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/one-policy/permission-preview.ts": {
@@ -6891,7 +6899,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/one-policy/runtime.ts": {
-      "sha256": "02b226e49b386b01618e9218b2be8af8b3b13f5ff2f22e646751f1a376308c15",
+      "sha256": "7280596ead819640d9191ec7dfe4542eaa568dcea304ae375ceaa69d5baba09f",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/organizations/contract.ts": {
@@ -7883,7 +7891,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/runtime-policy.test.ts": {
-      "sha256": "ae8199f63d7bc85cd8144b62ed552bbc671abd385969de16365f177bef3317a7",
+      "sha256": "7303d85e4987d46c3f17d906b9f2397379a330ff20db7a8bd97b46a697313e20",
       "mode": 420
     },
     "apps/platform/platform-api/test/runtime-protocol.test.ts": {
@@ -8591,7 +8599,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/generated/management-api.ts": {
-      "sha256": "52bf15955a9498dea574348146b687de9200d0c3c28bcf6051b48c28928a11eb",
+      "sha256": "c3e1a561b7261a366d420ef2c875a69b848248e6f73564683f2282ba70d946a4",
       "mode": 420
     },
     "apps/platform/platform-web/src/hooks/use-demo-mode.ts": {

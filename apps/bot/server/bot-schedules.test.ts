@@ -74,7 +74,8 @@ async function executeNativeTerminal(status: "completed" | "failed" | "interrupt
     } as any)
     await (runner as any).execute(run)
     if (completeAfterDispatch) runtimeListener.current?.onMessage(JSON.stringify({ method: "turn/completed", params: { threadId: "thread", turn: { id: "turn", status: "completed" } } }))
-    return { activeSchedules: schedules.listActive(), run: schedules.getRun(run!.id)!, turnRequests, requests }
+    if (auditFails) await runner.tick()
+    return { activeSchedules: schedules.listActive(), run: schedules.getRun(run!.id)!, reportCandidates: schedules.confirmedReports(), turnRequests, requests }
   } finally {
     globalThis.fetch = originalFetch
     if (originalMcpUrl === undefined) delete process.env.GENIO_ONE_MCP_URL
@@ -575,8 +576,11 @@ describe("BotSchedules", () => {
     expect(requests).toEqual([{ limit: 100, includeHidden: false }, { limit: 100, includeHidden: false, cursor: "page-2" }])
   })
 
-  test("keeps a concurrent completion while marking deferred audit reporting", async () => {
-    await expect(executeNativeTerminal("completed", true)).resolves.toMatchObject({ run: { state: "COMPLETED", error: "SCHEDULE_AUDIT_REPORT_DEFERRED" } })
+  test("keeps a concurrent completion and its terminal report pending when delivery fails", async () => {
+    const result = await executeNativeTerminal("completed", true)
+    expect(result.run).toMatchObject({ state: "COMPLETED", error: null })
+    expect(result.reportCandidates).toHaveLength(1)
+    expect(result.turnRequests).toBe(1)
   })
 
   test("rechecks pause state after asynchronous preparation before dispatch", async () => {

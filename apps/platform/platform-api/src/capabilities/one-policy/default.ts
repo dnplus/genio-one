@@ -162,7 +162,7 @@ export function createDefaultOnePolicy(options: {
   const mutations = createKeyedSerialExecutor()
   const runtimeStore = options.runtimeStore ?? createInMemoryRuntimePolicyStore({ now })
   const runtimeReportVerifier = options.runtimeReportVerifier ?? (options.runtimeReportKeyId && options.runtimeReportPublicKeyPem ? {
-    verify(input: { body: RuntimePolicyReportBody; keyId: string; signature: string }) {
+    verify(input: { body: Record<string, unknown>; keyId: string; signature: string }) {
       return input.keyId === options.runtimeReportKeyId && verifyRuntimeReport({ ...input.body }, input.signature, options.runtimeReportPublicKeyPem!)
     },
   } satisfies OnePolicyRuntimeReportVerifier : undefined)
@@ -355,8 +355,29 @@ export function createDefaultOnePolicy(options: {
       return result
     },
     async authorizeRuntime(input: RuntimePolicyAuthorizeBody & {
+      tenantId?: string
       principal: Pick<Principal, "tenant_id" | "subject_id" | "client_id" | "role" | "organization_ids">
+      reportAttestation?: { keyId: string; signature: string }
     }) {
+      if (input.tenant_id !== undefined || input.operation !== undefined || input.reportAttestation !== undefined) {
+        if (!runtimeReportVerifier || !input.reportAttestation?.keyId || !input.reportAttestation.signature || !input.tenant_id || input.operation !== "AUTHORIZE") {
+          throw new PlatformApiError("RUNTIME_REPORT_ATTESTATION_REQUIRED", 403)
+        }
+        if (input.tenant_id !== input.principal.tenant_id || input.tenant_id !== input.tenantId) throw new PlatformApiError("RUNTIME_REPORT_TENANT_CONFLICT", 403)
+        const authorizationPayload = {
+          tenant_id: input.tenant_id,
+          operation: input.operation,
+          correlation_id: input.correlation_id,
+          bot_id: input.bot_id,
+          runtime_id: input.runtime_id,
+          capability_id: input.capability_id,
+          action: input.action,
+          ...(input.session_id ? { session_id: input.session_id } : {}),
+        }
+        if (!runtimeReportVerifier.verify({ body: authorizationPayload, keyId: input.reportAttestation.keyId, signature: input.reportAttestation.signature })) {
+          throw new PlatformApiError("RUNTIME_REPORT_ATTESTATION_INVALID", 403)
+        }
+      }
       const existing = await findRuntimeAuthorization(input.principal.tenant_id, input.correlation_id)
       if (existing) {
         const expectedTarget = `runtime:${input.runtime_id}:${input.capability_id}`
@@ -374,11 +395,13 @@ export function createDefaultOnePolicy(options: {
       return result
     },
     async reportRuntime(input: RuntimePolicyReportBody & {
-      principal: Pick<Principal, "tenant_id" | "subject_id" | "client_id" | "role" | "organization_ids">
+      tenantId: string
+      principal?: Pick<Principal, "tenant_id" | "subject_id" | "client_id" | "role" | "organization_ids">
       reportAttestation: { keyId: string; signature: string }
     }) {
       if (!runtimeReportVerifier) throw new PlatformApiError("RUNTIME_REPORT_ATTESTATION_REQUIRED", 403)
       const reportPayload: RuntimePolicyReportBody = {
+        tenant_id: input.tenant_id,
         correlation_id: input.correlation_id,
         bot_id: input.bot_id,
         runtime_id: input.runtime_id,
@@ -391,33 +414,42 @@ export function createDefaultOnePolicy(options: {
       if (!runtimeReportVerifier.verify({ body: reportPayload, keyId: input.reportAttestation.keyId, signature: input.reportAttestation.signature })) {
         throw new PlatformApiError("RUNTIME_REPORT_ATTESTATION_INVALID", 403)
       }
-      const authorization = await findRuntimeAuthorization(input.principal.tenant_id, input.correlation_id)
+      if (input.tenant_id !== input.tenantId || (input.principal && input.principal.tenant_id !== input.tenantId)) throw new PlatformApiError("RUNTIME_REPORT_TENANT_CONFLICT", 403)
+      const authorization = await findRuntimeAuthorization(input.tenantId, input.correlation_id)
       if (!authorization) throw new PlatformApiError("RUNTIME_AUTHORIZATION_NOT_FOUND", 404)
       const expectedTarget = `runtime:${input.runtime_id}:${input.capability_id}`
-      if (authorization.subject.subject_id !== input.principal.subject_id || authorization.acting_client.acting_client_id !== input.principal.client_id || authorization.bot_id !== input.bot_id || authorization.runtime_id !== input.runtime_id || authorization.capability_id !== input.capability_id || authorization.action !== input.action || authorization.target !== expectedTarget || authorization.session_id !== (input.session_id ?? null)) {
+      if ((input.principal && (authorization.subject.subject_id !== input.principal.subject_id || authorization.acting_client.acting_client_id !== input.principal.client_id)) || authorization.bot_id !== input.bot_id || authorization.runtime_id !== input.runtime_id || authorization.capability_id !== input.capability_id || authorization.action !== input.action || authorization.target !== expectedTarget || authorization.session_id !== (input.session_id ?? null)) {
         throw new PlatformApiError("RUNTIME_REPORT_CORRELATION_CONFLICT", 409)
       }
       if (!reportOutcomeMatchesDecision(input.outcome, decisionFromAudit(authorization))) {
         throw new PlatformApiError("RUNTIME_REPORT_OUTCOME_CONFLICT", 409)
       }
       const reportId = `${authorization.audit_event_id}:report`
-      const existing = await findRuntimeReport(input.principal.tenant_id, input.correlation_id)
+      const sameReport = (event: RuntimePolicyAuditEvent) => event.audit_event_id === reportId && event.report_outcome === input.outcome && event.reason_code === (input.reason_code ?? authorization.reason_code) && event.subject.subject_id === authorization.subject.subject_id && event.acting_client.acting_client_id === authorization.acting_client.acting_client_id && event.target === expectedTarget && event.session_id === (input.session_id ?? null)
+      const existing = await findRuntimeReport(input.tenantId, input.correlation_id)
       if (existing) {
-        if (existing.audit_event_id !== reportId || existing.report_outcome !== input.outcome || existing.subject.subject_id !== input.principal.subject_id || existing.acting_client.acting_client_id !== input.principal.client_id || existing.target !== expectedTarget || existing.session_id !== (input.session_id ?? null)) throw new PlatformApiError("RUNTIME_REPORT_CORRELATION_CONFLICT", 409)
+        if (!sameReport(existing)) throw new PlatformApiError("RUNTIME_REPORT_CORRELATION_CONFLICT", 409)
         return structuredClone(existing)
       }
       const decision = decisionFromAudit(authorization)
       const report = runtimePolicyAuditEvent(decision, {
-        tenant_id: input.principal.tenant_id,
-        subject_id: input.principal.subject_id,
-        client_id: input.principal.client_id,
+        tenant_id: input.tenantId,
+        subject_id: authorization.subject.subject_id,
+        client_id: authorization.acting_client.acting_client_id,
       }, "REPORT", now(), {
         audit_event_id: reportId,
         authorization_audit_event_id: authorization.audit_event_id,
         report_outcome: input.outcome,
         reason_code: input.reason_code ?? authorization.reason_code,
       })
-      await recordRuntimeAudit(report)
+      try {
+        await recordRuntimeAudit(report)
+      } catch (error) {
+        if (!(error instanceof PlatformApiError) || error.code !== "AUDIT_EVENT_CONFLICT") throw error
+        const concurrent = await findRuntimeReport(input.tenantId, input.correlation_id)
+        if (!concurrent || !sameReport(concurrent)) throw new PlatformApiError("RUNTIME_REPORT_CORRELATION_CONFLICT", 409)
+        return structuredClone(concurrent)
+      }
       return report
     },
   }

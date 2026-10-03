@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import type { Database } from "bun:sqlite"
 import { CronExpressionParser } from "cron-parser"
 import type { GenioPrincipal } from "./runtime-broker"
+import type { RuntimePolicyReportAuthorization } from "./runtime-policy-contract"
 
 export type BotScheduleSpec =
   | { kind: "once"; at: string }
@@ -150,6 +151,8 @@ export class BotSchedules {
       payload_json text not null, schedule_id text not null, created_at integer not null,
       primary key (tenant_id, owner_subject_id, bot_id, client_request_id)
     )`)
+    const runColumns = this.db.query("pragma table_info(bot_schedule_runs)").all() as Array<{ name: string }>
+    if (!runColumns.some((column) => column.name === "report_authorization_json")) this.db.exec("alter table bot_schedule_runs add column report_authorization_json text")
     this.hasBotRegistry = Boolean(db.query("select 1 from sqlite_master where type = 'table' and name = 'bots'").get())
   }
 
@@ -196,6 +199,20 @@ export class BotSchedules {
     const safeLimit = Math.max(1, Math.min(100, limit))
     const safeOffset = Number.isSafeInteger(offset) && offset > 0 ? offset : 0
     return this.db.query("select * from bot_schedule_runs where state = 'UNCERTAIN' order by updated_at, id limit ? offset ?").all(safeLimit, safeOffset).map((row) => mapRun(row as Record<string, unknown>))
+  }
+
+  saveReportAuthorization(id: string, authorization: RuntimePolicyReportAuthorization) {
+    const result = this.db.query("update bot_schedule_runs set report_authorization_json = ? where id = ?").run(JSON.stringify(authorization), id)
+    if (result.changes !== 1) throw new Error("BOT_SCHEDULE_RUN_NOT_FOUND")
+  }
+
+  confirmedReports() {
+    const rows = this.db.query("select * from bot_schedule_runs where state in ('COMPLETED', 'FAILED', 'BLOCKED') and report_authorization_json is not null order by updated_at, id").all() as Array<Record<string, unknown>>
+    return rows.map((row) => ({ run: mapRun(row), authorization: JSON.parse(String(row.report_authorization_json)) as RuntimePolicyReportAuthorization }))
+  }
+
+  clearReportAuthorization(id: string, correlationId: string) {
+    this.db.query("update bot_schedule_runs set report_authorization_json = null where id = ? and json_extract(report_authorization_json, '$.correlationId') = ?").run(id, correlationId)
   }
 
   retainedOwnerPrincipals() {

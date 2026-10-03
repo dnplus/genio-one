@@ -218,6 +218,8 @@ export const RuntimePolicyEffectiveQuerySchema = Type.Object({
 }, { additionalProperties: false })
 
 export const RuntimePolicyAuthorizeBodySchema = Type.Object({
+  tenant_id: Type.Optional(Identifier),
+  operation: Type.Optional(Type.Literal("AUTHORIZE")),
   correlation_id: Identifier,
   bot_id: Identifier,
   runtime_id: Identifier,
@@ -227,6 +229,7 @@ export const RuntimePolicyAuthorizeBodySchema = Type.Object({
 }, { additionalProperties: false })
 
 export const RuntimePolicyReportBodySchema = Type.Object({
+  tenant_id: Identifier,
   correlation_id: Identifier,
   bot_id: Identifier,
   runtime_id: Identifier,

@@ -13,6 +13,7 @@ import type {
   PrincipalAuthenticator,
 } from "../tenancy-auth/contract"
 import { normalizePrincipal } from "../tenancy-auth/memory"
+import { RUNTIME_REPORT_KEY_ID_HEADER, RUNTIME_REPORT_SIGNATURE_HEADER } from "../../../../../../runtimes/gateway/services/shared/runtime-report-attestation"
 import {
   isRuntimeControlTransport,
   isRuntimeSelfRegistration,
@@ -339,6 +340,15 @@ function isInvocationRoute(route: TenantRoute, method: string): boolean {
     (route.rest.length === 1 || (route.rest.length === 3 && route.rest[2] === "cancel"))
 }
 
+function isSignedRuntimeReportRoute(route: TenantRoute, request: FastifyRequest): boolean {
+  return request.method === "POST" &&
+    route.rest.length === 2 &&
+    route.rest[0] === "one-policy" &&
+    route.rest[1] === "runtime-report" &&
+    typeof request.headers[RUNTIME_REPORT_KEY_ID_HEADER] === "string" &&
+    typeof request.headers[RUNTIME_REPORT_SIGNATURE_HEADER] === "string"
+}
+
 function isManagementOnlyKnowledgeCandidateRoute(route: TenantRoute, method: string): boolean {
   return method === "GET" &&
     route.rest.length === 3 &&
@@ -513,6 +523,7 @@ export function createManagementAuthorization(
       if (!route || isFederationTokenExchange(route, request.method)) return
       const token = extractBearerToken(request.headers.authorization)
       if (!token) {
+        if (!request.headers.authorization && isSignedRuntimeReportRoute(route, request)) return
         await recordAuthenticationAttempt(request, {
           outcome: "FAILURE",
           code: "MISSING_BEARER_TOKEN",

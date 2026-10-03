@@ -89,6 +89,20 @@ export interface RuntimePolicyReportInput extends RuntimePolicyResolveInput {
   reasonCode?: string
 }
 
+export interface RuntimePolicyReportAuthorization {
+  correlationId: string
+  sessionId: string
+  runtimeId: string
+  capabilityId: RuntimePolicyCapabilityId
+  action: RuntimePolicyExecutableAction
+}
+
+export function runtimePolicyReportAuthorization(decision: RuntimePolicyDecision, sessionId: string): RuntimePolicyReportAuthorization {
+  if (!decision.correlation_id) throw new Error("RUNTIME_POLICY_CORRELATION_MISSING")
+  const target = runtimePolicyDecisionTarget(decision)
+  return { correlationId: decision.correlation_id, sessionId: decision.session_id ?? sessionId, runtimeId: decision.runtime_id, ...target }
+}
+
 export function runtimePolicyDecisionTarget(decision: Pick<RuntimePolicyDecision, "capability_id" | "action">): {
   capabilityId: RuntimePolicyCapabilityId
   action: RuntimePolicyExecutableAction
@@ -104,4 +118,5 @@ export interface RuntimePolicyResolver {
   authorize(input: RuntimePolicyResolveInput): Promise<RuntimePolicyDecision>
   read(input: RuntimePolicyReadInput): Promise<RuntimePolicySnapshot>
   report(input: RuntimePolicyReportInput): Promise<void>
+  replayPendingReports?(): Promise<void>
 }

@@ -1,8 +1,13 @@
 import { describe, expect, test } from "bun:test"
+import { Database } from "bun:sqlite"
+import { generateKeyPairSync } from "node:crypto"
 
 import { codexRoutes, refreshManagedMcpConfiguration } from "./codex"
 import { BotConnectionInteractions } from "../bot-connection-interactions"
 import { botToolText } from "../bot-tool-contract"
+import { createRuntimePolicyClient } from "../runtime-policy"
+import { RuntimePolicyReportLedger } from "../runtime-policy-report-ledger"
+import type { RuntimePolicyReportInput } from "../runtime-policy-contract"
 
 const principal = {
   tenant_id: "tenant-local",
@@ -232,6 +237,87 @@ function activateDesktop(context: ReturnType<typeof createContext>) {
 }
 
 describe("Codex runtime policy route", () => {
+  test("returns the native turn result while its durable completion report awaits delivery", async () => {
+    const db = new Database(":memory:")
+    const ledger = new RuntimePolicyReportLedger(db)
+    const privateKey = generateKeyPairSync("ed25519").privateKey.export({ type: "pkcs8", format: "pem" }).toString()
+    let failNextReport = false
+    let deliveries = 0
+    const client = createRuntimePolicyClient({
+      origin: "http://platform.test",
+      reportKeyId: "bot-report",
+      reportPrivateKeyPem: privateKey,
+      reportLedger: ledger,
+      fetch: async (_url, init) => {
+        deliveries++
+        if (failNextReport) {
+          failNextReport = false
+          return Response.json({ error: "TEMPORARY_FAILURE" }, { status: 503 })
+        }
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+        return Response.json({
+          tenant_id: body.tenant_id,
+          correlation_id: body.correlation_id,
+          audit_event_id: `${body.correlation_id}:authorize:report`,
+          authorization_audit_event_id: `${body.correlation_id}:authorize`,
+          phase: "REPORT",
+          report_outcome: body.outcome,
+          bot_id: body.bot_id,
+          runtime_id: body.runtime_id,
+          capability_id: body.capability_id,
+          action: body.action,
+          session_id: body.session_id ?? null,
+          reason_code: body.reason_code ?? "RULE_ALLOW",
+        }, { status: 201 })
+      },
+    })
+    const context = createContext([], [])
+    context.runtimePolicy.report = (input) => client.report(input as unknown as RuntimePolicyReportInput)
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => Response.json(principal)) as unknown as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "genio/runtime/start", params: { accessToken: "token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/bot/select", params: { botId: "bot-dylan" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 2))
+      failNextReport = true
+      socket.emit("message", JSON.stringify({ id: 3, method: "turn/start", params: { threadId: "thread-dylan", input: [{ type: "text", text: "Continue" }] } }))
+      await waitFor(() => context.runtimeMessages.some((message) => message.id === 3))
+      context.getCallbacks()!.onMessage(JSON.stringify({ id: 3, result: { turn: { id: "turn-dylan" } } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 3))
+      expect(socket.sent.map((line) => JSON.parse(line)).find((message) => message.id === 3)?.result?.turn?.id).toBe("turn-dylan")
+      expect(context.runtimeMessages.filter((message) => message.id === 3)).toHaveLength(1)
+      expect(ledger.pending()).toHaveLength(1)
+      const beforeReplay = deliveries
+      await client.replayPendingReports?.()
+      expect(deliveries).toBe(beforeReplay + 1)
+      expect(ledger.pending()).toHaveLength(0)
+      expect(context.runtimeMessages.filter((message) => message.id === 3)).toHaveLength(1)
+
+      const noLedger = createRuntimePolicyClient({
+        origin: "http://platform.test",
+        reportKeyId: "bot-report",
+        reportPrivateKeyPem: privateKey,
+        fetch: async () => Response.json({ error: "TEMPORARY_FAILURE" }, { status: 503 }),
+      })
+      context.runtimePolicy.report = (input) => noLedger.report(input as unknown as RuntimePolicyReportInput)
+      socket.emit("message", JSON.stringify({ id: 4, method: "turn/start", params: { threadId: "thread-dylan", input: [{ type: "text", text: "Again" }] } }))
+      await waitFor(() => context.runtimeMessages.some((message) => message.id === 4))
+      context.getCallbacks()!.onMessage(JSON.stringify({ id: 4, result: { turn: { id: "turn-no-ledger" } } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 4))
+      expect(socket.sent.map((line) => JSON.parse(line)).find((message) => message.id === 4)?.error?.code).toBe("RUNTIME_POLICY_REPORT_UNAVAILABLE")
+      expect(context.runtimeMessages.filter((message) => message.id === 4)).toHaveLength(1)
+    } finally {
+      globalThis.fetch = originalFetch
+      socket.close()
+      db.close()
+    }
+  })
+
   test("uses the materialized local marketplace for native plugin installation", async () => {
     const context = createContext([], [])
     const testContext = context as { botRegistry: { materialize(): unknown } }

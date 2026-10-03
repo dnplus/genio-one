@@ -2,13 +2,36 @@ import { createHash } from "node:crypto"
 import type { Database } from "bun:sqlite"
 import type { BotQuestion } from "../shared/bot-question"
 import type { Turn } from "./generated/v2/Turn"
+import type { GenioPrincipal } from "./runtime-broker"
+import type { RuntimePolicyReportAuthorization } from "./runtime-policy-contract"
 
 export class BotQuestions {
   constructor(private readonly db: Database) {
     db.exec(`create table if not exists bot_questions (
       bot_id text not null, question_id text not null, body_json text not null,
       primary key (bot_id, question_id)
+    ); create table if not exists bot_question_report_authorizations (
+      bot_id text not null, question_id text not null, tenant_id text not null, subject_id text not null, acting_client_id text not null,
+      authorization_json text not null, primary key (bot_id, question_id)
     )`)
+  }
+
+  saveReportAuthorization(botId: string, questionId: string, principal: GenioPrincipal, authorization: RuntimePolicyReportAuthorization) {
+    this.db.query("insert into bot_question_report_authorizations (bot_id, question_id, tenant_id, subject_id, acting_client_id, authorization_json) values (?, ?, ?, ?, ?, ?) on conflict(bot_id, question_id) do update set authorization_json = excluded.authorization_json").run(botId, questionId, principal.tenant_id, principal.subject_id, principal.acting_client_id, JSON.stringify(authorization))
+  }
+
+  confirmedReports() {
+    const rows = this.db.query("select reports.* from bot_question_report_authorizations reports join bot_questions questions on questions.bot_id = reports.bot_id and questions.question_id = reports.question_id where json_extract(questions.body_json, '$.delivery') = 'delivered' order by questions.rowid").all() as Array<{ bot_id: string; question_id: string; tenant_id: string; subject_id: string; acting_client_id: string; authorization_json: string }>
+    return rows.map((row) => ({
+      botId: row.bot_id,
+      questionId: row.question_id,
+      principal: { tenant_id: row.tenant_id, subject_id: row.subject_id, acting_client_id: row.acting_client_id, scopes: [] },
+      authorization: JSON.parse(row.authorization_json) as RuntimePolicyReportAuthorization,
+    }))
+  }
+
+  clearReportAuthorization(botId: string, questionId: string, correlationId: string) {
+    this.db.query("delete from bot_question_report_authorizations where bot_id = ? and question_id = ? and json_extract(authorization_json, '$.correlationId') = ?").run(botId, questionId, correlationId)
   }
 
   list(botId: string): BotQuestion[] {

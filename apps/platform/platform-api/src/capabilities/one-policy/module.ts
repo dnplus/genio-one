@@ -52,7 +52,7 @@ export interface OnePolicyRuntimeAuditSink {
 }
 
 export interface OnePolicyRuntimeReportVerifier {
-  verify(input: { body: RuntimePolicyReportBody; keyId: string; signature: string }): boolean
+  verify(input: { body: Record<string, unknown>; keyId: string; signature: string }): boolean
 }
 
 export interface OnePolicy {
@@ -93,10 +93,13 @@ export interface OnePolicy {
     recordAudit?: boolean
   }): Promise<RuntimePolicyDecision>
   authorizeRuntime(input: RuntimePolicyAuthorizeBody & {
+    tenantId?: string
     principal: Pick<Principal, "tenant_id" | "subject_id" | "client_id" | "role" | "organization_ids">
+    reportAttestation?: { keyId: string; signature: string }
   }): Promise<RuntimePolicyDecision>
   reportRuntime(input: RuntimePolicyReportBody & {
-    principal: Pick<Principal, "tenant_id" | "subject_id" | "client_id" | "role" | "organization_ids">
+    tenantId: string
+    principal?: Pick<Principal, "tenant_id" | "subject_id" | "client_id" | "role" | "organization_ids">
     reportAttestation: { keyId: string; signature: string }
   }): Promise<RuntimePolicyAuditEvent>
 }

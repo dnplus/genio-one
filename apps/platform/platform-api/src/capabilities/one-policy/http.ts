@@ -353,7 +353,12 @@ export const onePolicyHttp: FastifyPluginAsync<{ policy: OnePolicy; drafts: Poli
     },
   }, async (request) => options.policy.authorizeRuntime({
     ...request.body,
+    tenantId: request.params.tenant_id,
     principal: request.principal!,
+    ...(request.headers[RUNTIME_REPORT_KEY_ID_HEADER] !== undefined || request.headers[RUNTIME_REPORT_SIGNATURE_HEADER] !== undefined ? { reportAttestation: {
+      keyId: headerValue(request.headers[RUNTIME_REPORT_KEY_ID_HEADER]),
+      signature: headerValue(request.headers[RUNTIME_REPORT_SIGNATURE_HEADER]),
+    } } : {}),
   }))
 
   routes.post("/v1/tenants/:tenant_id/one-policy/runtime-report", {
@@ -366,7 +371,8 @@ export const onePolicyHttp: FastifyPluginAsync<{ policy: OnePolicy; drafts: Poli
     },
   }, async (request, reply) => reply.code(201).send(await options.policy.reportRuntime({
     ...request.body,
-    principal: request.principal!,
+    tenantId: request.params.tenant_id,
+    principal: request.principal,
     reportAttestation: {
       keyId: headerValue(request.headers[RUNTIME_REPORT_KEY_ID_HEADER]),
       signature: headerValue(request.headers[RUNTIME_REPORT_SIGNATURE_HEADER]),
