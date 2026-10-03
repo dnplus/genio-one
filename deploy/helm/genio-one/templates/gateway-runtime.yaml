@@ -220,8 +220,13 @@ spec:
         - name: authorizer
           image: {{ include "genio-one.image" (list .Values.images.gatewayServices .) }}
           imagePullPolicy: {{ .Values.images.gatewayServices.pullPolicy }}
-          command: ["bun"]
-          args: ["authorizer.js"]
+          command: [/bin/sh, -c]
+          args:
+            - |
+              set -eu
+              export GENIO_ONE_VALKEY_ORIGIN="$(bun -e 'process.stdout.write("redis://:" + encodeURIComponent(process.env.GENIO_ONE_VALKEY_PASSWORD ?? "") + "@{{ include "genio-one.fullname" . }}-valkey:6379")')"
+              unset GENIO_ONE_VALKEY_PASSWORD
+              exec bun authorizer.js
           env:
             - { name: GENIO_ONE_OTEL_SPOOL_DIR, value: /var/lib/genio-one/gateway-runtime/otel-authorizer }
             - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: {{ printf "http://%s-otel-ingress:4318" (include "genio-one.fullname" .) | quote }} }
@@ -235,6 +240,8 @@ spec:
               valueFrom: { fieldRef: { fieldPath: metadata.name } }
             - { name: GENIO_ONE_GATEWAY_ID, value: {{ .Values.aiMcpGateway.enforcementPointId | quote }} }
             - { name: GENIO_ONE_GATEWAY_OBSERVATION_ORIGIN, value: http://127.0.0.1:9090 }
+            - name: GENIO_ONE_VALKEY_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "genio-one.secretName" . }}, key: valkey-password } }
           ports:
             - { name: authorizer-grpc, containerPort: 8081 }
           startupProbe: { tcpSocket: { port: authorizer-grpc }, periodSeconds: 2, failureThreshold: 60 }
