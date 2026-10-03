@@ -141,12 +141,17 @@ export async function proxyRoutes(app: FastifyInstance, context: BotServerContex
 
   app.all("/v1/*", async (request, reply) => {
     const origin = process.env.GENIO_ONE_PLATFORM_ORIGIN?.trim() || "http://127.0.0.1:58082"
+    let parsedUrl: URL
     let target: URL
     try {
-      target = new URL(request.url, origin)
+      parsedUrl = new URL(request.url, "http://127.0.0.1")
+      target = new URL(origin)
     } catch {
       return reply.code(400).send({ error: "INVALID_URL" })
     }
+    target.pathname = parsedUrl.pathname
+    target.search = parsedUrl.search
+    target.hash = parsedUrl.hash
 
     const pathname = target.pathname
     let decodedPathname: string
@@ -157,7 +162,7 @@ export async function proxyRoutes(app: FastifyInstance, context: BotServerContex
     }
     if (
       pathname.includes("..") || pathname.includes("//") || pathname.includes("\\") ||
-      decodedPathname.includes("..") || decodedPathname.includes("//") || decodedPathname.includes("\\") || decodedPathname.includes("\0")
+      decodedPathname.includes("..") || decodedPathname.includes("//") || decodedPathname.includes("\\") || /[\u0000-\u001f\u007f]/.test(decodedPathname)
     ) {
       return reply.code(400).send({ error: "INVALID_PATH" })
     }

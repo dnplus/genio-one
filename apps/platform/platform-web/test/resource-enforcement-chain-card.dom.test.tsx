@@ -193,6 +193,9 @@ test("renders tenant-scoped JEV safety and Presidio tokenization controls", asyn
   await user.click(await screen.findByRole("button", { name: "Edit policy" }))
 
   await waitFor(() => expect(screen.getByText("Guardrail provider")).toBeTruthy())
+  expect(screen.getByRole("button", { name: "Remove step 3: Request SAFETY_CHECK" })).toBeTruthy()
+  expect(screen.getByRole("button", { name: "Move step 3 up: Request SAFETY_CHECK" })).toBeTruthy()
+  expect(screen.getByRole("button", { name: "Move step 3 down: Request SAFETY_CHECK" })).toBeTruthy()
   expect(screen.getByText("JEV · https://jev.example.test/guard · guardrail-v1")).toBeTruthy()
   expect(screen.getByText("Presidio provider")).toBeTruthy()
   expect(screen.getByText("PRESIDIO · https://presidio.example.test/analyze")).toBeTruthy()

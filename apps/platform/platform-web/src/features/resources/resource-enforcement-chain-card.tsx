@@ -567,9 +567,9 @@ export function ResourceEnforcementChainCard({
                 <div className="min-w-0 flex-1 truncate font-medium">{step.label}</div>
                 {step.fixed ? <Badge variant="secondary">{t("Required")}</Badge> : editing ? (
                   <div className="flex items-center gap-1">
-                    <Button aria-label={t("Move up")} disabled={index === 2} onClick={() => moveStep(index - 2, -1)} size="icon-sm" type="button" variant="ghost"><ArrowUpIcon /></Button>
-                    <Button aria-label={t("Move down")} disabled={index === chain.length - 2} onClick={() => moveStep(index - 2, 1)} size="icon-sm" type="button" variant="ghost"><ArrowDownIcon /></Button>
-                    <Button aria-label={t("Remove step")} onClick={() => setDraft((current) => current.filter((item) => item.stepId !== step.id))} size="icon-sm" type="button" variant="ghost"><Trash2Icon /></Button>
+                    <Button aria-label={t("Move step {{index}} up: {{label}}", { index: index + 1, label: step.label })} disabled={index === 2} onClick={() => moveStep(index - 2, -1)} size="icon-sm" type="button" variant="ghost"><ArrowUpIcon /></Button>
+                    <Button aria-label={t("Move step {{index}} down: {{label}}", { index: index + 1, label: step.label })} disabled={index === chain.length - 2} onClick={() => moveStep(index - 2, 1)} size="icon-sm" type="button" variant="ghost"><ArrowDownIcon /></Button>
+                    <Button aria-label={t("Remove step {{index}}: {{label}}", { index: index + 1, label: step.label })} onClick={() => setDraft((current) => current.filter((item) => item.stepId !== step.id))} size="icon-sm" type="button" variant="ghost"><Trash2Icon /></Button>
                   </div>
                 ) : null}
               </div>

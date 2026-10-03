@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "bun:test"
+import { request as httpRequest } from "node:http"
 import Fastify from "fastify"
 import websocket from "@fastify/websocket"
 import WebSocket, { WebSocketServer } from "ws"
@@ -265,3 +266,185 @@ test("executor websocket denies shell frames before forwarding and reports an al
     await closeWebSocket(upstream)
   }
 })
+
+function rawProxyRequest(port: number, path: string, options: { method?: string; headers?: Record<string, string>; body?: string } = {}) {
+  return new Promise<{ statusCode: number | undefined; headers: import("node:http").IncomingHttpHeaders; body: string }>((resolve, reject) => {
+    const request = httpRequest({ hostname: "127.0.0.1", port, path, method: options.method ?? "GET", headers: options.headers }, (response) => {
+      const chunks: Buffer[] = []
+      response.on("data", (chunk) => chunks.push(Buffer.from(chunk)))
+      response.once("error", reject)
+      response.once("end", () => resolve({ statusCode: response.statusCode, headers: response.headers, body: Buffer.concat(chunks).toString() }))
+    })
+    request.once("error", reject)
+    request.setTimeout(5_000, () => request.destroy(new Error("PROXY_REQUEST_TIMEOUT")))
+    request.end(options.body)
+  })
+}
+
+test("proxy /v1/* anchors raw absolute request targets to the configured platform", async () => {
+  const previousOrigin = process.env.GENIO_ONE_PLATFORM_ORIGIN
+  process.env.GENIO_ONE_PLATFORM_ORIGIN = "http://platform.example:58082/configured?discard=1#configured"
+  const app = Fastify()
+  const rawTargets: string[] = []
+  app.addHook("onRequest", async (request) => { rawTargets.push(request.raw.url!) })
+  await proxyRoutes(app, {} as any)
+  const calls: Array<{ target: string; authorization: string | null }> = []
+  globalThis.fetch = (async (input, init) => {
+    calls.push({ target: String(input), authorization: new Headers(init?.headers).get("authorization") })
+    return new Response("ok", { status: 200, headers: { "content-type": "text/plain" } })
+  }) as typeof fetch
+
+  try {
+    await app.listen({ host: "127.0.0.1", port: 0 })
+    const address = app.server.address()
+    if (!address || typeof address === "string") throw new Error("PROXY_ADDRESS_UNAVAILABLE")
+    const publicTarget = "http://attacker.example/v1/identity/browser-configuration?return=https%3A%2F%2Fattacker.example"
+    const privateTarget = "https://attacker.example/v1/private?tenant=one&item=a%2Fb"
+    expect((await rawProxyRequest(address.port, publicTarget)).statusCode).toBe(200)
+    expect((await rawProxyRequest(address.port, privateTarget, { headers: { authorization: "Bearer private-token" } })).statusCode).toBe(200)
+    expect(rawTargets).toEqual([publicTarget, privateTarget])
+    expect(calls).toEqual([
+      { target: "http://platform.example:58082/v1/identity/browser-configuration?return=https%3A%2F%2Fattacker.example", authorization: null },
+      { target: "http://platform.example:58082/v1/private?tenant=one&item=a%2Fb", authorization: "Bearer private-token" },
+    ])
+  } finally {
+    globalThis.fetch = originalFetch
+    await app.close()
+    if (previousOrigin === undefined) delete process.env.GENIO_ONE_PLATFORM_ORIGIN
+    else process.env.GENIO_ONE_PLATFORM_ORIGIN = previousOrigin
+  }
+})
+
+test("proxy /v1/* rejects normalized authority paths and encoded malformed paths before forwarding bearer tokens", async () => {
+  const app = Fastify()
+  const rawTargets: string[] = []
+  app.addHook("onRequest", async (request) => { rawTargets.push(request.raw.url!) })
+  await proxyRoutes(app, {} as any)
+  const calls: string[] = []
+  globalThis.fetch = (async (input) => {
+    calls.push(String(input))
+    return new Response("unexpected forwarding")
+  }) as typeof fetch
+  const targets = [
+    "/v1/..//attacker.example/v1/private",
+    "/v1/%2e%2e//attacker.example/v1/private",
+    "/v1/.%2e//attacker.example/v1/private",
+    "http://attacker.example/v1/..//attacker.example/v1/private",
+    "/v1/%2f%2fattacker.example/v1/private",
+    "/v1/%5cattacker.example/v1/private",
+    "/v1/private%00",
+    "/v1/private%09",
+    "/v1/private%0a",
+    "/v1/private%7f",
+  ]
+  try {
+    await app.listen({ host: "127.0.0.1", port: 0 })
+    const address = app.server.address()
+    if (!address || typeof address === "string") throw new Error("PROXY_ADDRESS_UNAVAILABLE")
+    for (const target of targets) {
+      const response = await rawProxyRequest(address.port, target, { headers: { authorization: "Bearer private-token" } })
+      expect(response.statusCode).toBe(400)
+      expect(JSON.parse(response.body)).toEqual({ error: "INVALID_PATH" })
+    }
+    expect(rawTargets).toEqual(targets)
+    expect(calls).toEqual([])
+  } finally {
+    globalThis.fetch = originalFetch
+    await app.close()
+  }
+})
+
+test("proxy /v1/* preserves public GET, private authentication, request bodies, query strings, and hop header filtering", async () => {
+  const previousOrigin = process.env.GENIO_ONE_PLATFORM_ORIGIN
+  process.env.GENIO_ONE_PLATFORM_ORIGIN = "http://platform.example:58082"
+  const app = Fastify()
+  await proxyRoutes(app, {} as any)
+  const calls: Array<{ target: string; method: string | undefined; headers: Headers; body: BodyInit | null | undefined }> = []
+  globalThis.fetch = (async (input, init) => {
+    calls.push({ target: String(input), method: init?.method, headers: new Headers(init?.headers), body: init?.body })
+    if (String(input).includes("/empty")) return new Response(null, { status: 204 })
+    return new Response("platform-result", { status: 201, headers: { "content-type": "text/plain", "x-platform-result": "retained", connection: "close", "keep-alive": "timeout=5" } })
+  }) as typeof fetch
+  try {
+    await app.listen({ host: "127.0.0.1", port: 0 })
+    const address = app.server.address()
+    if (!address || typeof address === "string") throw new Error("PROXY_ADDRESS_UNAVAILABLE")
+    for (const path of ["/v1/identity/browser-configuration", "/v1/identity/login-branding"]) {
+      expect((await rawProxyRequest(address.port, path)).statusCode).toBe(201)
+    }
+    const publicCallCount = calls.length
+    for (const options of [{}, { headers: { authorization: "Basic invalid" } }, { headers: { authorization: "Bearer " } }]) {
+      expect((await rawProxyRequest(address.port, "/v1/private", options)).statusCode).toBe(401)
+    }
+    expect((await rawProxyRequest(address.port, "/v1/identity/login-branding", { method: "POST" })).statusCode).toBe(401)
+    expect(calls).toHaveLength(publicCallCount)
+    const response = await rawProxyRequest(address.port, "/v1/private?item=a%2Fb&return=https%3A%2F%2Fattacker.example", {
+      method: "POST",
+      headers: { authorization: "Bearer private-token", "content-type": "application/json", connection: "close, x-private-hop", "x-private-hop": "removed", "proxy-authorization": "removed", "x-client-header": "retained" },
+      body: JSON.stringify({ action: "save" }),
+    })
+    const call = calls.at(-1)!
+    expect(call.target).toBe("http://platform.example:58082/v1/private?item=a%2Fb&return=https%3A%2F%2Fattacker.example")
+    expect(call.method).toBe("POST")
+    expect(call.body).toBe(JSON.stringify({ action: "save" }))
+    expect(call.headers.get("authorization")).toBe("Bearer private-token")
+    expect(call.headers.get("x-client-header")).toBe("retained")
+    for (const name of ["host", "connection", "content-length", "x-private-hop", "proxy-authorization"]) expect(call.headers.has(name)).toBe(false)
+    expect(response.statusCode).toBe(201)
+    expect(response.body).toBe("platform-result")
+    expect(response.headers["x-platform-result"]).toBe("retained")
+    expect(response.headers["keep-alive"]).toBeUndefined()
+    expect((await rawProxyRequest(address.port, "/v1/empty", { headers: { authorization: "Bearer private-token" } })).statusCode).toBe(204)
+  } finally {
+    globalThis.fetch = originalFetch
+    await app.close()
+    if (previousOrigin === undefined) delete process.env.GENIO_ONE_PLATFORM_ORIGIN
+    else process.env.GENIO_ONE_PLATFORM_ORIGIN = previousOrigin
+  }
+})
+
+test("proxy /v1/* sends the first response chunk before the upstream stream completes", async () => {
+  const app = Fastify()
+  await proxyRoutes(app, {} as any)
+  let controller!: ReadableStreamDefaultController<Uint8Array>
+  let upstreamCompleted = false
+  const encoder = new TextEncoder()
+  globalThis.fetch = Object.assign(async () => new Response(new ReadableStream<Uint8Array>({
+    start(streamController) {
+      controller = streamController
+      controller.enqueue(encoder.encode("first-chunk"))
+    },
+  }), { headers: { "content-type": "text/event-stream" } }), { preconnect: () => {} })
+  let request: ReturnType<typeof httpRequest> | undefined
+  let resolveFirst!: (value: string) => void
+  let rejectFirst!: (error: Error) => void
+  const firstChunk = new Promise<string>((resolve, reject) => { resolveFirst = resolve; rejectFirst = reject })
+  try {
+    await app.listen({ host: "127.0.0.1", port: 0 })
+    const address = app.server.address()
+    if (!address || typeof address === "string") throw new Error("PROXY_ADDRESS_UNAVAILABLE")
+    const completed = new Promise<string>((resolve, reject) => {
+      request = httpRequest({ hostname: "127.0.0.1", port: address.port, path: "/v1/events", headers: { authorization: "Bearer private-token" } }, (response) => {
+        const chunks: Buffer[] = []
+        response.on("data", (chunk) => { chunks.push(Buffer.from(chunk)); resolveFirst(Buffer.from(chunk).toString()) })
+        response.once("error", (error) => { rejectFirst(error); reject(error) })
+        response.once("end", () => resolve(Buffer.concat(chunks).toString()))
+      })
+      request.once("error", (error) => { rejectFirst(error); reject(error) })
+      request.setTimeout(5_000, () => request!.destroy(new Error("PROXY_STREAM_TIMEOUT")))
+      request.end()
+    })
+    void completed.catch(() => undefined)
+    expect(await firstChunk).toBe("first-chunk")
+    expect(upstreamCompleted).toBe(false)
+    controller.enqueue(encoder.encode("last-chunk"))
+    controller.close()
+    upstreamCompleted = true
+    expect(await completed).toBe("first-chunklast-chunk")
+  } finally {
+    if (controller && !upstreamCompleted) controller.close()
+    request?.destroy()
+    globalThis.fetch = originalFetch
+    await app.close()
+  }
+}, 10_000)

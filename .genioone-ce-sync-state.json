@@ -4511,11 +4511,11 @@
       "mode": 420
     },
     "apps/bot/server/routes/proxy.test.ts": {
-      "sha256": "5338ba53ac50060c245faf6287fb6603e6d4d59be339f23b88a54cf7482b7a08",
+      "sha256": "34e1585884cd208f730db298199ccd120f53fc08cb6b0f45c14112d854dd8500",
       "mode": 420
     },
     "apps/bot/server/routes/proxy.ts": {
-      "sha256": "544484b247accd903d9810350c87d7b9b6e3c9491c66eb443d1e039b6cdb651c",
+      "sha256": "53f0430db267bca1a63d8465659d6af11d0d3f5ad54e6c6d18fe97990b43912d",
       "mode": 420
     },
     "apps/bot/server/routes/transcription.test.ts": {
@@ -8391,7 +8391,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/features/resources/resource-enforcement-chain-card.tsx": {
-      "sha256": "88791b6edf4262007a6ef9aff4454f62bda3d723c05099d43a8732856b9fcf98",
+      "sha256": "1bef08dca02124a8b0e9403f80574b828c32ce4d72c389a89669edde7f03c19b",
       "mode": 420
     },
     "apps/platform/platform-web/src/features/resources/resource-model-routing-card.tsx": {
@@ -8475,7 +8475,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/i18n.ts": {
-      "sha256": "af4c3fb3bfaff8ced08ad79616b66a5addab963adb3d89935d20facab4a9081b",
+      "sha256": "5f373c77e2bfad91edd7be6a6cc1a4067ddb9db22d8725529ca55ad31e8d7d67",
       "mode": 420
     },
     "apps/platform/platform-web/src/i18n/admin-governance.ts": {
@@ -8695,7 +8695,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/test/resource-enforcement-chain-card.dom.test.tsx": {
-      "sha256": "fad7710ea6cea92504c17c346ea165acb31be7af9499d6659804ba338e2c9ddb",
+      "sha256": "e4b1082b51bad54776190ac70302639134af83168bb3d3b1be3539956d7631a1",
       "mode": 420
     },
     "apps/platform/platform-web/test/resource-policy-draft-lifecycle.dom.test.tsx": {
