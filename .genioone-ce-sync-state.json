@@ -5147,11 +5147,11 @@
       "mode": 420
     },
     "apps/bot/src/lib/ui-copy.test.ts": {
-      "sha256": "e6dbba6c7064dbaec0dd70c050ab3c3a85fe04052f0eee2c7cd4d81769d881dc",
+      "sha256": "7888da5c3f13f064a129c3ce3d5c1bda4541a483ab02467f685485828da5c730",
       "mode": 420
     },
     "apps/bot/src/lib/ui-copy.ts": {
-      "sha256": "5ab31c71339788e9e5dede8ac1ac9374afe1652dfd26bb29f0fa19ad036990be",
+      "sha256": "7def03925139e13b79ee9f59fbf1702765c9f2c1d1a39eea33635bea64216d7d",
       "mode": 420
     },
     "apps/bot/src/main.tsx": {

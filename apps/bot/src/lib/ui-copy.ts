@@ -56,9 +56,19 @@ export function botStatusText(value: string) {
     ["遠端受控電腦已連線，點擊切換畫面", "Remote managed desktop connected; click to switch views"],
     ["基礎遠端沙盒可執行；尚未開啟桌面畫面", "Basic remote sandbox is ready; the desktop view is not open"],
     ["對話與企業工具可用；執行程式時才會啟動遠端沙盒", "Conversation and enterprise tools are available; the remote sandbox starts when code execution is needed"],
+    ["GenioOne SSO session 無法使用", "GenioOne SSO session is unavailable"],
+    ["工具連線中", "Connecting tools"],
+    ["展示模式", "Demo mode"],
+    ["目前工作仍在進行，完成後再重新連線工具。", "Work is still in progress. Reconnect tools after it finishes."],
+    ["等待新的工作階段載入工具", "Waiting for a new session to load tools"],
+    ["正在確認企業工具", "Checking enterprise tools"],
   ]
   for (const [from, to] of replacements) {
     if (value === from) return to
   }
-  return value.replace(/(\d+)\s*個工具/g, (_match, count: string) => `${count} ${Number(count) === 1 ? "tool" : "tools"}`)
+  const waitingForRuntime = value.match(/^等待 (.+) runtime$/)
+  if (waitingForRuntime?.[1]) return `Waiting for ${waitingForRuntime[1]} runtime`
+  return value
+    .replace(/(\d+)\s*個工具/g, (_match, count: string) => `${count} ${Number(count) === 1 ? "tool" : "tools"}`)
+    .replace(/(\d+)\s*個服務/g, (_match, count: string) => `${count} ${Number(count) === 1 ? "service" : "services"}`)
 }
