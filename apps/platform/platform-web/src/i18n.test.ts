@@ -3,6 +3,20 @@ import test from "node:test"
 
 import i18n from "@/i18n"
 
+test("Redirect URI copy controls and recovery feedback exist in both supported locales", () => {
+  const errorKey = "Could not copy Redirect URI. Try again or select and copy it manually."
+
+  for (const language of ["en", "zh-TW"]) {
+    assert.equal(i18n.exists("Copy Redirect URI", { lng: language, fallbackLng: false }), true)
+    assert.equal(i18n.exists(errorKey, { lng: language, fallbackLng: false }), true)
+  }
+
+  assert.equal(i18n.t("Copy Redirect URI", { lng: "en" }), "Copy Redirect URI")
+  assert.equal(i18n.t("Copy Redirect URI", { lng: "zh-TW" }), "複製重新導向 URI")
+  assert.equal(i18n.t(errorKey, { lng: "en" }), errorKey)
+  assert.equal(i18n.t(errorKey, { lng: "zh-TW" }), "無法複製重新導向 URI。請重試，或選取 URI 後手動複製。")
+})
+
 test("request-rule removal names include their row and localized unnamed fallback", () => {
   const key = "Remove rule {{index}}: {{name}}"
 

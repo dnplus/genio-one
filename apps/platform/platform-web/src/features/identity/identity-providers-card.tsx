@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react"
-import { KeyRoundIcon, LoaderCircleIcon, PlusIcon, Trash2Icon } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { CheckIcon, CopyIcon, KeyRoundIcon, LoaderCircleIcon, PlusIcon, Trash2Icon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Badge } from "@/components/ui/badge"
@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
 import { Switch } from "@/components/ui/switch"
 import {
   Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle,
@@ -184,6 +185,10 @@ function AddIdentityProviderSheet({ tenantId, option, onClose, onSaved }: {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const [created, setCreated] = useState<IdentityProvider | null>(null)
+  const [copiedRedirectUri, setCopiedRedirectUri] = useState(false)
+  const [copyError, setCopyError] = useState("")
+  const copyAttempt = useRef(0)
+  const copiedResetTimer = useRef<number | undefined>(undefined)
 
   useEffect(() => {
     setClientId("")
@@ -191,7 +196,28 @@ function AddIdentityProviderSheet({ tenantId, option, onClose, onSaved }: {
     setDiscoveryUrl("")
     setError("")
     setCreated(null)
+    setCopiedRedirectUri(false)
+    setCopyError("")
+    return () => {
+      copyAttempt.current += 1
+      window.clearTimeout(copiedResetTimer.current)
+    }
   }, [option])
+
+  async function copyRedirectUri(uri: string) {
+    const attempt = ++copyAttempt.current
+    window.clearTimeout(copiedResetTimer.current)
+    setCopiedRedirectUri(false)
+    setCopyError("")
+    try {
+      await navigator.clipboard.writeText(uri)
+      if (attempt !== copyAttempt.current) return
+      setCopiedRedirectUri(true)
+      copiedResetTimer.current = window.setTimeout(() => setCopiedRedirectUri(false), 2000)
+    } catch {
+      if (attempt === copyAttempt.current) setCopyError(t("Could not copy Redirect URI. Try again or select and copy it manually."))
+    }
+  }
 
   if (!option) return null
   const complete = clientId.trim() && clientSecret.trim() &&
@@ -227,7 +253,19 @@ function AddIdentityProviderSheet({ tenantId, option, onClose, onSaved }: {
         {created ? (
           <FieldGroup className="p-6">
             <p className="text-sm">{t("Added. Allow this redirect URI with the provider:")}</p>
-            <code className="block break-all rounded-md bg-muted px-3 py-2 text-xs">{created.redirect_uri}</code>
+            <InputGroup className="h-10 bg-background">
+              <InputGroupInput className="font-mono text-xs" readOnly value={created.redirect_uri} aria-label={t("Redirect URI")} />
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton
+                  aria-label={t("Copy Redirect URI")}
+                  onClick={() => void copyRedirectUri(created.redirect_uri)}
+                >
+                  {copiedRedirectUri ? <CheckIcon /> : <CopyIcon />}
+                  {t(copiedRedirectUri ? "Copied" : "Copy")}
+                </InputGroupButton>
+              </InputGroupAddon>
+            </InputGroup>
+            {copyError ? <p className="text-sm text-destructive" role="alert">{copyError}</p> : null}
             <p className="text-sm text-muted-foreground">
               {t("Sign-in through this provider fails until the provider accepts that URI.")}
             </p>
@@ -290,6 +328,10 @@ function EditIdentityProviderSheet({ tenantId, provider, onClose, onSaved }: {
   const [clientSecret, setClientSecret] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
+  const [copiedRedirectUri, setCopiedRedirectUri] = useState(false)
+  const [copyError, setCopyError] = useState("")
+  const copyAttempt = useRef(0)
+  const copiedResetTimer = useRef<number | undefined>(undefined)
 
   useEffect(() => {
     if (!provider) return
@@ -297,7 +339,28 @@ function EditIdentityProviderSheet({ tenantId, provider, onClose, onSaved }: {
     setHidden(provider.hidden_on_login_page)
     setClientSecret("")
     setError("")
+    setCopiedRedirectUri(false)
+    setCopyError("")
+    return () => {
+      copyAttempt.current += 1
+      window.clearTimeout(copiedResetTimer.current)
+    }
   }, [provider])
+
+  async function copyRedirectUri(uri: string) {
+    const attempt = ++copyAttempt.current
+    window.clearTimeout(copiedResetTimer.current)
+    setCopiedRedirectUri(false)
+    setCopyError("")
+    try {
+      await navigator.clipboard.writeText(uri)
+      if (attempt !== copyAttempt.current) return
+      setCopiedRedirectUri(true)
+      copiedResetTimer.current = window.setTimeout(() => setCopiedRedirectUri(false), 2000)
+    } catch {
+      if (attempt === copyAttempt.current) setCopyError(t("Could not copy Redirect URI. Try again or select and copy it manually."))
+    }
+  }
 
   if (!provider) return null
 
@@ -330,9 +393,19 @@ function EditIdentityProviderSheet({ tenantId, provider, onClose, onSaved }: {
         <FieldGroup className="p-6">
           <Field>
             <FieldLabel htmlFor="idp-redirect">{t("Redirect URI")}</FieldLabel>
-            <code id="idp-redirect" className="block break-all rounded-md bg-muted px-3 py-2 text-xs">
-              {provider.redirect_uri}
-            </code>
+            <InputGroup className="h-10 bg-background">
+              <InputGroupInput id="idp-redirect" className="font-mono text-xs" readOnly value={provider.redirect_uri} aria-label={t("Redirect URI")} />
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton
+                  aria-label={t("Copy Redirect URI")}
+                  onClick={() => void copyRedirectUri(provider.redirect_uri)}
+                >
+                  {copiedRedirectUri ? <CheckIcon /> : <CopyIcon />}
+                  {t(copiedRedirectUri ? "Copied" : "Copy")}
+                </InputGroupButton>
+              </InputGroupAddon>
+            </InputGroup>
+            {copyError ? <p className="text-sm text-destructive" role="alert">{copyError}</p> : null}
           </Field>
           <div className="flex items-center justify-between gap-3">
             <FieldLabel htmlFor="idp-enabled">{t("Enabled")}</FieldLabel>
