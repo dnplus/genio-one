@@ -165,18 +165,20 @@ function map(row: DatabaseRow): McpDiscoveryOperation {
 async function active(
   transaction: SqlTransaction,
   tenantId: string,
+  resourceId: string,
   connectionId: string,
 ): Promise<McpDiscoveryOperation | null> {
   const found = await transaction.query<DatabaseRow>(
     `select ${COLUMNS}
        from genio_one_mcp_discovery_operations
       where tenant_id = $1
-        and connection_id = $2
+        and resource_id = $2
+        and connection_id = $3
         and state in ('PENDING', 'RUNNING')
       order by created_at desc
       limit 1
       for update`,
-    [tenantId, connectionId],
+    [tenantId, resourceId, connectionId],
   )
   return found.rows[0] ? map(found.rows[0]) : null
 }
@@ -196,13 +198,13 @@ export function createPostgresMcpDiscoveryStore(options: {
         const same = await transaction.query<DatabaseRow>(
           `select ${COLUMNS}
              from genio_one_mcp_discovery_operations
-            where tenant_id = $1 and correlation_id = $2
+            where tenant_id = $1 and resource_id = $2 and correlation_id = $3
             limit 1
             for update`,
-          [input.tenantId, input.correlationId],
+          [input.tenantId, input.resourceId, input.correlationId],
         )
         if (same.rows[0]) return map(same.rows[0])
-        const current = await active(transaction, input.tenantId, input.connectionId)
+        const current = await active(transaction, input.tenantId, input.resourceId, input.connectionId)
         if (current) return current
         const source = await transaction.query<DatabaseRow>(
           `select resource.enforcement_point_id as gateway_id,
@@ -325,6 +327,7 @@ export function createPostgresMcpDiscoveryStore(options: {
              left join lateral (
                select candidates from genio_one_mcp_discovery_operations
                 where tenant_id = operation.tenant_id
+                  and resource_id = operation.resource_id
                   and connection_id = operation.connection_id
                   and operation_id <> operation.operation_id
                   and state = 'SUCCEEDED'

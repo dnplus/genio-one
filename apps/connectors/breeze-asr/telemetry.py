@@ -1,4 +1,3 @@
-import base64
 import contextvars
 import hashlib
 import json
@@ -12,11 +11,16 @@ import threading
 import time
 import urllib.request
 import urllib.error
-import traceback
 from contextlib import contextmanager, closing
 from pathlib import Path
 
 _context = contextvars.ContextVar("asr_observation", default=None)
+_SAFE_ATTRIBUTES = frozenset({
+    "http.request.method", "http.route", "http.response.status_code", "genio.correlation.id",
+    "audio.bytes", "audio.sha256", "audio.seconds", "audio.pcm.sha256", "audio.sample_rate",
+    "gen_ai.request.model", "gen_ai.response.text_length", "error.type",
+})
+_LEGACY_UNSAFE_KEYS = ("audio.payload", "gen_ai.response.text", "error.message", "error.stack")
 
 
 class Telemetry:
@@ -46,6 +50,7 @@ class Telemetry:
         database.execute("pragma auto_vacuum=incremental")
         database.execute("pragma journal_mode=wal")
         database.execute("pragma synchronous=full")
+        database.execute("pragma secure_delete=on")
         database.execute("create table if not exists events (id text primary key, created real not null, signal text not null, body text not null)")
         database.commit()
         os.chmod(self.path, 0o600)
@@ -60,6 +65,12 @@ class Telemetry:
         while not self.stopped.is_set():
             try:
                 database = self._database()
+                unsafe = " or ".join("body like ?" for _ in _LEGACY_UNSAFE_KEYS)
+                removed = database.execute(f"delete from events where {unsafe}", tuple(f'%"{key}"%' for key in _LEGACY_UNSAFE_KEYS)).rowcount
+                database.commit()
+                if removed:
+                    database.execute("pragma wal_checkpoint(truncate)")
+                    self._drop("LEGACY_UNSAFE_CONTENT", removed)
                 self.available = True
                 self.storage_failed = False
                 break
@@ -177,12 +188,12 @@ class Telemetry:
             yield details
         except BaseException as error:
             failed = True
-            details.update({"error.type": type(error).__name__, "error.message": str(error), "error.stack": traceback.format_exc()})
+            details["error.type"] = type(error).__name__
             raise
         finally:
             ended = time.time_ns()
             failed = failed or int(details.get("http.response.status_code", 200)) >= 400
-            fields = [{"key": key, "value": {"stringValue": str(value)}} for key, value in details.items()]
+            fields = [{"key": key, "value": {"stringValue": str(value)}} for key, value in details.items() if key in _SAFE_ATTRIBUTES]
             fields.append({"key": "genio.outcome", "value": {"stringValue": "CANCELLED" if details.get("error.type") == "CancelledError" else "FAILED" if failed else "COMPLETED"}})
             observation = {"traceId": trace, "spanId": span, "name": name, "kind": 1, "startTimeUnixNano": str(started), "endTimeUnixNano": str(ended), "attributes": fields, "status": {"code": 2 if failed else 1}}
             if parent_span:
@@ -201,7 +212,7 @@ class Telemetry:
         digest = hashlib.sha256(data).hexdigest()
         if not self.origin:
             return digest
-        fields = {"audio.sha256": digest, "audio.bytes": str(len(data)), "audio.encoding": "base64", "audio.payload": base64.b64encode(data).decode()}
+        fields = {"audio.sha256": digest, "audio.bytes": str(len(data))}
         event = {"timeUnixNano": str(time.time_ns()), "traceId": trace, "spanId": span, "body": {"stringValue": "asr.audio.input"}, "attributes": [{"key": key, "value": {"stringValue": value}} for key, value in fields.items()]}
         self.emit("logs", self.packet("logs", [event]))
         return digest

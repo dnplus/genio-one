@@ -14,7 +14,7 @@ Connector 將 `MediaTek-Research/Breeze-ASR-25` 常駐於本機，提供 OpenAI-
 pnpm --filter genio-connectors start:breeze-asr
 ```
 
-首次啟動會依 `uv.lock` 安裝依賴，並下載固定 revision 的模型權重到 Hugging Face cache。`GET http://127.0.0.1:5192/health` 只在模型載入後回報 ready。啟動命令使用 `--no-proxy-headers`，以 TCP peer 判定 loopback，避免把 Gateway 的 X-Forwarded-For 當成 Connector 的連線來源。預設綁定 loopback、單一推論併發，忙碌回傳 429；暫存音檔在解碼後刪除。操作日誌保留模型、裝置、correlation、音訊時長與耗時。設定 OTLP 後另送完整觀測資料，包含原始音訊及辨識文字。
+首次啟動會依 `uv.lock` 安裝依賴，並下載固定 revision 的模型權重到 Hugging Face cache。`GET http://127.0.0.1:5192/health` 只在模型載入後回報 ready。啟動命令使用 `--no-proxy-headers`，以 TCP peer 判定 loopback，避免把 Gateway 的 X-Forwarded-For 當成 Connector 的連線來源。預設綁定 loopback、單一推論併發，忙碌回傳 429；暫存音檔在解碼後刪除。操作日誌與 OTLP 保留模型、correlation、狀態、耗時、音訊大小及 SHA-256、轉錄長度與錯誤類別，不保存原始音訊或辨識文字。
 
 服務支援 `BREEZE_ASR_API_KEY`，設置後每個端點都要求 Bearer token。第一版安裝程式適用於 Gateway 與 Connector 同機、loopback 無憑證部署；跨機部署需先完成 CP 的服務憑證設定與網路驗證。容器的 localhost 指容器本身。
 
@@ -68,10 +68,10 @@ Bot 所固定的 Codex app-server 0.159.2 生成協定已包含 `audio`／`local
 
 來源：[Breeze ASR 25 模型與官方範例](https://huggingface.co/MediaTek-Research/Breeze-ASR-25)、[Envoy AI Gateway 音訊轉錄](https://aigateway.envoyproxy.io/docs/capabilities/llm-integrations/supported-endpoints/)、本 repo 的 `apps/bot/server/generated/v2/UserInput.ts` 與 `ThreadRealtimeStartParams.ts`。
 
-## 完整遙測與斷線保存
+## 遙測與斷線保存
 
 設定 `OTEL_EXPORTER_OTLP_ENDPOINT` 為實際 Collector HTTP origin，`GENIO_ONE_TENANT_ID` 為服務所屬租戶，`GENIO_ONE_OTEL_SPOOL_DIR` 為服務可寫的專用持久目錄。未設定 endpoint 時 health 明示 configured=false，不冒充已交付；容器部署須將 spool 目錄掛到持久卷。
 
-HTTP、解碼、排程等待與模型執行保留 traces／logs／metrics；原始音訊以 base64 保存一份並以 SHA-256 關聯，後續節點保留音訊參考與辨識文字。SQLite WAL+FULL 由背景執行緒處理，網路重試不佔用模型推論鎖；兩小時／256 MiB 上限、成功後刪除、定期清理與 incremental vacuum。等候落盤的記憶體上限 16 MiB；超限或儲存失敗有明示丟棄紀錄，儲存暫時不可用會重試。這些容量及程序中止窗口不是零遺失保證。
+HTTP、解碼、排程等待與模型執行保留 traces／logs／metrics；音訊只記錄大小與 SHA-256，辨識結果只記錄字元數。錯誤只記錄類別，不記錄可能含輸入資料的訊息或堆疊。升級時會刪除舊 outbox 中含原始音訊、辨識文字或錯誤訊息的待送紀錄。SQLite WAL+FULL 由背景執行緒處理，網路重試不佔用模型推論鎖；兩小時／256 MiB 上限、成功後刪除、定期清理與 incremental vacuum。等候落盤的記憶體上限 16 MiB；超限或儲存失敗有明示丟棄紀錄，儲存暫時不可用會重試。這些容量及程序中止窗口不是零遺失保證。
 
 `/health` 同時回傳模型 ready 與 telemetry 狀態；每 30 秒的 `telemetry.delivery.health` 可在 Admin Portal 原始紀錄查詢，計數範圍為目前程序。

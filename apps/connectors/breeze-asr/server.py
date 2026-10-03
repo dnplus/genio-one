@@ -34,6 +34,14 @@ if not logger.handlers:
 logger.propagate = False
 
 
+def safe_correlation_id(headers):
+    for name in ("x-genio-correlation-id", "x-request-id"):
+        value = headers.get(name, "")
+        if re.fullmatch(r"[A-Za-z0-9_-]{1,128}", value):
+            return value
+    return ""
+
+
 def verify_model(path):
     with Path(path).open("rb") as model:
         header = model.read(48)
@@ -127,7 +135,9 @@ def create_app(recognizer_factory=BreezeRecognizer):
 
     @app.middleware("http")
     async def observe_request(request: Request, call_next):
-        with telemetry.operation("asr.http", {"http.request.method": request.method, "http.route": request.url.path, "genio.correlation.id": request.headers.get("x-genio-correlation-id", request.headers.get("x-request-id", ""))}, request.headers.get("traceparent")) as evidence:
+        correlation = safe_correlation_id(request.headers)
+        route = request.url.path if request.url.path in ("/health", "/v1/models", "/v1/audio/transcriptions") else "unmatched"
+        with telemetry.operation("asr.http", {"http.request.method": request.method, "http.route": route, "genio.correlation.id": correlation}, request.headers.get("traceparent")) as evidence:
             response = await call_next(request)
             evidence["http.response.status_code"] = response.status_code
             return response
@@ -165,11 +175,11 @@ def create_app(recognizer_factory=BreezeRecognizer):
                     def recognize():
                         with telemetry.operation("asr.model.execute", {"gen_ai.request.model": MODEL_ALIAS}) as result:
                             value = app.state.recognizer.transcribe(audio)
-                            result["gen_ai.response.text"] = value
+                            result["gen_ai.response.text_length"] = len(value)
                             return value
                     text = await asyncio.to_thread(recognize)
                     evidence["gen_ai.response.text_length"] = len(text)
-                logger.info(json.dumps({"event": "asr.completed", "model": MODEL_ALIAS, "correlation_id": request.headers.get("x-request-id") if re.fullmatch(r"[A-Za-z0-9_-]{1,128}", request.headers.get("x-request-id", "")) else None, "audio_seconds": round(len(audio) / 16000, 2), "elapsed_ms": round((time.monotonic() - started) * 1000)}))
+                logger.info(json.dumps({"event": "asr.completed", "model": MODEL_ALIAS, "correlation_id": safe_correlation_id(request.headers) or None, "audio_seconds": round(len(audio) / 16000, 2), "elapsed_ms": round((time.monotonic() - started) * 1000)}))
                 return {"text": text}
 
     return app

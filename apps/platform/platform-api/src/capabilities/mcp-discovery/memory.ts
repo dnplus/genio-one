@@ -8,8 +8,8 @@ import { mcpToolCapabilityId } from "../../../../../../runtimes/gateway/services
 import { discoveryCandidates } from "./candidates"
 import { mcpToolReviewForCandidate, pruneMcpToolReviews, replaceMcpToolReview } from "./reviews"
 
-function connectionKey(tenantId: string, connectionId: string): string {
-  return `${tenantId}\u0000${connectionId}`
+function connectionKey(tenantId: string, resourceId: string, connectionId: string): string {
+  return `${tenantId}\u0000${resourceId}\u0000${connectionId}`
 }
 
 export function createInMemoryMcpDiscoveryStore(options: {
@@ -31,10 +31,10 @@ export function createInMemoryMcpDiscoveryStore(options: {
 
   return {
     async request(input) {
-      const correlationKey = `${input.tenantId}\u0000${input.correlationId}`
+      const correlationKey = `${input.tenantId}\u0000${input.resourceId}\u0000${input.correlationId}`
       const existingId = correlations.get(correlationKey)
       if (existingId) return clone(operations.get(existingId)!)
-      const activeId = activeConnections.get(connectionKey(input.tenantId, input.connectionId))
+      const activeId = activeConnections.get(connectionKey(input.tenantId, input.resourceId, input.connectionId))
       if (activeId) return clone(operations.get(activeId)!)
       const [resource, connection] = await Promise.all([
         options.resources.getResource({ tenantId: input.tenantId, resourceId: input.resourceId }),
@@ -72,7 +72,7 @@ export function createInMemoryMcpDiscoveryStore(options: {
       }
       operations.set(operation.operation_id, operation)
       correlations.set(correlationKey, operation.operation_id)
-      activeConnections.set(connectionKey(input.tenantId, input.connectionId), operation.operation_id)
+      activeConnections.set(connectionKey(input.tenantId, input.resourceId, input.connectionId), operation.operation_id)
       return clone(operation)
     },
 
@@ -130,6 +130,7 @@ export function createInMemoryMcpDiscoveryStore(options: {
       const previous = [...operations.values()]
         .filter((candidate) =>
           candidate.tenant_id === input.tenantId &&
+          candidate.resource_id === operation.resource_id &&
           candidate.connection_id === operation.connection_id &&
           candidate.operation_id !== operation.operation_id &&
           candidate.state === "SUCCEEDED")
@@ -172,7 +173,7 @@ export function createInMemoryMcpDiscoveryStore(options: {
             updated_at: timestamp,
           }
       operations.set(completed.operation_id, completed)
-      activeConnections.delete(connectionKey(completed.tenant_id, completed.connection_id))
+      activeConnections.delete(connectionKey(completed.tenant_id, completed.resource_id, completed.connection_id))
       return clone(completed)
     },
 

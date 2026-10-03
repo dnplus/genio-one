@@ -5515,15 +5515,15 @@
       "mode": 420
     },
     "apps/connectors/breeze-asr/README.md": {
-      "sha256": "e7c475285a4d0cf4f25aee214a2ebb08819fb157edf24f4da8907f7730270f21",
+      "sha256": "fa94cf74cfa7406243a06cd377b92add9431cd7857a9bb174a872ad613d1eb3c",
       "mode": 420
     },
     "apps/connectors/breeze-asr/server.py": {
-      "sha256": "069e225d04e9167781ea0d04c03b7f6194b54c703809c1dc5cb0615390d936cd",
+      "sha256": "bf5b0d7ad80d28ab645872908fb6e48d62299d3f37b2b50a9714da9823da80e3",
       "mode": 420
     },
     "apps/connectors/breeze-asr/telemetry.py": {
-      "sha256": "6c4bd6d64b22f3aaeff047593569aa6e74c96d9dc62f52f1e211d92fdd901038",
+      "sha256": "b46ae1e7f11d5d704841dceb31c1504b5da2b5bbcb119ff8428b607385531cc3",
       "mode": 420
     },
     "apps/connectors/breeze-asr/test_server.py": {
@@ -5531,7 +5531,7 @@
       "mode": 420
     },
     "apps/connectors/breeze-asr/test_telemetry.py": {
-      "sha256": "33a9ce6fd3c1e4f6a7c228ed2462a928e97da1b6f9a0bedb65ce30784d3ef953",
+      "sha256": "6df812fe0c96b37677faa1906a7e3cf0cfc2f9db424cd157c36b75fcc26a0bb9",
       "mode": 420
     },
     "apps/connectors/breeze-asr/uv.lock": {
@@ -5984,6 +5984,10 @@
     },
     "apps/platform/platform-api/migrations/022_mcp_oauth_resource_scope.sql": {
       "sha256": "ccdd17a3649ba4ee3eca3bb948dc30ce8aef61c8353ff7b64a04fe496ca4c936",
+      "mode": 420
+    },
+    "apps/platform/platform-api/migrations/023_mcp_discovery_resource_scope.sql": {
+      "sha256": "634ed5f6f59392eacfc58066312e053709fc6619ec521e58d2604a79455406e5",
       "mode": 420
     },
     "apps/platform/platform-api/migrations/README.md": {
@@ -6651,7 +6655,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/mcp-discovery/memory.ts": {
-      "sha256": "63cc1aa640c85a142fcd9b7c40126857262412dec87e88d69b1c6e5f6b4237f1",
+      "sha256": "44f5b05f6a88aed5287f4628e43ce81c77c7fc2006d632f4a125a7e07690d40f",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/mcp-discovery/module.ts": {
@@ -6659,7 +6663,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/mcp-discovery/postgres.ts": {
-      "sha256": "6ae1595ffde7b5b5792c38d8a612bc25e0fea73e2600fff6acee6e9f2144beb8",
+      "sha256": "380693a78c446315d0740196903b5f3cd4335582a2fe3a1934f3e34fde8374a5",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/mcp-discovery/reviews.ts": {
@@ -7678,6 +7682,14 @@
       "sha256": "efa457a72f466c4147da71fd48e30af65febb6bc84730c427084e50e6cccc420",
       "mode": 420
     },
+    "apps/platform/platform-api/test/mcp-discovery-resource-postgres.test.ts": {
+      "sha256": "123e190cc67a7d906919c43860bcb5508b43bb05055a3d7eb0f76f66ef178b9c",
+      "mode": 420
+    },
+    "apps/platform/platform-api/test/mcp-discovery-resource-scope.test.ts": {
+      "sha256": "db21cf794e3b72f069da0c539a165b0d2f8a0688aa62223dca321a30adddc15a",
+      "mode": 420
+    },
     "apps/platform/platform-api/test/mcp-oauth-configured.test.ts": {
       "sha256": "40e76a2e6dcbaedbec30ef75131f078d7408dc209bf7807128752129a0e5a8d1",
       "mode": 420
@@ -7755,7 +7767,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/persistence.test.ts": {
-      "sha256": "8e9bcf247b8ebfb441929178ab3792591dd560d14c23f814f42fb7d928fc6117",
+      "sha256": "6cbde234f68878aa699f7b69e7b5e9d3729ff0e6cbd2a97ea6f00bd8fa384bd8",
       "mode": 420
     },
     "apps/platform/platform-api/test/personal-connections.test.ts": {
