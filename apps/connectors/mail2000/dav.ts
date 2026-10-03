@@ -3,6 +3,12 @@ import { createDAVClient } from "tsdav"
 import type { Mail2000Credential } from "./server"
 import { parseMail2000VCard, searchMail2000Directory, type Mail2000DirectoryEntry } from "./vcard"
 
+const MAX_RESPONSE_BYTES = 8 * 1024 * 1024
+const MAX_OPERATION_BYTES = 16 * 1024 * 1024
+const MAX_REQUESTS = 32
+const MAX_COLLECTIONS = 32
+const MAX_OBJECTS = 2000
+
 export function davUrl(value: string, origin?: string): URL {
   const url = new URL(value)
   if (url.protocol !== "https:" || url.username || url.password || url.hash || (origin && url.origin !== origin)) throw new Error("MAIL2000_DAV_URL_REJECTED")
@@ -12,15 +18,48 @@ export function davUrl(value: string, origin?: string): URL {
 export function createMail2000Dav(config: { url: string; kind: "caldav" | "carddav" }, factory = createDAVClient) {
   const configured = davUrl(config.url)
   async function client(credential: Mail2000Credential) {
+    const budget = { bytes: MAX_OPERATION_BYTES, requests: MAX_REQUESTS }
     const guardedFetch = Object.assign(async (input: string | URL | Request, init?: RequestInit) => {
       let request = new Request(input, init)
       for (let redirects = 0; redirects <= 3; redirects++) {
         davUrl(request.url, configured.origin)
+        if (budget.requests-- <= 0) throw new Error("MAIL2000_DAV_CAPACITY_EXCEEDED")
         const replay = request.clone()
         const response = await observedFetch("genio-connector-mail2000", request, { redirect: "manual", signal: AbortSignal.timeout(30_000) })
-        if (![301, 302, 307, 308].includes(response.status)) return response
+        if (![301, 302, 307, 308].includes(response.status)) {
+          const available = Math.min(MAX_RESPONSE_BYTES, budget.bytes)
+          const declared = Number(response.headers.get("content-length"))
+          if (Number.isFinite(declared) && declared > available) {
+            await response.body?.cancel().catch(() => undefined)
+            throw new Error("MAIL2000_DAV_CAPACITY_EXCEEDED")
+          }
+          if (!response.body) return response
+          const reader = response.body.getReader()
+          let responseBytes = 0
+          const body = new ReadableStream<Uint8Array>({
+            async pull(controller) {
+              try {
+                const part = await reader.read()
+                if (part.done) { controller.close(); return }
+                responseBytes += part.value.byteLength
+                budget.bytes -= part.value.byteLength
+                if (responseBytes > MAX_RESPONSE_BYTES || budget.bytes < 0) {
+                  await reader.cancel().catch(() => undefined)
+                  controller.error(new Error("MAIL2000_DAV_CAPACITY_EXCEEDED"))
+                  return
+                }
+                controller.enqueue(part.value)
+              } catch (error) { controller.error(error) }
+            },
+            cancel(reason) { return reader.cancel(reason) },
+          }, { highWaterMark: 0 })
+          return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers })
+        }
         const location = response.headers.get("location")
-        if (!location) return response
+        if (!location) {
+          await response.body?.cancel().catch(() => undefined)
+          throw new Error("MAIL2000_DAV_REDIRECT_LIMIT")
+        }
         const target = davUrl(new URL(location, request.url).toString(), configured.origin)
         await response.body?.cancel()
         request = new Request(target, replay)
@@ -29,10 +68,21 @@ export function createMail2000Dav(config: { url: string; kind: "caldav" | "cardd
     }, { preconnect: fetch.preconnect })
     return factory({ serverUrl: configured.toString().replace("%7Busername%7D", encodeURIComponent(credential.username)).replace("{username}", encodeURIComponent(credential.username)), credentials: credential, authMethod: "Basic", defaultAccountType: config.kind, fetch: guardedFetch })
   }
+  function objectFilter(counter: { objects: number }) {
+    return (url: string) => {
+      if (!url || config.kind === "caldav" && !url.includes(".ics")) return false
+      if (++counter.objects > MAX_OBJECTS) throw new Error("MAIL2000_DAV_CAPACITY_EXCEEDED")
+      return true
+    }
+  }
+  function limitedCollections<T>(rows: T[]): T[] {
+    if (rows.length > MAX_COLLECTIONS) throw new Error("MAIL2000_DAV_CAPACITY_EXCEEDED")
+    return rows
+  }
   async function collection(credential: Mail2000Credential, url: string) {
     const target = davUrl(url, configured.origin).toString()
     const dav = await client(credential)
-    const collections = config.kind === "caldav" ? await dav.fetchCalendars() : await dav.fetchAddressBooks()
+    const collections = limitedCollections(config.kind === "caldav" ? await dav.fetchCalendars() : await dav.fetchAddressBooks())
     const selected = collections.find((item) => new URL(item.url).toString() === target)
     if (!selected) throw new Error("MAIL2000_DAV_COLLECTION_NOT_FOUND")
     return { dav, selected }
@@ -50,16 +100,19 @@ export function createMail2000Dav(config: { url: string; kind: "caldav" | "cardd
   async function directory(credential: Mail2000Credential) {
     if (config.kind !== "carddav") throw new Error("MAIL2000_CARDDAV_REQUIRED")
     const dav = await client(credential)
-    const addressBooks = await dav.fetchAddressBooks()
+    const addressBooks = limitedCollections(await dav.fetchAddressBooks())
     const scanned: Mail2000DirectoryEntry[] = []
-    for (let index = 0; index < addressBooks.length; index += 4) {
-      const batch = await Promise.all(addressBooks.slice(index, index + 4).map(async (addressBook) => {
-        const rows = await dav.fetchVCards({ addressBook })
-        const label = typeof addressBook.displayName === "string" && addressBook.displayName ? addressBook.displayName : addressBook.url
-        const parsed = rows.map((row) => parseMail2000VCard({ url: row.url, data: String(row.data ?? ""), addressBook: label, addressBookUrl: addressBook.url }))
-        return parsed.filter((entry): entry is Mail2000DirectoryEntry => entry !== null)
-      }))
-      scanned.push(...batch.flat())
+    const counter = { objects: 0 }
+    let rowsSeen = 0
+    for (const addressBook of addressBooks) {
+      const rows = await dav.fetchVCards({ addressBook, urlFilter: objectFilter(counter) })
+      rowsSeen += rows.length
+      if (rowsSeen > MAX_OBJECTS) throw new Error("MAIL2000_DAV_CAPACITY_EXCEEDED")
+      const label = typeof addressBook.displayName === "string" && addressBook.displayName ? addressBook.displayName : addressBook.url
+      for (const row of rows) {
+        const entry = parseMail2000VCard({ url: row.url, data: String(row.data ?? ""), addressBook: label, addressBookUrl: addressBook.url })
+        if (entry) scanned.push(entry)
+      }
     }
     const entries = scanned
     return { addressBooks, entries }
@@ -67,16 +120,18 @@ export function createMail2000Dav(config: { url: string; kind: "caldav" | "cardd
   const api = {
     async list(credential: Mail2000Credential) {
       const dav = await client(credential)
-      const rows = config.kind === "caldav" ? await dav.fetchCalendars() : await dav.fetchAddressBooks()
+      const rows = limitedCollections(config.kind === "caldav" ? await dav.fetchCalendars() : await dav.fetchAddressBooks())
       return rows.map((row) => ({ url: row.url, display_name: row.displayName ?? "" }))
     },
     async read(credential: Mail2000Credential, args: { collection_url: string; object_url?: string; start?: string; end?: string; limit: number }) {
       if (Boolean(args.start) !== Boolean(args.end) || (args.start && args.end && Date.parse(args.start) >= Date.parse(args.end))) throw new Error("MAIL2000_DAV_TIME_RANGE_INVALID")
       const { dav, selected } = await collection(credential, args.collection_url)
       const objectUrls = args.object_url ? [objectUrl(selected.url, args.object_url)] : undefined
+      const urlFilter = objectFilter({ objects: 0 })
       const rows = config.kind === "caldav"
-        ? await dav.fetchCalendarObjects({ calendar: selected, objectUrls, ...(args.start && args.end ? { timeRange: { start: args.start, end: args.end } } : {}) })
-        : await dav.fetchVCards({ addressBook: selected, objectUrls })
+        ? await dav.fetchCalendarObjects({ calendar: selected, objectUrls, urlFilter, ...(args.start && args.end ? { timeRange: { start: args.start, end: args.end } } : {}) })
+        : await dav.fetchVCards({ addressBook: selected, objectUrls, urlFilter })
+      if (rows.length > MAX_OBJECTS) throw new Error("MAIL2000_DAV_CAPACITY_EXCEEDED")
       return { total: rows.length, objects: rows.slice(0, args.limit).map((row) => ({ url: row.url, etag: row.etag, data: String(row.data ?? "").slice(0, 100_000), truncated: String(row.data ?? "").length > 100_000 })) }
     },
     async searchDirectory(credential: Mail2000Credential, args: { query: string; kind: "all" | "person" | "group"; limit: number }) {

@@ -66,3 +66,14 @@ test("large CardDAV groups cap every member field so truncation actually bounds 
   const byName = searchMail2000Directory([group], { query: "全公司", kind: "group", limit: 10 })
   expect(byName.results[0]?.member_emails).toEqual(group.member_emails.slice(0, 100))
 })
+
+test("large groups parse all supported members and fail when one vCard exceeds capacity", () => {
+  const addressBookUrl = "https://mail.test/addressbooks/all/"
+  const members = Array.from({ length: 4000 }, (_, index) => `MEMBER:mailto:user${String(index).padStart(4, "0")}@example.com`)
+  const data = ["BEGIN:VCARD", "FN:全公司", "KIND:group", ...members, "END:VCARD"].join("\r\n")
+  const input = { url: `${addressBookUrl}everyone.vcf`, addressBook: "All", addressBookUrl, data }
+  const group = parseMail2000VCard(input)
+  expect(group?.member_emails).toHaveLength(4000)
+  expect(() => parseMail2000VCard({ ...input, data: ["BEGIN:VCARD", "FN:全公司", "KIND:group", ...members, ...members, "END:VCARD"].join("\r\n") })).toThrow("MAIL2000_DAV_CAPACITY_EXCEEDED")
+  expect(() => parseMail2000VCard({ ...input, data: `FN:${"a".repeat(256 * 1024)}` })).toThrow("MAIL2000_DAV_CAPACITY_EXCEEDED")
+})

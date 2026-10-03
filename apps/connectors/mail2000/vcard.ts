@@ -22,6 +22,9 @@ export interface Mail2000GroupDirectoryEntry extends Mail2000DirectoryEntryBase 
 
 export type Mail2000DirectoryEntry = Mail2000PersonDirectoryEntry | Mail2000GroupDirectoryEntry
 
+const MAX_VCARD_BYTES = 256 * 1024
+const MAX_VCARD_FIELDS = 5000
+
 function unescapeValue(value: string): string {
   return value
     .replace(/\\[nN]/g, "\n")
@@ -74,12 +77,17 @@ function emailFromValue(value: string): string | null {
 }
 
 export function parseMail2000VCard(input: { url: string; data: string; addressBook: string; addressBookUrl: string }): Mail2000DirectoryEntry | null {
+  if (Buffer.byteLength(input.data) > MAX_VCARD_BYTES) throw new Error("MAIL2000_DAV_CAPACITY_EXCEEDED")
   const unfolded = input.data.replace(/\r?\n[ \t]/g, "")
   const fields = new Map<string, string[]>()
+  let fieldCount = 0
   for (const line of unfolded.split(/\r?\n/)) {
     const item = property(line)
     if (!item) continue
-    fields.set(item.name, [...(fields.get(item.name) ?? []), item.value])
+    if (++fieldCount > MAX_VCARD_FIELDS) throw new Error("MAIL2000_DAV_CAPACITY_EXCEEDED")
+    const values = fields.get(item.name)
+    if (values) values.push(item.value)
+    else fields.set(item.name, [item.value])
   }
   const first = (name: string) => fields.get(name)?.[0]
   const emails = [...new Set((fields.get("EMAIL") ?? []).map(emailFromValue).filter((value): value is string => Boolean(value)))].sort()

@@ -4,6 +4,41 @@ import type { ConnectionCertificate } from "./capabilities/connections/contract"
 
 type HttpFetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 type TlsRequestInit = RequestInit & { tls?: { ca?: string } }
+const MAX_MCP_VERIFIER_RESPONSE_BYTES = 32 * 1024 * 1024
+const MAX_LLM_VERIFIER_RESPONSE_BYTES = 1024 * 1024
+
+async function readVerifierResponseText(response: Response, maxBytes: number): Promise<string> {
+  const contentLength = response.headers.get("content-length")
+  if (contentLength !== null && Number(contentLength) > maxBytes) {
+    await response.body?.cancel()
+    throw new Error("Connection verifier response exceeds maximum size")
+  }
+  if (!response.body) return ""
+  const reader = response.body.getReader()
+  let buffer = new Uint8Array(0)
+  let bytes = 0
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      const nextBytes = bytes + value.byteLength
+      if (nextBytes > maxBytes) {
+        await reader.cancel()
+        throw new Error("Connection verifier response exceeds maximum size")
+      }
+      if (nextBytes > buffer.byteLength) {
+        const expanded = new Uint8Array(Math.min(maxBytes, Math.max(nextBytes, buffer.byteLength * 2, 1024)))
+        expanded.set(buffer.subarray(0, bytes))
+        buffer = expanded
+      }
+      buffer.set(value, bytes)
+      bytes = nextBytes
+    }
+    return new TextDecoder().decode(buffer.subarray(0, bytes))
+  } finally {
+    reader.releaseLock()
+  }
+}
 
 function certificateFetchInit(certificate: ConnectionCertificate | undefined): RequestInit {
   if (certificate?.mode !== "CUSTOM_CA" || !certificate.certificate_pem) return {}
@@ -39,12 +74,12 @@ async function mcpRequest(
     signal: AbortSignal.timeout(5_000),
     ...certificateFetchInit(certificate),
   } as TlsRequestInit)
-  const text = await response.text()
+  const text = await readVerifierResponseText(response, MAX_MCP_VERIFIER_RESPONSE_BYTES)
   let json: Record<string, any> | null = null
   if (text.trim()) {
     try {
       const payload = response.headers.get("content-type")?.includes("text/event-stream")
-        ? text.split("\n").find((line) => line.startsWith("data: "))?.slice(6) ?? ""
+        ? text.match(/^data: ([^\r\n]*)/m)?.[1] ?? ""
         : text
       const parsed: unknown = JSON.parse(payload)
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
@@ -202,7 +237,7 @@ export function createHttpConnectionVerifier(options: {
           ...certificateFetchInit(connection.certificate),
         } as TlsRequestInit)
         if (!response.ok) return false
-        const body: unknown = await response.json()
+        const body: unknown = JSON.parse(await readVerifierResponseText(response, MAX_LLM_VERIFIER_RESPONSE_BYTES))
         return typeof body === "object" && body !== null && "data" in body
       } catch {
         return false

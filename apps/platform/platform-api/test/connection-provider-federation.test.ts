@@ -180,4 +180,20 @@ test("Generic OpenAI-compatible verification uses the bound static Gemini key", 
     fetcher: async () => new Response(JSON.stringify({ data: [] }), { status: 200 }),
   })
   assert.equal(await missingSecretVerifier.verify({ connection, providerCredentialProfile: profile }), false)
+
+  let cancelled = false
+  let chunks = 0
+  const oversizedStreamVerifier = createHttpConnectionVerifier({
+    allowedHosts: ["generativelanguage.googleapis.com"],
+    credentials: { "gemini-api-key-primary": "test-only-secret" },
+    fetcher: async () => new Response(new ReadableStream<Uint8Array>({
+      pull(controller) {
+        chunks++
+        if (chunks <= 2) controller.enqueue(new Uint8Array(600_000).fill(97))
+      },
+      cancel() { cancelled = true },
+    }), { status: 200, headers: { "content-type": "application/json" } }),
+  })
+  assert.equal(await oversizedStreamVerifier.verify({ connection, providerCredentialProfile: profile }), false)
+  assert.equal(cancelled, true)
 })

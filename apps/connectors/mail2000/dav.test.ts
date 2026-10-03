@@ -64,6 +64,105 @@ test("CardDAV searches groups and resolves exact member emails from the same dir
   expect(self.self_contact?.full_name).toBe("王小明")
   expect(await dav.getSelfContext({ username: "other@example.com", password: "secret" })).toMatchObject({ match: "not_found", self_contact: null })
 })
+test("CalDAV reads the selected object and keeps the time range and ETag", async () => {
+  const objectUrl = `${collection}meeting.ics`
+  const dav = createMail2000Dav({ url: "https://mail.test/cal/", kind: "caldav" }, (async () => ({
+    async fetchCalendars() { return [{ url: collection }] },
+    async fetchCalendarObjects(input: { objectUrls: string[]; timeRange: { start: string; end: string }; urlFilter: (url: string) => boolean }) {
+      expect(input.objectUrls).toEqual([objectUrl])
+      expect(input.timeRange).toEqual({ start: "2026-10-01T00:00:00.000Z", end: "2026-10-31T00:00:00.000Z" })
+      expect(input.urlFilter(objectUrl)).toBe(true)
+      return [{ url: objectUrl, etag: '"v1"', data: "BEGIN:VCALENDAR\r\nEND:VCALENDAR" }]
+    },
+  })) as unknown as typeof createDAVClient)
+  expect(await dav.read(credential, { collection_url: collection, object_url: objectUrl, start: "2026-10-01T00:00:00.000Z", end: "2026-10-31T00:00:00.000Z", limit: 20 })).toEqual({
+    total: 1, objects: [{ url: objectUrl, etag: '"v1"', data: "BEGIN:VCALENDAR\r\nEND:VCALENDAR", truncated: false }],
+  })
+})
+test("CardDAV stops enumerating object URLs before fetching an oversized directory", async () => {
+  const addressBook = { url: "https://mail.test/addressbooks/people/" }
+  let examined = 0
+  let contentFetched = false
+  const dav = createMail2000Dav({ url: "https://mail.test/addressbooks/", kind: "carddav" }, (async () => ({
+    async fetchAddressBooks() { return [addressBook] },
+    async fetchVCards(input: { urlFilter: (url: string) => boolean }) {
+      for (let index = 0; index < 100_000; index++) {
+        examined++
+        input.urlFilter(`${addressBook.url}${index}.vcf`)
+      }
+      contentFetched = true
+      return []
+    },
+  })) as unknown as typeof createDAVClient)
+  await expect(dav.searchDirectory(credential, { query: "alice", kind: "all", limit: 20 })).rejects.toThrow("MAIL2000_DAV_CAPACITY_EXCEEDED")
+  expect(examined).toBe(2001)
+  expect(contentFetched).toBe(false)
+})
+test("CalDAV stops enumerating object URLs before fetching an oversized calendar", async () => {
+  let examined = 0
+  let contentFetched = false
+  const dav = createMail2000Dav({ url: "https://mail.test/cal/", kind: "caldav" }, (async () => ({
+    async fetchCalendars() { return [{ url: collection }] },
+    async fetchCalendarObjects(input: { urlFilter: (url: string) => boolean }) {
+      for (let index = 0; index < 100_000; index++) {
+        examined++
+        input.urlFilter(`${collection}${index}.ics`)
+      }
+      contentFetched = true
+      return []
+    },
+  })) as unknown as typeof createDAVClient)
+  await expect(dav.read(credential, { collection_url: collection, limit: 20 })).rejects.toThrow("MAIL2000_DAV_CAPACITY_EXCEEDED")
+  expect(examined).toBe(2001)
+  expect(contentFetched).toBe(false)
+})
+test("DAV rejects an oversized response body before the full stream is read", async () => {
+  const originalFetch = globalThis.fetch
+  let chunks = 0
+  let cancelled = false
+  globalThis.fetch = (async () => new Response(new ReadableStream<Uint8Array>({
+    pull(controller) { chunks++; controller.enqueue(new Uint8Array(1024 * 1024)) },
+    cancel() { cancelled = true },
+  }, { highWaterMark: 0 }), { status: 207, headers: { "content-type": "application/xml" } })) as unknown as typeof fetch
+  try {
+    const dav = createMail2000Dav({ url: "https://mail.test/cal/", kind: "caldav" }, (async (options: Parameters<typeof createDAVClient>[0]) => {
+      await (await options.fetch!(collection, { method: "REPORT" })).text()
+      return { async fetchCalendars() { return [] } }
+    }) as unknown as typeof createDAVClient)
+    await expect(dav.list(credential)).rejects.toThrow("MAIL2000_DAV_CAPACITY_EXCEEDED")
+    expect(chunks).toBeLessThan(20)
+    expect(cancelled).toBe(true)
+  } finally { globalThis.fetch = originalFetch }
+})
+test("DAV shares its byte budget across responses in one operation", async () => {
+  const originalFetch = globalThis.fetch
+  let requests = 0
+  globalThis.fetch = (async () => {
+    requests++
+    return new Response(new Uint8Array(6 * 1024 * 1024), { status: 207, headers: { "content-type": "application/xml" } })
+  }) as unknown as typeof fetch
+  try {
+    const dav = createMail2000Dav({ url: "https://mail.test/cal/", kind: "caldav" }, (async (options: Parameters<typeof createDAVClient>[0]) => {
+      for (let index = 0; index < 3; index++) await (await options.fetch!(collection, { method: "REPORT" })).text()
+      return { async fetchCalendars() { return [] } }
+    }) as unknown as typeof createDAVClient)
+    await expect(dav.list(credential)).rejects.toThrow("MAIL2000_DAV_CAPACITY_EXCEEDED")
+    expect(requests).toBe(3)
+  } finally { globalThis.fetch = originalFetch }
+})
+test("DAV refuses excess requests before contacting the upstream", async () => {
+  const originalFetch = globalThis.fetch
+  let requests = 0
+  globalThis.fetch = (async () => { requests++; return new Response(null, { status: 204 }) }) as unknown as typeof fetch
+  try {
+    const dav = createMail2000Dav({ url: "https://mail.test/cal/", kind: "caldav" }, (async (options: Parameters<typeof createDAVClient>[0]) => {
+      for (let index = 0; index < 100; index++) await options.fetch!(collection, { method: "PROPFIND" })
+      return { async fetchCalendars() { return [] } }
+    }) as unknown as typeof createDAVClient)
+    await expect(dav.list(credential)).rejects.toThrow("MAIL2000_DAV_CAPACITY_EXCEEDED")
+    expect(requests).toBe(32)
+  } finally { globalThis.fetch = originalFetch }
+})
 test("CardDAV directory operations reject CalDAV clients", async () => {
   const dav = createMail2000Dav({ url: "https://mail.test/cal/", kind: "caldav" }, (async () => ({})) as unknown as typeof createDAVClient)
   await expect(dav.searchDirectory(credential, { query: "BDSVD", kind: "all", limit: 10 })).rejects.toThrow("MAIL2000_CARDDAV_REQUIRED")

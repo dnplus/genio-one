@@ -5575,11 +5575,11 @@
       "mode": 420
     },
     "apps/connectors/mail2000/dav.test.ts": {
-      "sha256": "bca34bcf8dbdd30d85e00a623980bd7c6b43758c334ae49d62ecd73b5fe813ce",
+      "sha256": "ae9cd4eb1459a2b44be9e94562923ce7e785612d9640655c9f9118f304ca4cfa",
       "mode": 420
     },
     "apps/connectors/mail2000/dav.ts": {
-      "sha256": "90e0183d19d9be81bb7e15a3c58ee729a8d550333f1a10af3341fb14e3c77c5b",
+      "sha256": "872f5e65b700c7448c50575b0f6d74ff36a9bbc2a76edb05457cdc412f558e3c",
       "mode": 420
     },
     "apps/connectors/mail2000/imap.test.ts": {
@@ -5587,7 +5587,7 @@
       "mode": 420
     },
     "apps/connectors/mail2000/imap.ts": {
-      "sha256": "ae672d2916147c0afa55dac49ee2739134e73da349b0fe68b94f7e7916362389",
+      "sha256": "1b817161faaa8bb2582a6fefce92d078f8c48c21cf2cbf1f317b32fb1bf91947",
       "mode": 420
     },
     "apps/connectors/mail2000/install.test.ts": {
@@ -5631,7 +5631,7 @@
       "mode": 420
     },
     "apps/connectors/mail2000/search.test.ts": {
-      "sha256": "ade4968d7153244b6ce34fa20f54ed8fa5e227ae40d6daa8911b72368abb459d",
+      "sha256": "98e47d12e603bc038a4ef932c58738cb83e988190cd6331c8160feb32dd5467b",
       "mode": 420
     },
     "apps/connectors/mail2000/server.test.ts": {
@@ -5659,11 +5659,11 @@
       "mode": 420
     },
     "apps/connectors/mail2000/vcard.test.ts": {
-      "sha256": "a497f32207f232e502d36182a3b55b673a6a7cfa41e28c71505bbb8b147813d2",
+      "sha256": "63337faf391193317c736869088f29d123e6c0f95f692545f9e08ec57be8978f",
       "mode": 420
     },
     "apps/connectors/mail2000/vcard.ts": {
-      "sha256": "385d144df6aa39299f35bd1971fb44da3dd200aac95e03e613c5f7bb5553ce75",
+      "sha256": "9395ee56f2cd981a974f75dee267557d4c8736435896e60c6b0abc8e0e7ae130",
       "mode": 420
     },
     "apps/connectors/memory/server.ts": {
@@ -7231,7 +7231,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/local-slice-verifiers.ts": {
-      "sha256": "2749ec58c30809bf40ebf9e2c8c3365d9c170372ee81fa1cdce5526a80cf4cc1",
+      "sha256": "504ea18a06f65ea743fa512b640e410ac2565976c0c00ccd81f359860c8f517c",
       "mode": 420
     },
     "apps/platform/platform-api/src/migrate.ts": {
@@ -7391,7 +7391,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/connection-diagnostics.test.ts": {
-      "sha256": "5fa6575c1bbecd8c1f97bb7bba29b08befcffcfc08017af490021abbe509a2d0",
+      "sha256": "1ded645e652271abe6dc41aa77d3385860e4f5400918844dddf2a193796cd298",
       "mode": 420
     },
     "apps/platform/platform-api/test/connection-health-postgres-live.test.ts": {
@@ -7403,7 +7403,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/connection-provider-federation.test.ts": {
-      "sha256": "1fabab9a786396587d41fe9d8ecb5d7ca579948be5374cfba2f2461a36b6991d",
+      "sha256": "83265902264d433fe22dd627e9c02c5b80e29fe25e80e1faec7f07efcf61a587",
       "mode": 420
     },
     "apps/platform/platform-api/test/connections-mcp-routing.test.ts": {

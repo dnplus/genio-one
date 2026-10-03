@@ -9,6 +9,7 @@ export interface MailSearch { folder: string; folders?: string[]; text?: string;
 const FETCH_BATCH = 200
 const KEYWORD_WINDOW_DAYS = 30
 const KEYWORD_SCAN_LIMIT = 5000
+const UID_WINDOW = 5000
 
 type EnvelopeAddress = { name?: string; address?: string }
 const people = (list: EnvelopeAddress[] | undefined) => (list ?? []).flatMap((item) => [item.name, item.address])
@@ -59,6 +60,7 @@ export function createMail2000Imap(config: { host: string; port: number }, facto
       const since = args.since ? new Date(`${args.since}T00:00:00Z`) : keyword ? new Date(Date.now() - KEYWORD_WINDOW_DAYS * 86_400_000) : undefined
       const criteria = { ...(since ? { since } : {}), ...(args.before ? { before: new Date(`${args.before}T00:00:00Z`) } : {}), ...(args.unseen === undefined ? {} : { seen: !args.unseen }) }
       const folders = args.folders ?? [args.folder]
+      const scanPerFolder = Math.max(1, Math.floor(KEYWORD_SCAN_LIMIT / folders.length))
       const messages: Array<{ folder: string; uid_validity: string; uid: number; subject: string; from: EnvelopeAddress[]; date: string | null; size?: number; flags: string[] }> = []
       let total = 0, scanned = 0, truncated = false, uidValidity = ""
       for (const folder of folders) {
@@ -66,9 +68,18 @@ export function createMail2000Imap(config: { host: string; port: number }, facto
         try {
           if (!client.mailbox) throw new Error("MAIL2000_MAILBOX_NOT_FOUND")
           uidValidity = String(client.mailbox.uidValidity)
-          const uids = (await client.search(Object.keys(criteria).length ? criteria : { all: true }, { uid: true }) || []).sort((a, b) => b - a)
-          const candidates = uids.slice(0, keyword ? KEYWORD_SCAN_LIMIT : args.limit)
-          if (keyword) { scanned += candidates.length; truncated ||= uids.length > candidates.length } else total += uids.length
+          const uidNext = client.mailbox.uidNext
+          if (!Number.isSafeInteger(uidNext) || uidNext < 1) throw new Error("MAIL2000_SEARCH_CAPACITY_UNAVAILABLE")
+          if (client.mailbox.exists === 0 || uidNext === 1) continue
+          const highest = uidNext - 1
+          const lowest = Math.max(1, highest - UID_WINDOW + 1)
+          const found = await client.search({ ...criteria, uid: `${lowest}:${highest}` }, { uid: true })
+          if (!Array.isArray(found) || found.length > UID_WINDOW || found.some((uid) => !Number.isSafeInteger(uid) || uid < lowest || uid > highest)) throw new Error("MAIL2000_SEARCH_FAILED")
+          const uids = found.sort((a, b) => b - a)
+          const candidates = uids.slice(0, keyword ? scanPerFolder : Math.min(args.limit, scanPerFolder))
+          truncated ||= lowest > 1 || keyword && uids.length > candidates.length
+          if (keyword) scanned += candidates.length
+          else total += uids.length
           for (let index = 0; index < candidates.length; index += FETCH_BATCH) {
             for await (const row of client.fetch(candidates.slice(index, index + FETCH_BATCH), { uid: true, envelope: true, flags: true, size: true, internalDate: true }, { uid: true })) {
               const envelope = row.envelope
@@ -84,7 +95,8 @@ export function createMail2000Imap(config: { host: string; port: number }, facto
       return {
         ...(folders.length === 1 ? { folder: folders[0], uid_validity: uidValidity } : {}),
         total,
-        ...(keyword ? { since: since!.toISOString().slice(0, 10), scanned, truncated } : {}),
+        truncated,
+        ...(keyword ? { since: since!.toISOString().slice(0, 10), scanned } : {}),
         messages: messages.slice(0, args.limit),
       }
     }),

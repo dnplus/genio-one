@@ -11,14 +11,15 @@ function mailbox(folders: Record<string, { uidValidity: bigint; rows: Row[] }>) 
   let current = ""
   let perMessageFetches = 0
   const client = {
-    get mailbox() { return { uidValidity: folders[current]!.uidValidity } },
+    get mailbox() { return { uidValidity: folders[current]!.uidValidity, uidNext: Math.max(0, ...folders[current]!.rows.map((row) => row.uid)) + 1, exists: folders[current]!.rows.length } },
     async connect() {},
     async logout() {},
     async getMailboxLock(folder: string) { current = folder; return { release() {} } },
     async search(criteria: Record<string, unknown>) {
       searches.push({ folder: current, criteria })
       const since = criteria.since as Date | undefined
-      return folders[current]!.rows.filter((row) => !since || Date.parse(row.date) >= since.getTime()).map((row) => row.uid)
+      const [lowest, highest] = String(criteria.uid).split(":").map(Number)
+      return folders[current]!.rows.filter((row) => row.uid >= lowest! && row.uid <= highest! && (!since || Date.parse(row.date) >= since.getTime())).map((row) => row.uid)
     },
     async *fetch(uids: number[]) {
       fetchSizes.push(uids.length)
@@ -83,4 +84,85 @@ test("one call searches several folders and each hit carries the reference read_
     { folder: "INBOX", uid: 5, uid_validity: "1" },
   ])
   expect(result.total).toBe(2)
+  expect(result.truncated).toBe(true)
+})
+
+test("an older matching UID outside the range is reported as an incomplete search", async () => {
+  const box = mailbox({ Archive: { uidValidity: 7n, rows: [
+    { uid: 1, subject: "older match", from: "sales", date: recent(100) },
+    { uid: 10_000, subject: "recent match", from: "sales", date: recent(1) },
+  ] } })
+  const result = await box.api.search(credential, { folder: "Archive", text: "match", since: recent(365).slice(0, 10), limit: 20 })
+  expect(box.searches[0]!.criteria.uid).toBe("5001:10000")
+  expect(result.messages.map((message) => message.uid)).toEqual([10_000])
+  expect(result).toMatchObject({ total: 1, scanned: 1, truncated: true })
+  const unfiltered = await box.api.search(credential, { folder: "Archive", limit: 20 })
+  expect(unfiltered.messages.map((message) => message.uid)).toEqual([10_000])
+  expect(unfiltered).toMatchObject({ total: 1, truncated: true })
+})
+
+test("a failed upstream SEARCH cannot be reported as a complete empty result", async () => {
+  let released = false
+  const client = {
+    mailbox: { uidValidity: 7n, uidNext: 2, exists: 1 },
+    async connect() {},
+    async logout() {},
+    async getMailboxLock() { return { release() { released = true } } },
+    async search() { return false },
+  }
+  const api = createMail2000Imap({ host: "mail.test", port: 993 }, () => client as unknown as ImapFlow)
+  await expect(api.search(credential, { folder: "INBOX", limit: 20 })).rejects.toThrow("MAIL2000_SEARCH_FAILED")
+  expect(released).toBe(true)
+})
+
+test("an empty upstream SEARCH is a successful search with no matches", async () => {
+  let released = false
+  const client = {
+    mailbox: { uidValidity: 7n, uidNext: 2, exists: 1 },
+    async connect() {},
+    async logout() {},
+    async getMailboxLock() { return { release() { released = true } } },
+    async search(criteria: { seen: boolean; uid: string }) {
+      expect(criteria).toMatchObject({ seen: false, uid: "1:1" })
+      return []
+    },
+    async *fetch() { throw new Error("FETCH_UNEXPECTED") },
+  }
+  const api = createMail2000Imap({ host: "mail.test", port: 993 }, () => client as unknown as ImapFlow)
+  expect(await api.search(credential, { folder: "INBOX", unseen: true, limit: 20 })).toMatchObject({ folder: "INBOX", uid_validity: "7", total: 0, truncated: false, messages: [] })
+  expect(released).toBe(true)
+})
+
+test("keyword envelope scans share one budget across folders", async () => {
+  const rows = Array.from({ length: 6000 }, (_, index) => ({ uid: index + 1, subject: "match", from: "sales", date: recent(1) }))
+  const box = mailbox({ INBOX: { uidValidity: 1n, rows }, Archive: { uidValidity: 2n, rows } })
+  const result = await box.api.search(credential, { folder: "INBOX", folders: ["INBOX", "Archive"], text: "match", limit: 5 })
+  expect(result).toMatchObject({ total: 5000, scanned: 5000, truncated: true })
+  expect(box.fetchSizes.reduce((sum, size) => sum + size, 0)).toBe(5000)
+})
+
+test("a large mailbox is searched through a bounded upstream UID range", async () => {
+  let requested = ""
+  let fetched = 0
+  const client = {
+    mailbox: { uidValidity: 12n, uidNext: 100_001, exists: 100_000 },
+    async connect() {},
+    async logout() {},
+    async getMailboxLock() { return { release() {} } },
+    async search(criteria: { uid: string }) {
+      requested = criteria.uid
+      const [lowest, highest] = criteria.uid.split(":").map(Number)
+      return Array.from({ length: highest! - lowest! + 1 }, (_, index) => lowest! + index)
+    },
+    async *fetch(uids: number[]) {
+      fetched += uids.length
+      for (const uid of uids) yield { uid, flags: new Set<string>(), envelope: { subject: "match", date: new Date() } }
+    },
+  }
+  const api = createMail2000Imap({ host: "mail.test", port: 993 }, () => client as unknown as ImapFlow)
+  const result = await api.search(credential, { folder: "INBOX", text: "match", limit: 5 })
+  expect(requested).toBe("95001:100000")
+  expect(fetched).toBe(5000)
+  expect(result).toMatchObject({ total: 5000, scanned: 5000, truncated: true })
+  expect(result.messages).toHaveLength(5)
 })
