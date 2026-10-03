@@ -11,16 +11,16 @@ test("work-summary guidance preserves unresolved work with a valid status", () =
   expect(BOT_MEMORY_GUIDANCE).toContain(BOT_WORK_SUMMARY_STATUS_GUIDANCE)
 })
 
-test("rolling work survives recent-turn eviction and stale writers cannot overwrite a newer summary", () => {
+test("rolling work survives recent-turn eviction and stale writers cannot overwrite a newer summary", async () => {
   const registry = new BotRegistry(":memory:")
   try {
     registry.timeline.putTurn("bot", "old", { id: "first", status: "completed", startedAt: 0, items: [{ type: "userMessage", id: "request", content: [{ type: "text", text: "比較草稿，保留原版架構", text_elements: [] }] }] } as unknown as Turn)
     const first = registry.memory.updateWorkSummary("bot", summary)
     for (let i = 1; i <= 8; i++) registry.timeline.putTurn("bot", "old", { id: `later-${i}`, status: "completed", startedAt: i, items: [] } as unknown as Turn)
-    const context = botTurnContext(registry, "bot", "new")
+    const context = await botTurnContext(registry, "bot", "new")
     expect(JSON.parse(context["genio_bot/prior_work"]!.value).turns.some((turn: { turnId: string }) => turn.turnId === "first")).toBe(false)
     expect(JSON.parse(context["genio_bot/work_summary"]!.value).entry.workSummary.decisions).toEqual(summary.decisions)
-    expect(JSON.parse(botTurnContext(registry, "other", "new")["genio_bot/work_summary"]!.value).entry).toBeNull()
+    expect(JSON.parse((await botTurnContext(registry, "other", "new"))["genio_bot/work_summary"]!.value).entry).toBeNull()
     registry.timeline.putTurn("bot", "old", { id: "second", status: "completed", items: [{ type: "userMessage", id: "new-source", content: [{ type: "text", text: "現在比較差異", text_elements: [] }] }] } as unknown as Turn)
     const second = registry.memory.updateWorkSummary("bot", { ...summary, sourceMessageIds: ["old:new-source"], expectedRevision: first.revision, progress: ["已讀取兩份草稿"], nextSteps: ["比較差異"] })
     expect(second.revision).toBe(2)
@@ -35,7 +35,7 @@ test("rolling work survives recent-turn eviction and stale writers cannot overwr
     expect(registry.memory.workSummary("bot").entry?.workSummary).toBeUndefined()
     registry.memory.setForgotten("bot", second.id, true, 3)
     expect(registry.memory.workSummary("bot")).toMatchObject({ entry: null, writable: false, reason: "forgotten" })
-    expect(botTurnContext(registry, "bot", "new")["genio_bot/work_summary"]!.value).not.toContain("使用者修正")
+    expect((await botTurnContext(registry, "bot", "new"))["genio_bot/work_summary"]!.value).not.toContain("使用者修正")
   } finally { registry.close() }
 })
 

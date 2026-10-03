@@ -4,7 +4,7 @@ import test from "node:test"
 
 import type { CreateDistillationMarker } from "../src/capabilities/distillation/contract"
 import { createPostgresDistillationStore } from "../src/capabilities/distillation/postgres"
-import { runMigrations } from "../src/persistence/migration-runner"
+import { loadMigrations, runMigrations } from "../src/persistence/migration-runner"
 import { createPostgresSqlAdapter } from "../src/persistence/sql-adapter"
 
 const databaseUrl = process.env.GENIO_ONE_TEST_DATABASE_URL
@@ -48,6 +48,36 @@ test(
         ["tenant-fence", "organization-fence", "Fence", "fence"],
       )
       await sql.query(
+        `insert into genio_one_organizations (tenant_id, organization_id, display_name, slug)
+         values ($1, $2, $3, $4)`,
+        ["tenant-fence", "organization-other", "Other", "other"],
+      )
+      for (const [accessGroupId, organizationId] of [
+        ["readers", "organization-fence"],
+        ["contributors", "organization-fence"],
+        ["maintainers", "organization-fence"],
+        ["global-readers", null],
+        ["foreign-readers", "organization-other"],
+      ] as const) {
+        await sql.query(
+          `insert into genio_one_access_groups
+             (tenant_id, access_group_id, organization_id, revision, value)
+           values ($1, $2, $3, $4, $5::text::jsonb)`,
+          [
+            "tenant-fence",
+            accessGroupId,
+            organizationId,
+            1,
+            JSON.stringify({
+              tenant_id: "tenant-fence",
+              organization_id: organizationId,
+              access_group_id: accessGroupId,
+              revision: 1,
+            }),
+          ],
+        )
+      }
+      await sql.query(
         `insert into genio_one_team_workspaces
          (tenant_id, workspace_id, organization_id, display_name, reader_access_group_id,
           contributor_access_group_id, maintainer_access_group_id, created_at, created_by)
@@ -56,6 +86,32 @@ test(
           "tenant-fence", "workspace-fence", "organization-fence", "Fence", "readers",
           "contributors", "maintainers", 100, "owner",
         ],
+      )
+      await assert.rejects(
+        () => sql!.query(
+          `insert into genio_one_team_workspaces
+             (tenant_id, workspace_id, organization_id, display_name, reader_access_group_id,
+              contributor_access_group_id, maintainer_access_group_id, created_at, created_by)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [
+            "tenant-fence", "workspace-global", "organization-fence", "Global", "global-readers",
+            "contributors", "maintainers", 100, "owner",
+          ],
+        ),
+        (error: unknown) => error instanceof Error && error.message.includes("genio_one_team_workspaces_reader_access_group_fkey"),
+      )
+      await assert.rejects(
+        () => sql!.query(
+          `insert into genio_one_team_workspaces
+             (tenant_id, workspace_id, organization_id, display_name, reader_access_group_id,
+              contributor_access_group_id, maintainer_access_group_id, created_at, created_by)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [
+            "tenant-fence", "workspace-cross-organization", "organization-fence", "Cross organization", "foreign-readers",
+            "contributors", "maintainers", 100, "owner",
+          ],
+        ),
+        (error: unknown) => error instanceof Error && error.message.includes("genio_one_team_workspaces_reader_access_group_fkey"),
       )
       await assert.rejects(
         () => sql!.query(
@@ -122,6 +178,73 @@ test(
         ["tenant-fence", bound.marker_id],
       )
       assert.equal(Number(boundFence.rows[0]?.workspace_acl_version), 1)
+    } finally {
+      await sql?.end()
+      await admin.query(`drop schema if exists ${schema} cascade`)
+      await admin.end()
+    }
+  },
+)
+
+test(
+  "workspace group ownership migration refuses existing global group bindings",
+  { skip: !databaseUrl, timeout: 30_000 },
+  async () => {
+    assert.ok(databaseUrl)
+    const schema = `workspace_group_mismatch${randomUUID().replaceAll("-", "")}`
+    const options = { max: 1, onnotice: () => {} }
+    const admin = createPostgresSqlAdapter({ url: databaseUrl, options })
+    let sql: ReturnType<typeof createPostgresSqlAdapter> | undefined
+    try {
+      await admin.query(`create schema ${schema}`)
+      sql = createPostgresSqlAdapter({ url: databaseUrl, options: { ...options, connection: { search_path: schema } } })
+      const migrations = await loadMigrations()
+      await runMigrations(sql, {
+        advisoryLockKey: schema,
+        migrations: migrations.filter((migration) => migration.id !== 19),
+      })
+      await sql.query(
+        `insert into genio_one_organizations (tenant_id, organization_id, display_name, slug)
+         values ($1, $2, $3, $4)`,
+        ["tenant-mismatch", "organization-mismatch", "Mismatch", "mismatch"],
+      )
+      for (const [accessGroupId, organizationId] of [
+        ["global-readers", null],
+        ["contributors", "organization-mismatch"],
+        ["maintainers", "organization-mismatch"],
+      ] as const) {
+        await sql.query(
+          `insert into genio_one_access_groups
+             (tenant_id, access_group_id, organization_id, revision, value)
+           values ($1, $2, $3, $4, $5::text::jsonb)`,
+          [
+            "tenant-mismatch",
+            accessGroupId,
+            organizationId,
+            1,
+            JSON.stringify({
+              tenant_id: "tenant-mismatch",
+              organization_id: organizationId,
+              access_group_id: accessGroupId,
+              revision: 1,
+            }),
+          ],
+        )
+      }
+      await sql.query(
+        `insert into genio_one_team_workspaces
+           (tenant_id, workspace_id, organization_id, display_name, reader_access_group_id,
+            contributor_access_group_id, maintainer_access_group_id, created_at, created_by)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [
+          "tenant-mismatch", "workspace-mismatch", "organization-mismatch", "Mismatch", "global-readers",
+          "contributors", "maintainers", 100, "owner",
+        ],
+      )
+      await assert.rejects(
+        () => runMigrations(sql!, { advisoryLockKey: schema, migrations }),
+        (error: unknown) => error instanceof Error && error.message.includes("mismatched workspace bindings exist"),
+      )
     } finally {
       await sql?.end()
       await admin.query(`drop schema if exists ${schema} cascade`)

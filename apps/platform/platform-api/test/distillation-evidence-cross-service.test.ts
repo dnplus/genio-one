@@ -149,7 +149,11 @@ test("Platform and Bot preserve live evidence authorization through review", asy
         { subject_id: "reader", kind: "PERSON" },
       ],
     })
-    const organization = await modules.organizations.create({ tenantId, display_name: "Evidence" })
+    const organization = await modules.organizations.create({
+      tenantId,
+      display_name: "Evidence",
+      member_subject_ids: [owner.subject_id, maintainer.subject_id, reader.subject_id],
+    })
     for (const [accessGroupId, displayName] of [
       ["readers", "Readers"],
       ["contributors", "Contributors"],
@@ -157,6 +161,7 @@ test("Platform and Bot preserve live evidence authorization through review", asy
     ] as const) {
       await modules.accessGroups.save(admin, accessGroupId, {
         expected_revision: 0,
+        organization_id: organization.organization_id,
         display_name: displayName,
         description: "",
         enabled: true,

@@ -46,6 +46,81 @@ test("turn send rejection settles failure while broker retains its runtime", asy
   expect(closes).toBe(1)
 })
 
+test.each(["runtime-exit", "startup-timeout"] as const)("deferred memory fetch cannot start a turn after %s", async (failure) => {
+  const registry = new BotRegistry(":memory:")
+  const principal = { tenant_id: "tenant", subject_id: "owner", acting_client_id: "genio-one-bot", scopes: [] }
+  const caller = registry.create(principal, { name: "Caller", description: "Original" })
+  const target = registry.create(principal, { name: "Target", description: "Delegated" })
+  const invocation = registry.createHandoffs(principal, { fromBotId: caller.id, toBotId: target.id, fact: "Wait for memory" })[0]!
+  const broker = new RuntimeBroker({ provision: async () => { throw new Error("not used") } })
+  const originalFetch = globalThis.fetch
+  const originalSetTimeout = globalThis.setTimeout
+  const originalPlatformOrigin = process.env.GENIO_ONE_PLATFORM_ORIGIN
+  let memoryRequested!: () => void
+  let releaseMemory!: () => void
+  let onRuntimeExit: ((reason: string) => void) | undefined
+  let fireStartupTimeout: (() => void) | undefined
+  const memoryStarted = new Promise<void>((resolve) => { memoryRequested = resolve })
+  const memoryHeld = new Promise<void>((resolve) => { releaseMemory = resolve })
+  const sent: string[] = []
+  process.env.GENIO_ONE_PLATFORM_ORIGIN = "https://platform.example"
+  globalThis.setTimeout = ((handler: (...args: unknown[]) => void, timeout?: number, ...args: unknown[]) => {
+    const timer = originalSetTimeout(handler, timeout, ...args)
+    if (timeout === 120_000) fireStartupTimeout = () => handler(...args)
+    return timer
+  }) as typeof setTimeout
+  globalThis.fetch = (async (input) => {
+    const url = String(input)
+    if (url === "https://platform.example/v1/identity/session") return Response.json(principal)
+    if (url === "https://platform.example/v1/tenants/tenant/memory/mcp") {
+      memoryRequested()
+      await memoryHeld
+      return Response.json({ jsonrpc: "2.0", id: 1, result: { structuredContent: { memories: [], context: "" } } })
+    }
+    throw new Error(`Unexpected fetch: ${url}`)
+  }) as typeof fetch
+  const context = {
+    botRegistry: registry,
+    runtimeBroker: broker,
+    botToolSessions: new BotToolSessions(),
+    modelDirectory: createBotModelDirectory({}),
+    createCodexRuntime: (_token, callbacks) => {
+      onRuntimeExit = callbacks.onExit
+      return {
+        async send(line) {
+          const request = JSON.parse(line)
+          sent.push(request.method)
+          if (request.method === "initialize") callbacks.onMessage(JSON.stringify({ id: request.id, result: {} }))
+          if (request.method === "model/list") callbacks.onMessage(JSON.stringify({ id: request.id, result: { data: [{ id: "astra-id", model: "gpt-6-astra", hidden: false, isDefault: true }], nextCursor: null } }))
+          if (request.method === "thread/start") callbacks.onMessage(JSON.stringify({ id: request.id, result: { thread: { id: "target-thread" } } }))
+        },
+        async close() { callbacks.onExit("closed") },
+      }
+    },
+  } as BotServerContext
+  try {
+    const task = runApprovedBotInvocation(context, invocation.invocationId, "test-token")
+    await Promise.race([memoryStarted, Bun.sleep(2_000).then(() => { throw new Error("MEMORY_FETCH_NOT_REACHED") })])
+    expect(sent).not.toContain("turn/start")
+    if (failure === "runtime-exit") onRuntimeExit?.("lost")
+    else fireStartupTimeout?.()
+    await task
+    expect(registry.getInvocationForService(invocation.invocationId)?.decisionReason).toBe(failure === "runtime-exit" ? "TARGET_RUNTIME_INTERRUPTED" : "TARGET_STARTUP_TIMEOUT")
+    releaseMemory()
+    await new Promise<void>((resolve) => originalSetTimeout(resolve, 0))
+    expect(sent).not.toContain("turn/start")
+  } finally {
+    releaseMemory()
+    onRuntimeExit?.("cleanup")
+    globalThis.fetch = originalFetch
+    globalThis.setTimeout = originalSetTimeout
+    if (originalPlatformOrigin === undefined) delete process.env.GENIO_ONE_PLATFORM_ORIGIN
+    else process.env.GENIO_ONE_PLATFORM_ORIGIN = originalPlatformOrigin
+    await broker.close()
+    registry.close()
+  }
+})
+
 test("handoff binds a company model thread to its target Bot relay URL", async () => {
   const registry = new BotRegistry(":memory:")
   const principal = { tenant_id: "tenant", subject_id: "owner", acting_client_id: "genio-one-bot", scopes: [] }

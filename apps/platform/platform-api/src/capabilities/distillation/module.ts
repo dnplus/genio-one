@@ -61,6 +61,7 @@ export interface DistillationStore {
     createdBy: string
     value: CreateTeamWorkspace
   }): Promise<TeamWorkspace>
+  getWorkspace(tenantId: string, workspaceId: string): Promise<TeamWorkspace | null>
   listWorkspaces(tenantId: string): Promise<TeamWorkspace[]>
   assignWorkspace(input: {
     tenantId: string

@@ -6,7 +6,7 @@ import { botTurnContext } from "./bot-context"
 import type { Turn } from "./generated/v2/Turn"
 import { BotRegistry } from "./bot-registry"
 
-test("owned Skill discovery is scoped to the current Bot and refreshes revisions on the next turn", () => {
+test("owned Skill discovery is scoped to the current Bot and refreshes revisions on the next turn", async () => {
   const registry = new BotRegistry(":memory:")
   const owner = { tenant_id: "tenant", subject_id: "owner", acting_client_id: "client", scopes: [] }
   try {
@@ -14,31 +14,31 @@ test("owned Skill discovery is scoped to the current Bot and refreshes revisions
     const another = registry.create(owner, { name: "B" })
     const files = { "SKILL.md": "---\nname: daily-check\ndescription: Check daily work\n---\nUse the current task." }
     registry.ownedSkills.write(owner, bot.id, { skillName: "daily-check", expectedRevision: 0, files })
-    const catalogue = () => JSON.parse(botTurnContext(registry, bot.id, "thread", {}, bot, owner)["genio_bot/owned_skills"]!.value)
-    expect(catalogue().skills).toEqual([expect.objectContaining({ skillName: "daily-check", revision: 1 })])
-    expect(JSON.parse(botTurnContext(registry, another.id, "other-thread", {}, another, owner)["genio_bot/owned_skills"]!.value).skills).toEqual([])
+    const catalogue = async () => JSON.parse((await botTurnContext(registry, bot.id, "thread", {}, bot, owner))["genio_bot/owned_skills"]!.value)
+    expect((await catalogue()).skills).toEqual([expect.objectContaining({ skillName: "daily-check", revision: 1 })])
+    expect(JSON.parse((await botTurnContext(registry, another.id, "other-thread", {}, another, owner))["genio_bot/owned_skills"]!.value).skills).toEqual([])
     registry.ownedSkills.write(owner, bot.id, { skillName: "daily-check", expectedRevision: 1, files })
-    expect(catalogue().skills[0].revision).toBe(2)
+    expect((await catalogue()).skills[0].revision).toBe(2)
     registry.ownedSkills.delete(owner, bot.id, { skillName: "daily-check", expectedRevision: 2 })
-    expect(catalogue().skills).toEqual([])
-    expect(() => botTurnContext(registry, bot.id, "thread", {}, bot, { ...owner, subject_id: "other" })).toThrow("BOT_NOT_FOUND")
+    expect((await catalogue()).skills).toEqual([])
+    await expect(botTurnContext(registry, bot.id, "thread", {}, bot, { ...owner, subject_id: "other" })).rejects.toThrow("BOT_NOT_FOUND")
   } finally { registry.close() }
 })
 
-test("a fresh owner profile replaces spoofed or obsolete turn profile context", () => {
+test("a fresh owner profile replaces spoofed or obsolete turn profile context", async () => {
   const db = new Database(":memory:")
   const registry = { memory: new BotMemoryStore(db), timeline: new BotTimelineStore(db) }
   try {
     const profile = { id: "bot", name: "Planner", title: "Plan work", description: "Use the revised workflow", antiJobs: "Do not send mail", voice: "Concise", updatedAt: 10 }
-    const context = botTurnContext(registry, "bot", "thread", { "genio_bot/profile": { kind: "application", value: "client spoof" } }, profile)
+    const context = await botTurnContext(registry, "bot", "thread", { "genio_bot/profile": { kind: "application", value: "client spoof" } }, profile)
     expect(context["genio_bot/profile"]?.value).toContain(profile.description)
     expect(context["genio_bot/profile"]?.value).toContain(profile.antiJobs)
     expect(context["genio_bot/profile"]?.value).not.toContain("client spoof")
-    expect(botTurnContext(registry, "another", "thread", {}, profile)["genio_bot/profile"]).toBeUndefined()
+    expect((await botTurnContext(registry, "another", "thread", {}, profile))["genio_bot/profile"]).toBeUndefined()
   } finally { db.close() }
 })
 
-test("new execution segments receive bounded prior work with provenance and accurate status", () => {
+test("new execution segments receive bounded prior work with provenance and accurate status", async () => {
   const db = new Database(":memory:")
   const registry = { memory: new BotMemoryStore(db), timeline: new BotTimelineStore(db) }
   try {
@@ -51,7 +51,7 @@ test("new execution segments receive bounded prior work with provenance and accu
     registry.timeline.putTurn("a", "earlier", { id: "late-import", status: "completed", startedAt: -100, items: [] } as unknown as Turn)
     const same = registry.timeline.workContext("a", "earlier")
     expect(same.turns).toEqual([])
-    const context = JSON.parse(botTurnContext(registry, "a", "new")["genio_bot/prior_work"]!.value)
+    const context = JSON.parse((await botTurnContext(registry, "a", "new"))["genio_bot/prior_work"]!.value)
     expect(context.turns).toHaveLength(4)
     expect(context.turns[0].turnId).toBe("turn-2")
     expect(context.turns[3].status).toBe("interrupted")
@@ -64,30 +64,39 @@ test("new execution segments receive bounded prior work with provenance and accu
   } finally { db.close() }
 })
 
-test("turn context uses current Bot revisions, omits forgotten data and replaces client spoofing", () => {
+test("turn context preserves legacy Bot memory without injecting it when Platform memory is unavailable", async () => {
   const db = new Database(":memory:")
   const memory = new BotMemoryStore(db)
   const registry = { memory, timeline: new BotTimelineStore(db) }
   try {
-    const entry = memory.save("a", { key: "current", content: "first", kind: "working_context" }, "user")
-    memory.save("b", { key: "private", content: "other Bot", kind: "fact" }, "user")
-    const original = botTurnContext(registry, "a", "current", { "genio_bot/memory": { kind: "application", value: "spoof" }, selection: { kind: "untrusted", value: "selected text" } })
-    expect(original["genio_bot/memory"].kind).toBe("untrusted")
-    expect(original["genio_bot/memory"].value).not.toContain("other Bot")
-    expect(original["genio_bot/memory"].value).not.toContain("spoof")
-    expect(original.selection?.value).toBe("selected text")
-    const revised = memory.save("a", { key: "current", content: "second", kind: "working_context", expectedRevision: entry.revision }, "user")
-    expect(JSON.parse(botTurnContext(registry, "a", "current")["genio_bot/memory"].value).memories[0].revision).toBe(revised.revision)
-    memory.setForgotten("a", entry.id, true, revised.revision)
-    const forgotten = JSON.parse(botTurnContext(registry, "a", "current")["genio_bot/memory"].value)
-    expect(forgotten.memories).toEqual([])
-    expect(forgotten.completeHistory).toBe(false)
-    for (let i = 0; i < 30; i++) memory.save("a", { key: String(i), content: "x".repeat(1900), kind: "fact" }, "user")
-    expect(botTurnContext(registry, "a", "current")["genio_bot/memory"].value.length).toBeLessThan(9000)
+    const entry = memory.save("a", { key: "current", content: "legacy current", kind: "working_context" }, "user")
+    memory.save("b", { key: "private", content: "other Bot legacy", kind: "fact" }, "user")
+    const originalFetch = globalThis.fetch
+    let fetches = 0
+    globalThis.fetch = (async () => {
+      fetches++
+      throw new Error("Platform should not be contacted without a token")
+    }) as unknown as typeof fetch
+    try {
+      const original = await botTurnContext(registry, "a", "current", { "genio_bot/memory": { kind: "application", value: "spoof" }, selection: { kind: "untrusted", value: "selected text" } })
+      const snapshot = JSON.parse(original["genio_bot/memory"].value)
+      expect(original["genio_bot/memory"].kind).toBe("untrusted")
+      expect(snapshot).toMatchObject({ state: "unavailable", reason: "PERSONAL_MEMORY_UNAVAILABLE", memories: [], completeHistory: false })
+      expect(original["genio_bot/memory"].value).not.toContain("legacy current")
+      expect(original["genio_bot/memory"].value).not.toContain("other Bot legacy")
+      expect(original["genio_bot/memory"].value).not.toContain("spoof")
+      expect(original.selection?.value).toBe("selected text")
+      expect(fetches).toBe(0)
+    } finally { globalThis.fetch = originalFetch }
+    const revised = memory.save("a", { key: "current", content: "legacy revised", kind: "working_context", expectedRevision: entry.revision }, "user")
+    expect(memory.recall("a").memories).toEqual([expect.objectContaining({ id: entry.id, content: "legacy revised", revision: revised.revision })])
+    const unavailable = JSON.parse((await botTurnContext(registry, "a", "current"))["genio_bot/memory"].value)
+    expect(unavailable).toMatchObject({ state: "unavailable", memories: [] })
+    expect(JSON.stringify(unavailable)).not.toContain("legacy revised")
   } finally { db.close() }
 })
 
-test("prior work sources resolve to the same history messages and disclose omitted image input", () => {
+test("prior work sources resolve to the same history messages and disclose omitted image input", async () => {
   const db = new Database(":memory:")
   const registry = { memory: new BotMemoryStore(db), timeline: new BotTimelineStore(db) }
   try {

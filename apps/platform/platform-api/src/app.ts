@@ -5,6 +5,7 @@ import { registerHttpObservability } from "@genioone/telemetry/fastify-observabi
 import { permissionPreviewHttp } from "./capabilities/one-policy/permission-preview"
 import { accessGroupHttp } from "./capabilities/access-groups/http"
 import { discoveryMcpHttp } from "./capabilities/discovery-mcp/http"
+import { memoryHttp } from "./capabilities/memories/http"
 import type { InstalledConnectorDeployment } from "./capabilities/connections/installed-connectors"
 import swagger from "@fastify/swagger"
 import swaggerUi from "@fastify/swagger-ui"
@@ -548,6 +549,10 @@ export async function createManagementApi(dependencies: ManagementApiDependencie
     oauth: dependencies.modules.mcpOAuth,
     discovery: dependencies.modules.mcpDiscovery,
   })
+  await app.register(memoryHttp, {
+    directory: dependencies.modules.memories,
+    identity: dependencies.modules.identity,
+  })
   await app.register(providerHttp, {
     catalog: dependencies.modules.providers,
   })
@@ -655,7 +660,11 @@ export async function createManagementApi(dependencies: ManagementApiDependencie
   await app.register(gatewayRegistrationHttp, {
     lifecycle: dependencies.modules.gatewayRegistrations,
   })
-  await app.register(discoveryMcpHttp, { access: dependencies.modules.access, connections: dependencies.modules.connections })
+  await app.register(discoveryMcpHttp, {
+    access: dependencies.modules.access,
+    connections: dependencies.modules.connections,
+    memories: dependencies.modules.memories,
+  })
   await app.register(accessHttp, { store: dependencies.modules.access })
   await app.register(runtimeControlHttp, {
     store: dependencies.modules.runtimeControl,

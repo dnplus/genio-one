@@ -73,7 +73,11 @@ async function createFixture(options: {
       { subject_id: "reader", kind: "PERSON" },
     ],
   })
-  const organization = await modules.organizations.create({ tenantId, display_name: "Evidence" })
+  const organization = await modules.organizations.create({
+    tenantId,
+    display_name: "Evidence",
+    member_subject_ids: ["owner", "maintainer", "other-maintainer", "reader"],
+  })
   for (const [accessGroupId, displayName] of [
     ["readers", "Readers"],
     ["contributors", "Contributors"],
@@ -82,6 +86,7 @@ async function createFixture(options: {
   ] as const) {
     await modules.accessGroups.save(admin, accessGroupId, {
       expected_revision: 0,
+      organization_id: organization.organization_id,
       display_name: displayName,
       description: "",
       enabled: true,

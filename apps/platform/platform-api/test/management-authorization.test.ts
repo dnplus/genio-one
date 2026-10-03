@@ -137,6 +137,151 @@ test("Management authorization classifies Gateway Runtime transport independentl
   )
 })
 
+test("Memory invocation routes require an explicit invocation scope", async () => {
+  const invocationUser: Principal = {
+    ...organizationPrincipal,
+    role: "USER",
+    organization_ids: [],
+    administrator_organization_ids: [],
+    scopes: ["genioone-invocation"],
+  }
+  const module = authorization(invocationUser)
+  const allowed = [
+    { method: "GET", path: "me/memories" },
+    { method: "POST", path: "me/memories" },
+    { method: "GET", path: "me/memories/memory-personal" },
+    { method: "POST", path: "me/memory-agents" },
+    { method: "GET", path: "me/memory-agents/agent-personal" },
+    { method: "POST", path: "memory/mcp" },
+    { method: "GET", path: "me/memory-scopes" },
+    { method: "POST", path: "team-workspaces/workspace-one/memories" },
+    { method: "GET", path: "team-workspaces/workspace-one/memories/memory-shared" },
+    { method: "POST", path: "team-workspaces/workspace-one/memories/memory-shared/corrections" },
+    { method: "POST", path: "team-workspaces/workspace-one/memories/memory-shared/corrections/proposal-one/review" },
+    { method: "POST", path: "organizations/organization-one/memories" },
+    { method: "GET", path: "organizations/organization-one/memories/memory-shared" },
+    { method: "POST", path: "organizations/organization-one/memories/memory-shared/corrections" },
+    { method: "POST", path: "organizations/organization-one/memories/memory-shared/corrections/proposal-one/review" },
+  ]
+
+  for (const route of allowed) {
+    const input = request({
+      url: `/v1/tenants/tenant-acme/${route.path}`,
+      method: route.method,
+      token: "accepted",
+    })
+    await module.authenticate(input)
+    await module.normalize(input)
+    await module.authorize(input)
+    assert.equal(input.principal?.subject_id, invocationUser.subject_id)
+  }
+
+  for (const principal of [
+    { ...invocationUser, scopes: ["genioone-management"] },
+    { ...invocationUser, scopes: ["genioone-gateway-runtime"] },
+    { ...invocationUser, scopes: ["genioone-endpoint-runtime"] },
+    { ...invocationUser, scopes: undefined },
+  ]) {
+    const input = request({
+      url: "/v1/tenants/tenant-acme/team-workspaces/workspace-one/memories",
+      method: "GET",
+      token: "accepted",
+    })
+    await assert.rejects(
+      authorization(principal).authenticate(input),
+      (error: unknown) => error instanceof PlatformApiError && error.code === "INSUFFICIENT_SCOPE",
+    )
+  }
+
+  const endpointCredential = request({
+    url: "/v1/tenants/tenant-acme/team-workspaces/workspace-one/memories",
+    method: "GET",
+    token: "genio_endpoint_memory",
+  })
+  await assert.rejects(
+    module.authenticate(endpointCredential),
+    (error: unknown) => error instanceof PlatformApiError && error.code === "ENDPOINT_CREDENTIAL_REJECTED",
+  )
+
+  const anonymous = request({
+    url: "/v1/tenants/tenant-acme/team-workspaces/workspace-one/memories",
+    method: "GET",
+  })
+  await assert.rejects(
+    module.authenticate(anonymous),
+    (error: unknown) => error instanceof PlatformApiError && error.code === "UNAUTHENTICATED",
+  )
+})
+
+test("Memory invocation scope denial is recorded as an authorization decision", async () => {
+  const auditEvents = createInMemoryGatewayAuthorizationAuditStore()
+  const module = authorization(organizationPrincipal, auditEvents)
+  const input = request({
+    url: "/v1/tenants/tenant-acme/me/memories",
+    method: "GET",
+    token: "accepted",
+  })
+
+  await assert.rejects(
+    module.authenticate(input),
+    (error: unknown) => error instanceof PlatformApiError && error.code === "INSUFFICIENT_SCOPE",
+  )
+
+  const result = await auditEvents.query({
+    tenantId: "tenant-acme",
+    kind: "MANAGEMENT_AUTHORIZATION",
+    outcome: "DENY",
+    offset: 0,
+    limit: 10,
+  })
+  assert.equal(result.events.length, 1)
+  const event = result.events[0]
+  assert.equal(event?.kind, "MANAGEMENT_AUTHORIZATION")
+  if (event?.kind !== "MANAGEMENT_AUTHORIZATION") return
+  assert.equal(event.code, "INSUFFICIENT_SCOPE")
+  assert.equal(event.subject.subject_id, organizationPrincipal.subject_id)
+  assert.equal(event.request_context.requested_tenant_id, "tenant-acme")
+})
+
+test("Memory invocation classification accepts only the exact shared paths", async () => {
+  const invocationUser: Principal = {
+    ...organizationPrincipal,
+    role: "USER",
+    organization_ids: [],
+    administrator_organization_ids: [],
+    scopes: ["genioone-invocation"],
+  }
+  const module = authorization(invocationUser)
+
+  for (const path of ["team-workspaces", "team-workspaces/workspace-one"]) {
+    const input = request({
+      url: `/v1/tenants/tenant-acme/${path}`,
+      method: "GET",
+      token: "accepted",
+    })
+    await module.authenticate(input)
+  }
+
+  for (const route of [
+    { method: "GET", path: "team-workspaces/workspace-one/memories/memory-one/corrections/proposal-one" },
+    { method: "GET", path: "team-workspaces/workspace-one/memories/memory-one/corrections/proposal-one/review/extra" },
+    { method: "GET", path: "team-workspaces/workspace-one/unrelated" },
+    { method: "GET", path: "organizations/organization-one/memories/memory-one/corrections/proposal-one" },
+    { method: "GET", path: "organizations/organization-one/unrelated" },
+    { method: "POST", path: "me/memory-scopes" },
+  ]) {
+    const input = request({
+      url: `/v1/tenants/tenant-acme/${route.path}`,
+      method: route.method,
+      token: "accepted",
+    })
+    await assert.rejects(
+      module.authenticate(input),
+      (error: unknown) => error instanceof PlatformApiError && error.code === "INSUFFICIENT_SCOPE",
+    )
+  }
+})
+
 test("Management authorization permits only lifecycle toggles for installed built-in Resources", async () => {
   const principal: Principal = {
     ...organizationPrincipal,

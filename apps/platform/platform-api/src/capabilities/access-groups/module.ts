@@ -23,6 +23,11 @@ export interface AccessGroupRepository {
 export interface AccessGroupDirectory {
   list(actor: Principal): Promise<AccessGroup[]>
   get(actor: Principal, accessGroupId: string): Promise<AccessGroup>
+  assertWorkspaceAccessGroups(input: {
+    actor: Principal
+    organizationId: string
+    accessGroupIds: readonly string[]
+  }): Promise<void>
   assertOrganizationMembersRemainScoped(input: { tenantId: string; organizationId: string; memberSubjectIds: readonly string[] }): Promise<void>
   save(actor: Principal, accessGroupId: string, value: SaveAccessGroup, context?: { correlationId?: string }): Promise<AccessGroup>
   replaceMembers(actor: Principal, accessGroupId: string, value: ReplaceAccessGroupMembers, context?: { correlationId?: string }): Promise<AccessGroup>
@@ -126,7 +131,23 @@ export function createAccessGroupDirectory(options: {
     }
   }
 
+  async function assertWorkspaceAccessGroups(input: {
+    actor: Principal
+    organizationId: string
+    accessGroupIds: readonly string[]
+  }): Promise<void> {
+    for (const accessGroupId of input.accessGroupIds) {
+      const group = await get(input.actor, accessGroupId)
+      if (!group.enabled) throw new PlatformApiError("TEAM_WORKSPACE_ACCESS_GROUP_DISABLED", 422)
+      if (group.organization_id === null) throw new PlatformApiError("TEAM_WORKSPACE_ACCESS_GROUP_ORGANIZATION_REQUIRED", 422)
+      if (group.organization_id !== input.organizationId) {
+        throw new PlatformApiError("TEAM_WORKSPACE_ACCESS_GROUP_ORGANIZATION_MISMATCH", 422)
+      }
+    }
+  }
+
   return {
+    assertWorkspaceAccessGroups,
     assertOrganizationMembersRemainScoped,
     async list(actor) {
       if (actor.role === "USER") throw new PlatformApiError("ACCESS_GROUP_SCOPE_REQUIRED", 403)

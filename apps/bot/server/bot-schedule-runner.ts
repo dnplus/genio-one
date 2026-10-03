@@ -486,7 +486,7 @@ export class BotScheduleRunner {
       if (!current.enabled) throw new Error("SCHEDULE_PAUSED")
       botSchedules.markRun(run.id, "STARTING", { threadId })
       const prompt = `Scheduled run (${new Date(run.slotAt).toISOString()}). Continue the user's requested routine below. This is an authorized scheduled trigger, not a new authorization for actions outside the saved task.\n\n${current.prompt}`
-      const params = await canonical("turn/start", { threadId, clientUserMessageId: run.clientUserMessageId, model, input: [{ type: "text", text: prompt, text_elements: [] }], additionalContext: botTurnContext(botRegistry, bot.id, threadId, {}, bot, principal) })
+      const params = await canonical("turn/start", { threadId, clientUserMessageId: run.clientUserMessageId, model, input: [{ type: "text", text: prompt, text_elements: [] }], additionalContext: await botTurnContext(botRegistry, bot.id, threadId, {}, bot, principal, this.context.runtimeBroker.accessTokenForBot(session.id, bot.id)) })
       const dispatch = botSchedules.get(principal, bot.id, run.scheduleId)
       if (this.stopped || this.context.runtimeBroker.isClosing()) throw new Error("SCHEDULE_RUNNER_STOPPED")
       if (!dispatch) throw new Error("SCHEDULE_DELETED")

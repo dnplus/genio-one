@@ -243,6 +243,7 @@ export function createPlatformModuleGraph(
   })
   const postgres = createPostgresPlatformModules({
     providerCredentialCodec: createMcpOAuthSecretCodec(options.mcpOAuthEncryptionKey),
+    memoryDigestSecret: options.mcpOAuthEncryptionKey,
     sql: options.sql,
     now: options.now,
     idFactory: options.idFactory,
@@ -491,6 +492,7 @@ export function createPlatformModuleGraph(
     siem,
     notifications,
     distillation,
+    memories: postgres.memories,
     configuration,
     access,
     mcpDiscovery,

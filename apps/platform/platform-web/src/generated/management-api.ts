@@ -10446,6 +10446,2077 @@ export type GetV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionIdDisco
   error_code: string | null;
 };
 
+export type ListMyPersonalMemoriesParams = {
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+/**
+ * @minLength 1
+ * @maxLength 512
+ */
+cursor?: string;
+context?: {
+  kind?: typeof ListMyPersonalMemoriesContextKind[keyof typeof ListMyPersonalMemoriesContextKind];
+  context_id?: string | null;
+};
+};
+
+export const ListMyPersonalMemoriesContextKind = {  GLOBAL: 'GLOBAL',
+  PROJECT: 'PROJECT',
+  CONTEXT: 'CONTEXT',
+} as const
+export const ListMyPersonalMemories200MemoriesItemScope = {  PERSONAL: 'PERSONAL',
+  TEAM: 'TEAM',
+  ORGANIZATION: 'ORGANIZATION',
+} as const
+export const ListMyPersonalMemories200MemoriesItemKind = {  preference: 'preference',
+  fact: 'fact',
+  decision: 'decision',
+} as const
+export const ListMyPersonalMemories200MemoriesItemContextKind = {  GLOBAL: 'GLOBAL',
+  PROJECT: 'PROJECT',
+  CONTEXT: 'CONTEXT',
+} as const
+export type ListMyPersonalMemories200MemoriesItemContext = {
+  kind: typeof ListMyPersonalMemories200MemoriesItemContextKind[keyof typeof ListMyPersonalMemories200MemoriesItemContextKind];
+  context_id: string | null;
+};
+
+export const ListMyPersonalMemories200MemoriesItemAssertionOrigin = {  USER_EXPLICIT: 'USER_EXPLICIT',
+  AGENT_INFERRED: 'AGENT_INFERRED',
+} as const
+export type ListMyPersonalMemories200MemoriesItemSource = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  actor_subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  client_id: string;
+  agent_id: string | null;
+  agent_grant_id: string | null;
+  reference_id: string | null;
+};
+
+export type ListMyPersonalMemories200MemoriesItemConfirmation = {
+  confirmed: true;
+  /** @minimum 0 */
+  reviewed_at: number;
+} | null;
+
+export type ListMyPersonalMemories200MemoriesItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  memory_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  scope: typeof ListMyPersonalMemories200MemoriesItemScope[keyof typeof ListMyPersonalMemories200MemoriesItemScope];
+  owner_subject_id: string | null;
+  team_id: string | null;
+  organization_id: string | null;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  key: string;
+  kind: typeof ListMyPersonalMemories200MemoriesItemKind[keyof typeof ListMyPersonalMemories200MemoriesItemKind];
+  context: ListMyPersonalMemories200MemoriesItemContext;
+  /**
+     * @minLength 1
+     * @maxLength 12000
+     */
+  content: string;
+  assertion_origin: typeof ListMyPersonalMemories200MemoriesItemAssertionOrigin[keyof typeof ListMyPersonalMemories200MemoriesItemAssertionOrigin];
+  source: ListMyPersonalMemories200MemoriesItemSource;
+  /** @minimum 1 */
+  revision: number;
+  /** @minimum 0 */
+  created_at: number;
+  /** @minimum 0 */
+  updated_at: number;
+  confirmation: ListMyPersonalMemories200MemoriesItemConfirmation;
+};
+
+export type ListMyPersonalMemories200 = {
+  memories: ListMyPersonalMemories200MemoriesItem[];
+  next_cursor: string | null;
+};
+
+export const RememberMyPersonalMemoryBodyKind = {  preference: 'preference',
+  fact: 'fact',
+  decision: 'decision',
+} as const
+export const RememberMyPersonalMemoryBodyContextKind = {  GLOBAL: 'GLOBAL',
+  PROJECT: 'PROJECT',
+  CONTEXT: 'CONTEXT',
+} as const
+export type RememberMyPersonalMemoryBodyContext = {
+  kind: typeof RememberMyPersonalMemoryBodyContextKind[keyof typeof RememberMyPersonalMemoryBodyContextKind];
+  context_id: string | null;
+};
+
+export type RememberMyPersonalMemoryBody = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  memory_id?: string;
+  /** @minimum 0 */
+  expected_revision: number;
+  /**
+     * @minLength 36
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  idempotency_key: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  key: string;
+  kind: typeof RememberMyPersonalMemoryBodyKind[keyof typeof RememberMyPersonalMemoryBodyKind];
+  context?: RememberMyPersonalMemoryBodyContext;
+  /**
+     * @minLength 1
+     * @maxLength 12000
+     */
+  content: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  source_reference_id?: string;
+};
+
+export const RememberMyPersonalMemory200Scope = {  PERSONAL: 'PERSONAL',
+  TEAM: 'TEAM',
+  ORGANIZATION: 'ORGANIZATION',
+} as const
+export const RememberMyPersonalMemory200Kind = {  preference: 'preference',
+  fact: 'fact',
+  decision: 'decision',
+} as const
+export const RememberMyPersonalMemory200ContextKind = {  GLOBAL: 'GLOBAL',
+  PROJECT: 'PROJECT',
+  CONTEXT: 'CONTEXT',
+} as const
+export type RememberMyPersonalMemory200Context = {
+  kind: typeof RememberMyPersonalMemory200ContextKind[keyof typeof RememberMyPersonalMemory200ContextKind];
+  context_id: string | null;
+};
+
+export const RememberMyPersonalMemory200AssertionOrigin = {  USER_EXPLICIT: 'USER_EXPLICIT',
+  AGENT_INFERRED: 'AGENT_INFERRED',
+} as const
+export type RememberMyPersonalMemory200Source = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  actor_subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  client_id: string;
+  agent_id: string | null;
+  agent_grant_id: string | null;
+  reference_id: string | null;
+};
+
+export type RememberMyPersonalMemory200Confirmation = {
+  confirmed: true;
+  /** @minimum 0 */
+  reviewed_at: number;
+} | null;
+
+export type RememberMyPersonalMemory200 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  memory_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  scope: typeof RememberMyPersonalMemory200Scope[keyof typeof RememberMyPersonalMemory200Scope];
+  owner_subject_id: string | null;
+  team_id: string | null;
+  organization_id: string | null;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  key: string;
+  kind: typeof RememberMyPersonalMemory200Kind[keyof typeof RememberMyPersonalMemory200Kind];
+  context: RememberMyPersonalMemory200Context;
+  /**
+     * @minLength 1
+     * @maxLength 12000
+     */
+  content: string;
+  assertion_origin: typeof RememberMyPersonalMemory200AssertionOrigin[keyof typeof RememberMyPersonalMemory200AssertionOrigin];
+  source: RememberMyPersonalMemory200Source;
+  /** @minimum 1 */
+  revision: number;
+  /** @minimum 0 */
+  created_at: number;
+  /** @minimum 0 */
+  updated_at: number;
+  confirmation: RememberMyPersonalMemory200Confirmation;
+};
+
+export const RememberMyPersonalMemory201Scope = {  PERSONAL: 'PERSONAL',
+  TEAM: 'TEAM',
+  ORGANIZATION: 'ORGANIZATION',
+} as const
+export const RememberMyPersonalMemory201Kind = {  preference: 'preference',
+  fact: 'fact',
+  decision: 'decision',
+} as const
+export const RememberMyPersonalMemory201ContextKind = {  GLOBAL: 'GLOBAL',
+  PROJECT: 'PROJECT',
+  CONTEXT: 'CONTEXT',
+} as const
+export type RememberMyPersonalMemory201Context = {
+  kind: typeof RememberMyPersonalMemory201ContextKind[keyof typeof RememberMyPersonalMemory201ContextKind];
+  context_id: string | null;
+};
+
+export const RememberMyPersonalMemory201AssertionOrigin = {  USER_EXPLICIT: 'USER_EXPLICIT',
+  AGENT_INFERRED: 'AGENT_INFERRED',
+} as const
+export type RememberMyPersonalMemory201Source = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  actor_subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  client_id: string;
+  agent_id: string | null;
+  agent_grant_id: string | null;
+  reference_id: string | null;
+};
+
+export type RememberMyPersonalMemory201Confirmation = {
+  confirmed: true;
+  /** @minimum 0 */
+  reviewed_at: number;
+} | null;
+
+export type RememberMyPersonalMemory201 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  memory_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  scope: typeof RememberMyPersonalMemory201Scope[keyof typeof RememberMyPersonalMemory201Scope];
+  owner_subject_id: string | null;
+  team_id: string | null;
+  organization_id: string | null;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  key: string;
+  kind: typeof RememberMyPersonalMemory201Kind[keyof typeof RememberMyPersonalMemory201Kind];
+  context: RememberMyPersonalMemory201Context;
+  /**
+     * @minLength 1
+     * @maxLength 12000
+     */
+  content: string;
+  assertion_origin: typeof RememberMyPersonalMemory201AssertionOrigin[keyof typeof RememberMyPersonalMemory201AssertionOrigin];
+  source: RememberMyPersonalMemory201Source;
+  /** @minimum 1 */
+  revision: number;
+  /** @minimum 0 */
+  created_at: number;
+  /** @minimum 0 */
+  updated_at: number;
+  confirmation: RememberMyPersonalMemory201Confirmation;
+};
+
+export const GetMyPersonalMemory200Scope = {  PERSONAL: 'PERSONAL',
+  TEAM: 'TEAM',
+  ORGANIZATION: 'ORGANIZATION',
+} as const
+export const GetMyPersonalMemory200Kind = {  preference: 'preference',
+  fact: 'fact',
+  decision: 'decision',
+} as const
+export const GetMyPersonalMemory200ContextKind = {  GLOBAL: 'GLOBAL',
+  PROJECT: 'PROJECT',
+  CONTEXT: 'CONTEXT',
+} as const
+export type GetMyPersonalMemory200Context = {
+  kind: typeof GetMyPersonalMemory200ContextKind[keyof typeof GetMyPersonalMemory200ContextKind];
+  context_id: string | null;
+};
+
+export const GetMyPersonalMemory200AssertionOrigin = {  USER_EXPLICIT: 'USER_EXPLICIT',
+  AGENT_INFERRED: 'AGENT_INFERRED',
+} as const
+export type GetMyPersonalMemory200Source = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  actor_subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  client_id: string;
+  agent_id: string | null;
+  agent_grant_id: string | null;
+  reference_id: string | null;
+};
+
+export type GetMyPersonalMemory200Confirmation = {
+  confirmed: true;
+  /** @minimum 0 */
+  reviewed_at: number;
+} | null;
+
+export type GetMyPersonalMemory200 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  memory_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  scope: typeof GetMyPersonalMemory200Scope[keyof typeof GetMyPersonalMemory200Scope];
+  owner_subject_id: string | null;
+  team_id: string | null;
+  organization_id: string | null;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  key: string;
+  kind: typeof GetMyPersonalMemory200Kind[keyof typeof GetMyPersonalMemory200Kind];
+  context: GetMyPersonalMemory200Context;
+  /**
+     * @minLength 1
+     * @maxLength 12000
+     */
+  content: string;
+  assertion_origin: typeof GetMyPersonalMemory200AssertionOrigin[keyof typeof GetMyPersonalMemory200AssertionOrigin];
+  source: GetMyPersonalMemory200Source;
+  /** @minimum 1 */
+  revision: number;
+  /** @minimum 0 */
+  created_at: number;
+  /** @minimum 0 */
+  updated_at: number;
+  confirmation: GetMyPersonalMemory200Confirmation;
+};
+
+export type ForgetMyPersonalMemoryBody = {
+  /** @minimum 1 */
+  expected_revision: number;
+  /**
+     * @minLength 36
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  idempotency_key: string;
+};
+
+export const ForgetMyPersonalMemory200Scope = {  PERSONAL: 'PERSONAL',
+  TEAM: 'TEAM',
+  ORGANIZATION: 'ORGANIZATION',
+} as const
+export type ForgetMyPersonalMemory200 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  memory_id: string;
+  scope: typeof ForgetMyPersonalMemory200Scope[keyof typeof ForgetMyPersonalMemory200Scope];
+  owner_subject_id: string | null;
+  /** @minimum 1 */
+  deleted_revision: number;
+  /** @minimum 0 */
+  deleted_at: number;
+};
+
+export type EnableMyPersonalMemoryAgentBody = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  agent_id: string;
+};
+
+export type EnableMyPersonalMemoryAgent201 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  owner_subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  agent_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  grant_id: string;
+  /** @minimum 0 */
+  enabled_at: number;
+  revoked_at: number | null;
+};
+
+export type ListMyPersonalMemoryAgentsParams = {
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+/**
+ * @minLength 1
+ * @maxLength 512
+ */
+cursor?: string;
+};
+
+export type ListMyPersonalMemoryAgents200AgentsItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  owner_subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  agent_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  grant_id: string;
+  /** @minimum 0 */
+  enabled_at: number;
+  revoked_at: number | null;
+};
+
+export type ListMyPersonalMemoryAgents200 = {
+  /** @maxItems 100 */
+  agents: ListMyPersonalMemoryAgents200AgentsItem[];
+  next_cursor: string | null;
+};
+
+export type GetMyPersonalMemoryAgent200 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  owner_subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  agent_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  grant_id: string;
+  /** @minimum 0 */
+  enabled_at: number;
+  revoked_at: number | null;
+};
+
+export type RevokeMyPersonalMemoryAgent200 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  owner_subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  agent_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  grant_id: string;
+  /** @minimum 0 */
+  enabled_at: number;
+  revoked_at: number | null;
+};
+
+export type ListMyMemoryScopes200ScopesItemTarget = {
+  scope: 'PERSONAL';
+} | {
+  scope: 'TEAM';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  workspace_id: string;
+} | {
+  scope: 'ORGANIZATION';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  organization_id: string;
+};
+
+export type ListMyMemoryScopes200ScopesItem = {
+  target: ListMyMemoryScopes200ScopesItemTarget;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  display_name: string;
+  can_read: boolean;
+  can_contribute: boolean;
+  can_manage: boolean;
+};
+
+export type ListMyMemoryScopes200 = {
+  /** @maxItems 1000 */
+  scopes: ListMyMemoryScopes200ScopesItem[];
+};
+
+export type ListTeamWorkspaceMemoriesParams = {
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+/**
+ * @minLength 1
+ * @maxLength 512
+ */
+cursor?: string;
+context?: {
+  kind?: typeof ListTeamWorkspaceMemoriesContextKind[keyof typeof ListTeamWorkspaceMemoriesContextKind];
+  context_id?: string | null;
+};
+};
+
+export const ListTeamWorkspaceMemoriesContextKind = {  GLOBAL: 'GLOBAL',
+  PROJECT: 'PROJECT',
+  CONTEXT: 'CONTEXT',
+} as const
+export const ListTeamWorkspaceMemories200MemoriesItemScope = {  PERSONAL: 'PERSONAL',
+  TEAM: 'TEAM',
+  ORGANIZATION: 'ORGANIZATION',
+} as const
+export const ListTeamWorkspaceMemories200MemoriesItemKind = {  preference: 'preference',
+  fact: 'fact',
+  decision: 'decision',
+} as const
+export const ListTeamWorkspaceMemories200MemoriesItemContextKind = {  GLOBAL: 'GLOBAL',
+  PROJECT: 'PROJECT',
+  CONTEXT: 'CONTEXT',
+} as const
+export type ListTeamWorkspaceMemories200MemoriesItemContext = {
+  kind: typeof ListTeamWorkspaceMemories200MemoriesItemContextKind[keyof typeof ListTeamWorkspaceMemories200MemoriesItemContextKind];
+  context_id: string | null;
+};
+
+export const ListTeamWorkspaceMemories200MemoriesItemAssertionOrigin = {  USER_EXPLICIT: 'USER_EXPLICIT',
+  AGENT_INFERRED: 'AGENT_INFERRED',
+} as const
+export type ListTeamWorkspaceMemories200MemoriesItemSource = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  actor_subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  client_id: string;
+  agent_id: string | null;
+  agent_grant_id: string | null;
+  reference_id: string | null;
+};
+
+export type ListTeamWorkspaceMemories200MemoriesItemConfirmation = {
+  confirmed: true;
+  /** @minimum 0 */
+  reviewed_at: number;
+} | null;
+
+export type ListTeamWorkspaceMemories200MemoriesItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  memory_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  scope: typeof ListTeamWorkspaceMemories200MemoriesItemScope[keyof typeof ListTeamWorkspaceMemories200MemoriesItemScope];
+  owner_subject_id: string | null;
+  team_id: string | null;
+  organization_id: string | null;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  key: string;
+  kind: typeof ListTeamWorkspaceMemories200MemoriesItemKind[keyof typeof ListTeamWorkspaceMemories200MemoriesItemKind];
+  context: ListTeamWorkspaceMemories200MemoriesItemContext;
+  /**
+     * @minLength 1
+     * @maxLength 12000
+     */
+  content: string;
+  assertion_origin: typeof ListTeamWorkspaceMemories200MemoriesItemAssertionOrigin[keyof typeof ListTeamWorkspaceMemories200MemoriesItemAssertionOrigin];
+  source: ListTeamWorkspaceMemories200MemoriesItemSource;
+  /** @minimum 1 */
+  revision: number;
+  /** @minimum 0 */
+  created_at: number;
+  /** @minimum 0 */
+  updated_at: number;
+  confirmation: ListTeamWorkspaceMemories200MemoriesItemConfirmation;
+};
+
+export type ListTeamWorkspaceMemories200 = {
+  memories: ListTeamWorkspaceMemories200MemoriesItem[];
+  next_cursor: string | null;
+};
+
+export const RememberTeamWorkspaceMemoryBodyKind = {  preference: 'preference',
+  fact: 'fact',
+  decision: 'decision',
+} as const
+export const RememberTeamWorkspaceMemoryBodyContextKind = {  GLOBAL: 'GLOBAL',
+  PROJECT: 'PROJECT',
+  CONTEXT: 'CONTEXT',
+} as const
+export type RememberTeamWorkspaceMemoryBodyContext = {
+  kind: typeof RememberTeamWorkspaceMemoryBodyContextKind[keyof typeof RememberTeamWorkspaceMemoryBodyContextKind];
+  context_id: string | null;
+};
+
+export type RememberTeamWorkspaceMemoryBody = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  memory_id?: string;
+  /** @minimum 0 */
+  expected_revision: number;
+  /**
+     * @minLength 36
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  idempotency_key: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  key: string;
+  kind: typeof RememberTeamWorkspaceMemoryBodyKind[keyof typeof RememberTeamWorkspaceMemoryBodyKind];
+  context?: RememberTeamWorkspaceMemoryBodyContext;
+  /**
+     * @minLength 1
+     * @maxLength 12000
+     */
+  content: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  source_reference_id?: string;
+};
+
+export const RememberTeamWorkspaceMemory200Scope = {  PERSONAL: 'PERSONAL',
+  TEAM: 'TEAM',
+  ORGANIZATION: 'ORGANIZATION',
+} as const
+export const RememberTeamWorkspaceMemory200Kind = {  preference: 'preference',
+  fact: 'fact',
+  decision: 'decision',
+} as const
+export const RememberTeamWorkspaceMemory200ContextKind = {  GLOBAL: 'GLOBAL',
+  PROJECT: 'PROJECT',
+  CONTEXT: 'CONTEXT',
+} as const
+export type RememberTeamWorkspaceMemory200Context = {
+  kind: typeof RememberTeamWorkspaceMemory200ContextKind[keyof typeof RememberTeamWorkspaceMemory200ContextKind];
+  context_id: string | null;
+};
+
+export const RememberTeamWorkspaceMemory200AssertionOrigin = {  USER_EXPLICIT: 'USER_EXPLICIT',
+  AGENT_INFERRED: 'AGENT_INFERRED',
+} as const
+export type RememberTeamWorkspaceMemory200Source = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  actor_subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  client_id: string;
+  agent_id: string | null;
+  agent_grant_id: string | null;
+  reference_id: string | null;
+};
+
+export type RememberTeamWorkspaceMemory200Confirmation = {
+  confirmed: true;
+  /** @minimum 0 */
+  reviewed_at: number;
+} | null;
+
+export type RememberTeamWorkspaceMemory200 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  memory_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  scope: typeof RememberTeamWorkspaceMemory200Scope[keyof typeof RememberTeamWorkspaceMemory200Scope];
+  owner_subject_id: string | null;
+  team_id: string | null;
+  organization_id: string | null;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  key: string;
+  kind: typeof RememberTeamWorkspaceMemory200Kind[keyof typeof RememberTeamWorkspaceMemory200Kind];
+  context: RememberTeamWorkspaceMemory200Context;
+  /**
+     * @minLength 1
+     * @maxLength 12000
+     */
+  content: string;
+  assertion_origin: typeof RememberTeamWorkspaceMemory200AssertionOrigin[keyof typeof RememberTeamWorkspaceMemory200AssertionOrigin];
+  source: RememberTeamWorkspaceMemory200Source;
+  /** @minimum 1 */
+  revision: number;
+  /** @minimum 0 */
+  created_at: number;
+  /** @minimum 0 */
+  updated_at: number;
+  confirmation: RememberTeamWorkspaceMemory200Confirmation;
+};
+
+export const RememberTeamWorkspaceMemory201Scope = {  PERSONAL: 'PERSONAL',
+  TEAM: 'TEAM',
+  ORGANIZATION: 'ORGANIZATION',
+} as const
+export const RememberTeamWorkspaceMemory201Kind = {  preference: 'preference',
+  fact: 'fact',
+  decision: 'decision',
+} as const
+export const RememberTeamWorkspaceMemory201ContextKind = {  GLOBAL: 'GLOBAL',
+  PROJECT: 'PROJECT',
+  CONTEXT: 'CONTEXT',
+} as const
+export type RememberTeamWorkspaceMemory201Context = {
+  kind: typeof RememberTeamWorkspaceMemory201ContextKind[keyof typeof RememberTeamWorkspaceMemory201ContextKind];
+  context_id: string | null;
+};
+
+export const RememberTeamWorkspaceMemory201AssertionOrigin = {  USER_EXPLICIT: 'USER_EXPLICIT',
+  AGENT_INFERRED: 'AGENT_INFERRED',
+} as const
+export type RememberTeamWorkspaceMemory201Source = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  actor_subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  client_id: string;
+  agent_id: string | null;
+  agent_grant_id: string | null;
+  reference_id: string | null;
+};
+
+export type RememberTeamWorkspaceMemory201Confirmation = {
+  confirmed: true;
+  /** @minimum 0 */
+  reviewed_at: number;
+} | null;
+
+export type RememberTeamWorkspaceMemory201 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  memory_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  scope: typeof RememberTeamWorkspaceMemory201Scope[keyof typeof RememberTeamWorkspaceMemory201Scope];
+  owner_subject_id: string | null;
+  team_id: string | null;
+  organization_id: string | null;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  key: string;
+  kind: typeof RememberTeamWorkspaceMemory201Kind[keyof typeof RememberTeamWorkspaceMemory201Kind];
+  context: RememberTeamWorkspaceMemory201Context;
+  /**
+     * @minLength 1
+     * @maxLength 12000
+     */
+  content: string;
+  assertion_origin: typeof RememberTeamWorkspaceMemory201AssertionOrigin[keyof typeof RememberTeamWorkspaceMemory201AssertionOrigin];
+  source: RememberTeamWorkspaceMemory201Source;
+  /** @minimum 1 */
+  revision: number;
+  /** @minimum 0 */
+  created_at: number;
+  /** @minimum 0 */
+  updated_at: number;
+  confirmation: RememberTeamWorkspaceMemory201Confirmation;
+};
+
+export const GetTeamWorkspaceMemory200Scope = {  PERSONAL: 'PERSONAL',
+  TEAM: 'TEAM',
+  ORGANIZATION: 'ORGANIZATION',
+} as const
+export const GetTeamWorkspaceMemory200Kind = {  preference: 'preference',
+  fact: 'fact',
+  decision: 'decision',
+} as const
+export const GetTeamWorkspaceMemory200ContextKind = {  GLOBAL: 'GLOBAL',
+  PROJECT: 'PROJECT',
+  CONTEXT: 'CONTEXT',
+} as const
+export type GetTeamWorkspaceMemory200Context = {
+  kind: typeof GetTeamWorkspaceMemory200ContextKind[keyof typeof GetTeamWorkspaceMemory200ContextKind];
+  context_id: string | null;
+};
+
+export const GetTeamWorkspaceMemory200AssertionOrigin = {  USER_EXPLICIT: 'USER_EXPLICIT',
+  AGENT_INFERRED: 'AGENT_INFERRED',
+} as const
+export type GetTeamWorkspaceMemory200Source = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  actor_subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  client_id: string;
+  agent_id: string | null;
+  agent_grant_id: string | null;
+  reference_id: string | null;
+};
+
+export type GetTeamWorkspaceMemory200Confirmation = {
+  confirmed: true;
+  /** @minimum 0 */
+  reviewed_at: number;
+} | null;
+
+export type GetTeamWorkspaceMemory200 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  memory_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  scope: typeof GetTeamWorkspaceMemory200Scope[keyof typeof GetTeamWorkspaceMemory200Scope];
+  owner_subject_id: string | null;
+  team_id: string | null;
+  organization_id: string | null;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  key: string;
+  kind: typeof GetTeamWorkspaceMemory200Kind[keyof typeof GetTeamWorkspaceMemory200Kind];
+  context: GetTeamWorkspaceMemory200Context;
+  /**
+     * @minLength 1
+     * @maxLength 12000
+     */
+  content: string;
+  assertion_origin: typeof GetTeamWorkspaceMemory200AssertionOrigin[keyof typeof GetTeamWorkspaceMemory200AssertionOrigin];
+  source: GetTeamWorkspaceMemory200Source;
+  /** @minimum 1 */
+  revision: number;
+  /** @minimum 0 */
+  created_at: number;
+  /** @minimum 0 */
+  updated_at: number;
+  confirmation: GetTeamWorkspaceMemory200Confirmation;
+};
+
+export type ForgetTeamWorkspaceMemoryBody = {
+  /** @minimum 1 */
+  expected_revision: number;
+  /**
+     * @minLength 36
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  idempotency_key: string;
+};
+
+export const ForgetTeamWorkspaceMemory200Scope = {  PERSONAL: 'PERSONAL',
+  TEAM: 'TEAM',
+  ORGANIZATION: 'ORGANIZATION',
+} as const
+export type ForgetTeamWorkspaceMemory200 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  memory_id: string;
+  scope: typeof ForgetTeamWorkspaceMemory200Scope[keyof typeof ForgetTeamWorkspaceMemory200Scope];
+  owner_subject_id: string | null;
+  /** @minimum 1 */
+  deleted_revision: number;
+  /** @minimum 0 */
+  deleted_at: number;
+};
+
+export type ListTeamWorkspaceMemoryCorrectionsParams = {
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+/**
+ * @minLength 1
+ * @maxLength 512
+ */
+cursor?: string;
+status?: typeof ListTeamWorkspaceMemoryCorrectionsStatus[keyof typeof ListTeamWorkspaceMemoryCorrectionsStatus];
+};
+
+export const ListTeamWorkspaceMemoryCorrectionsStatus = {  PENDING: 'PENDING',
+  ACCEPTED: 'ACCEPTED',
+  REJECTED: 'REJECTED',
+  STALE: 'STALE',
+} as const
+export const ListTeamWorkspaceMemoryCorrections200ProposalsItemScope = {  PERSONAL: 'PERSONAL',
+  TEAM: 'TEAM',
+  ORGANIZATION: 'ORGANIZATION',
+} as const
+export const ListTeamWorkspaceMemoryCorrections200ProposalsItemProposedKind = {  preference: 'preference',
+  fact: 'fact',
+  decision: 'decision',
+} as const
+export type ListTeamWorkspaceMemoryCorrections200ProposalsItemSource = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  actor_subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  client_id: string;
+  agent_id: string | null;
+  agent_grant_id: string | null;
+  reference_id: string | null;
+};
+
+export const ListTeamWorkspaceMemoryCorrections200ProposalsItemStatus = {  PENDING: 'PENDING',
+  ACCEPTED: 'ACCEPTED',
+  REJECTED: 'REJECTED',
+  STALE: 'STALE',
+} as const
+export type ListTeamWorkspaceMemoryCorrections200ProposalsItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  proposal_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  memory_id: string;
+  scope: typeof ListTeamWorkspaceMemoryCorrections200ProposalsItemScope[keyof typeof ListTeamWorkspaceMemoryCorrections200ProposalsItemScope];
+  owner_subject_id: string | null;
+  team_id: string | null;
+  organization_id: string | null;
+  /** @minimum 1 */
+  base_revision: number;
+  proposed_kind: typeof ListTeamWorkspaceMemoryCorrections200ProposalsItemProposedKind[keyof typeof ListTeamWorkspaceMemoryCorrections200ProposalsItemProposedKind];
+  proposed_content: string | null;
+  source: ListTeamWorkspaceMemoryCorrections200ProposalsItemSource;
+  status: typeof ListTeamWorkspaceMemoryCorrections200ProposalsItemStatus[keyof typeof ListTeamWorkspaceMemoryCorrections200ProposalsItemStatus];
+  reviewer_subject_id: string | null;
+  /** @minimum 0 */
+  created_at: number;
+  resolved_at: number | null;
+};
+
+export type ListTeamWorkspaceMemoryCorrections200 = {
+  /** @maxItems 100 */
+  proposals: ListTeamWorkspaceMemoryCorrections200ProposalsItem[];
+  next_cursor: string | null;
+};
+
+export type CreateTeamWorkspaceMemoryCorrectionBody = {
+  /** @minimum 1 */
+  expected_revision: number;
+  /**
+     * @minLength 36
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  idempotency_key: string;
+  /**
+     * @minLength 1
+     * @maxLength 12000
+     */
+  content: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  source_reference_id?: string;
+};
+
+export const CreateTeamWorkspaceMemoryCorrection201Scope = {  PERSONAL: 'PERSONAL',
+  TEAM: 'TEAM',
+  ORGANIZATION: 'ORGANIZATION',
+} as const
+export const CreateTeamWorkspaceMemoryCorrection201ProposedKind = {  preference: 'preference',
+  fact: 'fact',
+  decision: 'decision',
+} as const
+export type CreateTeamWorkspaceMemoryCorrection201Source = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  actor_subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  client_id: string;
+  agent_id: string | null;
+  agent_grant_id: string | null;
+  reference_id: string | null;
+};
+
+export const CreateTeamWorkspaceMemoryCorrection201Status = {  PENDING: 'PENDING',
+  ACCEPTED: 'ACCEPTED',
+  REJECTED: 'REJECTED',
+  STALE: 'STALE',
+} as const
+export type CreateTeamWorkspaceMemoryCorrection201 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  proposal_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  memory_id: string;
+  scope: typeof CreateTeamWorkspaceMemoryCorrection201Scope[keyof typeof CreateTeamWorkspaceMemoryCorrection201Scope];
+  owner_subject_id: string | null;
+  team_id: string | null;
+  organization_id: string | null;
+  /** @minimum 1 */
+  base_revision: number;
+  proposed_kind: typeof CreateTeamWorkspaceMemoryCorrection201ProposedKind[keyof typeof CreateTeamWorkspaceMemoryCorrection201ProposedKind];
+  proposed_content: string | null;
+  source: CreateTeamWorkspaceMemoryCorrection201Source;
+  status: typeof CreateTeamWorkspaceMemoryCorrection201Status[keyof typeof CreateTeamWorkspaceMemoryCorrection201Status];
+  reviewer_subject_id: string | null;
+  /** @minimum 0 */
+  created_at: number;
+  resolved_at: number | null;
+};
+
+export const ReviewTeamWorkspaceMemoryCorrectionBodyAction = {  ACCEPT: 'ACCEPT',
+  REJECT: 'REJECT',
+} as const
+export type ReviewTeamWorkspaceMemoryCorrectionBody = {
+  action: typeof ReviewTeamWorkspaceMemoryCorrectionBodyAction[keyof typeof ReviewTeamWorkspaceMemoryCorrectionBodyAction];
+};
+
+export const ReviewTeamWorkspaceMemoryCorrection200ProposalScope = {  PERSONAL: 'PERSONAL',
+  TEAM: 'TEAM',
+  ORGANIZATION: 'ORGANIZATION',
+} as const
+export const ReviewTeamWorkspaceMemoryCorrection200ProposalProposedKind = {  preference: 'preference',
+  fact: 'fact',
+  decision: 'decision',
+} as const
+export type ReviewTeamWorkspaceMemoryCorrection200ProposalSource = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  actor_subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  client_id: string;
+  agent_id: string | null;
+  agent_grant_id: string | null;
+  reference_id: string | null;
+};
+
+export const ReviewTeamWorkspaceMemoryCorrection200ProposalStatus = {  PENDING: 'PENDING',
+  ACCEPTED: 'ACCEPTED',
+  REJECTED: 'REJECTED',
+  STALE: 'STALE',
+} as const
+export type ReviewTeamWorkspaceMemoryCorrection200Proposal = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  proposal_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  memory_id: string;
+  scope: typeof ReviewTeamWorkspaceMemoryCorrection200ProposalScope[keyof typeof ReviewTeamWorkspaceMemoryCorrection200ProposalScope];
+  owner_subject_id: string | null;
+  team_id: string | null;
+  organization_id: string | null;
+  /** @minimum 1 */
+  base_revision: number;
+  proposed_kind: typeof ReviewTeamWorkspaceMemoryCorrection200ProposalProposedKind[keyof typeof ReviewTeamWorkspaceMemoryCorrection200ProposalProposedKind];
+  proposed_content: string | null;
+  source: ReviewTeamWorkspaceMemoryCorrection200ProposalSource;
+  status: typeof ReviewTeamWorkspaceMemoryCorrection200ProposalStatus[keyof typeof ReviewTeamWorkspaceMemoryCorrection200ProposalStatus];
+  reviewer_subject_id: string | null;
+  /** @minimum 0 */
+  created_at: number;
+  resolved_at: number | null;
+};
+
+export const ReviewTeamWorkspaceMemoryCorrection200MemoryScope = {  PERSONAL: 'PERSONAL',
+  TEAM: 'TEAM',
+  ORGANIZATION: 'ORGANIZATION',
+} as const
+export const ReviewTeamWorkspaceMemoryCorrection200MemoryKind = {  preference: 'preference',
+  fact: 'fact',
+  decision: 'decision',
+} as const
+export const ReviewTeamWorkspaceMemoryCorrection200MemoryContextKind = {  GLOBAL: 'GLOBAL',
+  PROJECT: 'PROJECT',
+  CONTEXT: 'CONTEXT',
+} as const
+export type ReviewTeamWorkspaceMemoryCorrection200MemoryContext = {
+  kind: typeof ReviewTeamWorkspaceMemoryCorrection200MemoryContextKind[keyof typeof ReviewTeamWorkspaceMemoryCorrection200MemoryContextKind];
+  context_id: string | null;
+};
+
+export const ReviewTeamWorkspaceMemoryCorrection200MemoryAssertionOrigin = {  USER_EXPLICIT: 'USER_EXPLICIT',
+  AGENT_INFERRED: 'AGENT_INFERRED',
+} as const
+export type ReviewTeamWorkspaceMemoryCorrection200MemorySource = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  actor_subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  client_id: string;
+  agent_id: string | null;
+  agent_grant_id: string | null;
+  reference_id: string | null;
+};
+
+export type ReviewTeamWorkspaceMemoryCorrection200MemoryConfirmation = {
+  confirmed: true;
+  /** @minimum 0 */
+  reviewed_at: number;
+} | null;
+
+export type ReviewTeamWorkspaceMemoryCorrection200Memory = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  memory_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  scope: typeof ReviewTeamWorkspaceMemoryCorrection200MemoryScope[keyof typeof ReviewTeamWorkspaceMemoryCorrection200MemoryScope];
+  owner_subject_id: string | null;
+  team_id: string | null;
+  organization_id: string | null;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  key: string;
+  kind: typeof ReviewTeamWorkspaceMemoryCorrection200MemoryKind[keyof typeof ReviewTeamWorkspaceMemoryCorrection200MemoryKind];
+  context: ReviewTeamWorkspaceMemoryCorrection200MemoryContext;
+  /**
+     * @minLength 1
+     * @maxLength 12000
+     */
+  content: string;
+  assertion_origin: typeof ReviewTeamWorkspaceMemoryCorrection200MemoryAssertionOrigin[keyof typeof ReviewTeamWorkspaceMemoryCorrection200MemoryAssertionOrigin];
+  source: ReviewTeamWorkspaceMemoryCorrection200MemorySource;
+  /** @minimum 1 */
+  revision: number;
+  /** @minimum 0 */
+  created_at: number;
+  /** @minimum 0 */
+  updated_at: number;
+  confirmation: ReviewTeamWorkspaceMemoryCorrection200MemoryConfirmation;
+} | null;
+
+export type ReviewTeamWorkspaceMemoryCorrection200 = {
+  proposal: ReviewTeamWorkspaceMemoryCorrection200Proposal;
+  memory: ReviewTeamWorkspaceMemoryCorrection200Memory;
+};
+
+export type ListOrganizationMemoriesParams = {
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+/**
+ * @minLength 1
+ * @maxLength 512
+ */
+cursor?: string;
+context?: {
+  kind?: typeof ListOrganizationMemoriesContextKind[keyof typeof ListOrganizationMemoriesContextKind];
+  context_id?: string | null;
+};
+};
+
+export const ListOrganizationMemoriesContextKind = {  GLOBAL: 'GLOBAL',
+  PROJECT: 'PROJECT',
+  CONTEXT: 'CONTEXT',
+} as const
+export const ListOrganizationMemories200MemoriesItemScope = {  PERSONAL: 'PERSONAL',
+  TEAM: 'TEAM',
+  ORGANIZATION: 'ORGANIZATION',
+} as const
+export const ListOrganizationMemories200MemoriesItemKind = {  preference: 'preference',
+  fact: 'fact',
+  decision: 'decision',
+} as const
+export const ListOrganizationMemories200MemoriesItemContextKind = {  GLOBAL: 'GLOBAL',
+  PROJECT: 'PROJECT',
+  CONTEXT: 'CONTEXT',
+} as const
+export type ListOrganizationMemories200MemoriesItemContext = {
+  kind: typeof ListOrganizationMemories200MemoriesItemContextKind[keyof typeof ListOrganizationMemories200MemoriesItemContextKind];
+  context_id: string | null;
+};
+
+export const ListOrganizationMemories200MemoriesItemAssertionOrigin = {  USER_EXPLICIT: 'USER_EXPLICIT',
+  AGENT_INFERRED: 'AGENT_INFERRED',
+} as const
+export type ListOrganizationMemories200MemoriesItemSource = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  actor_subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  client_id: string;
+  agent_id: string | null;
+  agent_grant_id: string | null;
+  reference_id: string | null;
+};
+
+export type ListOrganizationMemories200MemoriesItemConfirmation = {
+  confirmed: true;
+  /** @minimum 0 */
+  reviewed_at: number;
+} | null;
+
+export type ListOrganizationMemories200MemoriesItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  memory_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  scope: typeof ListOrganizationMemories200MemoriesItemScope[keyof typeof ListOrganizationMemories200MemoriesItemScope];
+  owner_subject_id: string | null;
+  team_id: string | null;
+  organization_id: string | null;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  key: string;
+  kind: typeof ListOrganizationMemories200MemoriesItemKind[keyof typeof ListOrganizationMemories200MemoriesItemKind];
+  context: ListOrganizationMemories200MemoriesItemContext;
+  /**
+     * @minLength 1
+     * @maxLength 12000
+     */
+  content: string;
+  assertion_origin: typeof ListOrganizationMemories200MemoriesItemAssertionOrigin[keyof typeof ListOrganizationMemories200MemoriesItemAssertionOrigin];
+  source: ListOrganizationMemories200MemoriesItemSource;
+  /** @minimum 1 */
+  revision: number;
+  /** @minimum 0 */
+  created_at: number;
+  /** @minimum 0 */
+  updated_at: number;
+  confirmation: ListOrganizationMemories200MemoriesItemConfirmation;
+};
+
+export type ListOrganizationMemories200 = {
+  memories: ListOrganizationMemories200MemoriesItem[];
+  next_cursor: string | null;
+};
+
+export const RememberOrganizationMemoryBodyKind = {  preference: 'preference',
+  fact: 'fact',
+  decision: 'decision',
+} as const
+export const RememberOrganizationMemoryBodyContextKind = {  GLOBAL: 'GLOBAL',
+  PROJECT: 'PROJECT',
+  CONTEXT: 'CONTEXT',
+} as const
+export type RememberOrganizationMemoryBodyContext = {
+  kind: typeof RememberOrganizationMemoryBodyContextKind[keyof typeof RememberOrganizationMemoryBodyContextKind];
+  context_id: string | null;
+};
+
+export type RememberOrganizationMemoryBody = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  memory_id?: string;
+  /** @minimum 0 */
+  expected_revision: number;
+  /**
+     * @minLength 36
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  idempotency_key: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  key: string;
+  kind: typeof RememberOrganizationMemoryBodyKind[keyof typeof RememberOrganizationMemoryBodyKind];
+  context?: RememberOrganizationMemoryBodyContext;
+  /**
+     * @minLength 1
+     * @maxLength 12000
+     */
+  content: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  source_reference_id?: string;
+};
+
+export const RememberOrganizationMemory200Scope = {  PERSONAL: 'PERSONAL',
+  TEAM: 'TEAM',
+  ORGANIZATION: 'ORGANIZATION',
+} as const
+export const RememberOrganizationMemory200Kind = {  preference: 'preference',
+  fact: 'fact',
+  decision: 'decision',
+} as const
+export const RememberOrganizationMemory200ContextKind = {  GLOBAL: 'GLOBAL',
+  PROJECT: 'PROJECT',
+  CONTEXT: 'CONTEXT',
+} as const
+export type RememberOrganizationMemory200Context = {
+  kind: typeof RememberOrganizationMemory200ContextKind[keyof typeof RememberOrganizationMemory200ContextKind];
+  context_id: string | null;
+};
+
+export const RememberOrganizationMemory200AssertionOrigin = {  USER_EXPLICIT: 'USER_EXPLICIT',
+  AGENT_INFERRED: 'AGENT_INFERRED',
+} as const
+export type RememberOrganizationMemory200Source = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  actor_subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  client_id: string;
+  agent_id: string | null;
+  agent_grant_id: string | null;
+  reference_id: string | null;
+};
+
+export type RememberOrganizationMemory200Confirmation = {
+  confirmed: true;
+  /** @minimum 0 */
+  reviewed_at: number;
+} | null;
+
+export type RememberOrganizationMemory200 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  memory_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  scope: typeof RememberOrganizationMemory200Scope[keyof typeof RememberOrganizationMemory200Scope];
+  owner_subject_id: string | null;
+  team_id: string | null;
+  organization_id: string | null;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  key: string;
+  kind: typeof RememberOrganizationMemory200Kind[keyof typeof RememberOrganizationMemory200Kind];
+  context: RememberOrganizationMemory200Context;
+  /**
+     * @minLength 1
+     * @maxLength 12000
+     */
+  content: string;
+  assertion_origin: typeof RememberOrganizationMemory200AssertionOrigin[keyof typeof RememberOrganizationMemory200AssertionOrigin];
+  source: RememberOrganizationMemory200Source;
+  /** @minimum 1 */
+  revision: number;
+  /** @minimum 0 */
+  created_at: number;
+  /** @minimum 0 */
+  updated_at: number;
+  confirmation: RememberOrganizationMemory200Confirmation;
+};
+
+export const RememberOrganizationMemory201Scope = {  PERSONAL: 'PERSONAL',
+  TEAM: 'TEAM',
+  ORGANIZATION: 'ORGANIZATION',
+} as const
+export const RememberOrganizationMemory201Kind = {  preference: 'preference',
+  fact: 'fact',
+  decision: 'decision',
+} as const
+export const RememberOrganizationMemory201ContextKind = {  GLOBAL: 'GLOBAL',
+  PROJECT: 'PROJECT',
+  CONTEXT: 'CONTEXT',
+} as const
+export type RememberOrganizationMemory201Context = {
+  kind: typeof RememberOrganizationMemory201ContextKind[keyof typeof RememberOrganizationMemory201ContextKind];
+  context_id: string | null;
+};
+
+export const RememberOrganizationMemory201AssertionOrigin = {  USER_EXPLICIT: 'USER_EXPLICIT',
+  AGENT_INFERRED: 'AGENT_INFERRED',
+} as const
+export type RememberOrganizationMemory201Source = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  actor_subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  client_id: string;
+  agent_id: string | null;
+  agent_grant_id: string | null;
+  reference_id: string | null;
+};
+
+export type RememberOrganizationMemory201Confirmation = {
+  confirmed: true;
+  /** @minimum 0 */
+  reviewed_at: number;
+} | null;
+
+export type RememberOrganizationMemory201 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  memory_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  scope: typeof RememberOrganizationMemory201Scope[keyof typeof RememberOrganizationMemory201Scope];
+  owner_subject_id: string | null;
+  team_id: string | null;
+  organization_id: string | null;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  key: string;
+  kind: typeof RememberOrganizationMemory201Kind[keyof typeof RememberOrganizationMemory201Kind];
+  context: RememberOrganizationMemory201Context;
+  /**
+     * @minLength 1
+     * @maxLength 12000
+     */
+  content: string;
+  assertion_origin: typeof RememberOrganizationMemory201AssertionOrigin[keyof typeof RememberOrganizationMemory201AssertionOrigin];
+  source: RememberOrganizationMemory201Source;
+  /** @minimum 1 */
+  revision: number;
+  /** @minimum 0 */
+  created_at: number;
+  /** @minimum 0 */
+  updated_at: number;
+  confirmation: RememberOrganizationMemory201Confirmation;
+};
+
+export const GetOrganizationMemory200Scope = {  PERSONAL: 'PERSONAL',
+  TEAM: 'TEAM',
+  ORGANIZATION: 'ORGANIZATION',
+} as const
+export const GetOrganizationMemory200Kind = {  preference: 'preference',
+  fact: 'fact',
+  decision: 'decision',
+} as const
+export const GetOrganizationMemory200ContextKind = {  GLOBAL: 'GLOBAL',
+  PROJECT: 'PROJECT',
+  CONTEXT: 'CONTEXT',
+} as const
+export type GetOrganizationMemory200Context = {
+  kind: typeof GetOrganizationMemory200ContextKind[keyof typeof GetOrganizationMemory200ContextKind];
+  context_id: string | null;
+};
+
+export const GetOrganizationMemory200AssertionOrigin = {  USER_EXPLICIT: 'USER_EXPLICIT',
+  AGENT_INFERRED: 'AGENT_INFERRED',
+} as const
+export type GetOrganizationMemory200Source = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  actor_subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  client_id: string;
+  agent_id: string | null;
+  agent_grant_id: string | null;
+  reference_id: string | null;
+};
+
+export type GetOrganizationMemory200Confirmation = {
+  confirmed: true;
+  /** @minimum 0 */
+  reviewed_at: number;
+} | null;
+
+export type GetOrganizationMemory200 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  memory_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  scope: typeof GetOrganizationMemory200Scope[keyof typeof GetOrganizationMemory200Scope];
+  owner_subject_id: string | null;
+  team_id: string | null;
+  organization_id: string | null;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  key: string;
+  kind: typeof GetOrganizationMemory200Kind[keyof typeof GetOrganizationMemory200Kind];
+  context: GetOrganizationMemory200Context;
+  /**
+     * @minLength 1
+     * @maxLength 12000
+     */
+  content: string;
+  assertion_origin: typeof GetOrganizationMemory200AssertionOrigin[keyof typeof GetOrganizationMemory200AssertionOrigin];
+  source: GetOrganizationMemory200Source;
+  /** @minimum 1 */
+  revision: number;
+  /** @minimum 0 */
+  created_at: number;
+  /** @minimum 0 */
+  updated_at: number;
+  confirmation: GetOrganizationMemory200Confirmation;
+};
+
+export type ForgetOrganizationMemoryBody = {
+  /** @minimum 1 */
+  expected_revision: number;
+  /**
+     * @minLength 36
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  idempotency_key: string;
+};
+
+export const ForgetOrganizationMemory200Scope = {  PERSONAL: 'PERSONAL',
+  TEAM: 'TEAM',
+  ORGANIZATION: 'ORGANIZATION',
+} as const
+export type ForgetOrganizationMemory200 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  memory_id: string;
+  scope: typeof ForgetOrganizationMemory200Scope[keyof typeof ForgetOrganizationMemory200Scope];
+  owner_subject_id: string | null;
+  /** @minimum 1 */
+  deleted_revision: number;
+  /** @minimum 0 */
+  deleted_at: number;
+};
+
+export type ListOrganizationMemoryCorrectionsParams = {
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+/**
+ * @minLength 1
+ * @maxLength 512
+ */
+cursor?: string;
+status?: typeof ListOrganizationMemoryCorrectionsStatus[keyof typeof ListOrganizationMemoryCorrectionsStatus];
+};
+
+export const ListOrganizationMemoryCorrectionsStatus = {  PENDING: 'PENDING',
+  ACCEPTED: 'ACCEPTED',
+  REJECTED: 'REJECTED',
+  STALE: 'STALE',
+} as const
+export const ListOrganizationMemoryCorrections200ProposalsItemScope = {  PERSONAL: 'PERSONAL',
+  TEAM: 'TEAM',
+  ORGANIZATION: 'ORGANIZATION',
+} as const
+export const ListOrganizationMemoryCorrections200ProposalsItemProposedKind = {  preference: 'preference',
+  fact: 'fact',
+  decision: 'decision',
+} as const
+export type ListOrganizationMemoryCorrections200ProposalsItemSource = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  actor_subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  client_id: string;
+  agent_id: string | null;
+  agent_grant_id: string | null;
+  reference_id: string | null;
+};
+
+export const ListOrganizationMemoryCorrections200ProposalsItemStatus = {  PENDING: 'PENDING',
+  ACCEPTED: 'ACCEPTED',
+  REJECTED: 'REJECTED',
+  STALE: 'STALE',
+} as const
+export type ListOrganizationMemoryCorrections200ProposalsItem = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  proposal_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  memory_id: string;
+  scope: typeof ListOrganizationMemoryCorrections200ProposalsItemScope[keyof typeof ListOrganizationMemoryCorrections200ProposalsItemScope];
+  owner_subject_id: string | null;
+  team_id: string | null;
+  organization_id: string | null;
+  /** @minimum 1 */
+  base_revision: number;
+  proposed_kind: typeof ListOrganizationMemoryCorrections200ProposalsItemProposedKind[keyof typeof ListOrganizationMemoryCorrections200ProposalsItemProposedKind];
+  proposed_content: string | null;
+  source: ListOrganizationMemoryCorrections200ProposalsItemSource;
+  status: typeof ListOrganizationMemoryCorrections200ProposalsItemStatus[keyof typeof ListOrganizationMemoryCorrections200ProposalsItemStatus];
+  reviewer_subject_id: string | null;
+  /** @minimum 0 */
+  created_at: number;
+  resolved_at: number | null;
+};
+
+export type ListOrganizationMemoryCorrections200 = {
+  /** @maxItems 100 */
+  proposals: ListOrganizationMemoryCorrections200ProposalsItem[];
+  next_cursor: string | null;
+};
+
+export type CreateOrganizationMemoryCorrectionBody = {
+  /** @minimum 1 */
+  expected_revision: number;
+  /**
+     * @minLength 36
+     * @maxLength 36
+     * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+     */
+  idempotency_key: string;
+  /**
+     * @minLength 1
+     * @maxLength 12000
+     */
+  content: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  source_reference_id?: string;
+};
+
+export const CreateOrganizationMemoryCorrection201Scope = {  PERSONAL: 'PERSONAL',
+  TEAM: 'TEAM',
+  ORGANIZATION: 'ORGANIZATION',
+} as const
+export const CreateOrganizationMemoryCorrection201ProposedKind = {  preference: 'preference',
+  fact: 'fact',
+  decision: 'decision',
+} as const
+export type CreateOrganizationMemoryCorrection201Source = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  actor_subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  client_id: string;
+  agent_id: string | null;
+  agent_grant_id: string | null;
+  reference_id: string | null;
+};
+
+export const CreateOrganizationMemoryCorrection201Status = {  PENDING: 'PENDING',
+  ACCEPTED: 'ACCEPTED',
+  REJECTED: 'REJECTED',
+  STALE: 'STALE',
+} as const
+export type CreateOrganizationMemoryCorrection201 = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  proposal_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  memory_id: string;
+  scope: typeof CreateOrganizationMemoryCorrection201Scope[keyof typeof CreateOrganizationMemoryCorrection201Scope];
+  owner_subject_id: string | null;
+  team_id: string | null;
+  organization_id: string | null;
+  /** @minimum 1 */
+  base_revision: number;
+  proposed_kind: typeof CreateOrganizationMemoryCorrection201ProposedKind[keyof typeof CreateOrganizationMemoryCorrection201ProposedKind];
+  proposed_content: string | null;
+  source: CreateOrganizationMemoryCorrection201Source;
+  status: typeof CreateOrganizationMemoryCorrection201Status[keyof typeof CreateOrganizationMemoryCorrection201Status];
+  reviewer_subject_id: string | null;
+  /** @minimum 0 */
+  created_at: number;
+  resolved_at: number | null;
+};
+
+export const ReviewOrganizationMemoryCorrectionBodyAction = {  ACCEPT: 'ACCEPT',
+  REJECT: 'REJECT',
+} as const
+export type ReviewOrganizationMemoryCorrectionBody = {
+  action: typeof ReviewOrganizationMemoryCorrectionBodyAction[keyof typeof ReviewOrganizationMemoryCorrectionBodyAction];
+};
+
+export const ReviewOrganizationMemoryCorrection200ProposalScope = {  PERSONAL: 'PERSONAL',
+  TEAM: 'TEAM',
+  ORGANIZATION: 'ORGANIZATION',
+} as const
+export const ReviewOrganizationMemoryCorrection200ProposalProposedKind = {  preference: 'preference',
+  fact: 'fact',
+  decision: 'decision',
+} as const
+export type ReviewOrganizationMemoryCorrection200ProposalSource = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  actor_subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  client_id: string;
+  agent_id: string | null;
+  agent_grant_id: string | null;
+  reference_id: string | null;
+};
+
+export const ReviewOrganizationMemoryCorrection200ProposalStatus = {  PENDING: 'PENDING',
+  ACCEPTED: 'ACCEPTED',
+  REJECTED: 'REJECTED',
+  STALE: 'STALE',
+} as const
+export type ReviewOrganizationMemoryCorrection200Proposal = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  proposal_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  memory_id: string;
+  scope: typeof ReviewOrganizationMemoryCorrection200ProposalScope[keyof typeof ReviewOrganizationMemoryCorrection200ProposalScope];
+  owner_subject_id: string | null;
+  team_id: string | null;
+  organization_id: string | null;
+  /** @minimum 1 */
+  base_revision: number;
+  proposed_kind: typeof ReviewOrganizationMemoryCorrection200ProposalProposedKind[keyof typeof ReviewOrganizationMemoryCorrection200ProposalProposedKind];
+  proposed_content: string | null;
+  source: ReviewOrganizationMemoryCorrection200ProposalSource;
+  status: typeof ReviewOrganizationMemoryCorrection200ProposalStatus[keyof typeof ReviewOrganizationMemoryCorrection200ProposalStatus];
+  reviewer_subject_id: string | null;
+  /** @minimum 0 */
+  created_at: number;
+  resolved_at: number | null;
+};
+
+export const ReviewOrganizationMemoryCorrection200MemoryScope = {  PERSONAL: 'PERSONAL',
+  TEAM: 'TEAM',
+  ORGANIZATION: 'ORGANIZATION',
+} as const
+export const ReviewOrganizationMemoryCorrection200MemoryKind = {  preference: 'preference',
+  fact: 'fact',
+  decision: 'decision',
+} as const
+export const ReviewOrganizationMemoryCorrection200MemoryContextKind = {  GLOBAL: 'GLOBAL',
+  PROJECT: 'PROJECT',
+  CONTEXT: 'CONTEXT',
+} as const
+export type ReviewOrganizationMemoryCorrection200MemoryContext = {
+  kind: typeof ReviewOrganizationMemoryCorrection200MemoryContextKind[keyof typeof ReviewOrganizationMemoryCorrection200MemoryContextKind];
+  context_id: string | null;
+};
+
+export const ReviewOrganizationMemoryCorrection200MemoryAssertionOrigin = {  USER_EXPLICIT: 'USER_EXPLICIT',
+  AGENT_INFERRED: 'AGENT_INFERRED',
+} as const
+export type ReviewOrganizationMemoryCorrection200MemorySource = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  actor_subject_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  client_id: string;
+  agent_id: string | null;
+  agent_grant_id: string | null;
+  reference_id: string | null;
+};
+
+export type ReviewOrganizationMemoryCorrection200MemoryConfirmation = {
+  confirmed: true;
+  /** @minimum 0 */
+  reviewed_at: number;
+} | null;
+
+export type ReviewOrganizationMemoryCorrection200Memory = {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  memory_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  tenant_id: string;
+  scope: typeof ReviewOrganizationMemoryCorrection200MemoryScope[keyof typeof ReviewOrganizationMemoryCorrection200MemoryScope];
+  owner_subject_id: string | null;
+  team_id: string | null;
+  organization_id: string | null;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  key: string;
+  kind: typeof ReviewOrganizationMemoryCorrection200MemoryKind[keyof typeof ReviewOrganizationMemoryCorrection200MemoryKind];
+  context: ReviewOrganizationMemoryCorrection200MemoryContext;
+  /**
+     * @minLength 1
+     * @maxLength 12000
+     */
+  content: string;
+  assertion_origin: typeof ReviewOrganizationMemoryCorrection200MemoryAssertionOrigin[keyof typeof ReviewOrganizationMemoryCorrection200MemoryAssertionOrigin];
+  source: ReviewOrganizationMemoryCorrection200MemorySource;
+  /** @minimum 1 */
+  revision: number;
+  /** @minimum 0 */
+  created_at: number;
+  /** @minimum 0 */
+  updated_at: number;
+  confirmation: ReviewOrganizationMemoryCorrection200MemoryConfirmation;
+} | null;
+
+export type ReviewOrganizationMemoryCorrection200 = {
+  proposal: ReviewOrganizationMemoryCorrection200Proposal;
+  memory: ReviewOrganizationMemoryCorrection200Memory;
+};
+
 export const ListProviderProfiles200ItemProviderType = {  GENERIC_OPENAI_COMPATIBLE: 'GENERIC_OPENAI_COMPATIBLE',
   OPENAI: 'OPENAI',
   OMLX: 'OMLX',
@@ -41955,6 +44026,1059 @@ export const deleteV1TenantsTenantIdMeResourceConnectionsResourceIdConnectionId 
     method: 'DELETE'
 
 
+  }
+);}
+
+
+
+export type listMyPersonalMemoriesResponse200 = {
+  data: ListMyPersonalMemories200
+  status: 200
+}
+
+export type listMyPersonalMemoriesResponseSuccess = (listMyPersonalMemoriesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listMyPersonalMemoriesResponse = (listMyPersonalMemoriesResponseSuccess)
+
+export const getListMyPersonalMemoriesUrl = (tenantId: string,
+    params?: ListMyPersonalMemoriesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/tenants/${encodeURIComponent(String(tenantId))}/me/memories?${stringifiedParams}` : `/v1/tenants/${encodeURIComponent(String(tenantId))}/me/memories`
+}
+
+export const listMyPersonalMemories = async (tenantId: string,
+    params?: ListMyPersonalMemoriesParams, options?: Parameters<typeof managementApiFetch>[1]): Promise<listMyPersonalMemoriesResponse> => {
+
+  return managementApiFetch<listMyPersonalMemoriesResponse>(getListMyPersonalMemoriesUrl(tenantId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type rememberMyPersonalMemoryResponse200 = {
+  data: RememberMyPersonalMemory200
+  status: 200
+}
+
+export type rememberMyPersonalMemoryResponse201 = {
+  data: RememberMyPersonalMemory201
+  status: 201
+}
+
+export type rememberMyPersonalMemoryResponseSuccess = (rememberMyPersonalMemoryResponse200 | rememberMyPersonalMemoryResponse201) & {
+  headers: Headers;
+};
+;
+
+export type rememberMyPersonalMemoryResponse = (rememberMyPersonalMemoryResponseSuccess)
+
+export const getRememberMyPersonalMemoryUrl = (tenantId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/me/memories`
+}
+
+export const rememberMyPersonalMemory = async (tenantId: string,
+    rememberMyPersonalMemoryBody: RememberMyPersonalMemoryBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<rememberMyPersonalMemoryResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return managementApiFetch<rememberMyPersonalMemoryResponse>(getRememberMyPersonalMemoryUrl(tenantId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(rememberMyPersonalMemoryBody)
+  }
+);}
+
+
+
+export type getMyPersonalMemoryResponse200 = {
+  data: GetMyPersonalMemory200
+  status: 200
+}
+
+export type getMyPersonalMemoryResponseSuccess = (getMyPersonalMemoryResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getMyPersonalMemoryResponse = (getMyPersonalMemoryResponseSuccess)
+
+export const getGetMyPersonalMemoryUrl = (tenantId: string,
+    memoryId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/me/memories/${encodeURIComponent(String(memoryId))}`
+}
+
+export const getMyPersonalMemory = async (tenantId: string,
+    memoryId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getMyPersonalMemoryResponse> => {
+
+  return managementApiFetch<getMyPersonalMemoryResponse>(getGetMyPersonalMemoryUrl(tenantId,memoryId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type forgetMyPersonalMemoryResponse200 = {
+  data: ForgetMyPersonalMemory200
+  status: 200
+}
+
+export type forgetMyPersonalMemoryResponseSuccess = (forgetMyPersonalMemoryResponse200) & {
+  headers: Headers;
+};
+;
+
+export type forgetMyPersonalMemoryResponse = (forgetMyPersonalMemoryResponseSuccess)
+
+export const getForgetMyPersonalMemoryUrl = (tenantId: string,
+    memoryId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/me/memories/${encodeURIComponent(String(memoryId))}`
+}
+
+export const forgetMyPersonalMemory = async (tenantId: string,
+    memoryId: string,
+    forgetMyPersonalMemoryBody: ForgetMyPersonalMemoryBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<forgetMyPersonalMemoryResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return managementApiFetch<forgetMyPersonalMemoryResponse>(getForgetMyPersonalMemoryUrl(tenantId,memoryId),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(forgetMyPersonalMemoryBody)
+  }
+);}
+
+
+
+export type enableMyPersonalMemoryAgentResponse201 = {
+  data: EnableMyPersonalMemoryAgent201
+  status: 201
+}
+
+export type enableMyPersonalMemoryAgentResponseSuccess = (enableMyPersonalMemoryAgentResponse201) & {
+  headers: Headers;
+};
+;
+
+export type enableMyPersonalMemoryAgentResponse = (enableMyPersonalMemoryAgentResponseSuccess)
+
+export const getEnableMyPersonalMemoryAgentUrl = (tenantId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/me/memory-agents`
+}
+
+export const enableMyPersonalMemoryAgent = async (tenantId: string,
+    enableMyPersonalMemoryAgentBody: EnableMyPersonalMemoryAgentBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<enableMyPersonalMemoryAgentResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return managementApiFetch<enableMyPersonalMemoryAgentResponse>(getEnableMyPersonalMemoryAgentUrl(tenantId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(enableMyPersonalMemoryAgentBody)
+  }
+);}
+
+
+
+export type listMyPersonalMemoryAgentsResponse200 = {
+  data: ListMyPersonalMemoryAgents200
+  status: 200
+}
+
+export type listMyPersonalMemoryAgentsResponseSuccess = (listMyPersonalMemoryAgentsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listMyPersonalMemoryAgentsResponse = (listMyPersonalMemoryAgentsResponseSuccess)
+
+export const getListMyPersonalMemoryAgentsUrl = (tenantId: string,
+    params?: ListMyPersonalMemoryAgentsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/tenants/${encodeURIComponent(String(tenantId))}/me/memory-agents?${stringifiedParams}` : `/v1/tenants/${encodeURIComponent(String(tenantId))}/me/memory-agents`
+}
+
+export const listMyPersonalMemoryAgents = async (tenantId: string,
+    params?: ListMyPersonalMemoryAgentsParams, options?: Parameters<typeof managementApiFetch>[1]): Promise<listMyPersonalMemoryAgentsResponse> => {
+
+  return managementApiFetch<listMyPersonalMemoryAgentsResponse>(getListMyPersonalMemoryAgentsUrl(tenantId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getMyPersonalMemoryAgentResponse200 = {
+  data: GetMyPersonalMemoryAgent200
+  status: 200
+}
+
+export type getMyPersonalMemoryAgentResponseSuccess = (getMyPersonalMemoryAgentResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getMyPersonalMemoryAgentResponse = (getMyPersonalMemoryAgentResponseSuccess)
+
+export const getGetMyPersonalMemoryAgentUrl = (tenantId: string,
+    agentId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/me/memory-agents/${encodeURIComponent(String(agentId))}`
+}
+
+export const getMyPersonalMemoryAgent = async (tenantId: string,
+    agentId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getMyPersonalMemoryAgentResponse> => {
+
+  return managementApiFetch<getMyPersonalMemoryAgentResponse>(getGetMyPersonalMemoryAgentUrl(tenantId,agentId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type revokeMyPersonalMemoryAgentResponse200 = {
+  data: RevokeMyPersonalMemoryAgent200
+  status: 200
+}
+
+export type revokeMyPersonalMemoryAgentResponseSuccess = (revokeMyPersonalMemoryAgentResponse200) & {
+  headers: Headers;
+};
+;
+
+export type revokeMyPersonalMemoryAgentResponse = (revokeMyPersonalMemoryAgentResponseSuccess)
+
+export const getRevokeMyPersonalMemoryAgentUrl = (tenantId: string,
+    agentId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/me/memory-agents/${encodeURIComponent(String(agentId))}`
+}
+
+export const revokeMyPersonalMemoryAgent = async (tenantId: string,
+    agentId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<revokeMyPersonalMemoryAgentResponse> => {
+
+  return managementApiFetch<revokeMyPersonalMemoryAgentResponse>(getRevokeMyPersonalMemoryAgentUrl(tenantId,agentId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type listMyMemoryScopesResponse200 = {
+  data: ListMyMemoryScopes200
+  status: 200
+}
+
+export type listMyMemoryScopesResponseSuccess = (listMyMemoryScopesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listMyMemoryScopesResponse = (listMyMemoryScopesResponseSuccess)
+
+export const getListMyMemoryScopesUrl = (tenantId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/me/memory-scopes`
+}
+
+export const listMyMemoryScopes = async (tenantId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<listMyMemoryScopesResponse> => {
+
+  return managementApiFetch<listMyMemoryScopesResponse>(getListMyMemoryScopesUrl(tenantId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listTeamWorkspaceMemoriesResponse200 = {
+  data: ListTeamWorkspaceMemories200
+  status: 200
+}
+
+export type listTeamWorkspaceMemoriesResponseSuccess = (listTeamWorkspaceMemoriesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listTeamWorkspaceMemoriesResponse = (listTeamWorkspaceMemoriesResponseSuccess)
+
+export const getListTeamWorkspaceMemoriesUrl = (tenantId: string,
+    workspaceId: string,
+    params?: ListTeamWorkspaceMemoriesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/tenants/${encodeURIComponent(String(tenantId))}/team-workspaces/${encodeURIComponent(String(workspaceId))}/memories?${stringifiedParams}` : `/v1/tenants/${encodeURIComponent(String(tenantId))}/team-workspaces/${encodeURIComponent(String(workspaceId))}/memories`
+}
+
+export const listTeamWorkspaceMemories = async (tenantId: string,
+    workspaceId: string,
+    params?: ListTeamWorkspaceMemoriesParams, options?: Parameters<typeof managementApiFetch>[1]): Promise<listTeamWorkspaceMemoriesResponse> => {
+
+  return managementApiFetch<listTeamWorkspaceMemoriesResponse>(getListTeamWorkspaceMemoriesUrl(tenantId,workspaceId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type rememberTeamWorkspaceMemoryResponse200 = {
+  data: RememberTeamWorkspaceMemory200
+  status: 200
+}
+
+export type rememberTeamWorkspaceMemoryResponse201 = {
+  data: RememberTeamWorkspaceMemory201
+  status: 201
+}
+
+export type rememberTeamWorkspaceMemoryResponseSuccess = (rememberTeamWorkspaceMemoryResponse200 | rememberTeamWorkspaceMemoryResponse201) & {
+  headers: Headers;
+};
+;
+
+export type rememberTeamWorkspaceMemoryResponse = (rememberTeamWorkspaceMemoryResponseSuccess)
+
+export const getRememberTeamWorkspaceMemoryUrl = (tenantId: string,
+    workspaceId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/team-workspaces/${encodeURIComponent(String(workspaceId))}/memories`
+}
+
+export const rememberTeamWorkspaceMemory = async (tenantId: string,
+    workspaceId: string,
+    rememberTeamWorkspaceMemoryBody: RememberTeamWorkspaceMemoryBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<rememberTeamWorkspaceMemoryResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return managementApiFetch<rememberTeamWorkspaceMemoryResponse>(getRememberTeamWorkspaceMemoryUrl(tenantId,workspaceId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(rememberTeamWorkspaceMemoryBody)
+  }
+);}
+
+
+
+export type getTeamWorkspaceMemoryResponse200 = {
+  data: GetTeamWorkspaceMemory200
+  status: 200
+}
+
+export type getTeamWorkspaceMemoryResponseSuccess = (getTeamWorkspaceMemoryResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getTeamWorkspaceMemoryResponse = (getTeamWorkspaceMemoryResponseSuccess)
+
+export const getGetTeamWorkspaceMemoryUrl = (tenantId: string,
+    workspaceId: string,
+    memoryId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/team-workspaces/${encodeURIComponent(String(workspaceId))}/memories/${encodeURIComponent(String(memoryId))}`
+}
+
+export const getTeamWorkspaceMemory = async (tenantId: string,
+    workspaceId: string,
+    memoryId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getTeamWorkspaceMemoryResponse> => {
+
+  return managementApiFetch<getTeamWorkspaceMemoryResponse>(getGetTeamWorkspaceMemoryUrl(tenantId,workspaceId,memoryId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type forgetTeamWorkspaceMemoryResponse200 = {
+  data: ForgetTeamWorkspaceMemory200
+  status: 200
+}
+
+export type forgetTeamWorkspaceMemoryResponseSuccess = (forgetTeamWorkspaceMemoryResponse200) & {
+  headers: Headers;
+};
+;
+
+export type forgetTeamWorkspaceMemoryResponse = (forgetTeamWorkspaceMemoryResponseSuccess)
+
+export const getForgetTeamWorkspaceMemoryUrl = (tenantId: string,
+    workspaceId: string,
+    memoryId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/team-workspaces/${encodeURIComponent(String(workspaceId))}/memories/${encodeURIComponent(String(memoryId))}`
+}
+
+export const forgetTeamWorkspaceMemory = async (tenantId: string,
+    workspaceId: string,
+    memoryId: string,
+    forgetTeamWorkspaceMemoryBody: ForgetTeamWorkspaceMemoryBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<forgetTeamWorkspaceMemoryResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return managementApiFetch<forgetTeamWorkspaceMemoryResponse>(getForgetTeamWorkspaceMemoryUrl(tenantId,workspaceId,memoryId),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(forgetTeamWorkspaceMemoryBody)
+  }
+);}
+
+
+
+export type listTeamWorkspaceMemoryCorrectionsResponse200 = {
+  data: ListTeamWorkspaceMemoryCorrections200
+  status: 200
+}
+
+export type listTeamWorkspaceMemoryCorrectionsResponseSuccess = (listTeamWorkspaceMemoryCorrectionsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listTeamWorkspaceMemoryCorrectionsResponse = (listTeamWorkspaceMemoryCorrectionsResponseSuccess)
+
+export const getListTeamWorkspaceMemoryCorrectionsUrl = (tenantId: string,
+    workspaceId: string,
+    memoryId: string,
+    params?: ListTeamWorkspaceMemoryCorrectionsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/tenants/${encodeURIComponent(String(tenantId))}/team-workspaces/${encodeURIComponent(String(workspaceId))}/memories/${encodeURIComponent(String(memoryId))}/corrections?${stringifiedParams}` : `/v1/tenants/${encodeURIComponent(String(tenantId))}/team-workspaces/${encodeURIComponent(String(workspaceId))}/memories/${encodeURIComponent(String(memoryId))}/corrections`
+}
+
+export const listTeamWorkspaceMemoryCorrections = async (tenantId: string,
+    workspaceId: string,
+    memoryId: string,
+    params?: ListTeamWorkspaceMemoryCorrectionsParams, options?: Parameters<typeof managementApiFetch>[1]): Promise<listTeamWorkspaceMemoryCorrectionsResponse> => {
+
+  return managementApiFetch<listTeamWorkspaceMemoryCorrectionsResponse>(getListTeamWorkspaceMemoryCorrectionsUrl(tenantId,workspaceId,memoryId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createTeamWorkspaceMemoryCorrectionResponse201 = {
+  data: CreateTeamWorkspaceMemoryCorrection201
+  status: 201
+}
+
+export type createTeamWorkspaceMemoryCorrectionResponseSuccess = (createTeamWorkspaceMemoryCorrectionResponse201) & {
+  headers: Headers;
+};
+;
+
+export type createTeamWorkspaceMemoryCorrectionResponse = (createTeamWorkspaceMemoryCorrectionResponseSuccess)
+
+export const getCreateTeamWorkspaceMemoryCorrectionUrl = (tenantId: string,
+    workspaceId: string,
+    memoryId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/team-workspaces/${encodeURIComponent(String(workspaceId))}/memories/${encodeURIComponent(String(memoryId))}/corrections`
+}
+
+export const createTeamWorkspaceMemoryCorrection = async (tenantId: string,
+    workspaceId: string,
+    memoryId: string,
+    createTeamWorkspaceMemoryCorrectionBody: CreateTeamWorkspaceMemoryCorrectionBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<createTeamWorkspaceMemoryCorrectionResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return managementApiFetch<createTeamWorkspaceMemoryCorrectionResponse>(getCreateTeamWorkspaceMemoryCorrectionUrl(tenantId,workspaceId,memoryId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createTeamWorkspaceMemoryCorrectionBody)
+  }
+);}
+
+
+
+export type reviewTeamWorkspaceMemoryCorrectionResponse200 = {
+  data: ReviewTeamWorkspaceMemoryCorrection200
+  status: 200
+}
+
+export type reviewTeamWorkspaceMemoryCorrectionResponseSuccess = (reviewTeamWorkspaceMemoryCorrectionResponse200) & {
+  headers: Headers;
+};
+;
+
+export type reviewTeamWorkspaceMemoryCorrectionResponse = (reviewTeamWorkspaceMemoryCorrectionResponseSuccess)
+
+export const getReviewTeamWorkspaceMemoryCorrectionUrl = (tenantId: string,
+    workspaceId: string,
+    memoryId: string,
+    proposalId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/team-workspaces/${encodeURIComponent(String(workspaceId))}/memories/${encodeURIComponent(String(memoryId))}/corrections/${encodeURIComponent(String(proposalId))}/review`
+}
+
+export const reviewTeamWorkspaceMemoryCorrection = async (tenantId: string,
+    workspaceId: string,
+    memoryId: string,
+    proposalId: string,
+    reviewTeamWorkspaceMemoryCorrectionBody: ReviewTeamWorkspaceMemoryCorrectionBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<reviewTeamWorkspaceMemoryCorrectionResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return managementApiFetch<reviewTeamWorkspaceMemoryCorrectionResponse>(getReviewTeamWorkspaceMemoryCorrectionUrl(tenantId,workspaceId,memoryId,proposalId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(reviewTeamWorkspaceMemoryCorrectionBody)
+  }
+);}
+
+
+
+export type listOrganizationMemoriesResponse200 = {
+  data: ListOrganizationMemories200
+  status: 200
+}
+
+export type listOrganizationMemoriesResponseSuccess = (listOrganizationMemoriesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listOrganizationMemoriesResponse = (listOrganizationMemoriesResponseSuccess)
+
+export const getListOrganizationMemoriesUrl = (tenantId: string,
+    organizationId: string,
+    params?: ListOrganizationMemoriesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/tenants/${encodeURIComponent(String(tenantId))}/organizations/${encodeURIComponent(String(organizationId))}/memories?${stringifiedParams}` : `/v1/tenants/${encodeURIComponent(String(tenantId))}/organizations/${encodeURIComponent(String(organizationId))}/memories`
+}
+
+export const listOrganizationMemories = async (tenantId: string,
+    organizationId: string,
+    params?: ListOrganizationMemoriesParams, options?: Parameters<typeof managementApiFetch>[1]): Promise<listOrganizationMemoriesResponse> => {
+
+  return managementApiFetch<listOrganizationMemoriesResponse>(getListOrganizationMemoriesUrl(tenantId,organizationId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type rememberOrganizationMemoryResponse200 = {
+  data: RememberOrganizationMemory200
+  status: 200
+}
+
+export type rememberOrganizationMemoryResponse201 = {
+  data: RememberOrganizationMemory201
+  status: 201
+}
+
+export type rememberOrganizationMemoryResponseSuccess = (rememberOrganizationMemoryResponse200 | rememberOrganizationMemoryResponse201) & {
+  headers: Headers;
+};
+;
+
+export type rememberOrganizationMemoryResponse = (rememberOrganizationMemoryResponseSuccess)
+
+export const getRememberOrganizationMemoryUrl = (tenantId: string,
+    organizationId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/organizations/${encodeURIComponent(String(organizationId))}/memories`
+}
+
+export const rememberOrganizationMemory = async (tenantId: string,
+    organizationId: string,
+    rememberOrganizationMemoryBody: RememberOrganizationMemoryBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<rememberOrganizationMemoryResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return managementApiFetch<rememberOrganizationMemoryResponse>(getRememberOrganizationMemoryUrl(tenantId,organizationId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(rememberOrganizationMemoryBody)
+  }
+);}
+
+
+
+export type getOrganizationMemoryResponse200 = {
+  data: GetOrganizationMemory200
+  status: 200
+}
+
+export type getOrganizationMemoryResponseSuccess = (getOrganizationMemoryResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getOrganizationMemoryResponse = (getOrganizationMemoryResponseSuccess)
+
+export const getGetOrganizationMemoryUrl = (tenantId: string,
+    organizationId: string,
+    memoryId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/organizations/${encodeURIComponent(String(organizationId))}/memories/${encodeURIComponent(String(memoryId))}`
+}
+
+export const getOrganizationMemory = async (tenantId: string,
+    organizationId: string,
+    memoryId: string, options?: Parameters<typeof managementApiFetch>[1]): Promise<getOrganizationMemoryResponse> => {
+
+  return managementApiFetch<getOrganizationMemoryResponse>(getGetOrganizationMemoryUrl(tenantId,organizationId,memoryId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type forgetOrganizationMemoryResponse200 = {
+  data: ForgetOrganizationMemory200
+  status: 200
+}
+
+export type forgetOrganizationMemoryResponseSuccess = (forgetOrganizationMemoryResponse200) & {
+  headers: Headers;
+};
+;
+
+export type forgetOrganizationMemoryResponse = (forgetOrganizationMemoryResponseSuccess)
+
+export const getForgetOrganizationMemoryUrl = (tenantId: string,
+    organizationId: string,
+    memoryId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/organizations/${encodeURIComponent(String(organizationId))}/memories/${encodeURIComponent(String(memoryId))}`
+}
+
+export const forgetOrganizationMemory = async (tenantId: string,
+    organizationId: string,
+    memoryId: string,
+    forgetOrganizationMemoryBody: ForgetOrganizationMemoryBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<forgetOrganizationMemoryResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return managementApiFetch<forgetOrganizationMemoryResponse>(getForgetOrganizationMemoryUrl(tenantId,organizationId,memoryId),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(forgetOrganizationMemoryBody)
+  }
+);}
+
+
+
+export type listOrganizationMemoryCorrectionsResponse200 = {
+  data: ListOrganizationMemoryCorrections200
+  status: 200
+}
+
+export type listOrganizationMemoryCorrectionsResponseSuccess = (listOrganizationMemoryCorrectionsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listOrganizationMemoryCorrectionsResponse = (listOrganizationMemoryCorrectionsResponseSuccess)
+
+export const getListOrganizationMemoryCorrectionsUrl = (tenantId: string,
+    organizationId: string,
+    memoryId: string,
+    params?: ListOrganizationMemoryCorrectionsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/tenants/${encodeURIComponent(String(tenantId))}/organizations/${encodeURIComponent(String(organizationId))}/memories/${encodeURIComponent(String(memoryId))}/corrections?${stringifiedParams}` : `/v1/tenants/${encodeURIComponent(String(tenantId))}/organizations/${encodeURIComponent(String(organizationId))}/memories/${encodeURIComponent(String(memoryId))}/corrections`
+}
+
+export const listOrganizationMemoryCorrections = async (tenantId: string,
+    organizationId: string,
+    memoryId: string,
+    params?: ListOrganizationMemoryCorrectionsParams, options?: Parameters<typeof managementApiFetch>[1]): Promise<listOrganizationMemoryCorrectionsResponse> => {
+
+  return managementApiFetch<listOrganizationMemoryCorrectionsResponse>(getListOrganizationMemoryCorrectionsUrl(tenantId,organizationId,memoryId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createOrganizationMemoryCorrectionResponse201 = {
+  data: CreateOrganizationMemoryCorrection201
+  status: 201
+}
+
+export type createOrganizationMemoryCorrectionResponseSuccess = (createOrganizationMemoryCorrectionResponse201) & {
+  headers: Headers;
+};
+;
+
+export type createOrganizationMemoryCorrectionResponse = (createOrganizationMemoryCorrectionResponseSuccess)
+
+export const getCreateOrganizationMemoryCorrectionUrl = (tenantId: string,
+    organizationId: string,
+    memoryId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/organizations/${encodeURIComponent(String(organizationId))}/memories/${encodeURIComponent(String(memoryId))}/corrections`
+}
+
+export const createOrganizationMemoryCorrection = async (tenantId: string,
+    organizationId: string,
+    memoryId: string,
+    createOrganizationMemoryCorrectionBody: CreateOrganizationMemoryCorrectionBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<createOrganizationMemoryCorrectionResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return managementApiFetch<createOrganizationMemoryCorrectionResponse>(getCreateOrganizationMemoryCorrectionUrl(tenantId,organizationId,memoryId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createOrganizationMemoryCorrectionBody)
+  }
+);}
+
+
+
+export type reviewOrganizationMemoryCorrectionResponse200 = {
+  data: ReviewOrganizationMemoryCorrection200
+  status: 200
+}
+
+export type reviewOrganizationMemoryCorrectionResponseSuccess = (reviewOrganizationMemoryCorrectionResponse200) & {
+  headers: Headers;
+};
+;
+
+export type reviewOrganizationMemoryCorrectionResponse = (reviewOrganizationMemoryCorrectionResponseSuccess)
+
+export const getReviewOrganizationMemoryCorrectionUrl = (tenantId: string,
+    organizationId: string,
+    memoryId: string,
+    proposalId: string,) => {
+
+
+
+
+  return `/v1/tenants/${encodeURIComponent(String(tenantId))}/organizations/${encodeURIComponent(String(organizationId))}/memories/${encodeURIComponent(String(memoryId))}/corrections/${encodeURIComponent(String(proposalId))}/review`
+}
+
+export const reviewOrganizationMemoryCorrection = async (tenantId: string,
+    organizationId: string,
+    memoryId: string,
+    proposalId: string,
+    reviewOrganizationMemoryCorrectionBody: ReviewOrganizationMemoryCorrectionBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<reviewOrganizationMemoryCorrectionResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return managementApiFetch<reviewOrganizationMemoryCorrectionResponse>(getReviewOrganizationMemoryCorrectionUrl(tenantId,organizationId,memoryId,proposalId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(reviewOrganizationMemoryCorrectionBody)
   }
 );}
 

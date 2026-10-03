@@ -21,8 +21,12 @@ test("memory survives reopen, stays Bot-scoped, rejects lost updates and support
     const forgotten = store.setForgotten("a", updated.id, true, updated.revision)
     expect(store.recall("a").memories).toHaveLength(0)
     expect(store.list("a", true)).toHaveLength(1)
-    store.setForgotten("a", forgotten.id, false, forgotten.revision)
+    const restored = store.setForgotten("a", forgotten.id, false, forgotten.revision)
     expect(store.recall("a", "簡短").memories).toHaveLength(1)
+    expect(() => store.hardDelete("b", restored.id, restored.revision)).toThrow("BOT_MEMORY_NOT_FOUND")
+    expect(() => store.hardDelete("a", restored.id, restored.revision - 1)).toThrow("BOT_MEMORY_CONFLICT")
+    expect(store.hardDelete("a", restored.id, restored.revision)).toEqual({ id: restored.id, deletedRevision: restored.revision })
+    expect(store.list("a", true)).toEqual([])
   } finally { db.close(); rmSync(dir, { recursive: true, force: true }) }
 })
 

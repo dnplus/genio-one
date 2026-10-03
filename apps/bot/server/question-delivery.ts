@@ -80,7 +80,7 @@ export async function deliverQuestionAnswers(context: BotServerContext) {
           const clientUserMessageId = `question-answer:${question.id}:${question.clientAnswerId}`
           const params = originalStillActive
             ? { threadId, expectedTurnId: question.sourceTurnId, clientUserMessageId, input }
-            : await canonical("turn/start", { threadId, clientUserMessageId, input, additionalContext: botTurnContext(context.botRegistry, bot.id, threadId!, {}, bot, principal) })
+            : await canonical("turn/start", { threadId, clientUserMessageId, input, additionalContext: await botTurnContext(context.botRegistry, bot.id, threadId!, {}, bot, principal, context.runtimeBroker.accessTokenForBot(session.id, bot.id)) })
           context.botRegistry.questions.mark(bot.id, question.id, "sending", { deliveryThreadId: threadId, error: undefined })
           sent = true
           const result = await context.runtimeBroker.request(session.id, originalStillActive ? "turn/steer" : "turn/start", params)

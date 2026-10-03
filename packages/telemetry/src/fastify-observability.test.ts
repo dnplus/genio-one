@@ -67,3 +67,67 @@ test("HTTP observations keep safe metadata and omit HTTP evidence", async () => 
     else process.env.OTEL_EXPORTER_OTLP_ENDPOINT = originalOrigin
   }
 })
+
+test("sensitive HTTP routes omit request query, body and success or failure response payloads", async () => {
+  const originalFetch = globalThis.fetch
+  const originalOrigin = process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+  process.env.OTEL_EXPORTER_OTLP_ENDPOINT = "http://memory-http-collector.test"
+  const exports: any[] = []
+  globalThis.fetch = Object.assign(async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    exports.push(JSON.parse(String(init?.body)))
+    return new Response("{}")
+  }, { preconnect: originalFetch.preconnect })
+  const app = Fastify()
+  registerHttpObservability(app, "memory-http-test")
+  app.route({
+    method: ["GET", "POST"],
+    url: "/memory",
+    config: { sensitiveRequest: true, sensitiveResponse: true },
+    handler: async (request) => {
+      if ((request.query as { fail?: string }).fail) throw new Error("memory-error-secret", { cause: { content: "memory-cause-secret" } })
+      return request.body ?? { content: "memory-response-secret" }
+    },
+  })
+  app.post("/regular", async (request) => request.body)
+  try {
+    const headers = { "x-genio-correlation-id": "memory-http-correlation" }
+    const listed = await app.inject({ method: "GET", url: "/memory?query=memory-query-secret", headers })
+    assert.equal(listed.statusCode, 200)
+    assert.equal(listed.json().content, "memory-response-secret")
+    const written = await app.inject({ method: "POST", url: "/memory?query=memory-query-secret", headers, payload: { content: "memory-body-secret" } })
+    assert.equal(written.statusCode, 200)
+    assert.equal(written.json().content, "memory-body-secret")
+    const failed = await app.inject({ method: "POST", url: "/memory?fail=memory-query-secret", headers, payload: { content: "memory-body-secret" } })
+    assert.equal(failed.statusCode, 500)
+    assert.equal(failed.json().message, "memory-error-secret")
+    const regular = await app.inject({ method: "POST", url: "/regular?query=regular-query-evidence", payload: { content: "regular-body-evidence" } })
+    assert.equal(regular.statusCode, 200)
+    await app.close()
+    const serialized = JSON.stringify(exports)
+    for (const value of ["memory-query-secret", "memory-body-secret", "memory-response-secret", "memory-error-secret", "memory-cause-secret", "regular-query-evidence", "regular-body-evidence"]) assert.equal(serialized.includes(value), false)
+    const spans = exports.flatMap(value => value.resourceSpans ?? []).flatMap(value => value.scopeSpans).flatMap(value => value.spans)
+    const regularSpan = spans.find(value => value.name === "POST /regular")
+    assert.ok(regularSpan)
+    const regularAttributes = Object.fromEntries(regularSpan.attributes.map((value: any) => [value.key, value.value.stringValue ?? value.value.intValue]))
+    assert.equal(regularAttributes["genio.request"], JSON.stringify({ availability: "OMITTED_HTTP_REQUEST" }))
+    assert.equal(regularAttributes["genio.response"], JSON.stringify({ availability: "OMITTED_HTTP_RESPONSE" }))
+    assert.equal(regularAttributes["http.response.status_code"], "200")
+    const memorySpans = spans.filter(value => value.name.endsWith(" /memory"))
+    assert.equal(memorySpans.length, 3)
+    for (const span of memorySpans) {
+      const attributes = Object.fromEntries(span.attributes.map((value: any) => [value.key, value.value.stringValue ?? value.value.intValue]))
+      assert.equal(attributes["genio.request"], JSON.stringify({ availability: "OMITTED_SENSITIVE_REQUEST" }))
+      assert.equal(attributes["genio.response"], JSON.stringify({ availability: "OMITTED_SENSITIVE_RESPONSE" }))
+      assert.equal(attributes["genio.correlation.id"], "memory-http-correlation")
+      assert.ok(["200", "500"].includes(attributes["http.response.status_code"]))
+    }
+    assert.equal(memorySpans.filter(value => value.status.code === 2).length, 1)
+    assert.ok(exports.some(value => value.resourceLogs))
+    assert.ok(exports.some(value => value.resourceMetrics))
+  } finally {
+    await app.close()
+    globalThis.fetch = originalFetch
+    if (originalOrigin === undefined) delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+    else process.env.OTEL_EXPORTER_OTLP_ENDPOINT = originalOrigin
+  }
+})

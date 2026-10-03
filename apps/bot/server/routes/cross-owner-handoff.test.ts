@@ -3,16 +3,28 @@ import { createBotApp } from "../app"
 import { BotRegistry } from "../bot-registry"
 import { RuntimeBroker } from "../runtime-broker"
 
-test("only target owner can approve a cold cross-owner handoff and result returns to caller", async () => {
+test("only target owner can approve a cold cross-owner handoff and target memory uses its per-Bot bound token", async () => {
   const registry = new BotRegistry(":memory:")
 
   const broker = new RuntimeBroker({ provision: async () => { throw new Error("not used") } })
   const owner = { tenant_id: "tenant", subject_id: "owner", acting_client_id: "genio-one-bot", scopes: [] }
   const caller = { ...owner, subject_id: "caller" }
   const originalFetch = globalThis.fetch
-  globalThis.fetch = (async (input, init) => {
-    if (String(input).includes('/v1/identity/session')) return new Response(JSON.stringify(new Headers(init?.headers).get('authorization') === 'Bearer owner-token' ? owner : caller), { headers: { 'content-type':'application/json' } })
-    return new Response('not found',{status:404})
+  const originalExchangeUrl = process.env.GENIO_ONE_AGENT_TOKEN_EXCHANGE_URL
+  const originalExchangeToken = process.env.GENIO_ONE_AGENT_TOKEN_EXCHANGE_TOKEN
+  process.env.GENIO_ONE_AGENT_TOKEN_EXCHANGE_URL = "https://agent-token.example.test/exchange"
+  process.env.GENIO_ONE_AGENT_TOKEN_EXCHANGE_TOKEN = "exchange-service-token"
+  const memoryTokens: string[] = []
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input))
+    const authorization = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined)).get("authorization") ?? ""
+    if (url.href === process.env.GENIO_ONE_AGENT_TOKEN_EXCHANGE_URL) return Response.json({ access_token: "target-bound-token", expires_at: Date.now() + 60_000 })
+    if (url.pathname === "/v1/identity/session") return new Response(JSON.stringify(authorization === "Bearer owner-token" || authorization === "Bearer target-bound-token" ? owner : caller), { headers: { "content-type": "application/json" } })
+    if (url.pathname.endsWith("/memory/mcp")) {
+      memoryTokens.push(authorization)
+      return Response.json({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: "{}" }], structuredContent: { memories: [], context: "" } } })
+    }
+    return new Response("not found", { status: 404 })
   }) as typeof fetch
   let starts=0
   const app = await createBotApp({ botRegistry:registry, runtimeBroker:broker, createCodexRuntime: (_token, events) => ({
@@ -42,13 +54,24 @@ test("only target owner can approve a cold cross-owner handoff and result return
     expect(registry.getInvocationForService(id)?.state).toBe('PENDING')
     const accepted=await app.inject({method:'POST',url:`/api/bot-invocations/${id}/decision`,headers:{authorization:'Bearer owner-token'},payload:{decision:'APPROVE'}})
     expect(accepted.statusCode).toBe(200)
-    for(let i=0;i<50&&registry.getInvocationForService(id)?.state!=='COMPLETED';i++)await new Promise(resolve=>setTimeout(resolve,2))
+    for(let i=0;i<100&&registry.getInvocationForService(id)?.state!=='COMPLETED';i++)await new Promise(resolve=>setTimeout(resolve,2))
     expect(registry.getInvocationForService(id)?.state).toBe('COMPLETED')
     expect(starts).toBe(1)
+    expect(memoryTokens).toEqual(["Bearer target-bound-token"])
+    expect(memoryTokens).not.toContain("Bearer caller-token")
     expect(registry.continuations.pending()[0]?.bot_id).toBe(a.id)
     expect(registry.continuations.pending()[0]?.owner_id).toBe(caller.subject_id)
     await app.inject({method:'POST',url:`/api/bot-invocations/${id}/decision`,headers:{authorization:'Bearer owner-token'},payload:{decision:'APPROVE'}})
     expect(starts).toBe(1)
     expect(registry.continuations.pending()).toHaveLength(1)
-  } finally { await broker.close(); await app.close();  registry.close(); globalThis.fetch=originalFetch }
+  } finally {
+    await broker.close()
+    await app.close()
+    registry.close()
+    globalThis.fetch = originalFetch
+    if (originalExchangeUrl === undefined) delete process.env.GENIO_ONE_AGENT_TOKEN_EXCHANGE_URL
+    else process.env.GENIO_ONE_AGENT_TOKEN_EXCHANGE_URL = originalExchangeUrl
+    if (originalExchangeToken === undefined) delete process.env.GENIO_ONE_AGENT_TOKEN_EXCHANGE_TOKEN
+    else process.env.GENIO_ONE_AGENT_TOKEN_EXCHANGE_TOKEN = originalExchangeToken
+  }
 })

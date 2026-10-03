@@ -288,15 +288,18 @@ describe("BotRegistry", () => {
     registry = new BotRegistry(":memory:")
     const bot = registry.create(owner, { name: "待刪除", role: "測試" })
     registry.saveSession({ botId: bot.id, appServerThreadId: "thread-del-1", activeRuntimeTier: "none" })
+    registry.memory.save(bot.id, { key: "legacy", content: "must be removed", kind: "fact" }, "user")
 
     expect(registry.getProfile(bot.id, owner)).not.toBeNull()
     expect(registry.getSession(bot.id)).not.toBeNull()
+    expect(registry.memory.list(bot.id)).toHaveLength(1)
 
     const result = registry.delete(bot.id, owner)
     expect(result).toBeTrue()
     expect(registry.getProfile(bot.id, owner)).toBeNull()
     expect(registry.getSession(bot.id)).toBeNull()
     expect(registry.list(owner).find((b) => b.id === bot.id)).toBeUndefined()
+    expect(registry.memory.list(bot.id, true)).toEqual([])
     expect(() => registry!.delete(bot.id, owner)).toThrow("BOT_NOT_FOUND")
   })
 

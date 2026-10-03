@@ -37,6 +37,87 @@ test("operation observation preserves callable client fields and correlates modu
   }
 })
 
+test("memory operations and reserved runtime memory contexts retain metadata without payload evidence", async () => {
+  const originalFetch = globalThis.fetch
+  const originalOrigin = process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+  process.env.OTEL_EXPORTER_OTLP_ENDPOINT = "http://memory-operation-collector.test"
+  const exports: any[] = []
+  globalThis.fetch = Object.assign(async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    exports.push(JSON.parse(String(init?.body)))
+    return new Response("{}")
+  }, { preconnect: originalFetch.preconnect })
+  const additionalContext = {
+    "genio_bot/memory": { kind: "untrusted", value: JSON.stringify({ content: "context-memory-secret" }) },
+    "normal/context": { kind: "untrusted", value: "normal-context-evidence" },
+  }
+  const memoryError = new Error("memory-error-secret", { cause: { content: "memory-cause-secret" } })
+  memoryError.stack = "memory-stack-secret"
+  const contextError = new Error("context-error-secret", { cause: { content: "context-cause-secret" } })
+  contextError.stack = "context-stack-secret"
+  const modules = {
+    memories: {
+      async remember(_input: { tenant_id: string; content: string }) { return { content: "memory-output-secret" } },
+      async retrieve(_input: { tenant_id: string; query: string }) { throw memoryError },
+    },
+    runtimeBroker: {
+      async request(_id: string, _method: string, params: { additionalContext: typeof additionalContext; fail?: boolean }) {
+        if (params.fail) throw contextError
+        return params
+      },
+    },
+    regular: {
+      describe(_input: { content: string }) { return { content: "public-output-evidence" } },
+    },
+  }
+  try {
+    instrumentModuleGraph(modules, "memory-operation-test")
+    await observationContext.run({ traceId: "a".repeat(32), spanId: "b".repeat(16), correlationId: "memory-operation-correlation", tenantId: "qa" }, async () => {
+      assert.equal((await modules.memories.remember({ tenant_id: "qa", content: "memory-input-secret" })).content, "memory-output-secret")
+      await assert.rejects(modules.memories.retrieve({ tenant_id: "qa", query: "memory-query-secret" }), error => error === memoryError)
+      const result = await modules.runtimeBroker.request("runtime", "turn/start", { additionalContext })
+      assert.equal(result.additionalContext["genio_bot/memory"].value, additionalContext["genio_bot/memory"].value)
+      await assert.rejects(modules.runtimeBroker.request("runtime", "turn/start", { additionalContext, fail: true }), error => error === contextError)
+      assert.equal(modules.regular.describe({ content: "public-input-evidence" }).content, "public-output-evidence")
+    })
+    const { observationEvidence } = await import("./operation-observability")
+    const serializedInput = observationEvidence(JSON.stringify({ additionalContext }))
+    assert.equal(serializedInput.includes("context-memory-secret"), false)
+    assert.ok(serializedInput.includes("normal-context-evidence"))
+    assert.ok(serializedInput.includes("OMITTED_SENSITIVE_MEMORY_CONTEXT"))
+    assert.equal(additionalContext["genio_bot/memory"].value, JSON.stringify({ content: "context-memory-secret" }))
+    await flushOtel()
+    const serialized = JSON.stringify(exports)
+    for (const value of ["memory-input-secret", "memory-output-secret", "memory-query-secret", "memory-error-secret", "memory-stack-secret", "memory-cause-secret", "context-memory-secret", "context-error-secret", "context-stack-secret", "context-cause-secret"]) assert.equal(serialized.includes(value), false)
+    assert.ok(serialized.includes("public-input-evidence"))
+    assert.ok(serialized.includes("public-output-evidence"))
+    assert.ok(serialized.includes("normal-context-evidence"))
+    const spans = exports.flatMap(value => value.resourceSpans ?? []).flatMap(value => value.scopeSpans).flatMap(value => value.spans)
+    assert.equal(spans.length, 5)
+    for (const span of spans) {
+      const attributes = Object.fromEntries(span.attributes.map((value: any) => [value.key, value.value.stringValue]))
+      assert.equal(attributes["genio.correlation.id"], "memory-operation-correlation")
+      assert.equal(attributes["genio.operation"], span.name)
+      assert.equal(span.traceId, "a".repeat(32))
+      assert.equal(span.parentSpanId, "b".repeat(16))
+      assert.ok(["COMPLETED", "FAILED"].includes(attributes["genio.outcome"]))
+      if (span.name.startsWith("memories.")) {
+        assert.equal(attributes["genio.input"], JSON.stringify({ availability: "OMITTED_SENSITIVE_OPERATION" }))
+        assert.equal(attributes[span.status.code === 2 ? "genio.error" : "genio.output"], JSON.stringify({ availability: "OMITTED_SENSITIVE_OPERATION" }))
+      }
+      if (span.name === "runtimeBroker.request") {
+        assert.ok(attributes["genio.input"].includes("OMITTED_SENSITIVE_MEMORY_CONTEXT"))
+        if (span.status.code === 2) assert.equal(attributes["genio.error"], JSON.stringify({ availability: "OMITTED_SENSITIVE_OPERATION" }))
+      }
+    }
+    assert.equal(spans.filter(value => value.status.code === 2).length, 2)
+    assert.ok(exports.some(value => value.resourceLogs))
+  } finally {
+    globalThis.fetch = originalFetch
+    if (originalOrigin === undefined) delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+    else process.env.OTEL_EXPORTER_OTLP_ENDPOINT = originalOrigin
+  }
+})
+
 test("observed HTTP preserves the request body and explicit domain correlation", async () => {
   const originalFetch = globalThis.fetch
   const originalOrigin = process.env.OTEL_EXPORTER_OTLP_ENDPOINT

@@ -1129,7 +1129,7 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
               turnClaims.set(message.id, release)
             }
             if (message.id !== undefined) botRequests.set(message.id, { method: message.method, botId, session: runtimeSession, threadId, historyRevision: botRegistry.timeline.revision(), runtimeTier: ownedRuntimeEnvironment(runtimeSession, message.params?.environments?.[0]?.environmentId, undefined, botId)?.tier ?? "none", authorizations })
-            if (message.method === "turn/start") message.params.additionalContext = botTurnContext(botRegistry, botId, threadId, message.params.additionalContext ?? {}, botRegistry.getOwned(botId, runtimeSession.principal) ?? undefined, runtimeSession.principal)
+            if (message.method === "turn/start") message.params.additionalContext = await botTurnContext(botRegistry, botId, threadId, message.params.additionalContext ?? {}, botRegistry.getOwned(botId, runtimeSession.principal) ?? undefined, runtimeSession.principal, runtimeBroker.accessTokenForBot(runtimeSession.id, botId))
             if ((message.method === "thread/start" || message.method === "thread/resume") && sessionAccessToken) {
               const session = runtimeSession
               if (!session) return

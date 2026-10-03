@@ -129,6 +129,7 @@ test("Postgres module composition shares one SQL boundary", () => {
   const modules = createPostgresPlatformModules({
     sql,
     idFactory: (prefix) => `${prefix}-test`,
+    memoryDigestSecret: Buffer.alloc(32, 7),
   })
   assert.equal(modules.sql, sql)
   assert.notEqual(modules.resources, modules.connections)

@@ -448,9 +448,19 @@ test("only a current workspace maintainer can approve a candidate", async () => 
       { subject_id: "reader", kind: "PERSON" },
     ],
   })
-  const organization = await modules.organizations.create({ tenantId: "tenant-acme", display_name: "SE" })
+  const organization = await modules.organizations.create({
+    tenantId: "tenant-acme",
+    display_name: "SE",
+    member_subject_ids: ["reader", "bot-admin", "owner", "maintainer", "other-maintainer"],
+  })
   for (const [id, name] of [["readers", "Readers"], ["other-readers", "Other readers"], ["contributors", "Contributors"], ["maintainers", "Maintainers"]] as const) {
-    await modules.accessGroups.save(admin, id, { expected_revision: 0, display_name: name, description: "", enabled: true })
+    await modules.accessGroups.save(admin, id, {
+      expected_revision: 0,
+      organization_id: organization.organization_id,
+      display_name: name,
+      description: "",
+      enabled: true,
+    })
   }
   await modules.accessGroups.replaceMembers(admin, "readers", { expected_group_revision: 1, expected_source_revision: 0, subject_ids: ["reader", "bot-admin"] })
   await modules.accessGroups.replaceMembers(admin, "contributors", { expected_group_revision: 1, expected_source_revision: 0, subject_ids: ["owner"] })
@@ -468,6 +478,69 @@ test("only a current workspace maintainer can approve a candidate", async () => 
     },
   })
   assert.equal(workspace.statusCode, 200)
+  await modules.accessGroups.save(admin, "global-readers", {
+    expected_revision: 0,
+    display_name: "Global readers",
+    description: "",
+    enabled: true,
+  })
+  const globalGroup = await app.inject({
+    method: "POST",
+    url: "/v1/tenants/tenant-acme/team-workspaces",
+    headers: { authorization: "Bearer admin" },
+    payload: {
+      organization_id: organization.organization_id,
+      display_name: "Global group workspace",
+      reader_access_group_id: "global-readers",
+      contributor_access_group_id: "contributors",
+      maintainer_access_group_id: "maintainers",
+    },
+  })
+  assert.equal(globalGroup.statusCode, 422)
+  assert.equal(globalGroup.json().code, "TEAM_WORKSPACE_ACCESS_GROUP_ORGANIZATION_REQUIRED")
+  const otherOrganization = await modules.organizations.create({ tenantId: "tenant-acme", display_name: "Other organization" })
+  await modules.accessGroups.save(admin, "foreign-readers", {
+    expected_revision: 0,
+    organization_id: otherOrganization.organization_id,
+    display_name: "Foreign readers",
+    description: "",
+    enabled: true,
+  })
+  const crossOrganizationGroup = await app.inject({
+    method: "POST",
+    url: "/v1/tenants/tenant-acme/team-workspaces",
+    headers: { authorization: "Bearer admin" },
+    payload: {
+      organization_id: organization.organization_id,
+      display_name: "Cross organization group workspace",
+      reader_access_group_id: "foreign-readers",
+      contributor_access_group_id: "contributors",
+      maintainer_access_group_id: "maintainers",
+    },
+  })
+  assert.equal(crossOrganizationGroup.statusCode, 422)
+  assert.equal(crossOrganizationGroup.json().code, "TEAM_WORKSPACE_ACCESS_GROUP_ORGANIZATION_MISMATCH")
+  await modules.accessGroups.save(admin, "disabled-readers", {
+    expected_revision: 0,
+    organization_id: organization.organization_id,
+    display_name: "Disabled readers",
+    description: "",
+    enabled: false,
+  })
+  const disabledGroup = await app.inject({
+    method: "POST",
+    url: "/v1/tenants/tenant-acme/team-workspaces",
+    headers: { authorization: "Bearer admin" },
+    payload: {
+      organization_id: organization.organization_id,
+      display_name: "Disabled group workspace",
+      reader_access_group_id: "disabled-readers",
+      contributor_access_group_id: "contributors",
+      maintainer_access_group_id: "maintainers",
+    },
+  })
+  assert.equal(disabledGroup.statusCode, 422)
+  assert.equal(disabledGroup.json().code, "TEAM_WORKSPACE_ACCESS_GROUP_DISABLED")
   const workspaceId = workspace.json().workspace_id
   const listedBy = async (token: string) => {
     const response = await app.inject({
@@ -573,7 +646,13 @@ test("only a current workspace maintainer can approve a candidate", async () => 
     headers: { authorization: "Bearer owner" },
   })
   assert.equal(missingWorkspace.statusCode, 404)
-  await modules.accessGroups.save(admin, "others", { expected_revision: 0, display_name: "Others", description: "", enabled: true })
+  await modules.accessGroups.save(admin, "others", {
+    expected_revision: 0,
+    organization_id: organization.organization_id,
+    display_name: "Others",
+    description: "",
+    enabled: true,
+  })
   await modules.accessGroups.replaceMembers(admin, "others", { expected_group_revision: 1, expected_source_revision: 0, subject_ids: ["reader", "owner", "other-maintainer"] })
   const otherWorkspace = await app.inject({
     method: "POST",

@@ -273,7 +273,7 @@ class FakeCrossVersionMarkerAdapter implements SqlAdapter {
 
 test("the clean-install baseline and ordered migrations encode the current Platform schema", async () => {
   const migrations = await loadMigrations()
-  assert.deepEqual(migrations.map((migration) => migration.id), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
+  assert.deepEqual(migrations.map((migration) => migration.id), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21])
   assert.equal(migrations[1].name, "gateway_activity_safety_decisions")
   assert.equal(migrations[2].name, "distillation_markers")
   assert.match(migrations[2].sql, /create table genio_one_distillation_markers/i)
@@ -395,6 +395,77 @@ test("the clean-install baseline and ordered migrations encode the current Platf
     /'NONE'::text[\s\S]*'SERVICE'::text[\s\S]*'USER_PASSTHROUGH'::text[\s\S]*'USER_OAUTH'::text[\s\S]*'USER_PASSWORD'::text/i,
   )
   assert.doesNotMatch(gatewayActivityIdentityMigration.sql, /USER_CERTIFICATE|BEARER|JWT/i)
+  const sharedMemoriesMigration = migrations.find(
+    (migration) => migration.name === "shared_memories",
+  )
+  assert.ok(sharedMemoriesMigration)
+  assert.equal(sharedMemoriesMigration.id, 17)
+  assert.match(sharedMemoriesMigration.sql, /create table genio_one_shared_memories/i)
+  assert.match(sharedMemoriesMigration.sql, /create table genio_one_shared_memory_mutations/i)
+  assert.match(sharedMemoriesMigration.sql, /create table genio_one_personal_memory_agent_grants/i)
+  const sharedMemoryIdempotencyMigration = migrations.find(
+    (migration) => migration.name === "shared_memory_idempotency_hash",
+  )
+  assert.ok(sharedMemoryIdempotencyMigration)
+  assert.equal(sharedMemoryIdempotencyMigration.id, 18)
+  const workspaceGroupOwnershipMigration = migrations.find(
+    (migration) => migration.name === "team_workspace_group_ownership",
+  )
+  assert.ok(workspaceGroupOwnershipMigration)
+  assert.equal(workspaceGroupOwnershipMigration.id, 19)
+  const workspaceGroupOwnership = workspaceGroupOwnershipMigration.sql
+  assert.match(
+    workspaceGroupOwnership,
+    /lock table genio_one_team_workspaces, genio_one_access_groups\s+in share row exclusive mode/i,
+  )
+  assert.match(workspaceGroupOwnership, /mismatched workspace bindings exist/i)
+  assert.match(
+    workspaceGroupOwnership,
+    /unique \(tenant_id, organization_id, access_group_id\)/i,
+  )
+  for (const role of ["reader", "contributor", "maintainer"]) {
+    assert.match(
+      workspaceGroupOwnership,
+      new RegExp(
+        `foreign key \\(tenant_id, organization_id, ${role}_access_group_id\\)\\s+references genio_one_access_groups \\(tenant_id, organization_id, access_group_id\\)`,
+        "i",
+      ),
+    )
+  }
+  assert.doesNotMatch(workspaceGroupOwnership, /\b(update|delete)\b/i)
+  const sharedMemoryGovernanceMigration = migrations.find(
+    (migration) => migration.name === "shared_memory_governance",
+  )
+  assert.ok(sharedMemoryGovernanceMigration)
+  assert.equal(sharedMemoryGovernanceMigration.id, 20)
+  const sharedMemoryGovernance = sharedMemoryGovernanceMigration.sql
+  assert.match(
+    sharedMemoryGovernance,
+    /lock table genio_one_shared_memories, genio_one_shared_memory_mutations,\s+genio_one_team_workspaces, genio_one_organizations\s+in share row exclusive mode/i,
+  )
+  assert.match(sharedMemoryGovernance, /mismatched shared memory targets exist/i)
+  assert.match(
+    sharedMemoryGovernance,
+    /foreign key \(tenant_id, organization_id\)\s+references genio_one_organizations \(tenant_id, organization_id\)/i,
+  )
+  assert.match(
+    sharedMemoryGovernance,
+    /foreign key \(tenant_id, organization_id, team_id\)\s+references genio_one_team_workspaces \(tenant_id, organization_id, workspace_id\)/i,
+  )
+  assert.match(sharedMemoryGovernance, /add column team_id text/i)
+  assert.match(sharedMemoryGovernance, /add column organization_id text/i)
+  assert.match(sharedMemoryGovernance, /create table genio_one_shared_memory_correction_proposals/i)
+  assert.match(
+    sharedMemoryGovernance,
+    /foreign key \(tenant_id, memory_id, scope_target_key\)[\s\S]*references genio_one_shared_memories \(tenant_id, memory_id, scope_target_key\)[\s\S]*on delete cascade/i,
+  )
+  assert.match(sharedMemoryGovernance, /'PENDING'::text[\s\S]*'ACCEPTED'::text[\s\S]*'REJECTED'::text[\s\S]*'STALE'::text/i)
+  assert.match(sharedMemoryGovernance, /idempotency_key_digest ~ '\^\[a-f0-9\]\{64\}\$'/i)
+  assert.match(sharedMemoryGovernance, /request_digest ~ '\^\[a-f0-9\]\{64\}\$'/i)
+  assert.match(
+    sharedMemoryGovernance,
+    /unique \(tenant_id, scope_target_key, idempotency_key_digest\)/i,
+  )
   assert.equal(migrations[0].id, 1)
   assert.equal(migrations[0].name, "platform_baseline")
   assert.match(migrations[0].checksum, /^[a-f0-9]{64}$/)

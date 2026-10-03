@@ -1,6 +1,7 @@
 import { browserObserver } from "./browser-telemetry"
 import type { BotInstance, BotSharePolicy, RuntimeTier } from "../bots-storage"
-import type { BotMemory, BotMemoryKind } from "../../shared/bot-memory"
+import type { BotMemory } from "../../shared/bot-memory"
+import type { PlatformPersonalMemory } from "../../server/platform-memory"
 import type { BotSidebarSummary } from "../../shared/bot-roster"
 import type { RuntimePolicySnapshot } from "../../server/runtime-policy-contract"
 
@@ -10,12 +11,24 @@ export function getBotMemory(token: string, botId: string, includeForgotten = fa
   return request<BotMemory[]>(token, `/api/bots/${encodeURIComponent(botId)}/memory?includeForgotten=${includeForgotten}`, { cache: "no-store" })
 }
 
-export function saveBotMemory(token: string, botId: string, input: { key: string; content: string; kind: BotMemoryKind; expectedRevision?: number; sourceMessageIds?: string[] }) {
-  return request<BotMemory>(token, `/api/bots/${encodeURIComponent(botId)}/memory`, { method: "POST", body: JSON.stringify(input) })
+export interface LegacyBotMemoryImport {
+  legacyMemory: Pick<BotMemory, "id" | "key" | "kind" | "content" | "revision">
+  platformMemory: PlatformPersonalMemory
+  source: { kind: "legacy_bot_memory"; botId: string; memoryId: string; revision: number; referenceId: string }
 }
 
-export function forgetBotMemory(token: string, botId: string, memory: BotMemory, forgotten: boolean) {
-  return request<BotMemory>(token, `/api/bots/${encodeURIComponent(botId)}/memory/${encodeURIComponent(memory.id)}`, { method: "PATCH", body: JSON.stringify({ forgotten, expectedRevision: memory.revision }) })
+export interface LegacyBotMemoryImportResult {
+  source: "legacy_bot_memory"
+  imported: LegacyBotMemoryImport[]
+  failed: Array<{ legacyMemoryId: string; error: string; writeResult?: { id: string; revision: number; referenceId: string | null } }>
+}
+
+export function importLegacyBotMemory(token: string, botId: string, memoryIds: string[]) {
+  return request<LegacyBotMemoryImportResult>(token, `/api/bots/${encodeURIComponent(botId)}/memory/import`, { method: "POST", body: JSON.stringify({ memoryIds }) })
+}
+
+export function hardDeleteLegacyBotMemory(token: string, botId: string, memory: Pick<BotMemory, "id" | "revision">) {
+  return request<{ id: string; deletedRevision: number }>(token, `/api/bots/${encodeURIComponent(botId)}/memory/${encodeURIComponent(memory.id)}`, { method: "DELETE", body: JSON.stringify({ expectedRevision: memory.revision }) })
 }
 
 export interface BotPackageManifest {

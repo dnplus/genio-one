@@ -318,15 +318,16 @@ test("configured memory API uses its Bot service endpoint without reading the pr
       method: "POST",
       url: `/v1/tenants/${tenantId}/organizations`,
       headers: adminHeaders,
-      payload: { display_name: "Evidence" },
+      payload: { display_name: "Evidence", member_subject_ids: ["owner", "maintainer"] },
     })
     assert.equal(organization.statusCode, 201)
+    const organizationId = (organization.json() as { organization_id: string }).organization_id
     for (const [id, name] of [["readers", "Readers"], ["contributors", "Contributors"], ["maintainers", "Maintainers"]] as const) {
       const group = await configured.inject({
         method: "PUT",
         url: `/v1/tenants/${tenantId}/access-groups/${id}`,
         headers: adminHeaders,
-        payload: { expected_revision: 0, display_name: name, description: "", enabled: true },
+        payload: { expected_revision: 0, organization_id: organizationId, display_name: name, description: "", enabled: true },
       })
       assert.equal(group.statusCode, 200)
     }
@@ -344,7 +345,7 @@ test("configured memory API uses its Bot service endpoint without reading the pr
       url: `/v1/tenants/${tenantId}/team-workspaces`,
       headers: adminHeaders,
       payload: {
-        organization_id: (organization.json() as { organization_id: string }).organization_id,
+        organization_id: organizationId,
         display_name: "Evidence workspace",
         reader_access_group_id: "readers",
         contributor_access_group_id: "contributors",

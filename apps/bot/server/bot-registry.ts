@@ -964,6 +964,7 @@ export class BotRegistry {
       if (exists) this.db.query(`delete from ${table} where bot_id = ?`).run(botId)
     }
     this.db.query("delete from bot_bindings where bot_id = ?").run(botId)
+    this.db.query("delete from bot_memories where bot_id = ?").run(botId)
     this.db.query("delete from bot_sessions where bot_id = ?").run(botId)
     this.db.query("delete from bot_artifacts where bot_id = ?").run(botId)
     this.db.query("delete from bot_owned_skill_revisions where bot_id = ?").run(botId)

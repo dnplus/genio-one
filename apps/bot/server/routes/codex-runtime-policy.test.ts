@@ -134,6 +134,7 @@ function createContext(
   }
   const runtimeBroker = {
     get: (id: string) => id === session.id ? session : undefined,
+    accessTokenForBot: (runtimeId: string, botId: string) => runtimeId === session.id && botId === bot.id ? session.accessToken : undefined,
     refreshWorkspaceDetails() {},
     hasOtherBotTurn: () => false,
     claimBotTurn: () => () => {},

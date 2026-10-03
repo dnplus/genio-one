@@ -27,9 +27,13 @@ import { createPostgresUsageGovernanceDirectory } from "./usage-governance/postg
 import type { UsageGovernanceDirectory } from "./usage-governance/directory"
 import type { AccountingLedger } from "./usage-governance/accounting"
 import { createPostgresAccountingLedger } from "./usage-governance/accounting-postgres"
+import type { SharedMemoryDirectory } from "./memories/module"
+import { createSharedMemoryDirectory } from "./memories/module"
+import { createPostgresSharedMemoryRepository } from "./memories/postgres"
 
 export interface PostgresPlatformModulesOptions {
   providerCredentialCodec?: McpOAuthSecretCodec
+  memoryDigestSecret: Uint8Array
   /** Migrations are run by the process bootstrap, not by this constructor. */
   sql: SqlAdapter
   now?: () => number
@@ -53,6 +57,7 @@ export interface PostgresPlatformModules {
   modelRoutingPolicies: ModelRoutingPolicyStore
   usageGovernance: UsageGovernanceDirectory
   accountingLedger: (tenantId: string) => AccountingLedger
+  memories: SharedMemoryDirectory
 }
 
 /**
@@ -139,6 +144,14 @@ export function createPostgresPlatformModules(
     releasePublisher: options.lifecycleReleasePublisher,
     now: options.now,
   })
+  const memories = createSharedMemoryDirectory({
+    repository: createPostgresSharedMemoryRepository({
+      sql: options.sql,
+      now: options.now,
+      idFactory: options.idFactory,
+    }),
+    digestSecret: options.memoryDigestSecret,
+  })
   return {
     federation,
     sql: options.sql,
@@ -153,6 +166,7 @@ export function createPostgresPlatformModules(
     modelRoutingPolicies,
     usageGovernance,
     accountingLedger: (tenantId) => createPostgresAccountingLedger(options.sql, tenantId),
+    memories,
   }
 }
 

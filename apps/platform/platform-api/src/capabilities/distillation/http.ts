@@ -254,10 +254,11 @@ export const distillationHttp: FastifyPluginAsync<DistillationHttpOptions> = asy
       request.body.maintainer_access_group_id,
     ]
     if (new Set(groupIds).size !== groupIds.length) throw new PlatformApiError("TEAM_WORKSPACE_ROLES_NOT_DISTINCT", 422)
-    for (const accessGroupId of groupIds) {
-      const group = await options.accessGroups.get(principal, accessGroupId)
-      if (!group.enabled) throw new PlatformApiError("TEAM_WORKSPACE_ACCESS_GROUP_DISABLED", 422)
-    }
+    await options.accessGroups.assertWorkspaceAccessGroups({
+      actor: principal,
+      organizationId: request.body.organization_id,
+      accessGroupIds: groupIds,
+    })
     return options.store.createWorkspace({
       tenantId: principal.tenant_id,
       createdBy: principal.subject_id,

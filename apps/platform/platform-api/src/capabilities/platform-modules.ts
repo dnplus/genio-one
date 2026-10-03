@@ -1,5 +1,5 @@
 import { createPolicyDraftStore, type PolicyDraftStore } from "./one-policy/drafts"
-import { generateKeyPairSync } from "node:crypto"
+import { generateKeyPairSync, randomBytes } from "node:crypto"
 
 import { createInMemoryResourceConnectionRegistry } from "./connections/memory"
 import type { ResourceConnectionRegistry } from "./connections/module"
@@ -83,6 +83,10 @@ import type { NotificationSubscriptionStore } from "./notifications/module"
 import { createInMemoryNotificationSubscriptionStore } from "./notifications/memory"
 import type { DistillationStore } from "./distillation/module"
 import { createInMemoryDistillationStore } from "./distillation/memory"
+import type { SharedMemoryDirectory } from "./memories/module"
+import { createSharedMemoryDirectory } from "./memories/module"
+import { createInMemorySharedMemoryRepository, createInMemorySharedMemoryScopeAuthorizer } from "./memories/memory"
+import { createSharedMemoryScopeResolver } from "./memories/shared-scope-access"
 import type { TenantConfigurationStore } from "./configuration/module"
 import { createInMemoryTenantConfigurationStore } from "./configuration/memory"
 import type { AccessGovernanceStore } from "./access/module"
@@ -178,6 +182,7 @@ export interface PlatformModuleGraph {
   siem: SiemForwarder
   notifications: NotificationSubscriptionStore
   distillation: DistillationStore
+  memories: SharedMemoryDirectory
   configuration: TenantConfigurationStore
   access: AccessGovernanceStore
   mcpDiscovery: McpDiscoveryStore
@@ -196,6 +201,7 @@ export type InMemoryPlatformModules = PlatformModuleGraph
 
 export interface InMemoryPlatformOptions {
   now?: () => number
+  memoryDigestSecret?: Uint8Array
   processorAdapterRegistry?: ProcessorAdapterRegistry
   /** Supplying this enables strict in-memory publication delivery for runtime tests. */
   runtimeRegistrations?: readonly RegisterGatewayRuntimeInput[]
@@ -383,6 +389,17 @@ export function createInMemoryPlatformModules(
   const siem = createInMemorySiemForwarder({ now: options.now })
   const notifications = createInMemoryNotificationSubscriptionStore({ now: options.now })
   const distillation = createInMemoryDistillationStore({ now: options.now })
+  const memories = createSharedMemoryDirectory({
+    repository: createInMemorySharedMemoryRepository({
+      now: options.now,
+      sharedScopeAuthorizer: createInMemorySharedMemoryScopeAuthorizer({
+        resolver: createSharedMemoryScopeResolver({ organizations, workspaces: distillation, accessGroups }),
+        organizations,
+        workspaces: distillation,
+      }),
+    }),
+    digestSecret: options.memoryDigestSecret ?? randomBytes(32),
+  })
   const configuration = createInMemoryTenantConfigurationStore({ now: options.now })
   const access = createInMemoryAccessGovernanceStore({
     resources,
@@ -503,6 +520,7 @@ export function createInMemoryPlatformModules(
     siem,
     notifications,
     distillation,
+    memories,
     configuration,
     access,
     mcpDiscovery,

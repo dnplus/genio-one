@@ -85,6 +85,16 @@ export class BotMemoryStore {
     return this.list(botId, true).find((entry) => entry.id === id)!
   }
 
+  hardDelete(botId: string, id: string, expectedRevision: unknown) {
+    if (!Number.isSafeInteger(expectedRevision) || Number(expectedRevision) < 1) throw new Error("BOT_MEMORY_INVALID")
+    const current = this.db.query("select revision from bot_memories where bot_id = ? and id = ?").get(botId, id) as { revision: number } | null
+    if (!current) throw new Error("BOT_MEMORY_NOT_FOUND")
+    if (current.revision !== expectedRevision) throw new Error("BOT_MEMORY_CONFLICT")
+    const deleted = this.db.query("delete from bot_memories where bot_id = ? and id = ? and revision = ?").run(botId, id, expectedRevision)
+    if (deleted.changes !== 1) throw new Error("BOT_MEMORY_CONFLICT")
+    return { id, deletedRevision: current.revision }
+  }
+
   recall(botId: string, query = "") {
     const needle = query.trim().toLocaleLowerCase()
     let remaining = 8000

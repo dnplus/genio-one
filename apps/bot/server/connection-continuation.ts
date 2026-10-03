@@ -78,7 +78,7 @@ async function startContinuation(context: BotServerContext, session: RuntimeSess
     params: {
       threadId: entry.sourceThreadId,
       clientUserMessageId: entry.clientId,
-      additionalContext: botTurnContext(context.botRegistry, bot.id, entry.sourceThreadId, {}, bot, principal),
+      additionalContext: await botTurnContext(context.botRegistry, bot.id, entry.sourceThreadId, {}, bot, principal, context.runtimeBroker.accessTokenForBot(session.id, bot.id)),
       input: [{ type: "text", text: `The user completed the personal connection for ${entry.resourceName}. Continue the original user task with the newly available enterprise tools. This continuation is limited to approved read-only Mail2000 and Notion tools. Do not perform write, modification, or booking actions; use the normal explicit confirmation path before any such action. Do not repeat the connection setup.`, text_elements: [] }],
     },
     session,

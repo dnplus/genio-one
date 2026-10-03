@@ -50,7 +50,7 @@ async function executeNativeTerminal(status: "completed" | "failed" | "interrupt
     const runner = new BotScheduleRunner({
       botSchedules: schedules,
       capabilityGate: createCapabilityGate({ mode: "fixture", personalBotAllowlist: ["tenant:owner"] }),
-      runtimeBroker: { isClosing: () => false, findByPrincipal: () => session, claimBotTurn: () => () => undefined, listen: (_runtimeId: string, callbacks: { onMessage(line: string): void }) => {
+      runtimeBroker: { isClosing: () => false, findByPrincipal: () => session, accessTokenForBot: (runtimeId: string, botId: string) => runtimeId === session.id && botId === bot.id ? session.accessToken : undefined, claimBotTurn: () => () => undefined, listen: (_runtimeId: string, callbacks: { onMessage(line: string): void }) => {
         runtimeListener.current = callbacks
         return () => undefined
       }, request: async (_runtimeId: string, method: string, params: Record<string, unknown>) => {
@@ -517,6 +517,7 @@ describe("BotSchedules", () => {
         runtimeBroker: {
           isClosing: () => false,
           findByPrincipal: () => session,
+          accessTokenForBot: (runtimeId: string, botId: string) => runtimeId === session.id && botId === bot.id ? session.accessToken : undefined,
           claimBotTurn: () => () => undefined,
           listen: () => () => undefined,
           request: async (_runtimeId: string, method: string) => {

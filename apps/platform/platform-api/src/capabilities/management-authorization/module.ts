@@ -262,8 +262,51 @@ function isPostHogBrowserConfiguration(route: TenantRoute, method: string): bool
     route.rest[2] === "browser-configuration"
 }
 
+function isSharedMemoryRoute(
+  route: TenantRoute,
+  scope: "organizations" | "team-workspaces",
+): boolean {
+  if (route.rest[0] !== scope || !route.rest[1] || route.rest[2] !== "memories") return false
+  if (route.rest.length === 3) return true
+  if (route.rest.length === 4 && route.rest[3]) return true
+  if (route.rest.length === 5 && route.rest[3] && route.rest[4] === "corrections") return true
+  return route.rest.length === 7 &&
+    Boolean(route.rest[3]) &&
+    route.rest[4] === "corrections" &&
+    Boolean(route.rest[5]) &&
+    route.rest[6] === "review"
+}
+
+function isMemoryRoute(route: TenantRoute, method: string): boolean {
+  if (route.rest.length === 2 && route.rest[0] === "memory" && route.rest[1] === "mcp") return true
+  if (
+    isSharedMemoryRoute(route, "team-workspaces") ||
+    isSharedMemoryRoute(route, "organizations")
+  ) return true
+  if (route.rest[0] !== "me") return false
+  if (route.rest[1] === "memories") return route.rest.length === 2 || route.rest.length === 3
+  if (route.rest[1] === "memory-agents") return route.rest.length === 2 || route.rest.length === 3
+  return method === "GET" && route.rest.length === 2 && route.rest[1] === "memory-scopes"
+}
+
+function isTeamWorkspaceRead(route: TenantRoute, method: string): boolean {
+  return method === "GET" &&
+    route.rest[0] === "team-workspaces" &&
+    (route.rest.length === 1 || (route.rest.length === 2 && Boolean(route.rest[1])))
+}
+
+function assertMemoryInvocationScope(principal: Principal): void {
+  if (principal.scopes?.includes(INVOCATION_SCOPE)) return
+  throw new PlatformApiError(
+    "INSUFFICIENT_SCOPE",
+    403,
+    `The required OAuth scope is missing: ${INVOCATION_SCOPE}`,
+  )
+}
+
 function isInvocationRoute(route: TenantRoute, method: string): boolean {
   if (isPostHogBrowserConfiguration(route, method)) return true
+  if (isMemoryRoute(route, method)) return true
   if (route.rest.length === 2 && route.rest[0] === "discovery" && route.rest[1] === "mcp") return true
   if (method === "POST" && route.rest.length === 2 && route.rest[0] === "me" && route.rest[1] === "agents") return true
   if (route.rest[0] === "me" && route.rest[1] === "resource-connections") {
@@ -287,7 +330,7 @@ function isInvocationRoute(route: TenantRoute, method: string): boolean {
   if (isManagementOnlyKnowledgeCandidateRoute(route, method)) return false
   if (method === "GET" && route.rest[0] === "knowledge-candidates") return true
   if (method === "GET" && route.rest[0] === "distillation-markers") return true
-  if (method === "GET" && route.rest[0] === "team-workspaces") return true
+  if (isTeamWorkspaceRead(route, method)) return true
   if (method !== "POST") return false
   if (route.rest[0] === "one-policy" && ["runtime-authorize", "runtime-report"].includes(route.rest[1] ?? "")) return true
   if (route.rest[0] === "resource-onboarding-requests") return true
@@ -562,6 +605,7 @@ export function createManagementAuthorization(
       }
       try {
         assertPrincipalScope(principal, requiredRouteScopes(route, request.method))
+        if (isMemoryRoute(route, request.method)) assertMemoryInvocationScope(principal)
         if (isAuditExportRead(route, request.method)) {
           assertPrincipalScope(principal, ["audit.export"])
         }

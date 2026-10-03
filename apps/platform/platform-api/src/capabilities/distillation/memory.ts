@@ -298,6 +298,10 @@ export function createInMemoryDistillationStore(options: {
       workspaces.set(recordKey(tenantId, workspace.workspace_id), workspace)
       return structuredClone(workspace)
     },
+    async getWorkspace(tenantId, workspaceId) {
+      const workspace = workspaces.get(recordKey(tenantId, workspaceId))
+      return workspace ? structuredClone(workspace) : null
+    },
     async listWorkspaces(tenantId) {
       return [...workspaces.values()]
         .filter((workspace) => workspace.tenant_id === tenantId)

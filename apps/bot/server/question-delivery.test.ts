@@ -22,6 +22,7 @@ function setup() {
     runtimeBroker: {
       claimBotTurn: (id: string) => gate.claimBotTurn(id),
       findByPrincipal: () => session,
+      accessTokenForBot: (runtimeId: string, botId: string) => runtimeId === session.id && botId === bot.id ? session.accessToken : undefined,
       request: async (_id: string, method: string, params: any) => { requests.push({ method, params }); return response(method, params) },
     },
     modelDirectory: { resolve: async () => [] },

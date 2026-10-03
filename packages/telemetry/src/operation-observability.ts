@@ -6,6 +6,7 @@ import { createDetailBodyDecoder } from "./otlp-detail-capture"
 export interface ObservationContext { traceId: string; spanId: string; correlationId: string; tenantId: string }
 export const observationContext = new AsyncLocalStorage<ObservationContext>()
 const wrapped = new WeakSet<object>()
+const sensitiveOperationOmitted = JSON.stringify({ availability: "OMITTED_SENSITIVE_OPERATION" })
 const attr = (key: string, value: string) => ({ key, value: { stringValue: value } })
 const RESPONSE_BODY_CHUNK_BYTES = 1_048_576
 // Connector MCP paths carry a signed capability token (/mcp/<token>); it is a credential and, as
@@ -36,7 +37,7 @@ export function observationEvidence(value: unknown): string {
   try {
     if (typeof value === "string") { try { value = JSON.parse(value) } catch {} }
     const serializable = value instanceof Response ? { status: value.status, content_type: value.headers.get("content-type"), body: "STREAM_NOT_CONSUMED_BY_OBSERVER" } : value
-    const json = JSON.stringify(serializable, (_key, item) => typeof item === "bigint" ? String(item) : item) ?? "null"
+    const json = JSON.stringify(serializable, (key, item) => key === "genio_bot/memory" ? { availability: "OMITTED_SENSITIVE_MEMORY_CONTEXT" } : typeof item === "bigint" ? String(item) : item) ?? "null"
     const digest = createHash("sha256").update(json).digest("hex")
     return `{"availability":"CAPTURED","sha256":"${digest}","original_bytes":${Buffer.byteLength(json)},"value":${json}}`
   } catch { return JSON.stringify({ availability: "UNSERIALIZABLE" }) }
@@ -131,11 +132,14 @@ export function observeOperation<T>(service: string, operation: string, input: u
   const context = { traceId: identity.traceId, spanId: identity.spanId, correlationId: String(detail.correlationId ?? detail.correlation_id ?? value.correlationId ?? value.correlation_id ?? parent?.correlationId ?? identity.traceId), tenantId: String(value.tenantId ?? value.tenant_id ?? principal?.tenant_id ?? parent?.tenantId ?? process.env.GENIO_ONE_TENANT_ID ?? "unassigned") }
   const startedAt = BigInt(Date.now()) * 1_000_000n
   const resource = otelResource(service, context.tenantId)
-  const attributes = [attr("genio.correlation.id", context.correlationId), attr("genio.operation", operation), attr("genio.input", observationEvidence(input))]
+  const sensitiveOperation = operation.startsWith("memories.")
+  const inputEvidence = sensitiveOperation ? sensitiveOperationOmitted : observationEvidence(input)
+  const attributes = [attr("genio.correlation.id", context.correlationId), attr("genio.operation", operation), attr("genio.input", inputEvidence)]
   exportOtel("logs", { resourceLogs: [{ resource, scopeLogs: [{ scope: { name: "genio.operation" }, logRecords: [{ timeUnixNano: String(startedAt), traceId: identity.traceId, spanId: identity.spanId, severityNumber: 9, severityText: "INFO", body: { stringValue: `${operation}.started` }, attributes }] }] }] })
   const finish = (output: unknown, error?: unknown, failed = false) => {
     const endedAt = BigInt(Date.now()) * 1_000_000n
-    const fields = [...attributes, attr("genio.outcome", failed ? "FAILED" : "COMPLETED"), attr(failed ? "genio.error" : "genio.output", (operation.startsWith("traces.") && !failed ? observationReference(output) : observationEvidence(error instanceof Error ? { name: error.name, message: error.message, stack: error.stack, cause: error.cause } : failed ? error : output)))]
+    const omitPayload = sensitiveOperation || failed && inputEvidence.includes('"genio_bot/memory":')
+    const fields = [...attributes, attr("genio.outcome", failed ? "FAILED" : "COMPLETED"), attr(failed ? "genio.error" : "genio.output", omitPayload ? sensitiveOperationOmitted : (operation.startsWith("traces.") && !failed ? observationReference(output) : observationEvidence(error instanceof Error ? { name: error.name, message: error.message, stack: error.stack, cause: error.cause } : failed ? error : output)))]
     exportOtel("traces", { resourceSpans: [{ resource, scopeSpans: [{ scope: { name: "genio.operation" }, spans: [{ ...identity, name: operation, kind: 1, startTimeUnixNano: String(startedAt), endTimeUnixNano: String(endedAt), attributes: fields, status: { code: failed ? 2 : 1 } }] }] }] })
     exportOtel("logs", { resourceLogs: [{ resource, scopeLogs: [{ scope: { name: "genio.operation" }, logRecords: [{ timeUnixNano: String(endedAt), traceId: identity.traceId, spanId: identity.spanId, severityNumber: failed ? 17 : 9, severityText: failed ? "ERROR" : "INFO", body: { stringValue: `${operation}.${failed ? "failed" : "completed"}` }, attributes: fields }] }] }] })
   }

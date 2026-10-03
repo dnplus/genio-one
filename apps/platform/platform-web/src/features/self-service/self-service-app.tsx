@@ -61,6 +61,8 @@ import {
   SelfServiceRequestSheet,
   type AccessDisplayDirectory,
 } from "@/features/self-service/access-lifecycle"
+import { PersonalMemoryPanel } from "@/features/self-service/personal-memory-panel"
+import { SharedMemoryPanel } from "@/features/self-service/shared-memory-panel"
 import { changeConsoleLanguage, type ConsoleLanguage } from "@/i18n"
 import { relativeTime } from "@/lib/format"
 import {
@@ -156,6 +158,7 @@ export function SelfServiceApp() {
   const [token, setToken] = useState<string | null>(null)
   const [session, setSession] = useState<IdentitySession | null>(null)
   const [data, setData] = useState<SelfServiceData | null>(null)
+  const [personalMemoryRefreshKey, setPersonalMemoryRefreshKey] = useState(0)
   const [selected, setSelected] = useState<SubjectCatalogCapability | null>(null)
   const [selectedRequest, setSelectedRequest] = useState<AccessRequest | null>(null)
   const [justification, setJustification] = useState("")
@@ -212,6 +215,7 @@ export function SelfServiceApp() {
 
   const refresh = useCallback(async (accessToken: string, identity: IdentitySession) => {
     setData(await loadSelfService(accessToken, identity.tenant_id))
+    setPersonalMemoryRefreshKey((value) => value + 1)
   }, [])
 
   const connect = useCallback(
@@ -657,6 +661,18 @@ export function SelfServiceApp() {
                 </CardContent>
               </Card> : null}
             </div>
+
+            {token ? <PersonalMemoryPanel
+              accessToken={token}
+              refreshKey={personalMemoryRefreshKey}
+              tenantId={session.tenant_id}
+            /> : null}
+
+            {token ? <SharedMemoryPanel
+              accessToken={token}
+              refreshKey={personalMemoryRefreshKey}
+              tenantId={session.tenant_id}
+            /> : null}
 
             {data.notifications.length ? (
               <AccessUpdates

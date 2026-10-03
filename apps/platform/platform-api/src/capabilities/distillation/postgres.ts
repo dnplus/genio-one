@@ -23,6 +23,11 @@ import {
 } from "./policy"
 
 const WORKSPACE_ACL_VERSION = 1
+const WORKSPACE_ACCESS_GROUP_FOREIGN_KEYS = new Set([
+  "genio_one_team_workspaces_reader_access_group_fkey",
+  "genio_one_team_workspaces_contributor_access_group_fkey",
+  "genio_one_team_workspaces_maintainer_access_group_fkey",
+])
 
 type Row = Record<string, unknown>
 
@@ -39,6 +44,13 @@ function text(row: Row, key: string): string {
 
 function number(value: unknown): number {
   return typeof value === "number" ? value : Number(value)
+}
+
+function isWorkspaceAccessGroupForeignKeyError(error: unknown): boolean {
+  return typeof error === "object" && error !== null &&
+    "code" in error && error.code === "23503" &&
+    "constraint" in error && typeof error.constraint === "string" &&
+    WORKSPACE_ACCESS_GROUP_FOREIGN_KEYS.has(error.constraint)
 }
 
 function json<T>(value: unknown): T {
@@ -421,9 +433,21 @@ export function createPostgresDistillationStore(options: {
       } catch (error) {
         const code = typeof error === "object" && error && "code" in error ? String(error.code) : ""
         if (code === "23505") throw new PlatformApiError("TEAM_WORKSPACE_EXISTS", 409)
+        if (isWorkspaceAccessGroupForeignKeyError(error)) {
+          throw new PlatformApiError("TEAM_WORKSPACE_ACCESS_GROUP_ORGANIZATION_MISMATCH", 422)
+        }
         if (code === "23503") throw new PlatformApiError("ORGANIZATION_NOT_FOUND", 422)
         throw error
       }
+    },
+    async getWorkspace(tenantId, workspaceId) {
+      const result = await options.sql.query<Row>(
+        `select ${WORKSPACE_COLUMNS}
+           from genio_one_team_workspaces
+          where tenant_id = $1 and workspace_id = $2`,
+        [tenantId, workspaceId],
+      )
+      return result.rows[0] ? workspaceRow(result.rows[0]) : null
     },
     async listWorkspaces(tenantId) {
       const result = await options.sql.query<Row>(
