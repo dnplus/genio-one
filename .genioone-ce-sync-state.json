@@ -3,7 +3,7 @@
   "provenance": {
     "exporter": "genioone-ce-sync",
     "source": "git-committed-snapshot",
-    "manifestSha256": "65d30d3aabc2ba82c5b73b3d9edddfa9ae96f2016d44c7cdd34cc704a79cb4dc"
+    "manifestSha256": "7d98eef95d5654fac865901c0de715fb4e89f3e535242bb8dde329d7df145f42"
   },
   "files": {
     ".dockerignore": {
@@ -7115,7 +7115,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/runtime-control/http.ts": {
-      "sha256": "2d28a15345d63fefac08a129d878816079f3c369a77c97b95f70ea86e9d8fa02",
+      "sha256": "3d7c9538a16034ecc6d0785fe9e1a764f0a045c5fb7ebd2f28344d6eb8447891",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/runtime-control/memory.ts": {
@@ -7395,7 +7395,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/authentication.test.ts": {
-      "sha256": "486bf50703c4efcf788aa500725f681ab1c8b8ca8988b9e6bf060e115e91e954",
+      "sha256": "2c61a7ea60cb60fe242343542cfe67fa7edeaa44dec4ceeefa180db7c4ebeb8d",
       "mode": 420
     },
     "apps/platform/platform-api/test/bootstrap.test.ts": {
@@ -7647,7 +7647,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/gateway-registration.test.ts": {
-      "sha256": "429c976e7feb41b1d63856fd5e68d7015d17af1c14cba958f6cd0126e1c150d4",
+      "sha256": "474dcca50faa39022ddb2a4e567f3d22179039933030bd6d5468338053640fec",
       "mode": 420
     },
     "apps/platform/platform-api/test/gateway-release-runtime-protocol.test.ts": {
@@ -7839,7 +7839,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/postgres-live.test.ts": {
-      "sha256": "8aeeb87c8f8b3bfc24f96e47e1dd4b8a9ed7a4c8c51814ab730607fd3d00ad5f",
+      "sha256": "3cbc711165277c88e844c5d8274fc1c64818f255e48d92830666487218ce678b",
       "mode": 420
     },
     "apps/platform/platform-api/test/posthog-integration.test.ts": {
@@ -7895,7 +7895,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/runtime-control-http.test.ts": {
-      "sha256": "8636291b21d1a4cd6489c416532133dad96c291de9704887406c2c12969d0337",
+      "sha256": "32618fb00e23ed113c67d9726b1b33cbe8bf312a1da4260fed124dea1b4b9ebf",
       "mode": 420
     },
     "apps/platform/platform-api/test/runtime-inventory-http.test.ts": {
@@ -8922,6 +8922,30 @@
       "sha256": "f5cc8dfa9584df93497009880f6bfdb9a0f86c3c46a24a80f725d39b02f93441",
       "mode": 420
     },
+    "apps/platform/scripts/deployment-post-install.mjs": {
+      "sha256": "dd94b1c06df7ffa273b7a9424a96c4cf2748449f522106ea7cb409df3281bf4f",
+      "mode": 420
+    },
+    "apps/platform/scripts/deployment-post-install.test.mjs": {
+      "sha256": "5c5940284eff28cf572b1adb66bc46e40a20650d3110b03efa3b8c9794520cab",
+      "mode": 420
+    },
+    "apps/platform/scripts/environment.mjs": {
+      "sha256": "3740434ef86dcf5771f44eb2188138a950132aa6823b919128f55dfc8748d1bb",
+      "mode": 420
+    },
+    "apps/platform/scripts/environment.test.mjs": {
+      "sha256": "4d8041c029cdaeb4b66349acf58c7f4a945bac2c1aab8c4c68593f209b7eae67",
+      "mode": 420
+    },
+    "apps/platform/scripts/gateway-runtime-ownership-migration.mjs": {
+      "sha256": "0ead2acfe0facc8c376061dca9bf216145d10d4f1538643416685631db41c9e7",
+      "mode": 420
+    },
+    "apps/platform/scripts/gateway-runtime-ownership-migration.test.mjs": {
+      "sha256": "54524d8ba148e4d63fdfb9f31b7cc9006db9a9a2fe43d0a96d0f1fd4768d70f7",
+      "mode": 420
+    },
     "apps/platform/scripts/install-local-aigw.mjs": {
       "sha256": "2329688a97fb13f4f0043c265a343d2ede7f4fbf90fedf69731680fa3b699490",
       "mode": 420
@@ -9175,7 +9199,7 @@
       "mode": 420
     },
     "docs/public/ce/helm.md": {
-      "sha256": "9fa2097f4f51729caa4931d15f94b0d090a9ccd036fac5d12b17758b15e501f1",
+      "sha256": "718bb82d9419f53984af192af4d22b594fd4b2bf6c829c88af45dff3a995c58b",
       "mode": 420
     },
     "docs/public/ce/known-issues.md": {
@@ -10011,7 +10035,7 @@
       "mode": 420
     },
     "tooling/ce-verify.mjs": {
-      "sha256": "c54ce7dc5daf27ac10e20564bc44f03a2471221f5142f3f389e92db67adf526a",
+      "sha256": "9ab49903d91aadefdd6510cc68647ac905f633e15795bd4bcc28e17952ee7ba5",
       "mode": 420
     },
     "tooling/ce-verify.test.mjs": {

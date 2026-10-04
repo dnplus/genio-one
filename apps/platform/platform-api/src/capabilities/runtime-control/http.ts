@@ -2,6 +2,7 @@ import { TypeBoxTypeProvider } from "@fastify/type-provider-typebox"
 import type { FastifyPluginAsync } from "fastify"
 import { Type } from "typebox"
 
+import { PlatformApiError } from "../errors"
 import {
   RuntimeRegistrationSchema,
   type RuntimeControlStore,
@@ -41,21 +42,32 @@ export const runtimeControlHttp: FastifyPluginAsync<RuntimeControlHttpOptions> =
     {
       schema: {
         operationId: "registerGatewayRuntime",
-        summary: "Register a Gateway Runtime",
+        summary: "Confirm a provisioned Gateway Runtime registration",
         tags: ["Runtime Control"],
         params: RuntimePathSchema,
         body: RegistrationBodySchema,
         response: { 200: RuntimeRegistrationSchema },
       },
     },
-    async (request) => options.store.registerGatewayRuntime({
-      tenantId: request.params.tenant_id,
-      runtimeId: request.params.runtime_id,
-      targetId: request.body.target_id,
-      oidcClientId: request.body.oidc_client_id,
-      reportKeyId: request.body.report_key_id,
-      reportPublicKeyPem: request.body.report_public_key_pem,
-      ...(request.body.status === undefined ? {} : { status: request.body.status }),
-    }),
+    async (request) => {
+      const registration = await options.store.getGatewayRuntime({
+        tenantId: request.params.tenant_id,
+        runtimeId: request.params.runtime_id,
+      })
+      if (!registration) throw new PlatformApiError("RUNTIME_REGISTRATION_NOT_FOUND", 404)
+      if (registration.status !== "ACTIVE") {
+        throw new PlatformApiError("RUNTIME_REGISTRATION_NOT_ACTIVE", 403)
+      }
+      if (
+        registration.target_id !== request.body.target_id ||
+        registration.oidc_client_id !== request.body.oidc_client_id ||
+        registration.report_key_id !== request.body.report_key_id ||
+        registration.report_public_key_pem !== request.body.report_public_key_pem ||
+        registration.status !== (request.body.status ?? "ACTIVE")
+      ) {
+        throw new PlatformApiError("RUNTIME_REGISTRATION_MISMATCH", 409)
+      }
+      return registration
+    },
   )
 }
