@@ -517,6 +517,98 @@ test("SSE restoration buffers split lines and restores tokens before downstream"
   assert.match(Buffer.from(second.body).toString(), /\[DONE\]/)
 })
 
+test("SSE line buffer rejects an oversized line accumulated across chunks", async () => {
+  const buffer = new SseLineBuffer()
+  let transformed = 0
+  const transform = async (line: string) => {
+    transformed += 1
+    return { disposition: "CONTINUE" as const, body: Buffer.from(line), matches: [] }
+  }
+  const first = await buffer.push(Buffer.alloc(2 * 1024 * 1024, 97), false, transform)
+  assert.equal(first.body.byteLength, 0)
+  await assert.rejects(
+    buffer.push(Buffer.alloc(2 * 1024 * 1024 + 1, 97), false, transform),
+    /SSE_LINE_LIMIT_EXCEEDED/,
+  )
+  assert.equal(transformed, 0)
+})
+
+test("SSE line buffer keeps one bounded allocation for one-byte fragments", async () => {
+  const buffer = new SseLineBuffer()
+  const line = Buffer.from(`data: ${"嗨".repeat(3000)}`)
+  let releasedBytes = 0
+  let transformed = 0
+  const transform = async (value: string) => {
+    transformed += 1
+    return { disposition: "CONTINUE" as const, body: Buffer.from(value), matches: [] }
+  }
+  for (const byte of line) {
+    const result = await buffer.push(Uint8Array.of(byte), false, transform)
+    releasedBytes += result.body.byteLength
+  }
+  const state = buffer as unknown as { buffered: Buffer; bufferedBytes: number }
+  assert.ok(Buffer.isBuffer(state.buffered))
+  assert.equal(state.bufferedBytes, line.byteLength)
+  assert.ok(state.buffered.byteLength >= line.byteLength)
+  assert.ok(state.buffered.byteLength <= 16 * 1024)
+  assert.equal(releasedBytes, 0)
+  const final = await buffer.push(Buffer.from("\n"), true, transform)
+  assert.equal(Buffer.compare(Buffer.from(final.body), Buffer.concat([line, Buffer.from("\n")])), 0)
+  assert.equal(transformed, 1)
+  assert.ok(state.buffered.byteLength <= 4096)
+})
+
+test("SSE line buffer rejects an oversized line in one chunk", async () => {
+  let transformed = false
+  const accepted = await new SseLineBuffer().push(
+    Buffer.concat([Buffer.from("data: "), Buffer.alloc(4 * 1024 * 1024 - 6, 97), Buffer.from("\n")]),
+    true,
+    async (line) => ({ disposition: "CONTINUE" as const, body: Buffer.from(line), matches: [] }),
+  )
+  assert.equal(accepted.body.byteLength, 4 * 1024 * 1024 + 1)
+  await assert.rejects(
+    new SseLineBuffer().push(
+      Buffer.concat([Buffer.alloc(4 * 1024 * 1024 + 1, 97), Buffer.from("\n")]),
+      true,
+      async (line) => {
+        transformed = true
+        return { disposition: "CONTINUE" as const, body: Buffer.from(line), matches: [] }
+      },
+    ),
+    /SSE_LINE_LIMIT_EXCEEDED/,
+  )
+  assert.equal(transformed, false)
+})
+
+test("SSE line buffer accepts multiple events larger than one line limit in total", async () => {
+  const event = `data: ${"a".repeat(1024 * 1024)}\n\n`
+  const input = Buffer.from(event.repeat(5))
+  let transformed = 0
+  const result = await new SseLineBuffer().push(input, true, async (line) => {
+    transformed += 1
+    return { disposition: "CONTINUE" as const, body: Buffer.from(line), matches: [] }
+  })
+  assert.equal(result.disposition, "CONTINUE")
+  assert.equal(transformed, 10)
+  assert.equal(Buffer.compare(Buffer.from(result.body), input), 0)
+})
+
+test("SSE line buffer preserves UTF-8 characters split across chunks", async () => {
+  const input = Buffer.from('data: {"content":"嗨"}\n\n')
+  const split = input.indexOf(Buffer.from("嗨")) + 1
+  const lines: string[] = []
+  const buffer = new SseLineBuffer()
+  const transform = async (line: string) => {
+    lines.push(line)
+    return { disposition: "CONTINUE" as const, body: Buffer.from(line), matches: [] }
+  }
+  const first = await buffer.push(input.subarray(0, split), false, transform)
+  const second = await buffer.push(input.subarray(split), true, transform)
+  assert.equal(first.body.byteLength, 0)
+  assert.equal(Buffer.compare(Buffer.from(second.body), input), 0)
+  assert.equal(lines[0], 'data: {"content":"嗨"}')
+})
+
 test("SSE restoration holds token fragments across separate data events", async () => {
   const vault = new MemoryVault()
   const processor = new DataProcessor({
@@ -538,6 +630,37 @@ test("SSE restoration holds token fragments across separate data events", async 
   assert.doesNotMatch(Buffer.from(first.body).toString(), /__GENIO_/)
   assert.match(Buffer.from(second.body).toString(), /user@example.com/)
   assert.doesNotMatch(Buffer.from(second.body).toString(), /__GENIO_/)
+})
+
+test("SSE restoration accepts the longest vault token split across data events", async () => {
+  const vault = new MemoryVault()
+  const processor = new DataProcessor({ policy: { ...policy, action: "RESTORE" }, tokenVault: vault })
+  const token = `__GENIO_${"A".repeat(118)}__`
+  await vault.store(context, token, "user@example.com", 600)
+  const event = (content: string) => `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}`
+  const first = await processor.restoreSseLine(context, event(token.slice(0, 120)))
+  const second = await processor.restoreSseLine(context, event(token.slice(120)))
+  assert.doesNotMatch(Buffer.from(first.body).toString(), /__GENIO_/)
+  assert.match(Buffer.from(second.body).toString(), /user@example\.com/)
+})
+
+test("SSE restoration rejects forged token prefixes that exceed the pending limit", async () => {
+  const event = (content: string) => `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}`
+  for (const [prefix, continuation] of [
+    ["__GENIO_", "A".repeat(249)],
+    ["<EMAIL:", " ".repeat(250)],
+  ]) {
+    const processor = new DataProcessor({
+      policy: { ...policy, action: "RESTORE" },
+      tokenVault: new MemoryVault(),
+    })
+    const first = await processor.restoreSseLine(context, event(prefix))
+    assert.doesNotMatch(Buffer.from(first.body).toString(), /__GENIO_|<EMAIL:/)
+    await assert.rejects(
+      processor.restoreSseLine(context, event(continuation)),
+      /SSE_PENDING_TOKEN_LIMIT_EXCEEDED/,
+    )
+  }
 })
 
 test("SSE restoration holds semantic token fragments across separate data events", async () => {
@@ -1123,6 +1246,17 @@ test("ext_proc records OpenAI-compatible SSE usage split across response chunks"
     ["TOTAL_TOKENS", 46],
   ])
   assert.ok(accounting[0]?.quantities.every((value) => value.trusted_source === "PROVIDER_RESPONSE"))
+})
+
+test("ext_proc closes a stream when an SSE line exceeds the limit", async () => {
+  const result = await runStreamingCompletion(
+    externalProcessorOptions(new MemoryVault()),
+    ["a".repeat(2 * 1024 * 1024), "a".repeat(2 * 1024 * 1024 + 1)],
+  )
+  assert.match(String(result.destroyed?.cause), /SSE_LINE_LIMIT_EXCEEDED/)
+  const responseBodies = result.responses.filter((value: any) => value?.response_body) as any[]
+  assert.equal(responseBodies.length, 1)
+  assert.equal(responseBodies[0].response_body.response.body_mutation.body.byteLength, 0)
 })
 
 test("ext_proc waits for accounting and activity delivery before closing the stream", async () => {

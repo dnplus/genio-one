@@ -51743,7 +51743,7 @@ export const getRegisterGatewayRuntimeUrl = (tenantId: string,
 }
 
 /**
- * @summary Register a Gateway Runtime
+ * @summary Confirm a provisioned Gateway Runtime registration
  */
 export const registerGatewayRuntime = async (tenantId: string,
     runtimeId: string,

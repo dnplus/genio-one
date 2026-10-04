@@ -40,6 +40,9 @@ const TOKEN_PREFIX = "__GENIO_"
 const TOKEN_REFERENCE_PATTERN = /<[A-Za-z][A-Za-z0-9_]{0,31}\s*:\s*[A-Za-z0-9_-]{6,8}>|__GENIO_[A-Za-z0-9_-]+__/g
 const TOKEN_REFERENCE_EXACT_PATTERN = /^<([A-Za-z][A-Za-z0-9_]{0,31})\s*:\s*([A-Za-z0-9_-]{6,8})>$/
 const SEMANTIC_TYPE_PATTERN = /^[A-Z][A-Z0-9_]{0,31}$/
+const MAX_SSE_PENDING_TOKEN_BYTES = 256
+const MAX_SSE_LINE_BYTES = 4 * 1024 * 1024
+const INITIAL_SSE_LINE_CAPACITY_BYTES = 4096
 
 /** Keep the DLP semantic label readable; only the vault handle is opaque. */
 function canonicalSemanticType(value: string): string {
@@ -695,7 +698,11 @@ export class DataProcessor {
     const combined = `${this.sseRestorePending}${choice.delta!.content as string}`
     const boundary = tokenSafeBoundary(combined)
     const safe = combined.slice(0, boundary)
-    this.sseRestorePending = combined.slice(boundary)
+    const pending = combined.slice(boundary)
+    if (Buffer.byteLength(pending, "utf8") > MAX_SSE_PENDING_TOKEN_BYTES) {
+      throw new Error("SSE_PENDING_TOKEN_LIMIT_EXCEEDED")
+    }
+    this.sseRestorePending = pending
     choice.delta!.content = await this.restoreValue(context, safe)
     return {
       disposition: "CONTINUE",
@@ -899,23 +906,25 @@ export class DataProcessor {
 }
 
 export class SseLineBuffer {
-  private buffered = ""
+  private buffered = Buffer.alloc(0)
+  private bufferedBytes = 0
 
   async push(
     chunk: Uint8Array,
     endOfStream: boolean,
     transform: (line: string) => Promise<DataProtectionResult>,
   ): Promise<DataProtectionResult> {
-    this.buffered += Buffer.from(chunk).toString("utf8")
-    const parts = this.buffered.split("\n")
-    this.buffered = endOfStream ? "" : (parts.pop() ?? "")
-    if (endOfStream && parts.at(-1) === "") parts.pop()
     const matches = new Set<string>()
     const dataClassifications: DataClassificationReceipt[] = []
     const safetyDecisions: NonNullable<DataProtectionResult["safetyDecisions"]> = []
     const executedSteps: NonNullable<DataProtectionResult["executedSteps"]> = []
     const output: string[] = []
-    for (const line of parts) {
+    const transformLine = async () => {
+      const line = this.buffered.toString("utf8", 0, this.bufferedBytes)
+      if (this.buffered.byteLength > INITIAL_SSE_LINE_CAPACITY_BYTES) {
+        this.buffered = Buffer.alloc(0)
+      }
+      this.bufferedBytes = 0
       const transformed = await transform(line)
       if (transformed.disposition === "BLOCK") return transformed
       if (transformed.requiresBufferedResponse) {
@@ -932,25 +941,38 @@ export class SseLineBuffer {
         }
       }
       output.push(Buffer.from(transformed.body).toString("utf8"))
+      return undefined
     }
-    if (endOfStream && this.buffered) {
-      const transformed = await transform(this.buffered)
-      if (transformed.disposition === "BLOCK") return transformed
-      if (transformed.requiresBufferedResponse) {
-        throw new Error("PROCESSOR_REQUIRES_BUFFERED_STREAM")
+    let offset = 0
+    while (offset < chunk.byteLength) {
+      const newline = chunk.indexOf(10, offset)
+      const end = newline < 0 ? chunk.byteLength : newline
+      const segment = chunk.subarray(offset, end)
+      const requiredBytes = this.bufferedBytes + segment.byteLength
+      if (requiredBytes > MAX_SSE_LINE_BYTES) {
+        throw new Error("SSE_LINE_LIMIT_EXCEEDED")
       }
-      transformed.matches.forEach((match) => matches.add(match))
-      mergeDataClassificationReceipts(dataClassifications, transformed.dataClassifications ?? [])
-      safetyDecisions.push(...(transformed.safetyDecisions ?? []))
-      for (const step of transformed.executedSteps ?? []) {
-        if (!executedSteps.some((existing) =>
-          existing.stepId === step.stepId && existing.action === step.action
-        )) {
-          executedSteps.push(step)
+      if (segment.byteLength > 0) {
+        if (requiredBytes > this.buffered.byteLength) {
+          let capacity = Math.max(this.buffered.byteLength, INITIAL_SSE_LINE_CAPACITY_BYTES)
+          while (capacity < requiredBytes) {
+            capacity = Math.min(capacity * 2, MAX_SSE_LINE_BYTES)
+          }
+          const grown = Buffer.alloc(capacity)
+          this.buffered.copy(grown, 0, 0, this.bufferedBytes)
+          this.buffered = grown
         }
+        this.buffered.set(segment, this.bufferedBytes)
+        this.bufferedBytes = requiredBytes
       }
-      output.push(Buffer.from(transformed.body).toString("utf8"))
-      this.buffered = ""
+      if (newline < 0) break
+      const blocked = await transformLine()
+      if (blocked) return blocked
+      offset = newline + 1
+    }
+    if (endOfStream && this.bufferedBytes > 0) {
+      const blocked = await transformLine()
+      if (blocked) return blocked
     }
     const suffix = output.length > 0 && (!endOfStream || chunk.at(-1) === 10) ? "\n" : ""
     return {

@@ -4499,11 +4499,11 @@
       "mode": 420
     },
     "apps/bot/server/routes/codex-runtime-policy.test.ts": {
-      "sha256": "5296f7d2f3d9e34cb9766bdc1e76c3ad7c7d73378f7ffb30dda16221b4a40b5b",
+      "sha256": "f4aac7f6a734acc856b158b59bcc6ff6e16b0c65910cc49c5d48b296ce31cdf3",
       "mode": 420
     },
     "apps/bot/server/routes/codex.ts": {
-      "sha256": "a69653d1425ded4a84824b59582f3350cd92977156747fd0b4b5c9eac5d5c1bd",
+      "sha256": "a0518095bc3bd3b6f8aea79c7c8361950a23ddba179a79db71b4116acd724179",
       "mode": 420
     },
     "apps/bot/server/routes/cross-owner-handoff.test.ts": {
@@ -8619,7 +8619,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/generated/management-api.ts": {
-      "sha256": "c3e1a561b7261a366d420ef2c875a69b848248e6f73564683f2282ba70d946a4",
+      "sha256": "7d3fc4f465728132e586131295ce89defaaa991d4edc09ff54f1689f6fe25db7",
       "mode": 420
     },
     "apps/platform/platform-web/src/hooks/use-demo-mode.ts": {
@@ -9539,11 +9539,11 @@
       "mode": 420
     },
     "packages/telemetry/src/operation-observability.test.ts": {
-      "sha256": "ba8fa18842067c721e390d539c02308a4919edecbb2bf95f50cbf5ab5dcc6df6",
+      "sha256": "7f5f87b32a0fe217dbabe603ea62236f44dca93528c63d1c0b30fe098afeccbf",
       "mode": 420
     },
     "packages/telemetry/src/operation-observability.ts": {
-      "sha256": "1dc809c4ee49f4569457784ed2d99d200e7180000bfabf5824fbf0ef27474d54",
+      "sha256": "d7f415251b514a85d191bac4611c5341dcc445704fbd8a3431822ce4ace335bb",
       "mode": 420
     },
     "packages/telemetry/src/operational-log.test.ts": {
@@ -9839,7 +9839,7 @@
       "mode": 420
     },
     "runtimes/gateway/services/processor/module.ts": {
-      "sha256": "9362d35bfd9565b1bc7c4ddd194e7537260afa50d51f02ceb4fd19ec3449b6af",
+      "sha256": "4485c418b6192135970375141d7203f01e6afa20741ee14fd28f1756327d2e67",
       "mode": 420
     },
     "runtimes/gateway/services/processor/policy-store.ts": {
@@ -9847,7 +9847,7 @@
       "mode": 420
     },
     "runtimes/gateway/services/processor/processor.test.ts": {
-      "sha256": "46c6d7011813a047a08771676f81ae87e360d81c55f4356e44c59ab9abcf14be",
+      "sha256": "88bf8e4277ff4a9750660adfb679c2fd7a97e3f647c9882563988273ee7bd481",
       "mode": 420
     },
     "runtimes/gateway/services/processor/proto/external_processor_minimal.proto": {

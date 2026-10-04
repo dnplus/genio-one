@@ -37,6 +37,49 @@ test("operation observation preserves callable client fields and correlates modu
   }
 })
 
+test("operation observation emits verified actor fields through nested spans and logs", async () => {
+  const originalFetch = globalThis.fetch
+  const originalOrigin = process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+  process.env.OTEL_EXPORTER_OTLP_ENDPOINT = "http://actor-operation-collector.test"
+  const exports: any[] = []
+  globalThis.fetch = (async (input, init) => {
+    const request = new Request(input, init)
+    if (request.url.startsWith("http://provider.test")) return new Response("provider-response")
+    exports.push(JSON.parse(await request.text()))
+    return new Response("{}")
+  }) as typeof fetch
+  try {
+    observeOperation("bot", "pre-bootstrap", { tenantId: "qa", subjectId: "forged-subject", actingClientId: "forged-client" }, () => undefined)
+    await observeOperation("bot", "authenticated", { tenantId: "qa", message: { subjectId: "forged-subject", actingClientId: "forged-client" } }, async () => {
+      observeOperation("bot", "nested", { tenantId: "qa", principal: { subject_id: "forged-subject", acting_client_id: "forged-client" } }, () => undefined)
+      const response = await observedFetch("bot", "http://provider.test/v1/chat")
+      assert.equal(await response.text(), "provider-response")
+    }, { subjectId: "verified-subject", actingClientId: "verified-client" })
+    await flushOtel()
+    const spans = exports.flatMap(value => value.resourceSpans ?? []).flatMap(value => value.scopeSpans).flatMap(value => value.spans)
+    const logs = exports.flatMap(value => value.resourceLogs ?? []).flatMap(value => value.scopeLogs).flatMap(value => value.logRecords)
+    const attributes = (record: any) => Object.fromEntries(record.attributes.map((entry: any) => [entry.key, entry.value.stringValue]))
+    assert.equal(spans.length, 4)
+    assert.equal(attributes(spans.find(value => value.name === "pre-bootstrap"))["genio.subject.id"], undefined)
+    assert.equal(attributes(spans.find(value => value.name === "pre-bootstrap"))["genio.client.id"], undefined)
+    const preBootstrapLogs = logs.filter(value => value.body.stringValue.startsWith("pre-bootstrap."))
+    assert.equal(preBootstrapLogs.length, 2)
+    for (const record of preBootstrapLogs) {
+      assert.equal(attributes(record)["genio.subject.id"], undefined)
+      assert.equal(attributes(record)["genio.client.id"], undefined)
+    }
+    for (const record of [...spans.filter(value => value.name !== "pre-bootstrap"), ...logs.filter(value => value.body.stringValue !== "pre-bootstrap.started" && value.body.stringValue !== "pre-bootstrap.completed")]) {
+      assert.equal(attributes(record)["genio.subject.id"], "verified-subject")
+      assert.equal(attributes(record)["genio.client.id"], "verified-client")
+    }
+    assert.ok(logs.some(value => value.body.stringValue === "http.client.response.body"))
+  } finally {
+    globalThis.fetch = originalFetch
+    if (originalOrigin === undefined) delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+    else process.env.OTEL_EXPORTER_OTLP_ENDPOINT = originalOrigin
+  }
+})
+
 test("memory operations and reserved runtime memory contexts retain metadata without payload evidence", async () => {
   const originalFetch = globalThis.fetch
   const originalOrigin = process.env.OTEL_EXPORTER_OTLP_ENDPOINT

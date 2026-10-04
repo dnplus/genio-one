@@ -3,7 +3,7 @@ import { AsyncLocalStorage } from "node:async_hooks"
 import { exportOtel, otelResource, observabilityOrigin, persistOtel, recordHttpObservation, traceIdentity } from "./otlp-observability"
 import { createDetailBodyDecoder } from "./otlp-detail-capture"
 
-export interface ObservationContext { traceId: string; spanId: string; correlationId: string; tenantId: string }
+export interface ObservationContext { traceId: string; spanId: string; correlationId: string; tenantId: string; subjectId?: string; actingClientId?: string }
 export const observationContext = new AsyncLocalStorage<ObservationContext>()
 const wrapped = new WeakSet<object>()
 const sensitiveOperationOmitted = JSON.stringify({ availability: "OMITTED_SENSITIVE_OPERATION" })
@@ -60,7 +60,7 @@ function observeResponseBody(service: string, context: ObservationContext, respo
   const emit = (bytes: Buffer, final: boolean, outcome?: "COMPLETED" | "ERRORED" | "CANCELLED"): Promise<unknown> => {
     const body = decode(bytes, final)
     if (!origin) return Promise.resolve()
-    return persistOtel("logs", { resourceLogs: [{ resource, scopeLogs: [{ scope: { name: "genio.operation" }, logRecords: [{ timeUnixNano: String(BigInt(Date.now()) * 1_000_000n), traceId: context.traceId, spanId: context.spanId, severityNumber: 9, severityText: "INFO", body: { stringValue: "http.client.response.body" }, attributes: [attr("genio.correlation.id", context.correlationId), attr("http.response.status_code", String(response.status)), attr("output.mime_type", mimeType), attr("output.encoding", body.encoding), attr("output.sha256", body.digest), attr("output.chunk.index", String(index++)), attr("output.chunk.final", String(final)), ...(outcome ? [attr("output.stream.outcome", outcome)] : []), attr("output.value", body.value)] }] }] }] }, origin)
+    return persistOtel("logs", { resourceLogs: [{ resource, scopeLogs: [{ scope: { name: "genio.operation" }, logRecords: [{ timeUnixNano: String(BigInt(Date.now()) * 1_000_000n), traceId: context.traceId, spanId: context.spanId, severityNumber: 9, severityText: "INFO", body: { stringValue: "http.client.response.body" }, attributes: [attr("genio.correlation.id", context.correlationId), ...(context.subjectId ? [attr("genio.subject.id", context.subjectId)] : []), ...(context.actingClientId ? [attr("genio.client.id", context.actingClientId)] : []), attr("http.response.status_code", String(response.status)), attr("output.mime_type", mimeType), attr("output.encoding", body.encoding), attr("output.sha256", body.digest), attr("output.chunk.index", String(index++)), attr("output.chunk.final", String(final)), ...(outcome ? [attr("output.stream.outcome", outcome)] : []), attr("output.value", body.value)] }] }] }] }, origin)
   }
   const record = async (chunk: Uint8Array) => {
     for (let offset = 0; offset < chunk.byteLength;) {
@@ -121,7 +121,7 @@ export function observationReference(value: unknown): string {
   return JSON.stringify({ availability: "EXISTING_TELEMETRY_REFERENCE", original_bytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex"), record_count: records.length, references: records.map((record: any) => ({ trace_id: record?.trace_id, span_id: record?.span_id, record_id: record?.record_id })) })
 }
 
-export function observeOperation<T>(service: string, operation: string, input: unknown, run: () => T): T {
+export function observeOperation<T>(service: string, operation: string, input: unknown, run: () => T, verifiedActor?: Pick<ObservationContext, "subjectId" | "actingClientId">): T {
   if (!observabilityOrigin()) return run()
   const parent = observationContext.getStore()
   const identity = traceIdentity(parent ? `00-${parent.traceId}-${parent.spanId}-01` : undefined)
@@ -129,12 +129,12 @@ export function observeOperation<T>(service: string, operation: string, input: u
   const value = (candidates.find(item => item && typeof item === "object" && (item.tenantId || item.tenant_id || item.principal || item.correlationId || item.correlation_id)) ?? {}) as Record<string, unknown>
   const detail = (value.event ?? value.value ?? value.input ?? value) as Record<string, unknown>
   const principal = value.principal as { tenant_id?: string } | undefined
-  const context = { traceId: identity.traceId, spanId: identity.spanId, correlationId: String(detail.correlationId ?? detail.correlation_id ?? value.correlationId ?? value.correlation_id ?? parent?.correlationId ?? identity.traceId), tenantId: String(value.tenantId ?? value.tenant_id ?? principal?.tenant_id ?? parent?.tenantId ?? process.env.GENIO_ONE_TENANT_ID ?? "unassigned") }
+  const context = { traceId: identity.traceId, spanId: identity.spanId, correlationId: String(detail.correlationId ?? detail.correlation_id ?? value.correlationId ?? value.correlation_id ?? parent?.correlationId ?? identity.traceId), tenantId: String(value.tenantId ?? value.tenant_id ?? principal?.tenant_id ?? parent?.tenantId ?? process.env.GENIO_ONE_TENANT_ID ?? "unassigned"), subjectId: parent?.subjectId ?? verifiedActor?.subjectId, actingClientId: parent?.actingClientId ?? verifiedActor?.actingClientId }
   const startedAt = BigInt(Date.now()) * 1_000_000n
   const resource = otelResource(service, context.tenantId)
   const sensitiveOperation = operation.startsWith("memories.")
   const inputEvidence = sensitiveOperation ? sensitiveOperationOmitted : observationEvidence(input)
-  const attributes = [attr("genio.correlation.id", context.correlationId), attr("genio.operation", operation), attr("genio.input", inputEvidence)]
+  const attributes = [attr("genio.correlation.id", context.correlationId), attr("genio.operation", operation), ...(context.subjectId ? [attr("genio.subject.id", context.subjectId)] : []), ...(context.actingClientId ? [attr("genio.client.id", context.actingClientId)] : []), attr("genio.input", inputEvidence)]
   exportOtel("logs", { resourceLogs: [{ resource, scopeLogs: [{ scope: { name: "genio.operation" }, logRecords: [{ timeUnixNano: String(startedAt), traceId: identity.traceId, spanId: identity.spanId, severityNumber: 9, severityText: "INFO", body: { stringValue: `${operation}.started` }, attributes }] }] }] })
   const finish = (output: unknown, error?: unknown, failed = false) => {
     const endedAt = BigInt(Date.now()) * 1_000_000n

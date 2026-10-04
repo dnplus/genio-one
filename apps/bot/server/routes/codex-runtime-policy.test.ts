@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Database } from "bun:sqlite"
 import { generateKeyPairSync } from "node:crypto"
+import { flushOtel } from "@genioone/telemetry/otlp-observability"
 
 import { codexRoutes, refreshManagedMcpConfiguration } from "./codex"
 import { BotConnectionInteractions } from "../bot-connection-interactions"
@@ -1816,6 +1817,65 @@ describe("Codex runtime policy route", () => {
       expect(context.runtimeMessages.some((message) => message.id === 2)).toBe(false)
     } finally {
       globalThis.fetch = originalFetch
+      socket.close()
+    }
+  })
+
+  test("attributes WebSocket frames to the verified session actor across reauth", async () => {
+    const context = createContext([], [])
+    let handler: ((socket: FakeSocket) => void) | null = null
+    await codexRoutes({ get: (_path: string, _options: unknown, next: (socket: FakeSocket) => void) => { handler = next } } as never, context as never)
+    const socket = new FakeSocket()
+    handler!(socket)
+    const originalFetch = globalThis.fetch
+    const originalOrigin = process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+    process.env.OTEL_EXPORTER_OTLP_ENDPOINT = "http://codex-actor-collector.test"
+    const exports: any[] = []
+    globalThis.fetch = (async (input, init) => {
+      const request = new Request(input, init)
+      if (request.url.startsWith("http://codex-actor-collector.test")) {
+        exports.push(JSON.parse(await request.text()))
+        return new Response("{}")
+      }
+      const token = request.headers.get("authorization")?.replace(/^Bearer /, "")
+      return Response.json(token === "foreign-token" ? { ...principal, subject_id: "foreign-subject" } : principal)
+    }) as typeof fetch
+    try {
+      socket.emit("message", JSON.stringify({ id: 1, method: "initialize", subjectId: "forged-subject", actingClientId: "forged-client" }))
+      socket.emit("message", JSON.stringify({ id: 2, method: "genio/runtime/start", params: { accessToken: "first-token" }, principal: { subject_id: "forged-subject", acting_client_id: "forged-client" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).method === "genio/codexReady"))
+      socket.emit("message", JSON.stringify({ id: 3, method: "genio/runtime/status", subjectId: "forged-subject", actingClientId: "forged-client", principal: { subject_id: "forged-subject", acting_client_id: "forged-client" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 3))
+      socket.emit("message", JSON.stringify({ id: 4, method: "genio/runtime/start", params: { accessToken: "refreshed-token" } }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 4))
+      socket.emit("message", JSON.stringify({ id: 5, method: "genio/runtime/status", subjectId: "forged-again", actingClientId: "forged-again" }))
+      await waitFor(() => socket.sent.some((line) => JSON.parse(line).id === 5))
+      socket.emit("message", JSON.stringify({ id: 6, method: "genio/runtime/start", params: { accessToken: "foreign-token" } }))
+      await waitFor(() => socket.closeCode === 1008)
+      expect(context.session.principal).toEqual(principal)
+      expect(context.session.accessToken).toBe("refreshed-token")
+      await flushOtel()
+      const spans = exports.flatMap(value => value.resourceSpans ?? []).flatMap(value => value.scopeSpans).flatMap(value => value.spans)
+        .filter(value => value.name.startsWith("rpc.dispatch."))
+      const attributes = (value: any) => Object.fromEntries(value.attributes.map((entry: any) => [entry.key, entry.value.stringValue]))
+      expect(spans).toHaveLength(6)
+      const byMessageId = new Map(spans.map((span) => [JSON.parse(attributes(span)["genio.input"] as string).value.message.id, span]))
+      for (const id of [1, 2]) {
+        const span = byMessageId.get(id)
+        expect(span).toBeDefined()
+        expect(attributes(span)["genio.subject.id"]).toBeUndefined()
+        expect(attributes(span)["genio.client.id"]).toBeUndefined()
+      }
+      for (const id of [3, 4, 5, 6]) {
+        const span = byMessageId.get(id)
+        expect(span).toBeDefined()
+        expect(attributes(span)["genio.subject.id"]).toBe(principal.subject_id)
+        expect(attributes(span)["genio.client.id"]).toBe(principal.acting_client_id)
+      }
+    } finally {
+      globalThis.fetch = originalFetch
+      if (originalOrigin === undefined) delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+      else process.env.OTEL_EXPORTER_OTLP_ENDPOINT = originalOrigin
       socket.close()
     }
   })

@@ -1304,9 +1304,11 @@ export async function codexRoutes(app: FastifyInstance, context: BotServerContex
       try { value = JSON.parse(String(payload)) } catch {}
       const identity = traceIdentity(value?.genioTraceparent)
       if (value) delete value.genioTraceparent
-      const tenantId = runtimeSession?.principal.tenant_id ?? process.env.GENIO_ONE_TENANT_ID ?? "unassigned"
-      const run = () => observeOperation("genio-one-bot", `rpc.dispatch.${String(value?.method ?? "response")}`, { tenantId, message: value ?? { availability: "INVALID_JSON" } }, () => handleMessage(value ? JSON.stringify(value) : payload))
-      if (identity.parentSpanId) void observationContext.run({ traceId: identity.traceId, spanId: identity.parentSpanId, correlationId: identity.traceId, tenantId }, run)
+      const principal = runtimeSession?.principal
+      const tenantId = principal?.tenant_id ?? process.env.GENIO_ONE_TENANT_ID ?? "unassigned"
+      const verifiedActor = principal ? { subjectId: principal.subject_id, actingClientId: principal.acting_client_id } : undefined
+      const run = () => observeOperation("genio-one-bot", `rpc.dispatch.${String(value?.method ?? "response")}`, { tenantId, message: value ?? { availability: "INVALID_JSON" } }, () => handleMessage(value ? JSON.stringify(value) : payload), verifiedActor)
+      if (identity.parentSpanId) void observationContext.run({ traceId: identity.traceId, spanId: identity.parentSpanId, correlationId: identity.traceId, tenantId, ...verifiedActor }, run)
       else void observationContext.exit(run)
     })
 
