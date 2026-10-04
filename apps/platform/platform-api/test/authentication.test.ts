@@ -505,6 +505,15 @@ test("Management API applies role checks and rejects body actor spoofing", async
 test("OAuth scopes separate management, invocation, and Gateway Runtime routes", async () => {
   const modules = createInMemoryPlatformModules()
   const { publicKey } = generateKeyPairSync("ed25519")
+  const reportPublicKeyPem = publicKey.export({ type: "spki", format: "pem" }).toString()
+  await modules.runtimeControl.registerGatewayRuntime({
+    tenantId: "tenant-acme",
+    runtimeId: "gateway-runtime-scope",
+    targetId: "gateway-scope-target",
+    oidcClientId: "gateway-runtime-scope",
+    reportKeyId: "gateway-scope-report",
+    reportPublicKeyPem,
+  })
   const app = await createManagementApi({
     modules,
     resourceCatalog: modules.resources,
@@ -562,7 +571,7 @@ test("OAuth scopes separate management, invocation, and Gateway Runtime routes",
       target_id: "gateway-scope-target",
       oidc_client_id: "gateway-runtime-scope",
       report_key_id: "gateway-scope-report",
-      report_public_key_pem: publicKey.export({ type: "spki", format: "pem" }).toString(),
+      report_public_key_pem: reportPublicKeyPem,
       status: "ACTIVE",
     },
   )
@@ -695,6 +704,14 @@ test("a Gateway Runtime may self-register only its authenticated runtime id", as
   const runtimeId = "gateway-runtime-self"
   const { publicKey } = generateKeyPairSync("ed25519")
   const reportPublicKeyPem = publicKey.export({ type: "spki", format: "pem" }).toString()
+  await deps.modules.runtimeControl.registerGatewayRuntime({
+    tenantId: "tenant-acme",
+    runtimeId,
+    targetId: "gateway-self",
+    oidcClientId: runtimeId,
+    reportKeyId: "runtime-report-self",
+    reportPublicKeyPem,
+  })
   const app = await createManagementApi({
     ...deps,
     principalAuthenticator: createStaticPrincipalAuthenticator({
@@ -734,6 +751,88 @@ test("a Gateway Runtime may self-register only its authenticated runtime id", as
   )
   assert.equal(rejected.statusCode, 403)
   assert.equal(rejected.json().code, "RUNTIME_SELF_REGISTRATION_DENIED")
+  await app.close()
+})
+
+test("Gateway Runtime self-registration only replays its active provisioned trust binding", async () => {
+  let timestamp = 100
+  const modules = createInMemoryPlatformModules({ now: () => timestamp })
+  const runtimeId = "gateway-bound-runtime"
+  const reportPublicKeyPem = generateKeyPairSync("ed25519").publicKey
+    .export({ type: "spki", format: "pem" }).toString()
+  const replacementPublicKeyPem = generateKeyPairSync("ed25519").publicKey
+    .export({ type: "spki", format: "pem" }).toString()
+  const app = await createManagementApi({
+    modules,
+    resourceCatalog: modules.resources,
+    principalAuthenticator: createStaticPrincipalAuthenticator({
+      runtime: {
+        tenant_id: "tenant-acme",
+        subject_id: "service-account-bound-runtime",
+        role: "USER",
+        organization_ids: [],
+        client_id: runtimeId,
+        scopes: ["genioone-gateway-runtime"],
+      },
+    }),
+  })
+  const path = `/v1/tenants/tenant-acme/runtime-control/GATEWAY/${runtimeId}/registration`
+  const body = {
+    target_id: "gateway-bound-target",
+    oidc_client_id: runtimeId,
+    report_key_id: "bound-report-key",
+    report_public_key_pem: reportPublicKeyPem,
+  }
+  const key = { tenantId: "tenant-acme", runtimeId }
+  const trustedInput = {
+    ...key,
+    targetId: body.target_id,
+    oidcClientId: runtimeId,
+    reportKeyId: body.report_key_id,
+    reportPublicKeyPem,
+  }
+
+  const unprovisioned = await inject(app, "runtime", "PUT", path, body)
+  assert.equal(unprovisioned.statusCode, 404, unprovisioned.body)
+  assert.equal(unprovisioned.json().code, "RUNTIME_REGISTRATION_NOT_FOUND")
+  assert.equal(await modules.runtimeControl.getGatewayRuntime(key), null)
+
+  const provisioned = await modules.runtimeControl.registerGatewayRuntime(trustedInput)
+  for (const payload of [body, { ...body, status: "ACTIVE" }]) {
+    timestamp += 1
+    const replay = await inject(app, "runtime", "PUT", path, payload)
+    assert.equal(replay.statusCode, 200, replay.body)
+    assert.deepEqual(replay.json(), provisioned)
+    assert.deepEqual(await modules.runtimeControl.getGatewayRuntime(key), provisioned)
+  }
+
+  for (const mutation of [
+    { target_id: "other-gateway-target" },
+    { oidc_client_id: "other-oidc-client" },
+    { report_key_id: "replacement-report-key" },
+    { report_public_key_pem: replacementPublicKeyPem },
+    { report_public_key_pem: `${reportPublicKeyPem}\n` },
+    { status: "DISABLED" },
+    { status: "REVOKED" },
+  ]) {
+    timestamp += 1
+    const rejected = await inject(app, "runtime", "PUT", path, { ...body, ...mutation })
+    assert.equal(rejected.statusCode, 409, rejected.body)
+    assert.equal(rejected.json().code, "RUNTIME_REGISTRATION_MISMATCH")
+    assert.deepEqual(await modules.runtimeControl.getGatewayRuntime(key), provisioned)
+  }
+
+  for (const status of ["DISABLED", "REVOKED"] as const) {
+    timestamp += 1
+    const inactive = await modules.runtimeControl.registerGatewayRuntime({ ...trustedInput, status })
+    for (const payload of [body, { ...body, status: "ACTIVE" }, { ...body, status }]) {
+      timestamp += 1
+      const rejected = await inject(app, "runtime", "PUT", path, payload)
+      assert.equal(rejected.statusCode, 403, rejected.body)
+      assert.equal(rejected.json().code, "RUNTIME_REGISTRATION_NOT_ACTIVE")
+      assert.deepEqual(await modules.runtimeControl.getGatewayRuntime(key), inactive)
+    }
+  }
   await app.close()
 })
 

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { createPrivateKey, createPublicKey } from "node:crypto"
 import test from "node:test"
 
 import { createManagementApi } from "../src/app"
@@ -20,6 +21,14 @@ test("Tenant Administrator registers, provisions once, lists, and retires a Gate
         organization_ids: [],
         client_id: "management-ui",
         scopes: ["genioone-management"],
+      },
+      runtime: {
+        tenant_id: "tenant-acme",
+        subject_id: "service-account-gateway-taipei-1",
+        role: "USER",
+        organization_ids: [],
+        client_id: "gateway-taipei-1",
+        scopes: ["genioone-gateway-runtime"],
       },
     }),
   })
@@ -55,6 +64,27 @@ test("Tenant Administrator registers, provisions once, lists, and retires a Gate
   })
   assert.equal(runtime?.target_id, "genio-ai-mcp-gateway")
   assert.equal(runtime?.status, "ACTIVE")
+  const registrationPath = "/v1/tenants/tenant-acme/runtime-control/GATEWAY/gateway-taipei-1/registration"
+  const registrationPayload = {
+    target_id: bootstrap.gateway_id,
+    oidc_client_id: bootstrap.oidc.client_id,
+    report_key_id: bootstrap.report_signing.key_id,
+    report_public_key_pem: createPublicKey(createPrivateKey(bootstrap.report_signing.private_key_pem))
+      .export({ type: "spki", format: "pem" }).toString(),
+    status: "ACTIVE",
+  }
+  const replayed = await app.inject({
+    method: "PUT",
+    url: registrationPath,
+    headers: { authorization: "Bearer runtime" },
+    payload: registrationPayload,
+  })
+  assert.equal(replayed.statusCode, 200, replayed.body)
+  assert.deepEqual(replayed.json(), runtime)
+  assert.deepEqual(await modules.runtimeControl.getGatewayRuntime({
+    tenantId: "tenant-acme",
+    runtimeId: "gateway-taipei-1",
+  }), runtime)
 
   const listed = await app.inject({
     method: "GET",
@@ -81,10 +111,23 @@ test("Tenant Administrator registers, provisions once, lists, and retires a Gate
   })
   assert.equal(retired.statusCode, 200)
   assert.equal(retired.json().state, "RETIRED")
-  assert.equal((await modules.runtimeControl.getGatewayRuntime({
+  const revokedRuntime = await modules.runtimeControl.getGatewayRuntime({
     tenantId: "tenant-acme",
     runtimeId: "gateway-taipei-1",
-  }))?.status, "REVOKED")
+  })
+  assert.equal(revokedRuntime?.status, "REVOKED")
+  const revokedReplay = await app.inject({
+    method: "PUT",
+    url: registrationPath,
+    headers: { authorization: "Bearer runtime" },
+    payload: registrationPayload,
+  })
+  assert.equal(revokedReplay.statusCode, 403, revokedReplay.body)
+  assert.equal(revokedReplay.json().code, "RUNTIME_REGISTRATION_NOT_ACTIVE")
+  assert.deepEqual(await modules.runtimeControl.getGatewayRuntime({
+    tenantId: "tenant-acme",
+    runtimeId: "gateway-taipei-1",
+  }), revokedRuntime)
 
   const generatedBootstrapResponse = await app.inject({
     method: "POST",

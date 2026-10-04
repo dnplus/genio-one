@@ -2,6 +2,8 @@
 
 The CE chart is exported at `deploy/helm/genio-one`. It is a source distribution, not a hosted release or image registry. Build the six chart images and publish them to a registry your cluster can pull from before installing.
 
+<!-- TODO: publish a CE release tag from main after this installer path is on the public tip. Track main until then; do not pin an older commit. -->
+
 ## Prerequisites
 
 You need a Kubernetes cluster, `kubectl`, Helm `v4.2.4`, registry push access, and cluster-administrator coordination for the Gateway API and Envoy AI Gateway CRDs. The CE profile does not install those cluster-scoped CRDs (`aiMcpGateway.installCrds: false`). It deploys single replicas, disables API management and Ingress, and leaves hostnames and TLS under your control.
@@ -10,7 +12,7 @@ The local-cluster validation reference is kind `v0.33.0` with node image `kindes
 
 ## Build and publish images
 
-From the repository root, build all five images, tag them for your registry, and push them:
+From the repository root, build all six images, tag them for your registry, and push them:
 
 ```sh
 node tooling/ce-build-images.mjs \

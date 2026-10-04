@@ -180,6 +180,7 @@ async function main() {
         ["archify", "apps/connectors/archify/Dockerfile"],
         ["gateway", "runtimes/gateway/controller/Dockerfile"],
         ["gateway-services", "runtimes/gateway/services/Dockerfile"],
+        ["installer", "apps/platform/installer/Dockerfile"],
       ]) {
         steps.push(await run("docker", [
           "build", "--file", dockerfile, "--tag", `genioone-ce-verify-${name}:local`, ".",

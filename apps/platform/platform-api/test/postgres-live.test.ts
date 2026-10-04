@@ -207,6 +207,15 @@ test(
       })
       await app.ready()
 
+      const provisionedRuntime = await modules.runtimeControl.registerGatewayRuntime({
+        tenantId,
+        runtimeId,
+        targetId: "ai-gateway-test",
+        oidcClientId: runtimeId,
+        reportKeyId: runtimeReportSigner.keyId,
+        reportPublicKeyPem: runtimeReportSigner.publicKeyPem,
+        status: "ACTIVE",
+      })
       const registration = await jsonResponse(
         app,
         "PUT",
@@ -221,6 +230,8 @@ test(
         "live-runtime-token",
       )
       assert.equal(registration.response.statusCode, 200, registration.response.body)
+      assert.deepEqual(registration.body, provisionedRuntime)
+      assert.deepEqual(await modules.runtimeControl.getGatewayRuntime({ tenantId, runtimeId }), provisionedRuntime)
       const capabilities = await jsonResponse(
         app,
         "PUT",

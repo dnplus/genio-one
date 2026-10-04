@@ -7,13 +7,28 @@ import Fastify from "fastify"
 import { runtimeControlHttp } from "../src/capabilities/runtime-control/http"
 import { createInMemoryRuntimeControlStore } from "../src/capabilities/runtime-control/memory"
 
-test("runtime-control HTTP registers a Gateway Runtime", async () => {
+test("runtime-control HTTP confirms a provisioned Gateway Runtime without writing", async () => {
   const store = createInMemoryRuntimeControlStore()
   const app = Fastify({ logger: false })
-  await app.register(runtimeControlHttp, { store })
   const reportPublicKeyPem = generateKeyPairSync("ed25519").publicKey
     .export({ type: "spki", format: "pem" })
     .toString()
+  const registration = await store.registerGatewayRuntime({
+    tenantId: "tenant-http",
+    runtimeId: "gateway-http",
+    targetId: "gateway-target-http",
+    oidcClientId: "gateway-http",
+    reportKeyId: "report-key-http",
+    reportPublicKeyPem,
+  })
+  await app.register(runtimeControlHttp, {
+    store: {
+      ...store,
+      async registerGatewayRuntime() {
+        throw new Error("Self-registration must not call the trusted writer")
+      },
+    },
+  })
 
   const response = await app.inject({
     method: "PUT",
@@ -27,6 +42,10 @@ test("runtime-control HTTP registers a Gateway Runtime", async () => {
   })
 
   assert.equal(response.statusCode, 200, response.body)
-  assert.equal(response.json().runtime_id, "gateway-http")
+  assert.deepEqual(response.json(), registration)
+  assert.deepEqual(await store.getGatewayRuntime({
+    tenantId: "tenant-http",
+    runtimeId: "gateway-http",
+  }), registration)
   await app.close()
 })
