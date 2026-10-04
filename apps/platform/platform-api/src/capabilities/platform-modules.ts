@@ -62,7 +62,10 @@ import { createInMemoryUsageCounterStore } from "./usage-governance/memory-count
 import type { UsageCounterStore } from "./usage-governance/admission"
 import type { GatewayActivityDetailStore } from "./activities/detail-module"
 import type { GatewayActivityMaterializer, GatewayActivityStore } from "./activities/module"
-import type { PostHogGatewayActivitySink } from "./activities/posthog"
+import {
+  createPostHogGatewayActivitySink,
+  type PostHogGatewayActivitySink,
+} from "./activities/posthog"
 import type { TraceStore } from "./traces/module"
 import { createInMemoryTraceStore } from "./traces/memory"
 import type { GatewayMetricsStore } from "./metrics/module"
@@ -172,7 +175,7 @@ export interface PlatformModuleGraph {
   endpointRuntime: EndpointRuntimeStore
   activityDetails?: GatewayActivityDetailStore
   activityMaterializer?: GatewayActivityMaterializer
-  postHogGatewayActivitySink?: PostHogGatewayActivitySink
+  postHogGatewayActivitySink: PostHogGatewayActivitySink
   traces: TraceStore
   metrics: GatewayMetricsStore
   identity: IdentityDirectory
@@ -433,6 +436,9 @@ export function createInMemoryPlatformModules(
   const postHogIntegration = createInMemoryPostHogIntegrationStore({
     now: options.now,
   })
+  const postHogGatewayActivitySink = createPostHogGatewayActivitySink({
+    integrations: postHogIntegration,
+  })
   const gatewayRegistrations = createGatewayRegistrationLifecycle({
     repository: createInMemoryGatewayRegistrationRepository({ now: options.now }),
     provisioner: {
@@ -528,6 +534,7 @@ export function createInMemoryPlatformModules(
     personalCredentials,
     gatewayDiagnosticSettings,
     postHogIntegration,
+    postHogGatewayActivitySink,
     gatewayRegistrations,
     botAccessPolicy,
     demoInstallations,

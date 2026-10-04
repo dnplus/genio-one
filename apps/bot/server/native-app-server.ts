@@ -1,6 +1,7 @@
 import { ObservationLinks } from "./observation-links"
 import { observationContext, observeOperation, type ObservationContext } from "@genioone/telemetry/operation-observability"
 import { createNativeTelemetryReceiver } from "@genioone/telemetry/native-telemetry"
+import { createPostHogNativeAnalytics } from "@genioone/telemetry/posthog-native-analytics"
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
 import { mkdirSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -34,6 +35,7 @@ class ServerCodexRuntime implements CodexRuntime {
   private readonly links: ObservationLinks
   private readonly requestObservations = new Map<number | string, { context: ObservationContext; method: string; threadId?: string }>()
   private readonly telemetry: ReturnType<typeof createNativeTelemetryReceiver> | undefined
+  private readonly nativeAnalytics: ReturnType<typeof createPostHogNativeAnalytics> | undefined
   private readonly child: ChildProcessWithoutNullStreams
 
   constructor(accessToken: string, callbacks: RuntimeCallbacks, namespace?: CodexHomeNamespace, relaySecret = accessToken) {
@@ -61,7 +63,20 @@ class ServerCodexRuntime implements CodexRuntime {
     const collectorEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim() ||
       process.env.GENIO_ONE_OTEL_COLLECTOR_ORIGIN?.trim() ||
       (process.env.GENIO_ONE_OTEL_HTTP_PORT ? `http://127.0.0.1:${process.env.GENIO_ONE_OTEL_HTTP_PORT}` : "http://127.0.0.1:4318")
-    try { this.telemetry = createNativeTelemetryReceiver({ origin: collectorEndpoint, identity: namespace ?? {} }) }
+    this.nativeAnalytics = namespace?.tenantId && accessToken
+      ? createPostHogNativeAnalytics({
+        tenantId: namespace.tenantId,
+        runtimeId: namespace.runtimeSessionId,
+        accessToken,
+      })
+      : undefined
+    try {
+      this.telemetry = createNativeTelemetryReceiver({
+        origin: collectorEndpoint,
+        identity: namespace ?? {},
+        onAcceptedLogs: logs => { this.nativeAnalytics?.accept(logs) },
+      })
+    }
     catch { console.warn(JSON.stringify({ event: "codex.telemetry.receiver_unavailable", delivery: "NATIVE_TELEMETRY_UNAVAILABLE" })) }
     const otelEndpoint = this.telemetry?.origin
     const childEnvironment = codexChildEnvironment()
@@ -120,11 +135,12 @@ class ServerCodexRuntime implements CodexRuntime {
     })
     this.child.on("error", (err) => {
       this.telemetry?.close()
+      void this.nativeAnalytics?.close().catch(() => {})
       void this.links.close()
       console.error(JSON.stringify({ event: "codex.process.error", error: err instanceof Error ? err.message : String(err) }))
       callbacks.onExit(`codex error (${err instanceof Error ? err.message : String(err)})`)
     })
-    this.child.on("exit", (code, signal) => { this.telemetry?.close(); void this.links.close(); callbacks.onExit(`codex exited (${code ?? signal ?? "unknown"})`) })
+    this.child.on("exit", (code, signal) => { this.telemetry?.close(); void this.nativeAnalytics?.close().catch(() => {}); void this.links.close(); callbacks.onExit(`codex exited (${code ?? signal ?? "unknown"})`) })
   }
 
   async send(message: string) {
@@ -149,12 +165,13 @@ class ServerCodexRuntime implements CodexRuntime {
     })
   }
 
-  async updateToken(_token: string) {
+  async updateToken(token: string) {
+    this.nativeAnalytics?.updateAccessToken?.(token)
   }
 
   async close() {
     await this.links.close()
-    if (!this.child.pid || this.child.exitCode !== null || this.child.signalCode !== null) { this.telemetry?.close(); return }
+    if (!this.child.pid || this.child.exitCode !== null || this.child.signalCode !== null) { this.telemetry?.close(); await this.nativeAnalytics?.close(); return }
     await new Promise<void>((resolve) => {
       const forceKillTimer = setTimeout(() => {
         if (this.child.exitCode === null && this.child.signalCode === null) this.child.kill("SIGKILL")
@@ -163,6 +180,7 @@ class ServerCodexRuntime implements CodexRuntime {
       this.child.kill("SIGTERM")
     })
     this.telemetry?.close()
+    await this.nativeAnalytics?.close()
   }
 }
 

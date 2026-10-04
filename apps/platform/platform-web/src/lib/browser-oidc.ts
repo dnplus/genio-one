@@ -11,6 +11,7 @@ class BrowserOidcError extends Error {
 
 const verifierKey = (redirectPath: string) => `genioone.pkce.verifier:${redirectPath}`
 const stateKey = (redirectPath: string) => `genioone.pkce.state:${redirectPath}`
+const destinationKey = (redirectPath: string) => `genioone.oidc.destination:${redirectPath}`
 const refreshTokenKey = (redirectPath: string) => `genioone.oidc.refresh_token:${redirectPath}`
 
 export const BROWSER_SESSION_REFRESHED_EVENT = "genioone:browser-session-refreshed"
@@ -53,6 +54,18 @@ export function clearBrowserSession(redirectPath: string) {
   sessionStorage.removeItem(refreshTokenKey(redirectPath))
   sessionStorage.removeItem(verifierKey(redirectPath))
   sessionStorage.removeItem(stateKey(redirectPath))
+  sessionStorage.removeItem(destinationKey(redirectPath))
+}
+
+function loginDestination(redirectPath: string, value: string | null | undefined) {
+  try {
+    const url = new URL(value ?? redirectPath, location.origin)
+    if (url.origin !== location.origin || url.pathname !== redirectPath) return redirectPath
+    for (const key of ["code", "state", "session_state", "iss", "error", "error_description", "error_uri"]) url.searchParams.delete(key)
+    return `${url.pathname}${url.search}${url.hash}`
+  } catch {
+    return redirectPath
+  }
 }
 
 function base64Url(bytes: Uint8Array) {
@@ -182,6 +195,7 @@ export async function beginBrowserLogin(
   const challenge = base64Url(digest)
   sessionStorage.setItem(verifierKey(redirectPath), verifier)
   sessionStorage.setItem(stateKey(redirectPath), loginState)
+  sessionStorage.setItem(destinationKey(redirectPath), loginDestination(redirectPath, location.href))
 
   const authorization = new URL(configuration.authorization_endpoint)
   authorization.search = new URLSearchParams({
@@ -229,14 +243,18 @@ async function exchangeBrowserLogin(redirectPath: string) {
   } | null
   sessionStorage.removeItem(verifierKey(redirectPath))
   sessionStorage.removeItem(stateKey(redirectPath))
-  history.replaceState({}, "", location.pathname)
+  const destination = loginDestination(redirectPath, sessionStorage.getItem(destinationKey(redirectPath)))
+  sessionStorage.removeItem(destinationKey(redirectPath))
   if (!response.ok || !tokens?.access_token) {
+    history.replaceState({}, "", redirectPath)
     throw new BrowserOidcError("OIDC_CODE_EXCHANGE_FAILED", response.status)
   }
   persistTokens(redirectPath, {
     access_token: tokens.access_token,
     ...(tokens.refresh_token ? { refresh_token: tokens.refresh_token } : {}),
   })
+  history.replaceState({}, "", destination)
+  window.dispatchEvent(new PopStateEvent("popstate"))
   return tokens.access_token
 }
 

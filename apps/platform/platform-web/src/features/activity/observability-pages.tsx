@@ -14,8 +14,9 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import type { GatewayMetricsSummary, OverviewSnapshot, TraceSpan, TraceSummary } from "@/domain/contracts"
-import { getGatewayMetrics, listTraces, listTraceSpans } from "@/lib/product-api"
+import type { AiUsageDashboard as AiUsageDashboardData, GatewayMetricsSummary, OverviewSnapshot, TraceSpan, TraceSummary } from "@/domain/contracts"
+import { getGatewayMetrics, listTraces, listTraceSpans, loadAiUsageDashboard } from "@/lib/product-api"
+import { defaultAiUsageEpochRange } from "./ai-usage-dashboard"
 import {
   EnforcementPointFilter,
   enforcementPointLabel,
@@ -291,21 +292,93 @@ export function DashboardsPage({ tenantId, data }: { tenantId: string; data: Ove
   const [draft, setDraft] = useState<WidgetId[]>(widgets)
   const [open, setOpen] = useState(false)
   const [traceCount, setTraceCount] = useState<number | null>(null)
+  const [metrics, setMetrics] = useState<GatewayMetricsSummary | null>(() => data.gatewayMetrics)
+  const [metricsLoading, setMetricsLoading] = useState(() => data.gatewayMetrics === null)
+  const [metricsFailed, setMetricsFailed] = useState(false)
+  const [usage, setUsage] = useState<AiUsageDashboardData | null>(() => data.aiUsage)
+  const [usageLoading, setUsageLoading] = useState(() => data.aiUsage === null)
+  const [usageFailed, setUsageFailed] = useState(false)
   useEffect(() => {
     let active = true
     setTraceCount(null)
     void listTraces(tenantId).then((result) => { if (active) setTraceCount(result.traces.length) }).catch(() => { if (active) setTraceCount(null) })
     return () => { active = false }
   }, [tenantId, data])
-  const metrics = data.gatewayMetrics
+  useEffect(() => {
+    let active = true
+    if (data.gatewayMetrics) {
+      setMetrics(data.gatewayMetrics)
+      setMetricsLoading(false)
+      setMetricsFailed(false)
+      return () => { active = false }
+    }
+    setMetrics(null)
+    setMetricsLoading(true)
+    setMetricsFailed(false)
+    void getGatewayMetrics(tenantId)
+      .then((next) => {
+        if (active) setMetrics(next)
+      })
+      .catch(() => {
+        if (active) {
+          setMetrics(null)
+          setMetricsFailed(true)
+        }
+      })
+      .finally(() => {
+        if (active) setMetricsLoading(false)
+      })
+    return () => { active = false }
+  }, [data.gatewayMetrics, tenantId])
+  useEffect(() => {
+    let active = true
+    if (data.aiUsage) {
+      setUsage(data.aiUsage)
+      setUsageLoading(false)
+      setUsageFailed(false)
+      return () => { active = false }
+    }
+    const range = defaultAiUsageEpochRange()
+    setUsage(null)
+    setUsageLoading(true)
+    setUsageFailed(false)
+    void loadAiUsageDashboard(tenantId, range.from, range.to)
+      .then((next) => {
+        if (active) setUsage(next)
+      })
+      .catch(() => {
+        if (active) {
+          setUsage(null)
+          setUsageFailed(true)
+        }
+      })
+      .finally(() => {
+        if (active) setUsageLoading(false)
+      })
+    return () => { active = false }
+  }, [data.aiUsage, tenantId])
   const values: Record<WidgetId, string | number> = {
-    traffic: metrics?.request_count ?? "—",
-    latency: metrics?.average_latency_millis == null ? "—" : `${metrics.average_latency_millis.toFixed(1)} ms`,
-    errors: metrics && metrics.request_count > 0 ? `${(metrics.error_count / metrics.request_count * 100).toFixed(1)}%` : "—",
+    traffic: metricsLoading ? t("Loading…") : metrics?.request_count ?? "—",
+    latency: metricsLoading ? t("Loading…") : metrics?.average_latency_millis == null ? "—" : `${metrics.average_latency_millis.toFixed(1)} ms`,
+    errors: metricsLoading ? t("Loading…") : metrics && metrics.request_count > 0 ? `${(metrics.error_count / metrics.request_count * 100).toFixed(1)}%` : "—",
     traces: traceCount ?? "—",
-    tokens: data.aiUsage?.usage.total_tokens ?? "—",
+    tokens: usageLoading ? t("Loading…") : usage?.usage.total_tokens ?? "—",
   }
   const labels: Record<WidgetId, string> = { traffic: t("Gateway requests"), latency: t("Average latency"), errors: t("Error rate"), traces: t("Collected traces"), tokens: t("Total tokens") }
+
+  function signalDescription(widget: WidgetId) {
+    if (widget === "traces") return t("Traces returned by the current collection query; not a coverage percentage.")
+    if (widget === "tokens") {
+      if (usageLoading) return t("Loading…")
+      if (usageFailed) return t("Usage measurements are unavailable.")
+      if (!usage) return t("No measurements are available for this signal.")
+      return `${t("Sample window")}: ${new Date(usage.from * 1000).toLocaleString()} – ${new Date(usage.to * 1000).toLocaleString()}`
+    }
+    if (metricsLoading) return t("Loading…")
+    if (metricsFailed) return t("Metrics are unavailable.")
+    if (!metrics) return t("No measurements are available for this signal.")
+    return `${t(enforcementPointLabel(normalizeEnforcementPoint(metrics.enforcement_point_id) ?? "AI_GATEWAY"))} · ${t("Sample window")}: ${t("{{minutes}} minutes", { minutes: metrics.window_seconds / 60 })}`
+  }
 
   function toggle(widget: WidgetId, checked: boolean) {
     setDraft((current) => checked ? [...new Set([...current, widget])] : current.filter((item) => item !== widget))
@@ -331,7 +404,7 @@ export function DashboardsPage({ tenantId, data }: { tenantId: string; data: Ove
         </Sheet>
       } />
       <div className="grid gap-4 lg:grid-cols-2">
-        {widgets.map((widget) => <Card key={widget}><CardHeader><CardDescription>{labels[widget]}</CardDescription><CardTitle className="text-2xl tabular-nums">{values[widget]}</CardTitle></CardHeader><CardContent className="text-sm text-muted-foreground">{values[widget] === "—" ? t("No measurements are available for this signal.") : widget === "traces" ? t("Traces returned by the current collection query; not a coverage percentage.") : widget === "tokens" ? `${t("Sample window")}: ${new Date(data.aiUsage!.from * 1000).toLocaleString()} – ${new Date(data.aiUsage!.to * 1000).toLocaleString()}` : `${t(enforcementPointLabel(normalizeEnforcementPoint(metrics!.enforcement_point_id) ?? "AI_GATEWAY"))} · ${t("Sample window")}: ${t("{{minutes}} minutes", { minutes: metrics!.window_seconds / 60 })}`}</CardContent></Card>)}
+        {widgets.map((widget) => <Card key={widget}><CardHeader><CardDescription>{labels[widget]}</CardDescription><CardTitle className="text-2xl tabular-nums">{values[widget]}</CardTitle></CardHeader><CardContent className="text-sm text-muted-foreground">{signalDescription(widget)}</CardContent></Card>)}
       </div>
     </div>
   )

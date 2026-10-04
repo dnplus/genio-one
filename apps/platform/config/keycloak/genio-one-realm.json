@@ -623,6 +623,7 @@
       "name": "Codex native MCP OAuth client",
       "enabled": true,
       "publicClient": true,
+      "consentRequired": true,
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
@@ -672,7 +673,8 @@
           }
         }
       ],
-      "defaultClientScopes": ["basic", "genioone-invocation"]
+      "defaultClientScopes": ["basic", "genioone-invocation"],
+      "optionalClientScopes": ["offline_access"]
     },
     {
       "clientId": "grok",

@@ -4319,7 +4319,7 @@
       "mode": 420
     },
     "apps/bot/server/native-app-server.ts": {
-      "sha256": "ddddbbdb78f83f23eeb2889cabbdfa70d488fdb2ea33aa8676439f12d8f6ea01",
+      "sha256": "69fb2a7489aa1d11f9f79126629fd7fd258e56163f5090abfb66aecb3fe4b921",
       "mode": 420
     },
     "apps/bot/server/native-runtime-environment.test.ts": {
@@ -5571,7 +5571,7 @@
       "mode": 420
     },
     "apps/connectors/discovery/server.ts": {
-      "sha256": "da21ab390b4197b30c06840fe60e6824a8c277d0cd06feafb677459ad6019778",
+      "sha256": "e097ae41348811d003e6dc143f0fe5d54ea46e242c92de2d39ef5ab1107c0b51",
       "mode": 420
     },
     "apps/connectors/Dockerfile": {
@@ -5851,7 +5851,7 @@
       "mode": 420
     },
     "apps/platform/config/keycloak/genio-one-realm.json": {
-      "sha256": "24bc1fee69949a6c1871a15035e4b540a2422f62e2a0bd38a0225433ef225fb9",
+      "sha256": "6f042ae4649dbcbad3e3e8406b884003a927485166840e627c7756eb3fa9da34",
       "mode": 420
     },
     "apps/platform/config/keycloak/README.md": {
@@ -6023,11 +6023,11 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/app.ts": {
-      "sha256": "076cd2958cbd48bf89c0ed50e7745ed1a033838b6c8b628643264df627386845",
+      "sha256": "94e11a9cc411595a685bf33dd0e9da67a34e8ffc03bb5fb5270b3b1bf137e5a8",
       "mode": 420
     },
     "apps/platform/platform-api/src/bootstrap.ts": {
-      "sha256": "baa946e18728e9546c75919b95d186643af8a424f8abefa0e81443776870065e",
+      "sha256": "15ffe4617daf7325331e262a891ef4b426590232126128e1c10c5db5da33ca56",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/access-groups/audit.ts": {
@@ -6099,7 +6099,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/activities/http.ts": {
-      "sha256": "12b198108482cb72977721521133b2d801a4d7702b1a8acfb4d59fa2c7578fed",
+      "sha256": "d2f3ce1aef33e009f36c87f3b5fb3551b54edcdf24bea06de0ac98c9c197f562",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/activities/memory.ts": {
@@ -6111,7 +6111,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/activities/otel-clickhouse.ts": {
-      "sha256": "e61395f2040eed2a28913c1efeaa14381a0a6ef3076b0149582db82787a2bb78",
+      "sha256": "ba697e47553bbd5a096a828f899b8b047445ff3cb143765a0762717ca9f00430",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/activities/postgres.ts": {
@@ -6119,7 +6119,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/activities/posthog.ts": {
-      "sha256": "aeffc7de6144091755f739d60f6ce4f1c0d69f873e1d73f54ff494f2c10cff7c",
+      "sha256": "0f7b516525006acf97f0f6b5d431343f9ea4bcef341ccf5d5cd81412a8b88583",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/activities/usage-summary.ts": {
@@ -6295,7 +6295,11 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/discovery-mcp/http.ts": {
-      "sha256": "3f7f79c3008d22a304517b9cdfaab50cd248da31ed1c7f1f0927382a2d52734a",
+      "sha256": "9b1a1b109aa6ce2b8b65aa9d4e694d42de19727848bffbf46ea9ca7223ca620d",
+      "mode": 420
+    },
+    "apps/platform/platform-api/src/capabilities/discovery-mcp/posthog.ts": {
+      "sha256": "1f367fcc2b7354b18fab3374996294a474eaeac224b7764a400939c6d8bea1b9",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/discovery-mcp/seed.ts": {
@@ -6947,7 +6951,7 @@
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/platform-modules.ts": {
-      "sha256": "3eb2dde4afc41828e0b5a9ba2c0cc0e89cb547891075eadbd024502ab7815c0a",
+      "sha256": "faad83411d3d91b52dec3a4caf39127afd6a543ccbd0d6c10bfdc39238a55860",
       "mode": 420
     },
     "apps/platform/platform-api/src/capabilities/posthog-integration/contract.ts": {
@@ -7319,15 +7323,15 @@
       "mode": 420
     },
     "apps/platform/platform-api/test/activity-http.test.ts": {
-      "sha256": "2902e07803985d01d901a3ca53cc268ed8845b042a0bbd141b15bb878b418c8b",
+      "sha256": "11942db77735b4883b9753d180572426797bda8a3398a7e84e5f2b1d19161892",
       "mode": 420
     },
     "apps/platform/platform-api/test/activity-otel-materializer.test.ts": {
-      "sha256": "7bdfe40608279c3ac967072df3364fc1da27241f2facd834f2c8d2bd49606f48",
+      "sha256": "aee2b7f247024ca4884716099642d1d5478818515e7b60e60b52e60de611f428",
       "mode": 420
     },
     "apps/platform/platform-api/test/activity-posthog.test.ts": {
-      "sha256": "2428318caca8de87de55ace88d7a385b035506cc563987f04741f086e055b4fe",
+      "sha256": "8bba8b73e8125bc8091072a55c712dbc8bbfac62e35716a27e4686c280351b2e",
       "mode": 420
     },
     "apps/platform/platform-api/test/activity-provider-enrichment.test.ts": {
@@ -7446,8 +7450,12 @@
       "sha256": "9797923223b43b2d1273edb279ac01659d130812d484cb97e11d500dd1360169",
       "mode": 420
     },
+    "apps/platform/platform-api/test/discovery-mcp-posthog.test.ts": {
+      "sha256": "b4958dac05fca169db34a23dcd159ab50a407a7aee48a4b958ee368174e555f8",
+      "mode": 420
+    },
     "apps/platform/platform-api/test/discovery-mcp.test.ts": {
-      "sha256": "5a356d9889a26b2f324049dff51eaee9c3f92dbb2eeebb183736530bd4012b03",
+      "sha256": "47900afd2cb004a59e2b37f9140401b41af57f42202129f1203bc0c543d6e05f",
       "mode": 420
     },
     "apps/platform/platform-api/test/distillation-cancellation.test.ts": {
@@ -8267,7 +8275,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/features/activity/ai-usage-dashboard.tsx": {
-      "sha256": "dedebd3823f95150e5b4cb672b9f109dcd2385f3ce89cbd59f7869f00372ae34",
+      "sha256": "9a27b9e33de3e667912a1a50a54922579da06f3b51d0391acafe257db1b677fb",
       "mode": 420
     },
     "apps/platform/platform-web/src/features/activity/api-gateway-transaction-sheet.tsx": {
@@ -8291,7 +8299,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/features/activity/observability-pages.tsx": {
-      "sha256": "fe01e1b8fb242ea409b573361afcac36662b5022b7064bdab7125131d3881ce1",
+      "sha256": "5f07ae83193e5022eafafa4f016a2f5a17ab14e1acad934f7c67a14cddcaf926",
       "mode": 420
     },
     "apps/platform/platform-web/src/features/activity/telemetry-logs.tsx": {
@@ -8647,15 +8655,15 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/i18n/admin-governance.ts": {
-      "sha256": "a55e238419f1f471d4f2b71d11c0f988139aa7407f6a739a19f54f14d9105241",
+      "sha256": "b36cb5d08390101526819b2af33e252ea7eed3d3adee5652e358501dd0301e52",
       "mode": 420
     },
     "apps/platform/platform-web/src/lib/browser-oidc.test.ts": {
-      "sha256": "a3900157b33a5fe65f328f4e23be1764b8f1c6199d4ec65b9f3be39aaa027697",
+      "sha256": "4668947afcc47d2daf09e51fcd5bed7d0b44596374ef984f27b391e02692a305",
       "mode": 420
     },
     "apps/platform/platform-web/src/lib/browser-oidc.ts": {
-      "sha256": "6332444589b3371ed2837025f6e2d11a57a78d1fb99ef6dc5bdde8dbc1835774",
+      "sha256": "910f6cf3482c9d9b1632328de1a3dd96b1b8469b2a426ac7f92bc52457eaa8df",
       "mode": 420
     },
     "apps/platform/platform-web/src/lib/format.ts": {
@@ -8695,11 +8703,11 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/lib/product-api.test.ts": {
-      "sha256": "a435eb34eaa2f143dc5d6f17bf53042eaecc6b8aef11f4e9400deb67e4ee872d",
+      "sha256": "da65c0df256e76808a63a92d6b0bf75091a5562649a5e2a7e8a1b458dbda2726",
       "mode": 420
     },
     "apps/platform/platform-web/src/lib/product-api.ts": {
-      "sha256": "d8678d9030e977729a0a2bde597133d811f8f94513bd8851dbe03a97e15b867f",
+      "sha256": "999d23bd0c4c6f20e5fa3760e363b19954f82a5a8211469d438b181e188b706b",
       "mode": 420
     },
     "apps/platform/platform-web/src/lib/runtime-health.ts": {
@@ -8835,7 +8843,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/test/observability-pages.dom.test.tsx": {
-      "sha256": "f1cb6eb5b8064508441990e37006a69bf83dbd4c0066b964cbb8e8cfad7c0b7a",
+      "sha256": "6654712b263dcab8e0c20dd0b059bd436bb027afddccc2d4acc46cf9332e279e",
       "mode": 420
     },
     "apps/platform/platform-web/test/one-policy-drawer.dom.test.tsx": {
@@ -9487,11 +9495,11 @@
       "mode": 420
     },
     "packages/telemetry/src/fastify-observability.test.ts": {
-      "sha256": "e07084e687bd4ebb2206b0d985339fc9a68ef4d56f43a0a1e4916db910a58630",
+      "sha256": "98c0aa409f1e50c1d00f7b06365be3f2b16af7e97d07e4d86a9edf8061d1ce54",
       "mode": 420
     },
     "packages/telemetry/src/fastify-observability.ts": {
-      "sha256": "c484209037ed422fff8009f6fd3eac8f86815a001f3ca9f7c889eb3b553359a6",
+      "sha256": "27b8664d585bb7a2c6ce41df11a0d8284b719e15c6e7c0d489697bf5f2b5a783",
       "mode": 420
     },
     "packages/telemetry/src/native-telemetry.bench.ts": {
@@ -9499,11 +9507,11 @@
       "mode": 420
     },
     "packages/telemetry/src/native-telemetry.test.ts": {
-      "sha256": "4f76e05bfeec27df06b31b67f351c43d15b1fe5c490ec71046ef0d19570325e4",
+      "sha256": "723e7a3dc7f85d5d25e9de623fa31a9b917405939c60a9cde000a3dbae26d915",
       "mode": 420
     },
     "packages/telemetry/src/native-telemetry.ts": {
-      "sha256": "ca4c9554adbe52f3fb47a99aaca89c6a135571ac792b4f8997ffbc0394deb10c",
+      "sha256": "4f24d2e172d935cc2afecb17c63ff26759c7127c84f67f70556fa74c2ea4718c",
       "mode": 420
     },
     "packages/telemetry/src/operation-observability.test.ts": {
@@ -9535,7 +9543,7 @@
       "mode": 420
     },
     "packages/telemetry/src/otlp-observability.ts": {
-      "sha256": "b562b81bacea8954be1d50f6d510133b90e9d15d70ea98d6b653a3c6d2a6aaa1",
+      "sha256": "b0a4998d9c92fc662bdb8293d7a12e5bcaccf6eff36a682879109c11b5f622a3",
       "mode": 420
     },
     "packages/telemetry/src/otlp-outbox.test.ts": {
@@ -9554,12 +9562,20 @@
       "sha256": "655b1d021091d92cf05980a1b3f3bc06768b191c767fd717c2f73e8817aaab10",
       "mode": 420
     },
+    "packages/telemetry/src/posthog-native-analytics.test.ts": {
+      "sha256": "d2cd79f3d2a4ef43094e7b970a3ce47bc551e9ee3a7cfdde68313d30a0fa4ff7",
+      "mode": 420
+    },
+    "packages/telemetry/src/posthog-native-analytics.ts": {
+      "sha256": "d9619d9a3f7337927fea652bbc35447d24d6a4d4f65b9a80295e6d621dded6f7",
+      "mode": 420
+    },
     "packages/telemetry/src/posthog-product-analytics.test.ts": {
-      "sha256": "936aacd4099654d6778a201964e7c110f890af615568fbcc8828f7670c234750",
+      "sha256": "353bc27d2a219ae80aa593bdd1f6ef5e123f399f285cd7cbee2b6a7950b3a8c6",
       "mode": 420
     },
     "packages/telemetry/src/posthog-product-analytics.ts": {
-      "sha256": "0974ccce07df447a8dea4948435b8e8daf880fc87198013fc93bfc4c0f94f0f0",
+      "sha256": "03733a19ec46553282b62b5117f357d1d0db5e3b1a1f608d51ac8abc694c6fc3",
       "mode": 420
     },
     "packages/telemetry/tsconfig.json": {
@@ -9607,11 +9623,11 @@
       "mode": 420
     },
     "runtimes/gateway/controller/detail-capture.test.ts": {
-      "sha256": "2da40ef6c42a4858f539d3ed12ec91550cdab444b69dd6fff106f1d3e49cb344",
+      "sha256": "5da3c5e282907523455b440bb57c229e7243f376b6acd9d5d3f4bd91b6fec304",
       "mode": 420
     },
     "runtimes/gateway/controller/detail-capture.ts": {
-      "sha256": "4ecea473dd4080a5f570c3ad9f087a4e92abb33431d9ff853c18c4631556b06f",
+      "sha256": "ae74b36d57872addb756464bc9a3bdbd78f636aaf2f609b918be663d001ae887",
       "mode": 420
     },
     "runtimes/gateway/controller/Dockerfile": {
@@ -9739,7 +9755,7 @@
       "mode": 420
     },
     "runtimes/gateway/services/authorizer/authorizer.test.ts": {
-      "sha256": "d5d5af8aed35862a13f0c0d51b298c719399493a689cfacbd50a945fcbe7aa11",
+      "sha256": "005525119fbe829b9f0c7f8d8ee38ad586513e390ffc8d542144a5c5a422654b",
       "mode": 420
     },
     "runtimes/gateway/services/authorizer/bundle-store.ts": {
@@ -9747,7 +9763,7 @@
       "mode": 420
     },
     "runtimes/gateway/services/authorizer/grpc.ts": {
-      "sha256": "dc8b1643783370699df96c19a0eafdd2e470d33745dba7aeda07d80c41b70109",
+      "sha256": "b21d0c0104559251c9d7b93da0761af9366b92eb2372b214ed52de426b1a5ccb",
       "mode": 420
     },
     "runtimes/gateway/services/authorizer/proto/external_auth_minimal.proto": {

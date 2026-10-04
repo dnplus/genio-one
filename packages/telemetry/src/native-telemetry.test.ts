@@ -100,3 +100,116 @@ test("native telemetry rejects signal containers stored only in JSON prototype f
     assert.deepEqual(saved, [])
   } finally { receiver.close() }
 })
+
+test("native accepted logs callback receives only the Codex allowlist after durable acceptance", async () => {
+  const accepted: unknown[] = []
+  const receiver = createNativeTelemetryReceiver({
+    origin: "http://collector.test",
+    identity: { tenantId: "tenant-a", subjectId: "subject-a", runtimeSessionId: "runtime-a" },
+    persist: async () => true,
+    onAcceptedLogs: (logs) => { accepted.push(logs) },
+  })
+  try {
+    const body = {
+      resourceLogs: [{
+        resource: { attributes: [] },
+        scopeLogs: [{ logRecords: [{
+          timeUnixNano: "1700000000000000000",
+          traceId: "a".repeat(32),
+          spanId: "b".repeat(16),
+          body: { stringValue: "codex.sse_event" },
+          attributes: [
+            { key: "event.kind", value: { stringValue: "response.completed" } },
+            { key: "event.timestamp", value: { stringValue: "2026-10-03T00:00:00.000Z" } },
+            { key: "conversation.id", value: { stringValue: "conversation-secret" } },
+            { key: "model", value: { stringValue: "gpt-6-astra" } },
+            { key: "input_token_count", value: { intValue: "12" } },
+            { key: "output_token_count", value: { intValue: "7" } },
+            { key: "prompt", value: { stringValue: "do not forward" } },
+            { key: "email", value: { stringValue: "person@example.com" } },
+          ],
+        }] }],
+      }],
+    }
+    const response = await fetch(`${receiver.origin}/v1/logs`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
+    assert.equal(response.status, 200)
+    await new Promise(resolve => queueMicrotask(resolve))
+    assert.deepEqual(accepted, [[{
+      eventName: "codex.sse_event",
+      eventKind: "response.completed",
+      eventTimestamp: "2026-10-03T00:00:00.000Z",
+      observedTimestamp: "2023-11-14T22:13:20.000Z",
+      userPromptTimestamp: undefined,
+      conversationId: "conversation-secret",
+      model: "gpt-6-astra",
+      provider: undefined,
+      providerName: undefined,
+      inputTokenCount: 12,
+      outputTokenCount: 7,
+      cachedTokenCount: undefined,
+      reasoningTokenCount: undefined,
+      ttftMs: undefined,
+      callId: undefined,
+      toolName: undefined,
+      mcpServer: undefined,
+      durationMs: undefined,
+      success: undefined,
+      traceId: "a".repeat(32),
+      spanId: "b".repeat(16),
+      parentSpanId: undefined,
+      operation: undefined,
+    }]])
+    assert.equal(JSON.stringify(accepted).includes("do not forward"), false)
+    assert.equal(JSON.stringify(accepted).includes("person@example.com"), false)
+  } finally { receiver.close() }
+})
+
+test("native accepted logs reads Codex event names from event.name when the OTLP body is empty", async () => {
+  const accepted: any[] = []
+  const receiver = createNativeTelemetryReceiver({
+    origin: "http://collector.test",
+    identity: { tenantId: "tenant-a" },
+    persist: async () => true,
+    onAcceptedLogs: (logs) => { accepted.push(...logs) },
+  })
+  try {
+    const body = {
+      resourceLogs: [{
+        resource: { attributes: [] },
+        scopeLogs: [{ logRecords: [
+          { body: {}, attributes: [
+            { key: "event.name", value: { stringValue: "codex.conversation_starts" } },
+            { key: "event.timestamp", value: { stringValue: "2026-10-03T00:00:00.000Z" } },
+            { key: "conversation.id", value: { stringValue: "conversation-a" } },
+            { key: "model", value: { stringValue: "gpt-6-luna" } },
+            { key: "provider_name", value: { stringValue: "openai" } },
+          ] },
+          { body: {}, attributes: [
+            { key: "event.name", value: { stringValue: "codex.user_prompt" } },
+            { key: "event.timestamp", value: { stringValue: "2026-10-03T00:00:00.100Z" } },
+            { key: "conversation.id", value: { stringValue: "conversation-a" } },
+            { key: "prompt", value: { stringValue: "never forward" } },
+          ] },
+          { body: {}, attributes: [
+            { key: "event.name", value: { stringValue: "codex.sse_event" } },
+            { key: "event.kind", value: { stringValue: "response.completed" } },
+            { key: "event.timestamp", value: { stringValue: "2026-10-03T00:00:01.000Z" } },
+            { key: "conversation.id", value: { stringValue: "conversation-a" } },
+            { key: "model", value: { stringValue: "gpt-6-luna" } },
+            { key: "input_token_count", value: { intValue: "2" } },
+            { key: "output_token_count", value: { intValue: "3" } },
+          ] },
+        ] }],
+      }],
+    }
+    const response = await fetch(`${receiver.origin}/v1/logs`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
+    assert.equal(response.status, 200)
+    await new Promise(resolve => queueMicrotask(resolve))
+    assert.deepEqual(accepted.map(event => [event.eventName, event.providerName]), [
+      ["codex.conversation_starts", "openai"],
+      ["codex.user_prompt", undefined],
+      ["codex.sse_event", undefined],
+    ])
+    assert.equal(JSON.stringify(accepted).includes("never forward"), false)
+  } finally { receiver.close() }
+})

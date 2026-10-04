@@ -7,8 +7,40 @@ import type { HttpFetch } from "../../../../../../runtimes/gateway/services/shar
 
 interface OTelAccessLogRow {
   observed_at_millis: number | string
+  trace_id?: string | null
+  resource_tenant_id?: string | null
   attributes: Record<string, string>
 }
+
+interface OTelMcpSpanRow {
+  service_name: string | null
+  trace_id: string | null
+  span_id: string | null
+  parent_span_id: string | null
+  span_name: string | null
+  span_kind: string | null
+  correlation_id: string | null
+  resource_tenant_id: string | null
+  span_tenant_id: string | null
+  http_status: string | number | null
+  status_code: string | null
+  mcp_method: string | null
+  mcp_tool: string | null
+  error_type: string | null
+  has_exception_event: boolean | number | string | null
+  has_exception_type: boolean | number | string | null
+}
+
+const MAX_ACTIVITY_ROWS = 2_000
+const MAX_MCP_SPAN_ROWS = MAX_ACTIVITY_ROWS * 3
+const TRUSTED_MCP_PROXY_SERVICE_PATTERN = "^genio-ai-mcp-gateway(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)?$"
+const TRUSTED_MCP_FINAL_SERVICE_NAME = "ai-gateway"
+const TRUSTED_MCP_COMPLETION_SPAN_NAME = "ingress"
+const TRUSTED_MCP_COMPLETION_SPAN_KIND = "Server"
+const TRUSTED_MCP_FINAL_SPAN_NAME_PREFIX = "tools/call "
+const TRUSTED_MCP_FINAL_SPAN_KIND = "Client"
+const MCP_TOOL_RESULT_ERROR = "MCP_TOOL_RESULT_ERROR"
+const trustedMcpProxyService = new RegExp(TRUSTED_MCP_PROXY_SERVICE_PATTERN)
 
 function databaseIdentifier(value: string): string {
   if (!/^[a-zA-Z0-9_]+$/.test(value)) {
@@ -34,10 +66,14 @@ function value(attributes: Record<string, string>, name: string): string | null 
   return current && current !== "-" ? current : null
 }
 
-function integer(value: string | null): number | null {
-  if (value === null) return null
+function integer(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined) return null
   const parsed = Number(value)
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value !== "" && value !== "-" ? value : null
 }
 
 function outcome(status: number): GatewayActivityIngest["outcome"] {
@@ -89,18 +125,187 @@ export function createClickHouseGatewayActivityMaterializer(options: {
   const validatedLookback = integerParam(options.lookbackSeconds, "lookbackSeconds")
   const lookbackSeconds = Math.max(60, Math.min(3_600, validatedLookback ?? 900))
 
+  async function queryMcpSpans(
+    tenantId: string,
+    correlationIds: readonly string[],
+    ownedTraceIds: readonly string[],
+  ): Promise<OTelMcpSpanRow[]> {
+    if (correlationIds.length === 0) return []
+    const tenantScopes = [
+      `ResourceAttributes['genio.tenant.id'] = ${quote(tenantId)}`,
+      `SpanAttributes['genio.tenant.id'] = ${quote(tenantId)}`,
+    ]
+    if (ownedTraceIds.length > 0) {
+      tenantScopes.push(`(
+          (empty(ResourceAttributes['genio.tenant.id']) or ResourceAttributes['genio.tenant.id'] = '-')
+          and (empty(SpanAttributes['genio.tenant.id']) or SpanAttributes['genio.tenant.id'] = '-')
+          and TraceId in (${ownedTraceIds.map(quote).join(", ")})
+        )`)
+    }
+    const query = `
+      select
+        ServiceName as service_name,
+        TraceId as trace_id,
+        SpanId as span_id,
+        ParentSpanId as parent_span_id,
+        SpanName as span_name,
+        SpanKind as span_kind,
+        SpanAttributes['genio.correlation.id'] as correlation_id,
+        ResourceAttributes['genio.tenant.id'] as resource_tenant_id,
+        SpanAttributes['genio.tenant.id'] as span_tenant_id,
+        SpanAttributes['http.status_code'] as http_status,
+        StatusCode as status_code,
+        SpanAttributes['mcp.method.name'] as mcp_method,
+        SpanAttributes['mcp.tool.name'] as mcp_tool,
+        SpanAttributes['error.type'] as error_type,
+        has(Events.Name, 'exception') as has_exception_event,
+        arrayExists(attributes -> attributes['exception.type'] != '' and attributes['exception.type'] != '-', Events.Attributes) as has_exception_type
+      from ${database}.otel_traces
+      where (
+        match(ServiceName, ${quote(TRUSTED_MCP_PROXY_SERVICE_PATTERN)})
+        or ServiceName = ${quote(TRUSTED_MCP_FINAL_SERVICE_NAME)}
+      )
+        and Timestamp >= now() - interval ${lookbackSeconds} second
+        and (
+          (
+            match(ServiceName, ${quote(TRUSTED_MCP_PROXY_SERVICE_PATTERN)})
+            and (
+              (
+                SpanName = ${quote(TRUSTED_MCP_COMPLETION_SPAN_NAME)}
+                and SpanKind = ${quote(TRUSTED_MCP_COMPLETION_SPAN_KIND)}
+                and StatusCode in ('Error', 'Ok', 'Unset')
+                and SpanAttributes['http.status_code'] = '200'
+              )
+              or TraceId in (${ownedTraceIds.length > 0 ? ownedTraceIds.map(quote).join(", ") : quote("")})
+            )
+          )
+          or (
+            ServiceName = ${quote(TRUSTED_MCP_FINAL_SERVICE_NAME)}
+            and SpanKind = ${quote(TRUSTED_MCP_FINAL_SPAN_KIND)}
+            and startsWith(SpanName, ${quote(TRUSTED_MCP_FINAL_SPAN_NAME_PREFIX)})
+            and StatusCode in ('Error', 'Ok', 'Unset')
+            and SpanAttributes['mcp.method.name'] = 'tools/call'
+          )
+        )
+        and (
+          SpanAttributes['genio.correlation.id'] in (${correlationIds.map(quote).join(", ")})
+          or TraceId in (${ownedTraceIds.length > 0 ? ownedTraceIds.map(quote).join(", ") : quote("")})
+        )
+        and (${tenantScopes.join(" or ")})
+      order by Timestamp asc
+      limit ${MAX_MCP_SPAN_ROWS}
+      format JSONEachRow`
+    const response = await request(`${origin}/`, {
+      method: "POST",
+      headers: { authorization, "content-type": "text/plain; charset=utf-8" },
+      body: query,
+    })
+    if (!response.ok) throw new Error(`CLICKHOUSE_MCP_SPAN_QUERY_FAILED:${response.status}`)
+    return (await response.text()).split("\n").filter(Boolean).map(
+      (line) => JSON.parse(line) as OTelMcpSpanRow,
+    )
+  }
+
+  function trustedMcpSpanState(input: {
+    tenantId: string
+    correlationId: string
+    mcpMethod: string | null
+    mcpTool: string | null
+    candidates: readonly OTelAccessLogRow[]
+    spans: readonly OTelMcpSpanRow[]
+  }): "FAILED" | "COMPLETED" | null {
+    if (input.mcpMethod !== "tools/call") return null
+    const ownedTraceIds = new Set(
+      input.candidates
+        .filter((row) => stringValue(row.resource_tenant_id) === input.tenantId)
+        .map((row) => stringValue(row.trace_id))
+        .filter((traceId): traceId is string => traceId !== null),
+    )
+    const spanByKey = new Map<string, OTelMcpSpanRow>(
+      input.spans.flatMap((span) => {
+        const traceId = stringValue(span.trace_id)
+        const spanId = stringValue(span.span_id)
+        return traceId && spanId ? [[`${traceId}:${spanId}`, span] as const] : []
+      }),
+    )
+    const isTenantOwned = (span: OTelMcpSpanRow): boolean => {
+      const tenantIds = [span.resource_tenant_id, span.span_tenant_id]
+        .map(stringValue)
+        .filter((tenantId): tenantId is string => tenantId !== null)
+      if (tenantIds.some((tenantId) => tenantId !== input.tenantId)) return false
+      if (tenantIds.length > 0) return true
+      const traceId = stringValue(span.trace_id)
+      return traceId !== null && ownedTraceIds.has(traceId)
+    }
+    const isCorrelationOwned = (span: OTelMcpSpanRow): boolean => {
+      const correlationId = stringValue(span.correlation_id)
+      return correlationId === null || correlationId === input.correlationId
+    }
+    const isTrustedIngress = (span: OTelMcpSpanRow): boolean =>
+      trustedMcpProxyService.test(stringValue(span.service_name) ?? "") &&
+      span.span_name === TRUSTED_MCP_COMPLETION_SPAN_NAME &&
+      span.span_kind === TRUSTED_MCP_COMPLETION_SPAN_KIND &&
+      ["Error", "Ok", "Unset"].includes(span.status_code ?? "") &&
+      integer(span.http_status) === 200 &&
+      isTenantOwned(span) &&
+      isCorrelationOwned(span)
+    const hasTrustedIngressAncestor = (span: OTelMcpSpanRow): boolean => {
+      const traceId = stringValue(span.trace_id)
+      if (!traceId || !ownedTraceIds.has(traceId)) return false
+      const visited = new Set<string>()
+      let parentSpanId = stringValue(span.parent_span_id)
+      while (parentSpanId !== null) {
+        const key = `${traceId}:${parentSpanId}`
+        if (visited.has(key)) return false
+        visited.add(key)
+        const parent = spanByKey.get(key)
+        if (!parent) return false
+        if (!isTenantOwned(parent) || !isCorrelationOwned(parent)) return false
+        if (isTrustedIngress(parent)) return true
+        if (!trustedMcpProxyService.test(stringValue(parent.service_name) ?? "")) return false
+        parentSpanId = stringValue(parent.parent_span_id)
+      }
+      return false
+    }
+    const trusted = input.spans.filter((span) => {
+      if (span.service_name !== TRUSTED_MCP_FINAL_SERVICE_NAME) return false
+      if (stringValue(span.correlation_id) !== input.correlationId) return false
+      if (
+        span.span_kind !== TRUSTED_MCP_FINAL_SPAN_KIND ||
+        !["Error", "Ok", "Unset"].includes(span.status_code ?? "") ||
+        !span.span_name?.startsWith(TRUSTED_MCP_FINAL_SPAN_NAME_PREFIX) ||
+        span.mcp_method !== "tools/call"
+      ) return false
+      if (!hasTrustedIngressAncestor(span)) return false
+      const spanTool = stringValue(span.span_name?.slice(TRUSTED_MCP_FINAL_SPAN_NAME_PREFIX.length))
+      if (spanTool !== input.mcpTool) return false
+      const reportedTool = stringValue(span.mcp_tool)
+      if (reportedTool !== null && reportedTool !== input.mcpTool) return false
+      const tenantIds = [span.resource_tenant_id, span.span_tenant_id]
+        .map(stringValue)
+        .filter((tenantId): tenantId is string => tenantId !== null)
+      if (tenantIds.some((tenantId) => tenantId !== input.tenantId)) return false
+      return tenantIds.length === 0 || tenantIds.includes(input.tenantId)
+    })
+    if (trusted.some((span) => span.status_code === "Error")) return "FAILED"
+    if (trusted.some((span) => span.status_code === "Ok")) return "COMPLETED"
+    return null
+  }
+
   return {
     async refresh({ tenantId }) {
       const query = `
         select
           toUnixTimestamp64Milli(Timestamp) as observed_at_millis,
+          TraceId as trace_id,
+          ResourceAttributes['genio.tenant.id'] as resource_tenant_id,
           LogAttributes as attributes
         from ${database}.otel_logs
         where ResourceAttributes['genio.tenant.id'] = ${quote(tenantId)}
           and LogAttributes['genio.event.kind'] = 'ai_gateway_activity'
           and Timestamp >= now() - interval ${lookbackSeconds} second
         order by Timestamp asc
-        limit 2000
+        limit ${MAX_ACTIVITY_ROWS}
         format JSONEachRow`
       const response = await request(`${origin}/`, {
         method: "POST",
@@ -116,6 +321,65 @@ export function createClickHouseGatewayActivityMaterializer(options: {
         const correlationId = value(row.attributes, "x-request-id")
         if (!correlationId) continue
         grouped.set(correlationId, [...(grouped.get(correlationId) ?? []), row])
+      }
+
+      const mcpCorrelationIds = [...grouped.entries()]
+        .filter(([, candidates]) => candidates.some((row) =>
+          value(row.attributes, "mcp.tool.name") !== null ||
+          value(row.attributes, "mcp.method.name") === "tools/call",
+        ))
+        .map(([correlationId]) => correlationId)
+      let mcpSpans: OTelMcpSpanRow[] = []
+      let mcpSpanQuerySucceeded = mcpCorrelationIds.length === 0
+      if (mcpCorrelationIds.length > 0) {
+        try {
+          const ownedTraceIds = [...new Set(
+            mcpCorrelationIds.flatMap((correlationId) =>
+              (grouped.get(correlationId) ?? [])
+                .filter((row) => stringValue(row.resource_tenant_id) === tenantId)
+                .map((row) => stringValue(row.trace_id))
+                .filter((traceId): traceId is string => traceId !== null),
+            ),
+          )].slice(0, MAX_ACTIVITY_ROWS)
+          mcpSpans = await queryMcpSpans(
+            tenantId,
+            mcpCorrelationIds.slice(0, MAX_ACTIVITY_ROWS),
+            ownedTraceIds,
+          )
+          mcpSpanQuerySucceeded = true
+        } catch (error) {
+          process.stderr.write(`${JSON.stringify({
+            component: "gateway-activity-materializer",
+            event: "mcp-span-enrichment-failed",
+            reason: error instanceof Error ? error.message : "unknown",
+          })}\n`)
+        }
+      }
+      const mcpSpansByCorrelation = new Map<string, OTelMcpSpanRow[]>()
+      const ownedTraceIdsByCorrelation = new Map(
+        mcpCorrelationIds.map((correlationId) => [correlationId, new Set(
+          (grouped.get(correlationId) ?? [])
+            .filter((row) => stringValue(row.resource_tenant_id) === tenantId)
+            .map((row) => stringValue(row.trace_id))
+            .filter((traceId): traceId is string => traceId !== null),
+        )]),
+      )
+      for (const span of mcpSpans) {
+        const correlationIds = new Set<string>()
+        const directCorrelationId = stringValue(span.correlation_id)
+        if (directCorrelationId) correlationIds.add(directCorrelationId)
+        const traceId = stringValue(span.trace_id)
+        if (traceId) {
+          for (const [correlationId, ownedTraceIds] of ownedTraceIdsByCorrelation) {
+            if (ownedTraceIds.has(traceId)) correlationIds.add(correlationId)
+          }
+        }
+        for (const correlationId of correlationIds) {
+          mcpSpansByCorrelation.set(correlationId, [
+            ...(mcpSpansByCorrelation.get(correlationId) ?? []),
+            span,
+          ])
+        }
       }
 
       for (const [correlationId, candidates] of grouped) {
@@ -213,6 +477,22 @@ export function createClickHouseGatewayActivityMaterializer(options: {
           observedAttributes.map((attributes) => value(attributes, name)).find(
             (current): current is string => current !== null,
           ) ?? null
+        const mcpMethod = provider && value(provider.attributes, "mcp.tool.name")
+          ? value(provider.attributes, "mcp.method.name")
+          : audit.decision?.input_receipt?.mcp_method ??
+            (provider ? value(provider.attributes, "mcp.method.name") : null)
+        const mcpTool = audit.decision?.input_receipt?.mcp_tool ??
+          (provider ? value(provider.attributes, "mcp.tool.name") : null)
+        const mcpSpanState = status === 200 && mcpTool !== null
+          ? trustedMcpSpanState({
+              tenantId,
+              correlationId,
+              mcpMethod,
+              mcpTool,
+              candidates: activityCandidates,
+              spans: mcpSpansByCorrelation.get(correlationId) ?? [],
+            })
+          : null
         const event: GatewayActivityIngest = {
           correlation_id: correlationId,
           resource_id: audit.resource_id,
@@ -232,20 +512,18 @@ export function createClickHouseGatewayActivityMaterializer(options: {
           method: value(main.attributes, "method") ?? "POST",
           path: value(main.attributes, "path") ?? "/",
           status_code: status,
-          outcome: outcome(status),
-          error_code: status >= 400 ? value(main.attributes, "response_code_details") : null,
+          outcome: mcpSpanState === "FAILED" ? "FAILED" : outcome(status),
+          error_code: mcpSpanState === "FAILED"
+            ? MCP_TOOL_RESULT_ERROR
+            : status >= 400 ? value(main.attributes, "response_code_details") : null,
           latency_millis: integer(value(main.attributes, "duration")),
           upstream_attempted: value((provider ?? main).attributes, "upstream_host") !== null,
           requested_model_id: observedValue("gen_ai.request.model"),
           effective_model_id: observedValue("gen_ai.response.model"),
           provider_id: observedValue("gen_ai.provider.name"),
           connection_id: mcpConnection?.connection_id ?? selectedConnection?.connection_id ?? connectionId(backend),
-          mcp_method: provider && value(provider.attributes, "mcp.tool.name")
-            ? value(provider.attributes, "mcp.method.name")
-            : audit.decision?.input_receipt?.mcp_method ??
-              (provider ? value(provider.attributes, "mcp.method.name") : null),
-          mcp_tool: audit.decision?.input_receipt?.mcp_tool ??
-            (provider ? value(provider.attributes, "mcp.tool.name") : null),
+          mcp_method: mcpMethod,
+          mcp_tool: mcpTool,
           mcp_backend: backend,
           processor_bundle_revision: null,
           processor_request_steps: [],
@@ -283,14 +561,21 @@ export function createClickHouseGatewayActivityMaterializer(options: {
           })}\n`)
           continue
         }
-        try {
-          await options.postHog?.capture({ event: persisted })
-        } catch {
-          process.stderr.write(`${JSON.stringify({
-            component: "gateway-activity-materializer",
-            event: "posthog-projection-failed",
-            correlation_id: correlationId,
-          })}\n`)
+        const captureMcp = mcpTool === null
+          ? true
+          : status === 200
+            ? mcpSpanQuerySucceeded && mcpSpanState !== null
+            : true
+        if (captureMcp) {
+          try {
+            await options.postHog?.capture({ event: persisted })
+          } catch {
+            process.stderr.write(`${JSON.stringify({
+              component: "gateway-activity-materializer",
+              event: "posthog-projection-failed",
+              correlation_id: correlationId,
+            })}\n`)
+          }
         }
       }
     },

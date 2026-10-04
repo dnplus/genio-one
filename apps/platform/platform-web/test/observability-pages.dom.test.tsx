@@ -1,10 +1,13 @@
 import { expect, test } from "bun:test"
-import { cleanup, render, screen } from "@testing-library/react"
+import { cleanup, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { createInstance } from "i18next"
 import { I18nextProvider } from "react-i18next"
 
-import { MetricsPage, TracesPage } from "@/features/activity/observability-pages"
+import type { OverviewSnapshot } from "@/domain/contracts"
+import { DashboardsPage, MetricsPage, TracesPage } from "@/features/activity/observability-pages"
+import { createMockAiUsageDashboard, createMockGatewayMetrics } from "@/mocks/observability"
+import { createMockOverview } from "@/mocks/overview"
 
 const correlationId = "canonical-activity-correlation"
 const traceId = "a".repeat(32)
@@ -227,5 +230,42 @@ test("MetricsPage makes a metrics retrieval failure visible", async () => {
   } finally {
     cleanup()
     globalThis.fetch = originalFetch
+  }
+})
+
+test("DashboardsPage loads metrics and usage independently from the overview snapshot", async () => {
+  const originalFetch = globalThis.fetch
+  const originalWidgets = localStorage.getItem("genioone.dashboard.v1")
+  const metrics = createMockGatewayMetrics("tenant-1")
+  metrics.request_count = 123
+  const usage = createMockAiUsageDashboard("tenant-1", 1_000, 2_000)
+  usage.usage.total_tokens = 456
+  localStorage.setItem("genioone.dashboard.v1", JSON.stringify({ version: 1, widgets: ["traffic", "tokens"] }))
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = input instanceof Request ? input.url : String(input)
+    const parsed = new URL(url, "http://platform.test")
+    if (parsed.pathname.endsWith("/metrics")) return json(metrics)
+    if (parsed.pathname.endsWith("/ai-usage")) return json(usage)
+    if (parsed.pathname.endsWith("/traces")) return json({ traces: [] })
+    return json([])
+  }) as typeof fetch
+  try {
+    const i18n = createInstance()
+    await i18n.init({ lng: "en", resources: { en: { translation: {} } } })
+    const data: OverviewSnapshot = { ...createMockOverview(), aiUsage: null, gatewayMetrics: null }
+    render(
+      <I18nextProvider i18n={i18n}>
+        <DashboardsPage tenantId="tenant-1" data={data} />
+      </I18nextProvider>,
+    )
+
+    await waitFor(() => expect(screen.getByText("123")).toBeTruthy())
+    expect(screen.getByText("456")).toBeTruthy()
+    expect(screen.queryByText("No measurements are available for this signal.")).toBeNull()
+  } finally {
+    cleanup()
+    globalThis.fetch = originalFetch
+    if (originalWidgets === null) localStorage.removeItem("genioone.dashboard.v1")
+    else localStorage.setItem("genioone.dashboard.v1", originalWidgets)
   }
 })

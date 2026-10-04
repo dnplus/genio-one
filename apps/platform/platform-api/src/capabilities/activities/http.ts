@@ -92,12 +92,15 @@ export const gatewayActivityHttp: FastifyPluginAsync<GatewayActivityHttpOptions>
         tenantId: request.params.tenant_id,
         event: request.body,
       })
-      try {
-        await options.postHog?.capture({
-          event,
-        })
-      } catch (error) {
-        request.log.warn({ error }, "PostHog Gateway Activity projection failed")
+      const isMcp = event.mcp_tool !== null || event.mcp_method === "tools/call"
+      if (!isMcp || event.status_code !== 200) {
+        try {
+          await options.postHog?.capture({
+            event,
+          })
+        } catch (error) {
+          request.log.warn({ error }, "PostHog Gateway Activity projection failed")
+        }
       }
       return reply.code(201).send(event)
     },

@@ -64,6 +64,7 @@ const productJourneyActions = new Set<ProductJourneyAction>([
   "audit_opened",
   "bot_message_sent",
 ])
+const posthogUuidV7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 const maximumPendingJourneyEvents = 20
 
 let activeClient: ReturnType<typeof posthog.init> | null = null
@@ -189,6 +190,15 @@ function productEventResult(event: CaptureResult, properties: Record<string, unk
   return result
 }
 
+function posthogSessionProperties(properties: Record<string, unknown>): Record<string, string> {
+  const sessionProperties: Record<string, string> = {}
+  for (const key of ["$session_id", "$window_id"] as const) {
+    const value = properties[key]
+    if (typeof value === "string" && posthogUuidV7.test(value)) sessionProperties[key] = value
+  }
+  return sessionProperties
+}
+
 function eventForProductAnalytics(event: CaptureResult | null): CaptureResult | null {
   if (!event) return null
   const properties = event.properties ?? {}
@@ -196,6 +206,7 @@ function eventForProductAnalytics(event: CaptureResult | null): CaptureResult | 
   const transport = {
     distinct_id: properties.distinct_id,
     token: properties.token,
+    ...posthogSessionProperties(properties),
   }
   if (!productEventNames.has(event.event as ProductAnalyticsEventName)) return null
   const role = productRole(typeof properties.role === "string" ? properties.role : undefined)
@@ -272,7 +283,8 @@ function clearPageLifecycle() {
 
 function installPageLifecycle() {
   clearPageLifecycle()
-  if (!pageviewOpen || typeof window === "undefined" || typeof document === "undefined") return
+  if (typeof window === "undefined" || typeof document === "undefined") return
+  const onBeforeunload = () => capturePageleave()
   const onPagehide = () => capturePageleave()
   const onPageshow = () => {
     if (!pageviewOpen) capturePageview()
@@ -281,10 +293,12 @@ function installPageLifecycle() {
     if (document.visibilityState === "hidden") capturePageleave()
     if (document.visibilityState === "visible" && !pageviewOpen) capturePageview()
   }
+  window.addEventListener("beforeunload", onBeforeunload)
   window.addEventListener("pagehide", onPagehide)
   window.addEventListener("pageshow", onPageshow)
   document.addEventListener("visibilitychange", onVisibilityChange)
   pageLifecycleCleanup = () => {
+    window.removeEventListener("beforeunload", onBeforeunload)
     window.removeEventListener("pagehide", onPagehide)
     window.removeEventListener("pageshow", onPageshow)
     document.removeEventListener("visibilitychange", onVisibilityChange)
@@ -350,6 +364,7 @@ export async function initializePosthogProductAnalytics(input: InitializePosthog
     const configurationKey = `${input.tenantId}\u0000${configuration.host}\u0000${configuration.project_token}\u0000${input.surface}`
     if (activeConfiguration !== configurationKey) {
       if (activeClient || activeConfiguration || activeContext || initialEventsCaptured) resetPosthogProductAnalytics()
+      installPageLifecycle()
       activeClient = posthog.init(
         configuration.project_token,
         {
@@ -402,7 +417,6 @@ export async function initializePosthogProductAnalytics(input: InitializePosthog
       capturePageleave()
       activeContext = context
       capturePageview()
-      installPageLifecycle()
       flushPendingJourneyEvents()
       return
     }
@@ -413,7 +427,6 @@ export async function initializePosthogProductAnalytics(input: InitializePosthog
     }
     captureProductEventSafely("genioone_workspace_opened", {})
     capturePageview()
-    installPageLifecycle()
     initialEventsCaptured = true
     flushPendingJourneyEvents()
   } catch {

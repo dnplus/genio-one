@@ -58,12 +58,14 @@ function outboxFor(origin: string) {
 
 export async function flushOtel() { await Promise.all([...outboxes.values()].map(outbox => outbox.flush())) }
 
-export function recordHttpObservation(input: { service: string; tenantId: string; subjectId?: string; method: string; route: string; status: number; correlationId: string; traceId: string; spanId: string; parentSpanId?: string; startedAt: bigint; endedAt: bigint; details?: Record<string, string>; origin?: string }) {
+export function recordHttpObservation(input: { service: string; tenantId: string; subjectId?: string; method: string; route: string; status: number; correlationId: string; traceId: string; spanId: string; parentSpanId?: string; startedAt: bigint; endedAt: bigint; details?: Record<string, string>; outcome?: "COMPLETED" | "FAILED"; origin?: string }) {
   const resource = otelResource(input.service, input.tenantId)
   const attributes = [attribute("http.request.method", input.method), attribute("http.route", input.route), attribute("http.response.status_code", input.status), attribute("genio.correlation.id", input.correlationId), ...(input.subjectId ? [attribute("genio.subject.id", input.subjectId)] : []), ...Object.entries(input.details ?? {}).map(([key, value]) => attribute(key, value))]
   const scope = { name: "genio.http", version: "1" }
-  exportOtel("traces", { resourceSpans: [{ resource, scopeSpans: [{ scope, spans: [{ traceId: input.traceId, spanId: input.spanId, ...(input.parentSpanId ? { parentSpanId: input.parentSpanId } : {}), name: `${input.method} ${input.route}`, kind: 2, startTimeUnixNano: String(input.startedAt), endTimeUnixNano: String(input.endedAt), attributes, status: { code: input.status >= 400 ? 2 : 1 } }] }] }] }, input.origin)
-  exportOtel("logs", { resourceLogs: [{ resource, scopeLogs: [{ scope, logRecords: [{ timeUnixNano: String(input.endedAt), traceId: input.traceId, spanId: input.spanId, severityNumber: input.status >= 500 ? 17 : input.status >= 400 ? 13 : 9, severityText: input.status >= 500 ? "ERROR" : input.status >= 400 ? "WARN" : "INFO", body: { stringValue: "genio.http.request" }, attributes }] }] }] }, input.origin)
+  const failed = input.status >= 400 || input.outcome === "FAILED"
+  const error = input.status >= 500 || input.outcome === "FAILED"
+  exportOtel("traces", { resourceSpans: [{ resource, scopeSpans: [{ scope, spans: [{ traceId: input.traceId, spanId: input.spanId, ...(input.parentSpanId ? { parentSpanId: input.parentSpanId } : {}), name: `${input.method} ${input.route}`, kind: 2, startTimeUnixNano: String(input.startedAt), endTimeUnixNano: String(input.endedAt), attributes, status: { code: failed ? 2 : 1 } }] }] }] }, input.origin)
+  exportOtel("logs", { resourceLogs: [{ resource, scopeLogs: [{ scope, logRecords: [{ timeUnixNano: String(input.endedAt), traceId: input.traceId, spanId: input.spanId, severityNumber: error ? 17 : failed ? 13 : 9, severityText: error ? "ERROR" : failed ? "WARN" : "INFO", body: { stringValue: "genio.http.request" }, attributes }] }] }] }, input.origin)
   exportOtel("metrics", { resourceMetrics: [{ resource, scopeMetrics: [{ scope, metrics: [{ name: "http.server.request.duration", unit: "s", histogram: { aggregationTemporality: 1, dataPoints: [{ startTimeUnixNano: String(input.startedAt), timeUnixNano: String(input.endedAt), count: "1", sum: Number(input.endedAt - input.startedAt) / 1e9, bucketCounts: ["1"], explicitBounds: [], attributes: attributes.filter(value => METRIC_ATTRIBUTE_KEYS.has(value.key)) }] } }] }] }] }, input.origin)
 }
 

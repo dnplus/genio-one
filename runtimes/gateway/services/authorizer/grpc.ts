@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url"
 
 import grpc from "@grpc/grpc-js"
 import protoLoader from "@grpc/proto-loader"
+import { isJSONRPCResponse } from "@modelcontextprotocol/client"
 
 import type {
   AuthorizationDecision,
@@ -412,6 +413,15 @@ function requestedPublicModel(
 function mcpRequestMetadata(
   body: Record<string, unknown> | undefined,
 ): Pick<AuthorizationInput, "mcpMethod" | "mcpTool"> {
+  if (body && (Object.hasOwn(body, "result") || Object.hasOwn(body, "error"))) {
+    if (!Object.hasOwn(body, "id") ||
+      Object.hasOwn(body, "result") === Object.hasOwn(body, "error") ||
+      Object.keys(body).some((key) => !["jsonrpc", "id", "result", "error"].includes(key)) ||
+      !isJSONRPCResponse(body)) {
+      throw new Error("authorization request MCP response is invalid")
+    }
+    return { mcpMethod: "transport/response" }
+  }
   const method = body?.method
   if (typeof method !== "string" || !method.trim() || method.length > 256 || /[\u0000\r\n]/.test(method)) {
     throw new Error("authorization request body is missing MCP method")

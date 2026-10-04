@@ -46,6 +46,7 @@ test("enabled detail capture uses one shared service for direct and generated ro
     response: { body: "Streamed" },
   })
   assert.equal(direct?.spec.extProc[0].failOpen, false)
+  assert.equal(direct?.spec.extProc[0].messageTimeout, "5s")
 
   const gateway = configured.find((resource) =>
     resource.kind === "EnvoyExtensionPolicy" &&
@@ -54,6 +55,7 @@ test("enabled detail capture uses one shared service for direct and generated ro
   assert.equal(gateway?.spec.targetRefs[0].kind, "Gateway")
   assert.equal(gateway?.spec.extProc[0].backendRefs[0].name, "genio-one-detail-capture")
   assert.equal(gateway?.spec.extProc[0].failOpen, false)
+  assert.equal(gateway?.spec.extProc[0].messageTimeout, "5s")
 })
 
 test("disabled detail capture leaves the signed projection unchanged", () => {

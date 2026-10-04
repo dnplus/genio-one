@@ -234,7 +234,12 @@ test("authenticated Gateway Activity projects each tenant's enabled PostHog bind
       "tenant-one",
       "runtime-one",
       "one",
-      activity({ correlation_id: "tenant-one-correlation" }),
+      activity({
+        correlation_id: "tenant-one-correlation",
+        status_code: 500,
+        outcome: "FAILED",
+        error_code: "MCP_TOOL_RESULT_ERROR",
+      }),
     )).statusCode, 201)
     assert.equal((await activityRequest(
       app,
@@ -249,18 +254,31 @@ test("authenticated Gateway Activity projects each tenant's enabled PostHog bind
       }),
     )).statusCode, 201)
 
-    assert.equal(captured.length, 3)
+    assert.equal(captured.length, 4)
     assert.ok(captured.every((event) => event.url === "https://us.i.posthog.com/i/v0/e/"))
     const generation = captured.find((event) => event.body.event === "$ai_generation")
     const toolCall = captured.find((event) => event.body.event === "$mcp_tool_call")
+    const toolSpan = captured.find((event) => event.body.event === "$ai_span")
     const isolated = captured.find((event) => event.body.api_key === "phc_tenant_two")
     assert.ok(generation)
     assert.ok(toolCall)
+    assert.ok(toolSpan)
     assert.match(generation.body.uuid, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
     assert.match(toolCall.body.uuid, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
+    assert.match(toolSpan.body.uuid, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
     assert.notEqual(generation.body.uuid, toolCall.body.uuid)
+    assert.notEqual(generation.body.uuid, toolSpan.body.uuid)
     assert.equal(generation.body.timestamp, "2023-11-14T22:13:20.000Z")
     assert.equal(toolCall.body.timestamp, "2023-11-14T22:13:20.000Z")
+    assert.equal(toolSpan.body.timestamp, "2023-11-14T22:13:20.000Z")
+    assert.match(String(generation.body.properties.$ai_trace_id), /^[0-9a-f]{32}$/)
+    assert.equal(toolCall.body.properties.$ai_trace_id, generation.body.properties.$ai_trace_id)
+    assert.equal(toolSpan.body.properties.$ai_trace_id, generation.body.properties.$ai_trace_id)
+    assert.equal("$ai_session_id" in generation.body.properties, false)
+    assert.match(String(generation.body.properties.$ai_span_id), /^[0-9a-f]{16}$/)
+    assert.match(String(toolSpan.body.properties.$ai_span_id), /^[0-9a-f]{16}$/)
+    assert.equal(toolSpan.body.properties.$ai_parent_id, generation.body.properties.$ai_span_id)
+    assert.equal(toolSpan.body.properties.$ai_span_name, "mail2000__send_mail")
     assert.deepEqual(withoutEventIdentity(generation.body), {
       api_key: "phc_tenant_one",
       event: "$ai_generation",
@@ -270,9 +288,12 @@ test("authenticated Gateway Activity projects each tenant's enabled PostHog bind
         $geoip_disable: true,
         tenant_id: "tenant-one",
         resource_id: "resource-1",
-        status_code: 200,
+        status_code: 500,
+        $ai_trace_id: generation.body.properties.$ai_trace_id,
         $ai_model: "gpt-4.1",
-        $ai_http_status: 200,
+        $ai_span_id: generation.body.properties.$ai_span_id,
+        $ai_http_status: 500,
+        $ai_is_error: true,
         $ai_provider: "OPENAI",
         $ai_latency: 0.125,
         $ai_input_tokens: 12,
@@ -289,20 +310,174 @@ test("authenticated Gateway Activity projects each tenant's enabled PostHog bind
         $geoip_disable: true,
         tenant_id: "tenant-one",
         resource_id: "resource-1",
-        status_code: 200,
+        status_code: 500,
+        $ai_trace_id: generation.body.properties.$ai_trace_id,
         $mcp_tool_name: "mail2000__send_mail",
+        $mcp_is_error: true,
+        $mcp_server_name: "mail2000",
         $mcp_duration_ms: 125,
+      },
+    })
+    assert.deepEqual(withoutEventIdentity(toolSpan.body), {
+      api_key: "phc_tenant_one",
+      event: "$ai_span",
+      distinct_id: POSTHOG_GATEWAY_ACTIVITY_DISTINCT_ID,
+      properties: {
+        $process_person_profile: false,
+        $geoip_disable: true,
+        tenant_id: "tenant-one",
+        resource_id: "resource-1",
+        status_code: 500,
+        $ai_trace_id: generation.body.properties.$ai_trace_id,
+        $ai_span_name: "mail2000__send_mail",
+        $ai_span_id: toolSpan.body.properties.$ai_span_id,
+        $ai_parent_id: generation.body.properties.$ai_span_id,
+        $ai_http_status: 500,
+        $ai_is_error: true,
+        $ai_latency: 0.125,
+        $mcp_tool_name: "mail2000__send_mail",
+        $mcp_server_name: "mail2000",
       },
     })
     assert.equal(isolated?.body.event, "$ai_generation")
     assert.equal(isolated?.body.properties.tenant_id, "tenant-two")
+    assert.notEqual(isolated?.body.properties.$ai_trace_id, generation.body.properties.$ai_trace_id)
     assert.equal(JSON.stringify(generation?.body).includes("tenant-one-correlation"), false)
     assert.equal("capability_id" in (generation?.body.properties ?? {}), false)
-    assert.equal("$ai_trace_id" in (generation?.body.properties ?? {}), false)
   } finally {
     await app?.close()
     globalThis.fetch = originalFetch
   }
+})
+
+test("PostHog sink scopes AI observability identifiers and marks failed tool operations", async () => {
+  const captured: CapturedPostHogEvent[] = []
+  const sink = createPostHogGatewayActivitySink({
+    integrations: {
+      async get() {
+        return {
+          enabled: true,
+          host: "https://us.i.posthog.com",
+          project_id: 630618,
+          project_token: "phc_tenant_one",
+          configured_by: "tenant-admin",
+          configured_at: 1_700_000_000,
+        }
+      },
+    },
+    request: (async (input, init) => {
+      captured.push({
+        url: String(input),
+        body: JSON.parse(String(init?.body)) as CapturedPostHogEvent["body"],
+      })
+      return new Response("", { status: 200 })
+    }) as typeof fetch,
+  })
+  const event = recordedActivity({
+    correlation_id: "error-correlation",
+    session_id: "session-secret",
+    status_code: 200,
+    outcome: "FAILED",
+    error_code: "MCP_TOOL_RESULT_ERROR",
+    mcp_backend: null,
+  })
+
+  await sink.capture({ event })
+
+  assert.equal(captured.length, 3)
+  const generation = captured.find((entry) => entry.body.event === "$ai_generation")!
+  const toolCall = captured.find((entry) => entry.body.event === "$mcp_tool_call")!
+  const toolSpan = captured.find((entry) => entry.body.event === "$ai_span")!
+  const traceId = generation.body.properties.$ai_trace_id
+  const sessionId = generation.body.properties.$ai_session_id
+  assert.match(String(traceId), /^[0-9a-f]{32}$/)
+  assert.match(String(sessionId), /^[0-9a-f]{32}$/)
+  assert.equal(toolCall.body.properties.$ai_trace_id, traceId)
+  assert.equal(toolCall.body.properties.$ai_session_id, sessionId)
+  assert.equal(toolSpan.body.properties.$ai_trace_id, traceId)
+  assert.equal(toolSpan.body.properties.$ai_session_id, sessionId)
+  assert.equal(generation.body.properties.$ai_is_error, true)
+  assert.equal(generation.body.properties.$ai_http_status, 200)
+  assert.equal(toolCall.body.properties.$mcp_is_error, true)
+  assert.equal(toolCall.body.properties.status_code, 200)
+  assert.equal(toolSpan.body.properties.$ai_is_error, true)
+  assert.equal(toolSpan.body.properties.$ai_http_status, 200)
+  assert.equal(toolSpan.body.properties.$ai_parent_id, generation.body.properties.$ai_span_id)
+  assert.equal("$mcp_server_name" in toolCall.body.properties, false)
+  assert.equal(JSON.stringify(captured).includes(event.correlation_id), false)
+  assert.equal(JSON.stringify(captured).includes(event.session_id!), false)
+
+  const secondTenantEvent = { ...event, tenant_id: "tenant-two" }
+  await sink.capture({ event: secondTenantEvent })
+  const secondTenantGeneration = captured.find(
+    (entry) => entry.body.event === "$ai_generation" && entry.body.properties.tenant_id === "tenant-two",
+  )!
+  assert.notEqual(secondTenantGeneration.body.properties.$ai_trace_id, traceId)
+  assert.notEqual(secondTenantGeneration.body.properties.$ai_session_id, sessionId)
+
+  const toolOnlyEvent = {
+    ...event,
+    correlation_id: "tool-only-correlation",
+    upstream_attempted: false,
+    effective_model_id: null,
+    provider_id: null,
+    input_tokens: null,
+    output_tokens: null,
+    total_tokens: null,
+    mcp_backend: "resource-server",
+  }
+  await sink.capture({ event: toolOnlyEvent })
+  const toolOnlyCall = captured.at(-2)!
+  const toolOnlySpan = captured.at(-1)!
+  assert.equal(toolOnlyCall.body.event, "$mcp_tool_call")
+  assert.equal(toolOnlySpan.body.event, "$ai_span")
+  assert.equal(toolOnlySpan.body.properties.$ai_span_name, toolOnlyEvent.mcp_tool)
+  assert.equal(toolOnlySpan.body.properties.$mcp_tool_name, toolOnlyEvent.mcp_tool)
+  assert.equal(toolOnlySpan.body.properties.$mcp_server_name, "resource-server")
+  assert.equal("$ai_parent_id" in toolOnlySpan.body.properties, false)
+  assert.equal(
+    captured.some((entry) => entry.body.event === "$ai_generation" && entry.body.properties.$ai_trace_id === toolOnlySpan.body.properties.$ai_trace_id),
+    false,
+  )
+})
+
+test("PostHog sink keeps an immutable final MCP capture per stable event UUID", async () => {
+  const captured: CapturedPostHogEvent[] = []
+  const sink = createPostHogGatewayActivitySink({
+    integrations: {
+      async get() {
+        return {
+          enabled: true,
+          host: "https://us.i.posthog.com",
+          project_id: 630618,
+          project_token: "phc_tenant_one",
+          configured_by: "tenant-admin",
+          configured_at: 1_700_000_000,
+        }
+      },
+    },
+    request: (async (input, init) => {
+      captured.push({
+        url: String(input),
+        body: JSON.parse(String(init?.body)) as CapturedPostHogEvent["body"],
+      })
+      return new Response("", { status: 200 })
+    }) as typeof fetch,
+  })
+  const finalEvent = recordedActivity({
+    correlation_id: "late-mcp-error-correlation",
+    status_code: 200,
+    outcome: "FAILED" as const,
+    error_code: "MCP_TOOL_RESULT_ERROR",
+  })
+
+  await sink.capture({ event: finalEvent })
+  await sink.capture({ event: finalEvent })
+
+  assert.equal(captured.length, 3)
+  assert.equal(captured.find((entry) => entry.body.event === "$ai_generation")?.body.properties.$ai_is_error, true)
+  assert.equal(captured.find((entry) => entry.body.event === "$mcp_tool_call")?.body.properties.$mcp_is_error, true)
+  assert.equal(captured.find((entry) => entry.body.event === "$ai_span")?.body.properties.$ai_is_error, true)
 })
 
 test("Gateway Activity direct ingest and materializer share the live PostHog sink", async () => {
@@ -371,12 +546,12 @@ test("Gateway Activity direct ingest and materializer share the live PostHog sin
       "runtime",
       activity({
         correlation_id: "direct-and-materialized-correlation",
-        upstream_attempted: false,
-        effective_model_id: null,
-        provider_id: null,
+        status_code: 500,
+        outcome: "FAILED",
+        error_code: "UPSTREAM_FAILURE",
       }),
     )).statusCode, 201)
-    assert.equal(captured.length, 1)
+    assert.equal(captured.length, 3)
 
     const listed = await app.inject({
       method: "GET",
@@ -385,7 +560,7 @@ test("Gateway Activity direct ingest and materializer share the live PostHog sin
     })
     assert.equal(listed.statusCode, 200)
     assert.equal(materializerCaptures, 1)
-    assert.equal(captured.length, 1)
+    assert.equal(captured.length, 3)
   } finally {
     await app?.close()
     globalThis.fetch = originalFetch
@@ -531,7 +706,7 @@ test("PostHog sink retries a failed Activity capture", async () => {
   assert.equal(calls, 2)
 })
 
-test("PostHog sink suppresses irrelevant changes and captures enrichment and binding changes", async () => {
+test("PostHog sink suppresses changes after immutable capture and follows binding identity", async () => {
   const captured: CapturedPostHogEvent[] = []
   let host: "https://us.i.posthog.com" | "https://eu.i.posthog.com" = "https://us.i.posthog.com"
   let projectId = 630618
@@ -578,20 +753,19 @@ test("PostHog sink suppresses irrelevant changes and captures enrichment and bin
   })
   assert.equal(captured.length, 1)
   await sink.capture({ event: { ...event, output_tokens: 8 } })
-  assert.equal(captured.length, 2)
+  assert.equal(captured.length, 1)
   projectToken = "phc_tenant_one_rotated"
   await sink.capture({ event })
-  assert.equal(captured.length, 3)
-  assert.equal(captured[2]?.body.api_key, "phc_tenant_one_rotated")
+  assert.equal(captured.length, 1)
   host = "https://eu.i.posthog.com"
   projectId = 630619
   projectToken = "phc_tenant_two"
   await sink.capture({ event })
 
-  assert.equal(captured.length, 4)
-  assert.equal(captured[1]?.body.properties.$ai_output_tokens, 8)
-  assert.equal(captured[3]?.url, "https://eu.i.posthog.com/i/v0/e/")
-  assert.equal(captured[3]?.body.api_key, "phc_tenant_two")
+  assert.equal(captured.length, 2)
+  assert.equal(captured[0]?.body.properties.$ai_output_tokens, undefined)
+  assert.equal(captured[1]?.url, "https://eu.i.posthog.com/i/v0/e/")
+  assert.equal(captured[1]?.body.api_key, "phc_tenant_two")
 })
 
 test("PostHog transport failure leaves an authenticated Gateway Activity successful", async () => {

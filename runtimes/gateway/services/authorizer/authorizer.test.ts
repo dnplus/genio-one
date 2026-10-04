@@ -1706,6 +1706,149 @@ test("Envoy gRPC ext_authz authorizes authenticated MCP GET and DELETE transport
   }
 })
 
+function mcpCheckRequest(body: unknown, headers: Record<string, string> = {
+  "x-request-id": input.correlationId,
+  "x-genio-verified-subject": input.subjectId,
+  "x-genio-verified-client": input.actingClientId,
+}) {
+  return checkRequest({
+    attributes: {
+      context_extensions: {
+        tenant_id: input.tenantId,
+        resource_id: input.resourceId,
+        capability_id: input.capabilityId,
+        request_protocol: "MCP",
+      },
+      request: { http: { method: "POST", headers, body: JSON.stringify(body) } },
+    },
+  })
+}
+
+test("Envoy gRPC ext_authz authorizes MCP JSON-RPC success and error responses through One Policy", async () => {
+  const originalNow = Date.now
+  Date.now = () => now * 1000
+  const decisions: AuthorizationDecisionEvent[] = []
+  const resolvedMethods: Array<string | undefined> = []
+  const { client, stop } = await startAuthorizationClient(
+    { async current() { return bundleSnapshot() } },
+    async (value) => { resolvedMethods.push(value.mcpMethod); return [] },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    (event) => { decisions.push(event) },
+  )
+  try {
+    for (const body of [
+      { jsonrpc: "2.0", id: 0, result: {} },
+      { jsonrpc: "2.0", id: "peer-roots", result: { roots: [] } },
+      { jsonrpc: "2.0", id: "peer-unsupported", error: { code: -32601, message: "Method not found" } },
+      { jsonrpc: "2.0", id: "peer-error", error: { code: -32603, message: "Internal error", data: { retryable: false } } },
+    ]) {
+      const response = await check(client, mcpCheckRequest(body))
+      assert.equal(response.status.code, grpc.status.OK)
+      assert.equal(Boolean(response.denied_response), false)
+      assert.equal(decisions.at(-1)?.input.mcpMethod, "transport/response")
+      assert.equal(decisions.at(-1)?.input.mcpTool, undefined)
+      assert.equal(decisions.at(-1)?.decision.reason, "ALLOWED_BY_RULE")
+      assert.equal(resolvedMethods.at(-1), "transport/response")
+      assert.equal(decisions.at(-1)?.input.actionDigest, executionActionDigest({
+        method: "POST", path: "/", body: JSON.stringify(body),
+      }))
+    }
+    assert.equal(decisions.length, 4)
+  } finally {
+    Date.now = originalNow
+    await stop()
+  }
+})
+
+test("Envoy gRPC ext_authz rejects malformed or mixed MCP JSON-RPC response envelopes", async () => {
+  const { client, stop } = await startAuthorizationClient({ async current() { return bundleSnapshot() } })
+  try {
+    for (const body of [
+      { id: 1, result: {} },
+      { jsonrpc: "1.0", id: 1, result: {} },
+      { jsonrpc: "2.0", result: {} },
+      { jsonrpc: "2.0", id: true, result: {} },
+      { jsonrpc: "2.0", id: null, result: {} },
+      { jsonrpc: "2.0", id: 1, result: null },
+      { jsonrpc: "2.0", id: 1, result: [] },
+      { jsonrpc: "2.0", id: 1, error: null },
+      { jsonrpc: "2.0", id: 1, error: {} },
+      { jsonrpc: "2.0", id: 1, error: { code: "-32601", message: "Method not found" } },
+      { jsonrpc: "2.0", id: 1, error: { code: -32601, message: 123 } },
+      { jsonrpc: "2.0", id: 1, result: {}, error: { code: -32601, message: "Method not found" } },
+      { jsonrpc: "2.0", id: 1, result: {}, params: {} },
+      { jsonrpc: "2.0", id: 1, result: {}, method: "tools/call", params: { name: "issues.search", arguments: {} } },
+      { jsonrpc: "2.0", id: 1, result: {}, method: "tools/call", params: { name: "issues.delete", arguments: {} } },
+      { jsonrpc: "2.0", id: 1, result: {}, unexpected: true },
+      { jsonrpc: "2.0", id: 1 },
+    ]) {
+      const response = await check(client, mcpCheckRequest(body))
+      assert.equal(response.status.code, grpc.status.UNAUTHENTICATED)
+      assert.equal(response.denied_response.status.code, 401)
+      assert.match(response.denied_response.body, /UNVERIFIED_IDENTITY_CONTEXT/)
+    }
+  } finally {
+    await stop()
+  }
+})
+
+test("Envoy gRPC ext_authz requires verified identity and an MCP entitlement for response transport", async () => {
+  const originalNow = Date.now
+  Date.now = () => now * 1000
+  let activeBundle = bundle
+  const resolvedMethods: Array<string | undefined> = []
+  const { client, stop } = await startAuthorizationClient(
+    { async current() { return { ...bundleSnapshot(), bundle: activeBundle } } },
+    async (value) => { resolvedMethods.push(value.mcpMethod); return [] },
+  )
+  const body = { jsonrpc: "2.0", id: "peer-response", result: {} }
+  try {
+    const unverifiedHeaders: Array<Record<string, string>> = [
+      { "x-request-id": input.correlationId, "mcp-session-id": "opaque-session" },
+      { "x-request-id": input.correlationId, "authorization": "Bearer unverified-test-value", "mcp-session-id": "opaque-session" },
+      { "x-request-id": input.correlationId, "x-genio-verified-subject": input.subjectId },
+      { "x-request-id": input.correlationId, "x-genio-verified-client": input.actingClientId },
+    ]
+    for (const headers of unverifiedHeaders) {
+      const response = await check(client, mcpCheckRequest(body, headers))
+      assert.equal(response.status.code, grpc.status.UNAUTHENTICATED)
+      assert.equal(response.denied_response.status.code, 401)
+    }
+    const unentitledHeaders: Array<Record<string, string>> = [
+      { "x-request-id": input.correlationId, "x-genio-verified-subject": "unentitled-person", "x-genio-verified-client": input.actingClientId },
+      { "x-request-id": input.correlationId, "x-genio-verified-subject": input.subjectId, "x-genio-verified-client": "unentitled-client" },
+    ]
+    for (const headers of unentitledHeaders) {
+      const response = await check(client, mcpCheckRequest(body, headers))
+      assert.equal(response.status.code, grpc.status.PERMISSION_DENIED)
+      assert.equal(response.denied_response.status.code, 403)
+    }
+    for (const rules of [
+      [],
+      [{ ...bundle.rules[0]!, mcp_tools: [] }],
+      [{ ...bundle.rules[0]!, disposition: "DENY" as const }],
+    ]) {
+      activeBundle = { ...bundle, rules }
+      const response = await check(client, mcpCheckRequest(body))
+      assert.equal(response.status.code, grpc.status.PERMISSION_DENIED)
+      assert.equal(response.denied_response.status.code, 403)
+    }
+    activeBundle = bundle
+    const toolResponse = await check(client, mcpCheckRequest({
+      jsonrpc: "2.0", id: "tool-denied", method: "tools/call", params: { name: "issues.delete", arguments: {} },
+    }))
+    assert.equal(toolResponse.status.code, grpc.status.PERMISSION_DENIED)
+    assert.equal(toolResponse.denied_response.status.code, 403)
+    assert.equal(resolvedMethods.length, 0)
+  } finally {
+    Date.now = originalNow
+    await stop()
+  }
+})
+
 test("Envoy gRPC ext_authz injects MCP OAuth headers and fails closed when resolution fails", async () => {
   const originalNow = Date.now
   Date.now = () => now * 1000

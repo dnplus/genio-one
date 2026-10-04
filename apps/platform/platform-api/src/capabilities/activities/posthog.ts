@@ -8,7 +8,7 @@ export const POSTHOG_GATEWAY_ACTIVITY_DISTINCT_ID = "genioone-gateway-activity"
 type CaptureProperties = Record<string, string | number | boolean>
 
 interface PostHogCapture {
-  event: "$ai_generation" | "$mcp_tool_call"
+  event: "$ai_generation" | "$mcp_tool_call" | "$ai_span"
   properties: CaptureProperties
 }
 
@@ -36,20 +36,62 @@ export interface PostHogGatewayActivitySinkOptions {
 function contextProperties(input: {
   event: GatewayActivityEvent
 }): CaptureProperties {
-  return {
+  const traceId = scopedHash({
+    namespace: "trace",
+    tenantId: input.event.tenant_id,
+    value: input.event.correlation_id,
+  }).slice(0, 32)
+  const properties: CaptureProperties = {
     $process_person_profile: false,
     $geoip_disable: true,
     tenant_id: input.event.tenant_id,
     resource_id: input.event.resource_id,
     status_code: input.event.status_code,
+    $ai_trace_id: traceId,
   }
+  if (input.event.session_id) {
+    properties.$ai_session_id = scopedHash({
+      namespace: "session",
+      tenantId: input.event.tenant_id,
+      value: input.event.session_id,
+    }).slice(0, 32)
+  }
+  return properties
+}
+
+function scopedHash(input: {
+  namespace: string
+  tenantId: string
+  value: string
+}): string {
+  return createHash("sha256")
+    .update(input.namespace)
+    .update("\0")
+    .update(input.tenantId)
+    .update("\0")
+    .update(input.value)
+    .digest("hex")
+}
+
+function isError(event: GatewayActivityEvent): boolean {
+  return event.status_code >= 400 || event.outcome === "FAILED" || event.error_code !== null
+}
+
+function spanId(event: GatewayActivityEvent, namespace: "generation" | "tool"): string {
+  return scopedHash({
+    namespace: `${namespace}-span`,
+    tenantId: event.tenant_id,
+    value: event.correlation_id,
+  }).slice(0, 16)
 }
 
 function generationProperties(event: GatewayActivityEvent, context: CaptureProperties): CaptureProperties {
   const properties: CaptureProperties = {
     ...context,
     $ai_model: event.effective_model_id!,
+    $ai_span_id: spanId(event, "generation"),
     $ai_http_status: event.status_code,
+    $ai_is_error: isError(event),
   }
   if (event.provider_id) properties.$ai_provider = event.provider_id
   if (event.latency_millis !== null) properties.$ai_latency = event.latency_millis / 1_000
@@ -75,9 +117,25 @@ function capturesForGatewayActivity(input: {
     const properties: CaptureProperties = {
       ...context,
       $mcp_tool_name: event.mcp_tool,
+      $mcp_is_error: isError(event),
     }
+    if (event.mcp_backend) properties.$mcp_server_name = event.mcp_backend
     if (event.latency_millis !== null) properties.$mcp_duration_ms = event.latency_millis
     captures.push({ event: "$mcp_tool_call", properties })
+    const spanProperties: CaptureProperties = {
+      ...context,
+      $ai_span_name: event.mcp_tool,
+      $ai_span_id: spanId(event, "tool"),
+      $ai_http_status: event.status_code,
+      $ai_is_error: isError(event),
+      $mcp_tool_name: event.mcp_tool,
+    }
+    if (event.mcp_backend) spanProperties.$mcp_server_name = event.mcp_backend
+    if (event.upstream_attempted && event.effective_model_id) {
+      spanProperties.$ai_parent_id = spanId(event, "generation")
+    }
+    if (event.latency_millis !== null) spanProperties.$ai_latency = event.latency_millis / 1_000
+    captures.push({ event: "$ai_span", properties: spanProperties })
   }
   return captures
 }
@@ -103,14 +161,14 @@ function captureUuid(input: {
 function captureKey(input: {
   host: string
   projectId: number
-  request: PostHogCaptureRequest
+  uuid: string
 }): string {
   return createHash("sha256")
     .update(input.host)
     .update("\0")
     .update(String(input.projectId))
     .update("\0")
-    .update(JSON.stringify(input.request))
+    .update(input.uuid)
     .digest("hex")
 }
 
@@ -188,7 +246,7 @@ export function createPostHogGatewayActivitySink(
           key: captureKey({
             host,
             projectId,
-            request: body,
+            uuid: body.uuid,
           }),
           url,
           body,

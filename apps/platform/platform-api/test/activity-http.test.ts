@@ -7,6 +7,63 @@ import { gatewayActivityHttp } from "../src/capabilities/activities/http"
 import type { GatewayActivityEvent, GatewayActivityIngest } from "../src/capabilities/activities/contract"
 import { createInMemoryGatewayActivityStore } from "../src/capabilities/activities/memory"
 
+function activity(overrides: Partial<GatewayActivityIngest> = {}): GatewayActivityIngest {
+  return {
+    correlation_id: "activity-correlation",
+    resource_id: "resource-1",
+    capability_id: "mcp.invoke",
+    application_id: null,
+    subject_id: null,
+    acting_client_id: null,
+    session_id: null,
+    entitlement_id: null,
+    usage_admission_id: null,
+    usage_admission_disposition: "NOT_APPLICABLE",
+    usage_admission_reason: null,
+    consumer_organization_id: null,
+    resource_owner_organization_id: null,
+    use_case_id: null,
+    enforcement_point_id: "AI_GATEWAY",
+    route: "MANAGED",
+    method: "POST",
+    path: "/mcp",
+    status_code: 200,
+    outcome: "COMPLETED",
+    error_code: null,
+    latency_millis: 125,
+    upstream_attempted: true,
+    requested_model_id: null,
+    effective_model_id: null,
+    provider_id: null,
+    connection_id: null,
+    mcp_method: "tools/call",
+    mcp_tool: "mail2000__read_mail",
+    mcp_backend: "mail2000",
+    processor_bundle_revision: null,
+    processor_request_steps: [],
+    processor_response_steps: [],
+    data_classifications: [],
+    safety_decisions: [],
+    input_tokens: null,
+    output_tokens: null,
+    total_tokens: null,
+    route_mode: null,
+    route_lease_id: null,
+    route_lease_reused: null,
+    provider_credential_profile_id: null,
+    provider_credential_profile_revision: null,
+    provider_credential_strategy_digest: null,
+    routing_policy_id: null,
+    routing_revision: null,
+    candidate_set_digest: null,
+    detail_availability: "NOT_CAPTURED",
+    detail_ref: null,
+    detail_expires_at: null,
+    occurred_at: 1_700_000_000,
+    ...overrides,
+  }
+}
+
 test("Activity HTTP ingest preserves false and null Session Lease reused values", async () => {
   const received: GatewayActivityIngest[] = []
   const projected: GatewayActivityEvent[] = []
@@ -270,6 +327,46 @@ test("Activity HTTP ingest preserves false and null Session Lease reused values"
     timeline.json().events.map((event: { correlation_id: string }) => event.correlation_id),
     ["correlation-1", "correlation-2"],
   )
+  await app.close()
+})
+
+test("HTTP 200 MCP ingest waits for a trusted completion span while HTTP failures project directly", async () => {
+  const projected: GatewayActivityEvent[] = []
+  const store = createInMemoryGatewayActivityStore()
+  const app = Fastify()
+  await app.register(gatewayActivityHttp, {
+    authorizeRuntime: async () => {},
+    store,
+    postHog: {
+      async capture({ event }) {
+        projected.push(event)
+      },
+    },
+  })
+
+  const semanticResult = await app.inject({
+    method: "POST",
+    url: "/v1/tenants/tenant-1/runtime-control/GATEWAY/runtime-1/activities",
+    payload: activity({ correlation_id: "mcp-http-200" }),
+  })
+  assert.equal(semanticResult.statusCode, 201)
+  assert.equal(projected.length, 0)
+  assert.equal((await store.get!({ tenantId: "tenant-1", correlationId: "mcp-http-200" }))?.status_code, 200)
+
+  const transportFailure = await app.inject({
+    method: "POST",
+    url: "/v1/tenants/tenant-1/runtime-control/GATEWAY/runtime-1/activities",
+    payload: activity({
+      correlation_id: "mcp-http-500",
+      status_code: 500,
+      outcome: "FAILED",
+      error_code: "UPSTREAM_FAILURE",
+    }),
+  })
+  assert.equal(transportFailure.statusCode, 201)
+  assert.equal(projected.length, 1)
+  assert.equal(projected[0]?.correlation_id, "mcp-http-500")
+  assert.equal(projected[0]?.status_code, 500)
   await app.close()
 })
 

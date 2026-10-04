@@ -251,12 +251,6 @@ export async function loadOverview(tenantId: string, role?: IdentitySession["rol
   const tenant = encodeURIComponent(tenantId)
   const base = `/v1/tenants/${tenant}`
   const canLoadTenantAudit = canReadTenantAudit(role)
-  const analyticsTo = Math.floor(Date.now() / 1000)
-  const analyticsFrom = analyticsTo - defaultGatewayMetricsWindowSeconds
-  const analyticsQuery = new URLSearchParams({
-    from: String(analyticsFrom),
-    to: String(analyticsTo),
-  })
   const overviewResults =
     await Promise.all([
       settled("Resources", loadResources(tenantId), []),
@@ -271,12 +265,6 @@ export async function loadOverview(tenantId: string, role?: IdentitySession["rol
         requestJson<ApiGatewayActivityInventory>(`${base}/api-activities?limit=100`),
         { events: [] },
       ),
-      settled(
-        "AI Usage analytics",
-        requestJson<AiUsageDashboard>(`${base}/ai-usage?${analyticsQuery}`),
-        null,
-      ),
-      settled("Gateway metrics", getGatewayMetrics(tenantId, defaultGatewayMetricsWindowSeconds), null),
       canLoadTenantAudit ? settled("Audit", loadAuditEvents(tenantId), []) : notRequested([] as AuditEvent[]),
       canLoadTenantAudit ? settled(
         "Endpoint enrolled audit",
@@ -322,7 +310,7 @@ export async function loadOverview(tenantId: string, role?: IdentitySession["rol
       settled("Gateway Sites", requestJson<GatewayFleetAvailability>(`${base}/gateway-sites`), null),
       settled("Platform health", requestJson<{ status: string }>("/healthz"), null),
     ])
-  const [resources, apiEnvironmentDeployments, activity, apiActivity, aiUsage, gatewayMetrics, auditEvents, endpointEnrolledEvents, endpointRevokedEvents, endpointSessionRejectedEvents, siemDestination, siemDeliveries, accessRequests, ownedEntitlements, accessNotifications, apiVersionMigrationNotices, resourceOnboardingRequests, identity, agentDelegations, executionGrantRequests, agentExtensions, accessGroups, organizations, applications, runtimes, gatewayRegistrations, gatewaySites, health] = overviewResults
+  const [resources, apiEnvironmentDeployments, activity, apiActivity, auditEvents, endpointEnrolledEvents, endpointRevokedEvents, endpointSessionRejectedEvents, siemDestination, siemDeliveries, accessRequests, ownedEntitlements, accessNotifications, apiVersionMigrationNotices, resourceOnboardingRequests, identity, agentDelegations, executionGrantRequests, agentExtensions, accessGroups, organizations, applications, runtimes, gatewayRegistrations, gatewaySites, health] = overviewResults
 
   const platformConnections = (await Promise.all(resources.value.map(async (resource) => {
     try {
@@ -406,8 +394,8 @@ export async function loadOverview(tenantId: string, role?: IdentitySession["rol
     connections: platformConnections,
     activity: activity.value,
     apiActivity: apiActivity.value,
-    aiUsage: aiUsage.value,
-    gatewayMetrics: gatewayMetrics.value,
+    aiUsage: null,
+    gatewayMetrics: null,
     auditEvents: auditEvents.value.map(normalizeAuditEvent),
     endpointSecurityEvents: [...endpointEnrolledEvents.value, ...endpointRevokedEvents.value, ...endpointSessionRejectedEvents.value]
       .filter(isDecisionAuditEvent)

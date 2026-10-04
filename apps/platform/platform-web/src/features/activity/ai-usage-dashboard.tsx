@@ -45,6 +45,10 @@ function epochRange(range: DateRange) {
   return { from, to }
 }
 
+export function defaultAiUsageEpochRange() {
+  return epochRange({ from: dateInput(6), to: dateInput(0) })
+}
+
 function formatCost(data: AiUsageDashboardData, language: string) {
   if (!data.cost_by_currency.length) return "—"
   return data.cost_by_currency

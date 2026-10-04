@@ -125,6 +125,33 @@ test("overview reports each settled source failure once", async () => {
   }
 })
 
+test("overview does not wait for secondary analytics before returning management data", async () => {
+  const originalFetch = globalThis.fetch
+  let metricsRequested = false
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = input instanceof Request ? input.url : String(input)
+    if (url.includes("/metrics?")) {
+      metricsRequested = true
+      return await new Promise<Response>(() => {})
+    }
+    return new Response(JSON.stringify(responseFor(url)), {
+      headers: { "content-type": "application/json" },
+      status: 200,
+    })
+  }) as typeof fetch
+  try {
+    const overview = await Promise.race([
+      loadOverview("tenant-acme", "ORGANIZATION_ADMINISTRATOR"),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("OVERVIEW_CORE_LOAD_TIMEOUT")), 500)),
+    ])
+    assert.equal(metricsRequested, false)
+    assert.equal(overview.gatewayMetrics, null)
+    assert.equal(overview.aiUsage, null)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test("live and mock overview omit legacy policy authority", async () => {
   const originalFetch = globalThis.fetch
   const originalSessionStorage = globalThis.sessionStorage

@@ -63,6 +63,7 @@ function captureExtProc(namespace: string) {
       response: { body: "Streamed" },
     },
     failOpen: false,
+    messageTimeout: "5s",
   }
 }
 

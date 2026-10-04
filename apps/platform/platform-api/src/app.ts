@@ -4,8 +4,9 @@ import { instrumentModuleGraph } from "@genioone/telemetry/operation-observabili
 import { registerHttpObservability } from "@genioone/telemetry/fastify-observability"
 import { permissionPreviewHttp } from "./capabilities/one-policy/permission-preview"
 import { accessGroupHttp } from "./capabilities/access-groups/http"
-import { discoveryMcpHttp } from "./capabilities/discovery-mcp/http"
+import { discoveryMetadataUrl, discoveryMcpHttp, discoveryTenantIdFromUrl } from "./capabilities/discovery-mcp/http"
 import { memoryHttp } from "./capabilities/memories/http"
+import { createDiscoveryMcpPostHogSink, type DiscoveryMcpPostHogSink } from "./capabilities/discovery-mcp/posthog"
 import type { InstalledConnectorDeployment } from "./capabilities/connections/installed-connectors"
 import swagger from "@fastify/swagger"
 import swaggerUi from "@fastify/swagger-ui"
@@ -43,7 +44,6 @@ import { mcpDiscoveryHttp } from "./capabilities/mcp-discovery/http"
 import { mcpOAuthHttp } from "./capabilities/mcp-oauth/http"
 import { personalConnectionHttp } from "./capabilities/mcp-oauth/personal-http"
 import { gatewayActivityHttp } from "./capabilities/activities/http"
-import { createPostHogGatewayActivitySink } from "./capabilities/activities/posthog"
 import { endpointActivityHttp } from "./capabilities/endpoint-activities/http"
 import { endpointRuntimeHttp } from "./capabilities/endpoint-runtime/http"
 import { traceHttp } from "./capabilities/traces/http"
@@ -106,6 +106,8 @@ export interface ManagementApiDependencies {
     management_client_id: string
     management_scopes: string[]
   }
+  mcpOAuthPublicOrigin?: string
+  discoveryMcpPostHog?: DiscoveryMcpPostHogSink
   /** Absent when no Keycloak Admin credential is configured; login-method routes stay unregistered. */
   identityProviders?: IdentityProviderRegistry
   /** Mirrors Subject suspension into the identity provider when configured. */
@@ -138,6 +140,18 @@ function originFromUrl(value: string): string | null {
   }
 }
 
+function assertMcpOAuthPublicOrigin(value: string | undefined): void {
+  if (!value) return
+  try {
+    const origin = new URL(value)
+    if (!["http:", "https:"].includes(origin.protocol) || origin.username || origin.password) {
+      throw new Error("invalid")
+    }
+  } catch {
+    throw new Error("GENIO_ONE_MCP_OAUTH_PUBLIC_ORIGIN_INVALID")
+  }
+}
+
 function assertBrowserPrincipalScope(principal: Principal): void {
   if (BROWSER_IDENTITY_SCOPES.some((scope) => principal.scopes?.includes(scope) === true)) return
   throw new PlatformApiError(
@@ -148,7 +162,11 @@ function assertBrowserPrincipalScope(principal: Principal): void {
 }
 
 export async function createManagementApi(dependencies: ManagementApiDependencies) {
+  assertMcpOAuthPublicOrigin(dependencies.mcpOAuthPublicOrigin)
   const app = Fastify({ logger: dependencies.logger ?? false }).withTypeProvider<TypeBoxTypeProvider>()
+  const discoveryMcpPostHog = dependencies.discoveryMcpPostHog ?? createDiscoveryMcpPostHogSink({
+    integrations: dependencies.modules.postHogIntegration,
+  })
   registerHttpObservability(app, "genio-one-platform-api")
   instrumentModuleGraph(dependencies.modules as unknown as Record<string, unknown>, "genio-one-platform-api")
   const resourceRegistry = dependencies.modules.resources
@@ -428,7 +446,7 @@ export async function createManagementApi(dependencies: ManagementApiDependencie
     })
   }
 
-  app.setErrorHandler((error, _request, reply) => {
+  app.setErrorHandler((error, request, reply) => {
     if (
       typeof error === "object" &&
       error !== null &&
@@ -449,6 +467,15 @@ export async function createManagementApi(dependencies: ManagementApiDependencie
       })
     }
     if (isPlatformApiError(error)) {
+      const tenantId = error.statusCode === 401 && error.code === "UNAUTHENTICATED"
+        ? discoveryTenantIdFromUrl(request.url)
+        : null
+      if (tenantId && dependencies.browserIdentity && dependencies.mcpOAuthPublicOrigin) {
+        reply.header(
+          "www-authenticate",
+          `Bearer resource_metadata="${discoveryMetadataUrl(dependencies.mcpOAuthPublicOrigin, tenantId)}"`,
+        )
+      }
       const violations = error.violations.length > 0
         ? error.violations
         : error.statusCode === 422
@@ -612,8 +639,7 @@ export async function createManagementApi(dependencies: ManagementApiDependencie
     detail: dependencies.modules.activityDetails,
     materializer: dependencies.modules.activityMaterializer,
     metrics: dependencies.modules.metrics,
-    postHog: dependencies.modules.postHogGatewayActivitySink ??
-      createPostHogGatewayActivitySink({ integrations: dependencies.modules.postHogIntegration }),
+    postHog: dependencies.modules.postHogGatewayActivitySink,
     authorizeRuntime: authorizeGatewayRuntime,
   })
   await app.register(usageGovernanceHttp, {
@@ -667,6 +693,16 @@ export async function createManagementApi(dependencies: ManagementApiDependencie
     access: dependencies.modules.access,
     connections: dependencies.modules.connections,
     memories: dependencies.modules.memories,
+    postHog: discoveryMcpPostHog,
+    ...(dependencies.browserIdentity && dependencies.mcpOAuthPublicOrigin
+      ? {
+          browserIdentity: {
+            issuer: dependencies.browserIdentity.issuer,
+            scopes: dependencies.browserIdentity.scopes,
+          },
+          publicOrigin: dependencies.mcpOAuthPublicOrigin,
+        }
+      : {}),
   })
   await app.register(accessHttp, { store: dependencies.modules.access })
   await app.register(runtimeControlHttp, {
