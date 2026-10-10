@@ -599,7 +599,7 @@
       "mode": 420
     },
     "apps/bot/server/connection-continuation.test.ts": {
-      "sha256": "862fda7044c281d7f75a1859a5afc3192e59de01e3cf4761d59b07b0592f09ea",
+      "sha256": "30f818a05c768a995baeee33012b56709ea6710b5f5d5ac8b3ee7eef8be27ed2",
       "mode": 420
     },
     "apps/bot/server/connection-continuation.ts": {
@@ -5579,7 +5579,7 @@
       "mode": 420
     },
     "apps/connectors/host.test.ts": {
-      "sha256": "9948c0722cbb34713e66b0b44616fa9a224e22afc3f28151f4ef8f92562662cf",
+      "sha256": "4dcd6161d44f1dee544105ab6d21aa250ccf106897a622e5d3301ec4a862d426",
       "mode": 420
     },
     "apps/connectors/host.ts": {
@@ -7406,6 +7406,10 @@
       "sha256": "a8a81853b1d6d176d207a2f80719f8b62a8c1c4b1db93d9621eb1af74538cf3b",
       "mode": 420
     },
+    "apps/platform/platform-api/test/canonical-principal-tenant-isolation.test.ts": {
+      "sha256": "6d01162936c4484c8c13e4055e97263c137839415d98a952b6d50f8960e3030f",
+      "mode": 420
+    },
     "apps/platform/platform-api/test/configuration.test.ts": {
       "sha256": "37feaecd809c6f7751a438132ae2790c744660ba2f2192b01911cb078460b1d4",
       "mode": 420
@@ -8795,7 +8799,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/test/create-resource-wizard.dom.test.tsx": {
-      "sha256": "4b41715e09359124c67e4979eb216ad182b46b762fa0f18743711bc695224413",
+      "sha256": "f35720ddc4d7e2a46839636b7232dff6b479a21f079cf1274d9f11fa8d380a36",
       "mode": 420
     },
     "apps/platform/platform-web/test/data-table.dom.test.tsx": {
@@ -9358,16 +9362,20 @@
       "sha256": "4ec3b9a933fa08d3f9f6506955329818430abace692ac8c19aba6720c5bcd404",
       "mode": 420
     },
+    "packages/brand/scripts/test_build_logo_kit.py": {
+      "sha256": "fbb792b0c532f9e04ca3fdc96e8c93a181459e27f6f55837e11062e7725686bd",
+      "mode": 420
+    },
     "packages/policy/package.json": {
       "sha256": "34bc00850730b1e57b23bca9dc3346139189e8744c0581558c75dfb66afb7fd6",
       "mode": 420
     },
     "packages/policy/src/authorize.test.ts": {
-      "sha256": "9e36f60c6eedce3b88e0e0ae37fe745563b1f1f109d14e314ff629db51c0453d",
+      "sha256": "3ff5d40ac51b51f30f610cb2e3224c03087a3caab84d79636c06000711c07e50",
       "mode": 420
     },
     "packages/policy/src/authorize.ts": {
-      "sha256": "36fc63071cb29dfa98b621422013e1a0fca015cc399e9c3b8363544eeb085b50",
+      "sha256": "fa55d785be152e696a241c4ace4df28bdc67ced8618731d0e1250755a26af75a",
       "mode": 420
     },
     "packages/policy/tsconfig.json": {
@@ -9396,6 +9404,10 @@
     },
     "packages/protocol/rust/src/lib.rs": {
       "sha256": "026219c61f3de7945483b40970c4c8a6b8250f5f561b13dfd1f999eac1a7f259",
+      "mode": 420
+    },
+    "packages/protocol/rust/tests/wire_contract.rs": {
+      "sha256": "61117dba46c828153f014c1076e8337871d56490a8290429d6aff42dcc22a054",
       "mode": 420
     },
     "packages/protocol/schema/fixtures/runtime-command-endpoint.json": {
@@ -9444,6 +9456,10 @@
     },
     "packages/protocol/src/ce-demo.ts": {
       "sha256": "b0d20bd83b19ace854fe8a4913bc90edcb084d9583fb4b0cd6a5075eb3bb39a2",
+      "mode": 420
+    },
+    "packages/protocol/src/compact-jws.test.ts": {
+      "sha256": "096707fb11f300010b1ab44e8d7a1a61d8a61e3e402e2718015e0752b8e3f96e",
       "mode": 420
     },
     "packages/protocol/src/compact-jws.ts": {
@@ -9547,7 +9563,7 @@
       "mode": 420
     },
     "packages/telemetry/src/operational-log.test.ts": {
-      "sha256": "5fdf11475db7369896a4dacf679323bd3332321bc9427d34f0674012a59bbe69",
+      "sha256": "c75510c03ccd528819490443fc3e017e01df5e65dee3831a03069ed812d27e00",
       "mode": 420
     },
     "packages/telemetry/src/operational-log.ts": {
@@ -9631,7 +9647,7 @@
       "mode": 420
     },
     "runtimes/gateway/controller/authority-floor.test.ts": {
-      "sha256": "b064a4b09b1bc09a4c49745244dc44b047f999fbd5947494830829a1dbed1f78",
+      "sha256": "25db87e858da5f740955102fc081449cf33a1181275c06cf887d9a2d91972792",
       "mode": 420
     },
     "runtimes/gateway/controller/authority-floor.ts": {

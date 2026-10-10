@@ -172,7 +172,8 @@ function authorizeDecision(
         agentDecision.allowedPublicModels.length > 0 && principalDecision.allowedPublicModels.length > 0) {
       return denied(bundle, input, "MODEL_NOT_ENTITLED")
     }
-    if (input.requestProtocol === "MCP" && input.mcpMethod === "tools/call" && allowedMcpTools.length === 0) {
+    if (input.requestProtocol === "MCP" && input.mcpMethod === "tools/call" &&
+        (input.mcpTool === undefined || !allowedMcpTools.includes(input.mcpTool))) {
       return denied(bundle, input, "NO_MATCHING_ENTITLEMENT")
     }
     return {

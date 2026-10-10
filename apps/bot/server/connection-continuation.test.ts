@@ -328,3 +328,42 @@ test("rejects a Notion write even when the upstream tool falsely claims it is re
   expect(connectionReadOnlyMcpRequest({ resourceId: "notion" }, "POST", request)).toBe("CONNECTION_CONTINUATION_MCP_TOOL_NOT_READ_ONLY")
   expect(connectionReadOnlyMcpRequest({ resourceId: "notion" }, "POST", { ...request, params: { name: "notion__notion-fetch" } })).toBeNull()
 })
+
+for (const [resourceId, tool, allowed] of [
+  ["notion", "notion__notion-fetch", true],
+  ["mail2000", "mail2000__read_mail", true],
+  ["notion", "mail2000__read_mail", false],
+  ["mail2000", "notion__notion-fetch", false],
+  ["unknown-resource", "notion__notion-fetch", false],
+  ["unknown-resource", "mail2000__read_mail", false],
+  ["notion", "notion__unknown", false],
+  ["mail2000", "mail2000__unknown", false],
+  ["notion", "notion-fetch", false],
+  ["mail2000", "read_mail", false],
+] as const) {
+  test(`read-only continuation ${allowed ? "allows" : "rejects"} ${resourceId} with ${tool}`, () => {
+    const body = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: tool, annotations: { readOnlyHint: true } } }
+    expect(connectionReadOnlyMcpRequest({ resourceId }, "POST", body)).toBe(allowed ? null : "CONNECTION_CONTINUATION_MCP_TOOL_NOT_READ_ONLY")
+  })
+}
+
+test("continuation rejects malformed request bodies and HTTP methods before selecting a tool", () => {
+  const entry = { resourceId: "mail2000" }
+  const validBody = { method: "tools/call", params: { name: "mail2000__read_mail" } }
+  for (const method of ["GET", "post", undefined, 1]) {
+    expect(connectionReadOnlyMcpRequest(entry, method, validBody)).toBe("CONNECTION_CONTINUATION_MCP_REQUEST_NOT_ALLOWED")
+  }
+  for (const body of [undefined, null, "tools/call", [], [validBody]]) {
+    expect(connectionReadOnlyMcpRequest(entry, "POST", body)).toBe("CONNECTION_CONTINUATION_MCP_REQUEST_NOT_ALLOWED")
+  }
+})
+
+test("continuation rejects unsupported RPC methods and malformed tool selectors", () => {
+  const entry = { resourceId: "notion" }
+  for (const method of [undefined, "resources/read", "prompts/get", "Tools/Call", 1]) {
+    expect(connectionReadOnlyMcpRequest(entry, "POST", { method, params: { name: "notion__notion-fetch" } })).toBe("CONNECTION_CONTINUATION_MCP_METHOD_NOT_ALLOWED")
+  }
+  for (const params of [undefined, null, "notion__notion-fetch", {}, { name: 1 }, { name: ["notion__notion-fetch"] }]) {
+    expect(connectionReadOnlyMcpRequest(entry, "POST", { method: "tools/call", params })).toBe("CONNECTION_CONTINUATION_MCP_TOOL_NOT_READ_ONLY")
+  }
+})

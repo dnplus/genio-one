@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { createInstance } from "i18next"
 import { I18nextProvider } from "react-i18next"
@@ -106,6 +106,99 @@ test("Resource onboarding creates a Draft through the visible review step and re
         owner_organization_id: "ai-platform",
       },
     }])
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  const promise = new Promise<T>((settle) => { resolve = settle })
+  return { promise, resolve }
+}
+
+async function reviewModelDraft(user: ReturnType<typeof userEvent.setup>, name: string) {
+  await user.type(screen.getByLabelText("Display name"), name)
+  await user.click(screen.getByRole("button", { name: "Continue" }))
+  await screen.findByText("Access control")
+  await user.click(screen.getByRole("button", { name: "Continue" }))
+  await screen.findByText("Review Draft")
+}
+
+test("Draft creation stays disabled through the server response and pending completion callback", async () => {
+  const originalFetch = globalThis.fetch
+  const response = deferred<Response>()
+  const completion = deferred<void>()
+  const created: string[] = []
+  let posts = 0
+  let cancelled = 0
+  globalThis.fetch = (async () => { posts++; return response.promise }) as typeof fetch
+  try {
+    const user = userEvent.setup()
+    await renderWizard(async (id) => { created.push(id); await completion.promise }, () => { cancelled++ })
+    await reviewModelDraft(user, "Pending model")
+    const create = screen.getByRole("button", { name: "Create Draft" }) as HTMLButtonElement
+    await user.click(create)
+    expect(create.disabled).toBe(true)
+    await user.click(create)
+    expect(posts).toBe(1)
+    expect(created).toEqual([])
+    expect(cancelled).toBe(0)
+    response.resolve(json({ resource_id: "resource-pending" }))
+    await waitFor(() => expect(created).toEqual(["resource-pending"]))
+    expect(create.disabled).toBe(true)
+    await user.click(create)
+    expect(posts).toBe(1)
+    expect(cancelled).toBe(0)
+    completion.resolve()
+    await waitFor(() => expect(cancelled).toBe(1))
+    expect(created).toEqual(["resource-pending"])
+    expect(posts).toBe(1)
+    await waitFor(() => expect(create.disabled).toBe(false))
+  } finally {
+    try {
+      await act(async () => {
+        response.resolve(json({ resource_id: "resource-pending" }))
+        completion.resolve()
+        await Promise.all([response.promise, completion.promise])
+      })
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  }
+})
+
+test("failed Draft creation displays the server error, preserves input, and permits a successful retry", async () => {
+  const originalFetch = globalThis.fetch
+  const requests: Record<string, unknown>[] = []
+  const created: string[] = []
+  let cancelled = 0
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    requests.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
+    return requests.length === 1
+      ? new Response(JSON.stringify({ code: "RESOURCE_SERVICE_UNAVAILABLE" }), { status: 500, headers: { "content-type": "application/json" } })
+      : json({ resource_id: "resource-retry" })
+  }) as typeof fetch
+  try {
+    const user = userEvent.setup()
+    await renderWizard(async (id) => { created.push(id) }, () => { cancelled++ })
+    await reviewModelDraft(user, "Preserved retry model")
+    await user.click(screen.getByRole("button", { name: "Create Draft" }))
+    await screen.findByText("RESOURCE_SERVICE_UNAVAILABLE")
+    expect(created).toEqual([])
+    expect(cancelled).toBe(0)
+    expect(screen.getByText("Preserved retry model")).toBeTruthy()
+    expect((screen.getByRole("button", { name: "Create Draft" }) as HTMLButtonElement).disabled).toBe(false)
+    await user.click(screen.getByRole("button", { name: "Back" }))
+    await user.click(screen.getByRole("button", { name: "Back" }))
+    expect((screen.getByLabelText("Display name") as HTMLInputElement).value).toBe("Preserved retry model")
+    await user.click(screen.getByRole("button", { name: "Continue" }))
+    await user.click(screen.getByRole("button", { name: "Continue" }))
+    await user.click(screen.getByRole("button", { name: "Create Draft" }))
+    await waitFor(() => expect(created).toEqual(["resource-retry"]))
+    expect(cancelled).toBe(1)
+    expect(requests).toHaveLength(2)
+    expect(requests[1]).toEqual(requests[0])
   } finally {
     globalThis.fetch = originalFetch
   }
