@@ -56,7 +56,6 @@ try {
     throw new Error("description does not round-trip designer fields")
   }
 
-  // Conversation-ready session projection (no routine enablement)
   const session = registry.saveSession({ botId: created.id, activeRuntimeTier: "none" })
   if (session.workState !== "idle") throw new Error("session not idle for chat")
 

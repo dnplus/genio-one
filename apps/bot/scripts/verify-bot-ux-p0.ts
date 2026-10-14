@@ -23,7 +23,6 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
 }
 
-// --- 1) List status vocabulary ---
 for (const status of ["available", "connect_first", "request", "unavailable", "pending", "added"] as const) {
   const label = statusLabelFor(status)
   assert((HUMAN_STATUS_LABELS as readonly string[]).includes(label), `status ${status} → ${label} not in vocabulary`)
@@ -84,7 +83,6 @@ for (const row of surface) {
   assert(!row.statusLabel.includes("PEP"), "PEP leak")
 }
 
-// --- 2) Runtime Exposure deny ≡ UI 無法使用 ---
 const browser = buildRuntimeSurfaceRow(
   { id: "browser.open", kind: "browser", display_name: "Browser", description: "Open" },
   DEFAULT_RUNTIME_EXPOSE_POLICY,
@@ -94,7 +92,6 @@ assert(browser.denialKind === "exposure", "exposure kind")
 assert(browser.effectiveAllow === false, "exposure not allow")
 assertNoProtocolLeak(browser.userMessage ?? "")
 
-// --- 3) Four denials each have human + CTA ---
 const fours = allDenialAcceptanceRows()
 assert(fours.length === 4, "four denials")
 const kinds = fours.map((r) => r.kind)
@@ -106,17 +103,14 @@ for (const row of fours) {
 assert(denialCopyFor("execution").statusLabel === "無法使用", "execution status")
 assert(denialCopyFor("connection").ctaLabel === "連接", "connection CTA")
 
-// --- 4) Sanitize protocol errors ---
 assert(!sanitizeUserFacingError("BOT_ACCESS_DENIED:403").includes("403"), "no http in sanitized")
 assert(!sanitizeUserFacingError("runtime_expose_deny").includes("runtime_expose"), "no reason enum")
 assert(!sanitizeUserFacingError("agent-runtime-pep").toUpperCase().includes("PEP"), "no PEP")
 
-// --- 5) Connect card phase switch points ---
 assert(connectCardPhaseLabel("choose") === "需連線", "card choose")
 assert(connectCardPhaseLabel("connected") === "可用", "card connected → 可用")
 assert(connectCardPhaseLabel("oauth_pending") === "連線中", "oauth path")
 
-// --- 6) Panel builder merge ---
 const panel = buildBotCapabilityRows([
   {
     resourceId: "sn",

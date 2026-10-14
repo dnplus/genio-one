@@ -43,7 +43,6 @@ export interface RuntimeExposePolicy {
   deny: string[]
 }
 
-/** A-1 contract-reviewer draft: shell/fs/web_search allow, browser deny. */
 export const DEFAULT_RUNTIME_EXPOSE_POLICY: RuntimeExposePolicy = {
   allow: ["shell.exec", "filesystem.read", "filesystem.write", "web_search.query"],
   deny: ["browser.open"],
@@ -92,7 +91,6 @@ export interface CapabilitySurfaceRow {
   denialKind?: "exposure" | "entitlement" | "connection" | "execution"
 }
 
-/** List-facing status vocabulary (UX P0). */
 export const HUMAN_STATUS_LABELS = ["可用", "需連線", "需申請", "無法使用", "審批中"] as const
 
 const FORBIDDEN_PRIMARY_TOKENS = [

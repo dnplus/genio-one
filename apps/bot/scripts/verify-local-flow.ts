@@ -33,17 +33,14 @@ async function run() {
   authUrl.searchParams.set("code_challenge_method", "S256")
   authUrl.searchParams.set("state", state)
 
-  // 2a. Request Keycloak login page
   const loginPageRes = await fetch(authUrl, { redirect: "manual" })
   const cookie = loginPageRes.headers.get("set-cookie") || ""
   const html = await loginPageRes.text()
 
-  // Extract form action from Keycloak HTML
   const actionMatch = html.match(/action="([^"]+)"/)
   if (!actionMatch) throw new Error("Could not find login form action in Keycloak page")
   const loginAction = actionMatch[1].replace(/&amp;/g, "&")
 
-  // 2b. Submit credentials (username: local-admin, password: genio-one-local)
   const loginRes = await fetch(loginAction, {
     method: "POST",
     headers: {
@@ -68,7 +65,6 @@ async function run() {
   if (!authCode) throw new Error(`Redirect did not contain auth code: ${location}`)
   console.log("Successfully obtained Auth Code via PKCE!")
 
-  // 2c. Exchange code for access_token
   const tokenRes = await fetch(config.token_endpoint, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },

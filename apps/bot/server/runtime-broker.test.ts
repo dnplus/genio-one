@@ -573,19 +573,15 @@ describe("RuntimeBroker", () => {
     const session = await broker.start(principal, firstCallbacks, codexFactory)
     expect(session.codex).toBeDefined()
 
-    // Codex outputs message while connected
     codexCallback!.onMessage('{"method":"item/agentMessage/delta","params":{"delta":"Live"}}')
     expect(firstMessages).toEqual(['{"method":"item/agentMessage/delta","params":{"delta":"Live"}}'])
 
-    // User disconnects
     broker.detach(session.id, firstCallbacks)
 
-    // Codex outputs background message while disconnected
     codexCallback!.onMessage('{"method":"item/agentMessage/delta","params":{"delta":"Background"}}')
     codexCallback!.onMessage('{"method":"turn/completed","params":{"status":"done"}}')
     expect(codexClosed).toBeFalse() // Must NOT be killed!
 
-    // User reconnects
     const secondMessages: string[] = []
     const secondCallbacks = {
       onMessage(msg: string) { secondMessages.push(msg) },
@@ -593,7 +589,6 @@ describe("RuntimeBroker", () => {
     }
     const resumed = await broker.start(principal, secondCallbacks, codexFactory)
     expect(resumed.id).toBe(session.id)
-    // Buffered background messages replayed to the new connection
     expect(secondMessages).toEqual([
       '{"method":"item/agentMessage/delta","params":{"delta":"Background"}}',
       '{"method":"turn/completed","params":{"status":"done"}}',
@@ -621,13 +616,11 @@ describe("RuntimeBroker", () => {
     }, codexFactory)
 
     expect(broker.get(session.id)).toBeDefined()
-    // Process exits unexpectedly
     codexCallback!.onExit("crash")
     expect(clientExited).toBeTrue()
     await Bun.sleep(0)
     expect(broker.get(session.id)).toBeNull()
 
-    // Next connection starts a fresh session instead of returning dead one
     const newSession = await broker.start(principal, { onMessage() {}, onExit() {} })
     expect(newSession.id).not.toBe(session.id)
     expect(codexClosed).toBeDefined()

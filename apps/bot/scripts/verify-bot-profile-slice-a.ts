@@ -44,7 +44,6 @@ try {
     throw new Error("toBotProfile mismatch vs getProfile")
   }
 
-  // Simulate "clear browser storage": reopen DB file, roster still there
   registry.close()
   const again = new BotRegistry(join(dir, "registry.sqlite"), join(dir, "artifacts"))
   const listed = again.list(owner)
