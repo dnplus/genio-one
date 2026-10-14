@@ -1,7 +1,6 @@
 import type { IdentityProviderPreset } from "./contract"
 
 export interface IdentityProviderPresetDefinition {
-  /** The Keycloak identity provider type this preset creates. */
   providerId: "google" | "github" | "oidc"
   defaultAlias: string
   defaultDisplayName: string
@@ -52,7 +51,6 @@ export const identityProviderPresets: Record<IdentityProviderPreset, IdentityPro
   },
 }
 
-/** Recovers the preset for a provider Keycloak already stores. */
 export function presetForStoredProvider(
   providerId: unknown,
   alias: string,

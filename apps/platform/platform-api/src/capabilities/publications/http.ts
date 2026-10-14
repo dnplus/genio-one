@@ -17,7 +17,6 @@ export interface PublicationWorkflowHttpOptions {
   workflow: AiResourcePublicationWorkflow
 }
 
-/** HTTP boundary for the review/build/publish workflow. */
 export const publicationWorkflowHttp: FastifyPluginAsync<PublicationWorkflowHttpOptions> = async (
   app,
   options,

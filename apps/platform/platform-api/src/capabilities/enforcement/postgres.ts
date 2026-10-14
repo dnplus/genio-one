@@ -450,7 +450,6 @@ async function activeGatewayForResource(
   return { gatewayId }
 }
 
-/** PostgreSQL store for immutable, tenant-scoped compiled chain revisions. */
 export function createPostgresEnforcementChainRevisionStore(
   options: PostgresEnforcementChainRevisionOptions,
 ): PostgresEnforcementChainRevisionStore {

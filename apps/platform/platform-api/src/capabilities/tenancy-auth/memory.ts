@@ -48,7 +48,6 @@ export function oidcSubjectAliasesFromEnvironment(
   )
 }
 
-/** Validate and clone an authenticator result before it becomes request context. */
 export function normalizePrincipal(value: unknown): Principal | null {
   if (!isRecord(value)) return null
   if (!isNonEmptyString(value.tenant_id)) return null
