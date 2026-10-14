@@ -1188,7 +1188,6 @@ function protoPath(): string {
   )
 }
 
-/** Create the gRPC server consumed by Envoy's ext_authz filter. */
 export function createExternalAuthorizerServer(
   bundleSource: AuthorizationBundleSource,
   onDecision?: (event: AuthorizationDecisionEvent) => void | Promise<void>,

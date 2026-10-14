@@ -179,8 +179,6 @@ function runtimeErrorMessage(error: unknown): string {
 }
 
 /**
- * The complete Gateway Runtime interface for the first vertical slice.
- *
  * It accepts one signed desired release and returns one signed observation.
  * Transport, persistence and the local/Kubernetes apply mechanism remain
  * adapters behind this interface.
