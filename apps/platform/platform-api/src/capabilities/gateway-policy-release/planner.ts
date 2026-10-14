@@ -65,7 +65,6 @@ function sha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex")
 }
 
-/** Canonical bytes shared by release identity, artifacts, and manifest. */
 export const canonicalGatewayPolicyReleaseBytes = canonicalBytes
 
 function assertSigner(signer: CompactJwsSigner, label: string): void {
