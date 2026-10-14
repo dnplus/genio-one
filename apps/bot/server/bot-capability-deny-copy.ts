@@ -8,7 +8,6 @@
  */
 import type { CapabilitySurfaceStatus } from "./bot-capability-surface"
 
-/** User-facing denial categories (not protocol enums). */
 export type CapabilityDenialKind =
   | "exposure"
   | "entitlement"
@@ -22,14 +21,12 @@ export interface CapabilityDenialCopy {
   statusLabel: string
   /** Short human explanation — no PEP / HTTP / enum tokens. */
   message: string
-  /** Primary CTA label. */
   ctaLabel: string
   ctaDisabled: boolean
   /** Optional next step hint for Connect card / request flow. */
   nextStep?: string
 }
 
-/** Tokens that must never appear in primary user-facing denial copy. */
 export const FORBIDDEN_DENY_COPY_TOKENS = [
   "PEP",
   "HTTP",
@@ -135,7 +132,6 @@ export function resolveDenialKind(input: {
   const addState = (input.addState ?? "").trim().toUpperCase()
   const phase = input.phase ?? "list"
 
-  // Positive / non-denial add states → not a denial.
   if (
     addState === "ENTITLED" ||
     addState === "AUTO_GRANT" ||
@@ -185,7 +181,6 @@ export function humanDenialFor(input: {
   return denialCopyFor(kind)
 }
 
-/** Assert primary user copy does not leak protocol tokens. */
 export function assertNoProtocolLeak(...labels: string[]): void {
   for (const label of labels) {
     const upper = label.toUpperCase()
@@ -233,7 +228,6 @@ export function sanitizeUserFacingError(raw: string, fallback = "操作未完成
   }
 }
 
-/** Acceptance fixture: all four kinds with human status + CTA. */
 export function allDenialAcceptanceRows(): CapabilityDenialCopy[] {
   return [
     denialCopyFor("exposure"),

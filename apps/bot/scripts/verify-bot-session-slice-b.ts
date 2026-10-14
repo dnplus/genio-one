@@ -50,7 +50,6 @@ try {
   if (!afterComplete.unread || afterComplete.workState !== "idle") throw new Error("expected unread idle")
   if (afterComplete.appServerThreadId !== "thread-aqua-persist") throw new Error("thread pointer lost on event")
 
-  // Simulate switch bots: darkness session must remain
   if (registry.getSession(darkness.id)?.appServerThreadId !== "thread-dark-persist") {
     throw new Error("switching focus lost other bot session")
   }
@@ -58,7 +57,6 @@ try {
   registry.applySessionEvent(aqua.id, "viewed")
   if (registry.getSession(aqua.id)?.unread) throw new Error("viewed should clear unread")
 
-  // Clear "browser storage" simulation: reopen sqlite
   registry.close()
   const again = new BotRegistry(join(dir, "registry.sqlite"), join(dir, "artifacts"))
   const roster = again.listRoster(owner)
