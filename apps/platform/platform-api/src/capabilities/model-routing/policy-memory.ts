@@ -22,7 +22,6 @@ const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/
 export interface InMemoryModelRoutingPolicyOptions {
   now?: () => number
   idFactory?: (prefix: string) => string
-  /** Optional Resource authority lookup used by memory tests and previews. */
   resourceOwner?: (input: {
     tenantId: string
     resourceId: string

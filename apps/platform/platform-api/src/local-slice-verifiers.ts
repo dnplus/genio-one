@@ -92,7 +92,6 @@ async function mcpRequest(
   return { response, json }
 }
 
-/** Real network probes used only by the explicit local AI Gateway slice. */
 export function createLocalSliceConnectionVerifier(options: {
   credentials?: Readonly<Record<string, string>>
   allowedHosts?: readonly string[]

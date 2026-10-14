@@ -115,7 +115,6 @@ function validatePolicyValues(
   }
 }
 
-/** Validate and return an immutable routing-policy revision input. */
 export function validateCreateModelRoutingPolicy(
   value: unknown,
 ): CreateModelRoutingPolicyInput {
@@ -131,7 +130,6 @@ export function validateCreateModelRoutingPolicy(
   return policy
 }
 
-/** Validate a row returned from persistence before it crosses the module seam. */
 export function validateModelRoutingPolicy(value: unknown): ModelRoutingPolicy {
   if (!Check(ModelRoutingPolicySchema, value)) {
     invalidStoredPolicy("Persisted routing policy does not match the strict policy contract")
