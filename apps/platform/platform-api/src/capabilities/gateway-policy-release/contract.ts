@@ -59,7 +59,6 @@ export interface GatewayPolicyReleaseInput {
   gateway_routing_artifact: GatewayRoutingArtifact
   gateway_configuration?: PolicyReleaseGatewayConfiguration
   enforcement_verification_keys: ReleaseVerificationKeyRing
-  /** Signs the policy artifact JWS documents. */
   artifact_signer: CompactJwsSigner
   /** Signs the per-runtime manifest with a key outside the release directory. */
   release_root_signer: CompactJwsSigner
