@@ -82,9 +82,7 @@ describe("authorize & intersectGrants", () => {
     }
     const result = authorize(mockBundle, input)
     expect(result.disposition).toBe("ALLOW")
-    // Intersection of ["gpt-4", "gemini-pro"] and ["gpt-4", "claude-3"] is ["gpt-4"]
     expect(result.allowedPublicModels).toEqual(["gpt-4"])
-    // Intersection of ["tool-2", "tool-3"] and ["tool-1", "tool-2"] is ["tool-2"]
     expect(result.allowedMcpTools).toEqual(["tool-2"])
   })
 
@@ -191,7 +189,6 @@ describe("authorize & intersectGrants", () => {
     }
     const result = authorize(bundleWithWildcard, input)
     expect(result.disposition).toBe("ALLOW")
-    // left is empty ([]), right is ["gpt-4"]. intersectGrants([], ["gpt-4"]) => ["gpt-4"]
     expect(result.allowedPublicModels).toEqual(["gpt-4"])
   })
 
@@ -235,7 +232,6 @@ describe("authorize & intersectGrants", () => {
     }
     const result = authorize(bundleLarge, input)
     expect(result.disposition).toBe("ALLOW")
-    // Expected intersection: model-25 to model-49 (25 models)
     const expected = Array.from({ length: 25 }, (_, i) => `model-${i + 25}`)
     expect(result.allowedPublicModels).toEqual(expected)
   })

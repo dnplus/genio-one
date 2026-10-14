@@ -63,14 +63,12 @@ async function benchmark() {
       }),
     })
 
-  // Warmup
   for (let i = 0; i < 50; i++) {
     await handleDiscoveryMcp(searchRequestEmpty(), optionsSmall)
   }
 
   const ITERATIONS = 1000
 
-  // 1. Large Catalog Empty Search
   let start = performance.now()
   for (let i = 0; i < ITERATIONS; i++) {
     await handleDiscoveryMcp(searchRequestEmpty(""), optionsLarge)
@@ -78,7 +76,6 @@ async function benchmark() {
   let durationEmpty = performance.now() - start
   console.log(`Large Catalog Empty Query (${ITERATIONS} ops): ${durationEmpty.toFixed(2)} ms (${(ITERATIONS / (durationEmpty / 1000)).toFixed(0)} ops/sec)`)
 
-  // 2. Large Catalog Matching Search
   start = performance.now()
   for (let i = 0; i < ITERATIONS; i++) {
     await handleDiscoveryMcp(searchRequestEmpty("客服"), optionsLarge)
@@ -86,7 +83,6 @@ async function benchmark() {
   let durationMatch = performance.now() - start
   console.log(`Large Catalog Matching Query (${ITERATIONS} ops): ${durationMatch.toFixed(2)} ms (${(ITERATIONS / (durationMatch / 1000)).toFixed(0)} ops/sec)`)
 
-  // 3. Large Catalog Get Resource
   start = performance.now()
   for (let i = 0; i < ITERATIONS; i++) {
     await handleDiscoveryMcp(getResourceRequest("resource-150"), optionsLarge)

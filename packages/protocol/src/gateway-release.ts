@@ -32,13 +32,9 @@ const ReleaseId = Type.String({
   pattern: "^[A-Za-z0-9][A-Za-z0-9._-]*$",
 })
 
-/** TypeBox object schemas are closed at the protocol boundary. */
 const StrictObject = <Properties extends TProperties>(properties: Properties) =>
   Type.Object(properties, { additionalProperties: false })
 
-/* -------------------------------------------------------------------------- */
-/* Shared envelope                                                            */
-/* -------------------------------------------------------------------------- */
 
 const RuntimeComponentStateSchema = Type.Union([
   Type.Literal("APPLYING"),
@@ -72,9 +68,6 @@ const ReportEnvelopeFields = {
   runtime_kind: Type.Literal("GATEWAY"),
 }
 
-/* -------------------------------------------------------------------------- */
-/* Aggregate Gateway release reference                                      */
-/* -------------------------------------------------------------------------- */
 
 /**
  * The command points at one Gateway-level release, not at one publication.
@@ -90,13 +83,9 @@ export const GatewayReleaseReferenceSchema = StrictObject({
   projection_count: JsonInteger,
 })
 
-/** Short alias used by runtime-control callers. */
 export type GatewayReleaseReference = Static<typeof GatewayReleaseReferenceSchema>
 export type GatewayReleaseRef = GatewayReleaseReference
 
-/* -------------------------------------------------------------------------- */
-/* Gateway observed state                                                    */
-/* -------------------------------------------------------------------------- */
 
 const GatewayComponentObservationFields = {
   state: RuntimeComponentStateSchema,
@@ -155,9 +144,6 @@ export type GatewayComponentObservation = Static<typeof GatewayComponentObservat
 export type RuntimeObservedError = Static<typeof RuntimeObservedErrorSchema>
 export type GatewayObservedState = Static<typeof GatewayObservedStateSchema>
 
-/* -------------------------------------------------------------------------- */
-/* Gateway command/report                                                     */
-/* -------------------------------------------------------------------------- */
 
 export const GatewayRuntimeCommandSchema = StrictObject({
   ...CommandEnvelopeFields,
