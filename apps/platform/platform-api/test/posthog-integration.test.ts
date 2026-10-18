@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES, MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 import Fastify from "fastify"
@@ -44,6 +45,7 @@ test("PostHog integration is tenant-admin configured and exposes only an enabled
       client_id: "management-ui",
       role: "TENANT_ADMINISTRATOR",
       organization_ids: [],
+      scopes: [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.systemRead, MANAGEMENT_SCOPES.systemWrite],
     },
     user: {
       tenant_id: "tenant-acme",
@@ -51,6 +53,7 @@ test("PostHog integration is tenant-admin configured and exposes only an enabled
       client_id: "management-ui",
       role: "USER",
       organization_ids: [],
+      scopes: [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.systemRead, MANAGEMENT_SCOPES.systemWrite],
     },
     other: {
       tenant_id: "tenant-other",
@@ -58,6 +61,7 @@ test("PostHog integration is tenant-admin configured and exposes only an enabled
       client_id: "management-ui",
       role: "TENANT_ADMINISTRATOR",
       organization_ids: [],
+      scopes: [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.systemRead, MANAGEMENT_SCOPES.systemWrite],
     },
   }
   const app = Fastify()
@@ -253,16 +257,16 @@ test("PostHog integration is tenant-admin configured and exposes only an enabled
   await app.close()
 })
 
-test("PostHog browser configuration accepts an invocation token only for its tenant", async () => {
+test("PostHog browser configuration accepts a read-scope token only for its tenant", async () => {
   const authorization = createManagementAuthorization({
     principalAuthenticator: createStaticPrincipalAuthenticator({
-      invocation: {
+      reader: {
         tenant_id: "tenant-acme",
         subject_id: "person-bot-user",
         client_id: "genio-one-bot",
         role: "USER",
         organization_ids: [],
-        scopes: ["genioone-invocation"],
+        scopes: [GENIOONE_SCOPES.read],
       },
       other: {
         tenant_id: "tenant-other",
@@ -270,7 +274,7 @@ test("PostHog browser configuration accepts an invocation token only for its ten
         client_id: "genio-one-bot",
         role: "USER",
         organization_ids: [],
-        scopes: ["genioone-invocation"],
+        scopes: [GENIOONE_SCOPES.read],
       },
     }),
     resourceCatalog: {} as ResourceCatalog,
@@ -296,7 +300,7 @@ test("PostHog browser configuration accepts an invocation token only for its ten
   const normalRead = await app.inject({
     method: "GET",
     url: "/v1/tenants/tenant-acme/telemetry/posthog/browser-configuration",
-    headers: { authorization: "Bearer invocation" },
+    headers: { authorization: "Bearer reader" },
   })
   assert.equal(normalRead.statusCode, 200)
   assert.equal(normalRead.headers["cache-control"], "no-store")
@@ -305,7 +309,7 @@ test("PostHog browser configuration accepts an invocation token only for its ten
   const managementRead = await app.inject({
     method: "GET",
     url: "/v1/tenants/tenant-acme/telemetry/posthog",
-    headers: { authorization: "Bearer invocation" },
+    headers: { authorization: "Bearer reader" },
   })
   assert.equal(managementRead.statusCode, 403)
   assert.equal(managementRead.json().code, "INSUFFICIENT_SCOPE")

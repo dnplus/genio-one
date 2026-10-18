@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES, MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -45,15 +46,15 @@ function principal(subjectId: string, scopes: string[]): Principal {
   }
 }
 
-test("bot cancellation accepts either owner scope and preserves other owners and terminal candidates", async () => {
+test("bot cancellation accepts resource or management write scope and preserves other owners and terminal candidates", async () => {
   const modules = createInMemoryPlatformModules({ now: () => 1_000 })
   const app = await createManagementApi({
     modules,
     resourceCatalog: modules.resources,
     principalAuthenticator: createStaticPrincipalAuthenticator({
-      owner: principal("owner", ["genioone-invocation"]),
-      console: principal("owner", ["genioone-management"]),
-      other: principal("other", ["genioone-invocation"]),
+      owner: principal("owner", [GENIOONE_SCOPES.read, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke]),
+      console: principal("owner", [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.resourcesWrite]),
+      other: principal("other", [GENIOONE_SCOPES.read, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke]),
       denied: principal("owner", []),
     }),
   })

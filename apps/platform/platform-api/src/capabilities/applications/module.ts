@@ -1,8 +1,10 @@
+import type { Principal } from "../tenancy-auth/contract"
 import type {
   Application,
   ApplicationApiCredential,
   ApplicationApiCredentialCreation,
   IssueApplicationOAuthCredentialInput,
+  IssueApplicationApiKeyCredentialInput,
   RegisterApplicationInput,
   RotateApplicationCredentialInput,
 } from "./contract"
@@ -40,11 +42,20 @@ export interface ApplicationRegistry {
     applicationId: string
   }): Promise<ApplicationApiCredential[]>
   issueOAuthCredential(input: {
+    issuerScopes: readonly string[]
     tenantId: string
     applicationId: string
     value: IssueApplicationOAuthCredentialInput
   }): Promise<ApplicationApiCredentialCreation>
+  issueApiKeyCredential(input: {
+    issuerScopes: readonly string[]
+    tenantId: string
+    applicationId: string
+    value: IssueApplicationApiKeyCredentialInput
+  }): Promise<ApplicationApiCredentialCreation>
+  authenticateApiKey(input: { tenantId: string; token: string }): Promise<Principal | null>
   rotateCredential(input: {
+    issuerScopes: readonly string[]
     tenantId: string
     applicationId: string
     credentialId: string

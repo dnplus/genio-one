@@ -2,6 +2,7 @@ export const REQUEST_ID_HEADER = "x-request-id"
 export const CORRELATION_HEADER = "x-genio-correlation-id"
 export const VERIFIED_SUBJECT_HEADER = "x-genio-verified-subject"
 export const VERIFIED_CLIENT_HEADER = "x-genio-verified-client"
+export const VERIFIED_SCOPES_HEADER = "x-genio-verified-scopes"
 export const AI_GATEWAY_MODEL_HEADER = "x-ai-eg-model"
 export const TRUSTED_TENANT_HEADER = "x-genio-trusted-tenant-id"
 export const TRUSTED_SUBJECT_HEADER = "x-genio-trusted-subject-id"
@@ -49,6 +50,10 @@ export const CALLER_IDENTITY_HEADERS = [
   "x-genio-capability-id",
   VERIFIED_SUBJECT_HEADER,
   VERIFIED_CLIENT_HEADER,
+  VERIFIED_SCOPES_HEADER,
+  "x-genio-scopes",
+  "x-api-key",
+  "authorization",
   AI_GATEWAY_MODEL_HEADER,
   CONSUMER_ORGANIZATION_HEADER,
   USE_CASE_HEADER,

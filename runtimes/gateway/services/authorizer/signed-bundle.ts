@@ -3,7 +3,10 @@ import {
   type CompiledAuthorizationBundle,
   type CompiledAuthorizationRule,
   type CompiledMcpToolDefinition,
+  type CompiledCapabilityOperation,
+  type CompiledApplicationApiKey,
 } from "@genioone/protocol/authorization"
+import { RESOURCE_SCOPE_VALUES } from "@genioone/protocol/authorization-scopes"
 import {
   verifyCompactEdDsaJws,
   type VerificationKeyRing,
@@ -114,6 +117,46 @@ function isRule(value: unknown): value is CompiledAuthorizationRule {
   )
 }
 
+function isCapabilityOperation(value: unknown): value is CompiledCapabilityOperation {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false
+  const operation = value as Record<string, unknown>
+  return hasOnlyKeys(operation, ["resource_id", "capability_id", "operation_semantics", "mcp_tool"]) &&
+    nonEmptyString(operation.resource_id) &&
+    nonEmptyString(operation.capability_id) &&
+    (operation.operation_semantics === "READ" || operation.operation_semantics === "WRITE" || operation.operation_semantics === "INVOKE") &&
+    (operation.mcp_tool === undefined || (nonEmptyString(operation.mcp_tool) && operation.operation_semantics !== "INVOKE"))
+}
+
+function hasUniqueCapabilityOperations(value: unknown): boolean {
+  if (!Array.isArray(value) || value.length > 4096 || !value.every(isCapabilityOperation)) return false
+  const identities = value.map((operation) => `${operation.resource_id}\u0000${operation.capability_id}\u0000${operation.mcp_tool ?? ""}`)
+  return new Set(identities).size === identities.length
+}
+
+function isApplicationApiKey(value: unknown): value is CompiledApplicationApiKey {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false
+  const credential = value as Record<string, unknown>
+  return hasOnlyKeys(credential, [
+    "credential_id", "api_key_hash", "subject_id", "acting_client_id", "resource_id", "capability_id", "scopes", "expires_at",
+  ]) &&
+    nonEmptyString(credential.credential_id) &&
+    typeof credential.api_key_hash === "string" && /^[a-f0-9]{64}$/.test(credential.api_key_hash) &&
+    nonEmptyString(credential.subject_id) &&
+    nonEmptyString(credential.acting_client_id) &&
+    nonEmptyString(credential.resource_id) &&
+    nonEmptyString(credential.capability_id) &&
+    canonicalStringArray(credential.scopes) &&
+    credential.scopes.length > 0 &&
+    credential.scopes.every((scope) => (RESOURCE_SCOPE_VALUES as readonly string[]).includes(scope)) &&
+    positiveInteger(credential.expires_at)
+}
+
+function hasUniqueApplicationApiKeys(value: unknown): boolean {
+  if (!Array.isArray(value) || value.length > 4096 || !value.every(isApplicationApiKey)) return false
+  return new Set(value.map((credential) => credential.credential_id)).size === value.length &&
+    new Set(value.map((credential) => credential.api_key_hash)).size === value.length
+}
+
 function isUsagePolicy(value: unknown): boolean {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false
   const policy = value as Record<string, unknown>
@@ -215,6 +258,8 @@ export function isCompiledAuthorizationBundle(
     && (bundle.agent_delegations === undefined || (Array.isArray(bundle.agent_delegations) && bundle.agent_delegations.every(isAgentDelegation)))
     && (bundle.execution_grants === undefined || (Array.isArray(bundle.execution_grants) && bundle.execution_grants.every(isExecutionGrant)))
     && (bundle.mcp_tool_definitions === undefined || hasUniqueMcpToolDefinitions(bundle.mcp_tool_definitions))
+    && (bundle.capability_operations === undefined || hasUniqueCapabilityOperations(bundle.capability_operations))
+    && (bundle.application_api_keys === undefined || hasUniqueApplicationApiKeys(bundle.application_api_keys))
   )
 }
 

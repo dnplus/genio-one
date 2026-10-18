@@ -1,3 +1,4 @@
+import { MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -152,26 +153,26 @@ test("Provider credential profile HTTP routes enforce owner Organization scope",
         tenant_id: "tenant-acme",
         subject_id: "person-admin",
         client_id: "management-ui",
-        scopes: ["genioone-management"],
         role: "TENANT_ADMINISTRATOR",
         organization_ids: [],
+        scopes: [MANAGEMENT_SCOPES.credentialsRead, MANAGEMENT_SCOPES.credentialsWrite],
       },
       owner: {
         tenant_id: "tenant-acme",
         subject_id: "person-owner",
         client_id: "management-ui",
-        scopes: ["genioone-management"],
         role: "ORGANIZATION_ADMINISTRATOR",
         organization_ids: ["organization-ai-platform"],
         administrator_organization_ids: ["organization-ai-platform"],
+        scopes: [MANAGEMENT_SCOPES.credentialsRead, MANAGEMENT_SCOPES.credentialsWrite],
       },
       outsider: {
         tenant_id: "tenant-acme",
         subject_id: "person-outsider",
         client_id: "management-ui",
-        scopes: ["genioone-management"],
         role: "USER",
         organization_ids: ["organization-other"],
+        scopes: [MANAGEMENT_SCOPES.credentialsRead, MANAGEMENT_SCOPES.credentialsWrite],
       },
     }),
   })

@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES, MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -20,7 +21,7 @@ test("the first-party One Policy gives the local Tenant Administrator the defaul
         client_id: "genio-one-bot",
         role: "TENANT_ADMINISTRATOR",
         organization_ids: [],
-        scopes: ["genioone-management", "genioone-invocation"],
+        scopes: [MANAGEMENT_SCOPES.policiesRead, MANAGEMENT_SCOPES.policiesWrite, MANAGEMENT_SCOPES.policiesPublish, MANAGEMENT_SCOPES.auditRead, GENIOONE_SCOPES.read, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke],
       },
       "bot-user": {
         tenant_id: "tenant-keycloak-local",
@@ -28,7 +29,7 @@ test("the first-party One Policy gives the local Tenant Administrator the defaul
         client_id: "genio-one-bot",
         role: "USER",
         organization_ids: [],
-        scopes: ["genioone-management", "genioone-invocation"],
+        scopes: [MANAGEMENT_SCOPES.policiesRead, MANAGEMENT_SCOPES.policiesWrite, MANAGEMENT_SCOPES.policiesPublish, MANAGEMENT_SCOPES.auditRead, GENIOONE_SCOPES.read, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke],
       },
     }),
   })
@@ -303,7 +304,7 @@ test("the Platform Bot access gate follows the installed connection lifecycle", 
         client_id: "genio-one-bot",
         role: "TENANT_ADMINISTRATOR",
         organization_ids: [],
-        scopes: ["genioone-management", "genioone-invocation"],
+        scopes: [MANAGEMENT_SCOPES.policiesRead, MANAGEMENT_SCOPES.policiesWrite, MANAGEMENT_SCOPES.policiesPublish, MANAGEMENT_SCOPES.auditRead, GENIOONE_SCOPES.read, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke],
       },
     }),
   })

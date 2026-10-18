@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES, MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 import type { FastifyRequest } from "fastify"
@@ -20,7 +21,7 @@ const managementPrincipal: Principal = {
   role: "TENANT_ADMINISTRATOR",
   organization_ids: [],
   client_id: "management-console",
-  scopes: ["genioone-management"],
+  scopes: [MANAGEMENT_SCOPES.policiesRead],
 }
 const draftPath = `/v1/tenants/${tenantId}/resources/resource-1/capabilities/chat/policy-draft`
 
@@ -46,25 +47,18 @@ async function api(principals: Record<string, Principal> = { management: managem
       tenant_id: tenantId, issuer: "https://identity.example.test",
       authorization_endpoint: "https://identity.example.test/authorize",
       token_endpoint: "https://identity.example.test/token", client_id: "invocation-client",
-      scopes: ["genioone-invocation"], management_client_id: "management-console",
-      management_scopes: ["genioone-management"],
+      scopes: [GENIOONE_SCOPES.read], management_client_id: "management-console",
+      management_scopes: [MANAGEMENT_SCOPES.policiesRead],
     },
   })
   return { app, modules }
 }
 
-test("invalid tenant and capability segments fail closed before a readable handler", async () => {
+test("malformed tenant path encoding fails closed before a readable handler", async () => {
   const { app } = await api()
   try {
     const paths = [
-      "/v1/tenants/tenant%2Facme/resources/resource-1/capabilities/chat/policy-draft",
-      "/v1/tenants/tenant%5cacme/resources/resource-1/capabilities/chat/policy-draft",
-      "/v1/tenants/%2e/resources/resource-1/capabilities/chat/policy-draft",
-      "/v1/tenants/%2e%2e/resources/resource-1/capabilities/chat/policy-draft",
-      draftPath.replace("/chat/", "/chat%2Fread/"),
-      draftPath.replace("/chat/", "/chat%5cread/"),
-      draftPath.replace("/chat/", "/%2e/"),
-      draftPath.replace("/chat/", "/%2e%2e/"),
+      "/v1/tenants/tenant%00acme/resources/resource-1/capabilities/chat/policy-draft",
       draftPath.replace("/chat/", "/chat%00read/"),
       draftPath.replace("/chat/", "/chat\\read/"),
       draftPath.replace("/chat/", "/%ZZ/"),
@@ -85,6 +79,48 @@ test("invalid tenant and capability segments fail closed before a readable handl
     })
     assert.equal(authorized.statusCode, 200, authorized.body)
     assert.equal(authorized.json(), null)
+  } finally {
+    await app.close()
+  }
+})
+
+test("matched opaque capability identifiers retain authentication, scopes, and exact policy keys", async () => {
+  const { app, modules } = await api({
+    management: managementPrincipal,
+    unrelated: principal([GENIOONE_SCOPES.read]),
+  })
+  const keys: string[] = []
+  const get = modules.policyDrafts.get
+  modules.policyDrafts.get = async (selectedTenant, key) => {
+    assert.equal(selectedTenant, tenantId)
+    keys.push(key)
+    return get(selectedTenant, key)
+  }
+  try {
+    for (const capability of ["chat/read", "chat\\read"]) {
+      const url = draftPath.replace("/chat/", `/${encodeURIComponent(capability)}/`)
+      const anonymous = await app.inject({ method: "GET", url })
+      assert.equal(anonymous.statusCode, 401, `${url}: ${anonymous.body}`)
+      const unrelated = await app.inject({ method: "GET", url, headers: { authorization: "Bearer unrelated" } })
+      assert.equal(unrelated.statusCode, 403, unrelated.body)
+      assert.equal(unrelated.json().code, "INSUFFICIENT_SCOPE")
+      const authorized = await app.inject({ method: "GET", url, headers: { authorization: "Bearer management" } })
+      assert.equal(authorized.statusCode, 200, `${url}: ${authorized.body}`)
+      assert.equal(keys.at(-1), resourcePolicyKey("resource-1", capability))
+      assert.deepEqual(tenantRoute({
+        url,
+        routeOptions: { url: "/v1/tenants/:tenant_id/resources/:resource_id/capabilities/:capability_id/policy-draft" },
+        params: { tenant_id: tenantId, resource_id: "resource-1", capability_id: capability },
+      }), { tenantId, rest: ["resources", "resource-1", "capabilities", capability, "policy-draft"] })
+    }
+    for (const opaqueTenant of ["tenant/acme", "tenant\\acme"]) {
+      const url = draftPath.replace(`/${tenantId}/`, `/${encodeURIComponent(opaqueTenant)}/`)
+      const anonymous = await app.inject({ method: "GET", url })
+      assert.equal(anonymous.statusCode, 401, anonymous.body)
+      const crossTenant = await app.inject({ method: "GET", url, headers: { authorization: "Bearer management" } })
+      assert.equal(crossTenant.statusCode, 403, crossTenant.body)
+      assert.equal(crossTenant.json().code, "TENANT_ACCESS_DENIED")
+    }
   } finally {
     await app.close()
   }
@@ -115,6 +151,11 @@ test("a matched tenant route rejects an invalid raw path instead of becoming pub
       routeOptions: { url: "/v1/tenants/:tenant_id/resources/:resource_id" },
     }), { code: "INVALID_TENANT_PATH", statusCode: 400 })
   }
+  assert.throws(() => tenantRoute({
+    url: "/v1/tenants/tenant-acme/resources/resource-1",
+    routeOptions: { url: "/v1/tenants/:tenant_id/resources/:resource_id" },
+    params: { tenant_id: tenantId, resource_id: "resource-other" },
+  }), { code: "INVALID_TENANT_PATH", statusCode: 400 })
   assert.deepEqual(tenantRoute({ url: "/v1/tenants/tenant-acme/resources?next=/runtime-control/" }), {
     tenantId, rest: ["resources"],
   })
@@ -165,17 +206,17 @@ for (const authenticatorKind of ["static", "environment", "delegate"] as const) 
   })
 }
 
-test("audit export requires both management and audit.export while preserving administrator checks", async () => {
+test("audit export requires its explicit export scope while preserving administrator checks", async () => {
   const { app } = await api({
-    management: principal(["genioone-management"]),
-    export: principal(["audit.export"]),
-    allowed: principal(["genioone-management", "audit.export"]),
-    user: principal(["genioone-management", "audit.export"], "USER"),
+    management: principal([MANAGEMENT_SCOPES.auditRead]),
+    legacy: principal(["genioone-management", "audit.export"]),
+    allowed: principal([MANAGEMENT_SCOPES.auditExport]),
+    user: principal([MANAGEMENT_SCOPES.auditExport], "USER"),
   })
   try {
     for (const [token, status, code] of [
       ["management", 403, "INSUFFICIENT_SCOPE"],
-      ["export", 403, "INSUFFICIENT_SCOPE"],
+      ["legacy", 403, "INSUFFICIENT_SCOPE"],
       ["allowed", 200, undefined],
       ["user", 403, "TENANT_ADMINISTRATOR_REQUIRED"],
     ] as const) {
@@ -193,18 +234,18 @@ test("audit export requires both management and audit.export while preserving ad
   }
 })
 
-test("application creation requires both management and application.create and preserves ownership checks", async () => {
+test("application creation requires identity write scope and preserves ownership checks", async () => {
   const { app, modules } = await api({
-    management: principal(["genioone-management"]),
-    create: principal(["application.create"]),
-    allowed: principal(["genioone-management", "application.create"]),
-    user: principal(["genioone-management", "application.create"], "USER"),
+    management: principal([MANAGEMENT_SCOPES.identityRead]),
+    legacy: principal(["genioone-management", "application.create"]),
+    allowed: principal([MANAGEMENT_SCOPES.identityWrite]),
+    user: principal([MANAGEMENT_SCOPES.identityWrite], "USER"),
   })
   try {
     const organization = await modules.organizations.create({ tenantId, display_name: "Owner", member_subject_ids: [] })
     for (const [token, status, code] of [
       ["management", 403, "INSUFFICIENT_SCOPE"],
-      ["create", 403, "INSUFFICIENT_SCOPE"],
+      ["legacy", 403, "INSUFFICIENT_SCOPE"],
       ["user", 403, "RESOURCE_OWNER_OR_TENANT_ADMIN_REQUIRED"],
       ["allowed", 201, undefined],
     ] as const) {
@@ -300,7 +341,7 @@ test("double encoding preserves literal identifiers while enforcing authenticati
 test("browser identity session requires an explicit browser scope without adding configured scopes", async () => {
   const { app } = await api({
     missing: principal(undefined), empty: principal([]), runtime: principal(["genioone-gateway-runtime"]),
-    management: principal(["genioone-management"]), invocation: principal(["genioone-invocation"]),
+    management: principal([MANAGEMENT_SCOPES.identityRead]), invocation: principal([GENIOONE_SCOPES.read]),
   })
   try {
     for (const token of ["missing", "empty", "runtime"]) {
@@ -308,7 +349,7 @@ test("browser identity session requires an explicit browser scope without adding
       assert.equal(response.statusCode, 403, response.body)
       assert.equal(response.json().code, "INSUFFICIENT_SCOPE")
     }
-    for (const [token, scope] of [["management", "genioone-management"], ["invocation", "genioone-invocation"]]) {
+    for (const [token, scope] of [["management", MANAGEMENT_SCOPES.identityRead], ["invocation", GENIOONE_SCOPES.read]]) {
       const response = await app.inject({ method: "GET", url: "/v1/identity/session", headers: { authorization: `Bearer ${token}` } })
       assert.equal(response.statusCode, 200, response.body)
       assert.deepEqual(response.json().scopes, [scope])

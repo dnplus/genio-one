@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -22,7 +23,7 @@ const principal: Principal = {
   tenant_id: "tenant-http",
   subject_id: "owner-http",
   client_id: "bot-http",
-  scopes: ["genioone-invocation"],
+  scopes: [GENIOONE_SCOPES.write],
   role: "USER",
   organization_ids: [],
 }

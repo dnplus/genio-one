@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { GENIOONE_SCOPES } from "@genioone/protocol/authorization-scopes"
 import { BotRegistry } from "./bot-registry"
 import { RuntimeBroker } from "./runtime-broker"
 import { continueCallers } from "./caller-continuation"
@@ -61,7 +62,11 @@ test.each(["COMPLETED", "FAILED"] as const)("handoff %s waits for caller idle an
   const context = {
     botRegistry: registry,
     runtimeBroker: broker,
-    capabilityGate: { async resolve() { return { decision: "ALLOW", model_route: "genio-gateway" } } },
+    capabilityGate: { async resolve(owner: { scopes: string[] }, _capabilityId: string, accessToken: string) {
+      expect(owner.scopes).toEqual([GENIOONE_SCOPES.invoke])
+      expect(accessToken).toBe("test-token")
+      return { decision: "ALLOW", model_route: "genio-gateway" }
+    } },
     botToolSessions: new BotToolSessions(),
     runtimePolicy: { async read() { return { decisions: [] } } },
     modelDirectory: { async resolve() { return [{ publicModelId: "company-model", displayName: "Company Model", route: { kind: "genio-gateway" } }] } },

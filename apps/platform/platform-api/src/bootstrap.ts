@@ -1,3 +1,4 @@
+import { MANAGEMENT_CONSOLE_OAUTH_SCOPES, SELF_SERVICE_OAUTH_SCOPES } from "@genioone/protocol/authorization-scopes"
 import { createPublicationDnsVerifier } from "./publication-dns-verifier"
 import { installedConnectorsFromEnvironment } from "./capabilities/connections/installed-connectors"
 import { seedInstalledServices } from "./capabilities/installed-services/seed"
@@ -26,6 +27,7 @@ import {
   oidcSubjectAliasesFromEnvironment,
 } from "./capabilities/tenancy-auth/memory"
 import { createCanonicalPrincipalAuthenticator } from "./capabilities/tenancy-auth/canonical"
+import { createApplicationApiKeyAuthenticator } from "./capabilities/applications/api-keys"
 import { runMigrations } from "./persistence/migration-runner"
 import { createPostgresSqlAdapter } from "./persistence/sql-adapter"
 import {
@@ -127,13 +129,19 @@ function browserIdentityFromEnvironment(environment: NodeJS.ProcessEnv) {
       issuer: keycloakIssuer,
       authorization_endpoint: `${keycloakIssuer}/protocol/openid-connect/auth`,
       token_endpoint: `${keycloakIssuer}/protocol/openid-connect/token`,
+      account_management_endpoint: `${keycloakIssuer}/account/`,
       client_id: "genio-one-self-service",
-      scopes: ["genioone-invocation"],
+      scopes: [...SELF_SERVICE_OAUTH_SCOPES],
       management_client_id: "genio-one-management-console",
-      management_scopes: ["genioone-management"],
+      management_scopes: [...MANAGEMENT_CONSOLE_OAUTH_SCOPES],
     }
   } else {
     value = JSON.parse(raw) as Record<string, unknown>
+  }
+  if (value.account_management_endpoint !== undefined) {
+    if (typeof value.account_management_endpoint !== "string") throw new Error("GENIO_ONE_BROWSER_IDENTITY_JSON.account_management_endpoint must be a URL")
+    const endpoint = new URL(value.account_management_endpoint)
+    if (endpoint.username || endpoint.password || !["https:", "http:"].includes(endpoint.protocol)) throw new Error("GENIO_ONE_BROWSER_IDENTITY_JSON.account_management_endpoint must be an HTTP URL")
   }
   const strings = [
     "tenant_id",
@@ -453,7 +461,10 @@ async function createMemoryDevApi(environment: NodeJS.ProcessEnv, logger: boolea
     await modules.identity.bootstrap({ tenantId, subjects })
   }
   const principalAuthenticator = createCanonicalPrincipalAuthenticator({
-    delegate: createEnvironmentPrincipalAuthenticator(environment),
+    delegate: createApplicationApiKeyAuthenticator({
+      registry: modules.applications,
+      delegate: createEnvironmentPrincipalAuthenticator(environment),
+    }),
     identity: modules.identity,
     organizations: modules.organizations,
     justInTimeProviderIds: justInTimeProviderIdsFromEnvironment(environment),
@@ -710,7 +721,10 @@ export async function createConfiguredManagementApi(
       },
       resourceCatalog: modules.resources,
       principalAuthenticator: createCanonicalPrincipalAuthenticator({
-        delegate: principalAuthenticator,
+        delegate: createApplicationApiKeyAuthenticator({
+          registry: modules.applications,
+          delegate: principalAuthenticator,
+        }),
         identity: modules.identity,
         organizations: modules.organizations,
         justInTimeProviderIds: justInTimeProviderIdsFromEnvironment(environment),

@@ -1,3 +1,4 @@
+import { MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -38,7 +39,7 @@ test("Resource administration derives owner scope and publication readiness once
     role: "ORGANIZATION_ADMINISTRATOR",
     organization_ids: ["ai-platform"],
     administrator_organization_ids: ["ai-platform"],
-    scopes: ["genioone-management"],
+    scopes: [MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.policiesPublish],
     acr: "oidc",
     amr: ["oidc"],
   }
@@ -66,7 +67,7 @@ test("publication requests allow managed Draft and Published Resources only when
     role: "ORGANIZATION_ADMINISTRATOR",
     organization_ids: ["ai-platform"],
     administrator_organization_ids: ["ai-platform"],
-    scopes: ["genioone-management"],
+    scopes: [MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.policiesPublish],
     acr: "oidc",
     amr: ["oidc"],
   }
@@ -94,7 +95,7 @@ test("a failed publication build reopens draft inputs while review and build rem
     role: "ORGANIZATION_ADMINISTRATOR",
     organization_ids: ["ai-platform"],
     administrator_organization_ids: ["ai-platform"],
-    scopes: ["genioone-management"],
+    scopes: [MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.policiesPublish],
     acr: "oidc",
     amr: ["oidc"],
   }

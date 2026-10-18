@@ -13,6 +13,7 @@ import type { ConnectionModelMapping, PublicModel } from "../models/contract"
 import {
   ResourcePublicationEndpointSchema,
   ResourceRegistrationSchema,
+  CapabilityOperationSemanticsSchema,
 } from "../resources/contract"
 import type { ResourceRegistration, ResourcePublicationEndpoint } from "../resources/contract"
 import { ProviderCredentialProfileRevisionSchema } from "../provider-credentials/contract"
@@ -89,6 +90,13 @@ const GatewayMcpToolDefinitionSchema = Type.Object({
 
 const GatewayProjectionSignatureSchema = Ed25519SignatureSchema
 
+const GatewayCapabilityOperationSchema = Type.Object({
+  resource_id: Identifier,
+  capability_id: Identifier,
+  operation_semantics: CapabilityOperationSemanticsSchema,
+  mcp_tool: Type.Optional(Identifier),
+}, { additionalProperties: false })
+
 const GatewayProjectionEnvelopeSchema = Type.Object({
   schema_version: Type.Literal("genio.one.gateway.v1"),
   projection_id: Identifier,
@@ -103,6 +111,7 @@ const GatewayProjectionEnvelopeSchema = Type.Object({
   signature: GatewayProjectionSignatureSchema,
   publication_endpoint: GatewayProjectionPublicationSchema,
   policy_bundle: GatewayPolicyBundleSchema,
+  capability_operations: Type.Optional(Type.Array(GatewayCapabilityOperationSchema, { maxItems: 1025 })),
   mcp_tool_definitions: Type.Optional(Type.Array(GatewayMcpToolDefinitionSchema, { maxItems: 1024 })),
 })
 

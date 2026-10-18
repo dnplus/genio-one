@@ -1,3 +1,6 @@
+import { hasAnyScope } from "@genioone/protocol/authorization-scopes"
+import { platformRouteScopeRequirements } from "../management-authorization/route-scopes"
+import { tenantRoute } from "../tenancy-auth/routes"
 import type { FastifyPluginAsync, FastifyRequest } from "fastify"
 import { TypeBoxTypeProvider } from "@fastify/type-provider-typebox"
 import { Type, type TSchema } from "typebox"
@@ -33,7 +36,6 @@ import type { SharedMemoryScopeSelector } from "./shared-scope-access"
 
 const selfServiceClientId = "genio-one-self-service"
 const managementConsoleClientId = "genio-one-management-console"
-const invocationScope = "genioone-invocation"
 const directMemoryClientIds = new Set([selfServiceClientId, managementConsoleClientId])
 const identifier = Type.String({ minLength: 1, maxLength: 256 })
 const tenantPath = Type.Object({ tenant_id: identifier })
@@ -68,9 +70,10 @@ function errorCode(error: unknown): string {
   return error instanceof PlatformApiError ? error.code : "MEMORY_OPERATION_FAILED"
 }
 
-function requireInvocationScope(principal: Principal): void {
-  if (principal.scopes?.includes(invocationScope)) return
-  throw new PlatformApiError("INSUFFICIENT_SCOPE", 403, `The required OAuth scope is missing: ${invocationScope}`)
+function requireMemoryScope(principal: Principal, request: FastifyRequest): void {
+  const route = tenantRoute(request)
+  if (route && platformRouteScopeRequirements(route, request.method, request.body).every(scopes => hasAnyScope(principal.scopes, scopes))) return
+  throw new PlatformApiError("INSUFFICIENT_SCOPE", 403)
 }
 
 function strictBody(schema: TSchema) {
@@ -97,7 +100,7 @@ export const memoryHttp: FastifyPluginAsync<{
   }> {
     const actor = request.principal
     if (!actor || actor.tenant_id !== tenantId) throw new PlatformApiError("AUTHENTICATION_REQUIRED", 401)
-    requireInvocationScope(actor)
+    requireMemoryScope(actor, request)
     if (actor.client_id !== selfServiceClientId) {
       throw new PlatformApiError("MEMORY_SELF_SERVICE_CLIENT_REQUIRED", 403)
     }
@@ -119,7 +122,7 @@ export const memoryHttp: FastifyPluginAsync<{
   async function verifiedSharedActor(request: FastifyRequest, tenantId: string): Promise<Principal> {
     const actor = request.principal
     if (!actor || actor.tenant_id !== tenantId) throw new PlatformApiError("AUTHENTICATION_REQUIRED", 401)
-    requireInvocationScope(actor)
+    requireMemoryScope(actor, request)
     if (!directMemoryClientIds.has(actor.client_id)) {
       throw new PlatformApiError("MEMORY_DIRECT_CLIENT_REQUIRED", 403)
     }
@@ -544,7 +547,7 @@ export const memoryHttp: FastifyPluginAsync<{
     if (!principal || principal.tenant_id !== request.params.tenant_id) {
       throw new PlatformApiError("AUTHENTICATION_REQUIRED", 401)
     }
-    requireInvocationScope(principal)
+    requireMemoryScope(principal, request)
     try {
       await options.directory.listPersonalAsAgent(principal, { limit: 1 })
     } catch (error) {

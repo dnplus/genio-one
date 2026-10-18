@@ -1,11 +1,13 @@
 import { observeOperation } from "@genioone/telemetry/operation-observability"
 import { createHash } from "node:crypto"
+import { GENIOONE_SCOPES, hasAnyScope } from "@genioone/protocol/authorization-scopes"
 
 import type {
   AuthorizationDecision,
   AuthorizationInput,
   CompiledAuthorizationBundle,
   CompiledAuthorizationRule,
+  CapabilityOperationSemantics,
 } from "@genioone/protocol/authorization"
 
 function matches(values: string[], value: string): boolean {
@@ -14,6 +16,57 @@ function matches(values: string[], value: string): boolean {
     if (v === "*" || v === value) return true
   }
   return false
+}
+
+function operationScope(operation: CapabilityOperationSemantics): string {
+  return operation === "READ" ? GENIOONE_SCOPES.read : operation === "WRITE" ? GENIOONE_SCOPES.write : GENIOONE_SCOPES.invoke
+}
+
+function mcpToolScope(bundle: CompiledAuthorizationBundle, input: AuthorizationInput, tool: string): string {
+  const operation = bundle.capability_operations?.find((candidate) =>
+    candidate.resource_id === input.resourceId && candidate.mcp_tool === tool,
+  )?.operation_semantics
+  const reviewedReadOnly = bundle.mcp_tool_definitions?.some((definition) =>
+    definition.resource_id === input.resourceId && definition.exposed_tool_name === tool && definition.read_only === true,
+  ) === true
+  return operationScope(operation ?? (reviewedReadOnly ? "READ" : "WRITE"))
+}
+
+function requestScopes(bundle: CompiledAuthorizationBundle, input: AuthorizationInput): string[] {
+  if (input.requestProtocol === "LLM" || input.requestProtocol === "A2A") return [GENIOONE_SCOPES.invoke]
+  if (input.requestProtocol === "MCP") {
+    if (input.mcpMethod === "tools/call" && input.mcpTool) return [mcpToolScope(bundle, input, input.mcpTool)]
+    if (["initialize", "notifications/initialized", "notifications/cancelled", "ping", "transport/get", "transport/delete"].includes(input.mcpMethod ?? "")) {
+      return [GENIOONE_SCOPES.read, GENIOONE_SCOPES.write]
+    }
+    if (["tools/list", "resources/list", "resources/templates/list", "resources/read", "prompts/list", "prompts/get"].includes(input.mcpMethod ?? "")) {
+      return [GENIOONE_SCOPES.read]
+    }
+    return [GENIOONE_SCOPES.write]
+  }
+  const operation = bundle.capability_operations?.find((candidate) =>
+    candidate.resource_id === input.resourceId && candidate.capability_id === input.capabilityId && candidate.mcp_tool === undefined,
+  )?.operation_semantics ?? "WRITE"
+  return [operationScope(operation)]
+}
+
+function constrainCallerScopes(
+  bundle: CompiledAuthorizationBundle,
+  input: AuthorizationInput,
+  decision: AuthorizationDecision,
+): AuthorizationDecision {
+  if (decision.disposition === "DENY") return decision
+  const requiredScopes = requestScopes(bundle, input)
+  if (!hasAnyScope(input.authorizationScopes, requiredScopes)) {
+    return { ...denied(bundle, input, "INSUFFICIENT_SCOPE"), requiredScopes }
+  }
+  if (input.requestProtocol !== "MCP") return decision
+  return {
+    ...decision,
+    allowedMcpTools: decision.allowedMcpTools.filter((tool) =>
+      hasAnyScope(input.authorizationScopes, [mcpToolScope(bundle, input, tool)]),
+    ),
+  }
 }
 
 function ruleMatches(rule: CompiledAuthorizationRule, input: AuthorizationInput): boolean {
@@ -44,6 +97,7 @@ function decisionId(bundle: CompiledAuthorizationBundle, input: AuthorizationInp
     `${input.tenantId}\0` +
     `${input.subjectId}\0` +
     `${input.actingClientId}\0` +
+    `${[...(input.authorizationScopes ?? [])].sort().join(" ")}\0` +
     `${input.resourceId}\0` +
     `${input.capabilityId}\0` +
     `${input.requestedPublicModel ?? ""}\0` +
@@ -143,7 +197,7 @@ function authorizeDecision(
   }
   if (input.authorityMode === "DELEGATED") {
     if (!input.principalSubjectId) return denied(bundle, input, "NO_MATCHING_ENTITLEMENT")
-    const agentDecision = authorize(bundle, {
+    const agentDecision = authorizeDecision(bundle, {
       ...input,
       authorityMode: "SELF",
       principalSubjectId: undefined,
@@ -151,7 +205,7 @@ function authorizeDecision(
       delegationRevision: undefined,
       delegationRevocationGeneration: undefined,
     })
-    const principalDecision = authorize(bundle, {
+    const principalDecision = authorizeDecision(bundle, {
       ...input,
       requestProtocol: "API",
       subjectId: input.principalSubjectId,
@@ -179,8 +233,7 @@ function authorizeDecision(
         agentDecision.allowedPublicModels.length > 0 && principalDecision.allowedPublicModels.length > 0) {
       return denied(bundle, input, "MODEL_NOT_ENTITLED")
     }
-    if (input.requestProtocol === "MCP" && input.mcpMethod === "tools/call" &&
-        (input.mcpTool === undefined || !allowedMcpTools.includes(input.mcpTool))) {
+    if (input.requestProtocol === "MCP" && input.mcpMethod === "tools/call" && (!input.mcpTool || !allowedMcpTools.includes(input.mcpTool))) {
       return denied(bundle, input, "NO_MATCHING_ENTITLEMENT")
     }
     return {
@@ -317,5 +370,5 @@ function authorizeDecision(
 }
 
 export function authorize(bundle: CompiledAuthorizationBundle, input: AuthorizationInput): AuthorizationDecision {
-  return observeOperation("genio-one-authorizer", "policy.authorize", { ...input, policy_version: bundle.policy_version, bundle_revision: bundle.revision }, () => authorizeDecision(bundle, input))
+  return observeOperation("genio-one-authorizer", "policy.authorize", { ...input, policy_version: bundle.policy_version, bundle_revision: bundle.revision }, () => constrainCallerScopes(bundle, input, authorizeDecision(bundle, input)))
 }

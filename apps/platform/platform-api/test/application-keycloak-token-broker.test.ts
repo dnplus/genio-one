@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -33,14 +34,14 @@ test("Keycloak token broker uses the active Application client secret transientl
           access_token: "bounded-keycloak-token",
           token_type: "Bearer",
           expires_in: 300,
-          scope: "genioone-invocation",
+          scope: GENIOONE_SCOPES.invoke,
         })
       }
       return new Response(null, { status: 404 })
     },
   })
 
-  const minted = await broker.mint({ clientId: "genio-app-1", scope: "genioone-invocation" })
+  const minted = await broker.mint({ clientId: "genio-app-1", scope: GENIOONE_SCOPES.invoke })
 
   assert.equal(minted.accessToken, "bounded-keycloak-token")
   assert.equal(minted.expiresIn, 300)

@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES, RESOURCE_SCOPE_VALUES } from "@genioone/protocol/authorization-scopes"
 import { describe, expect, test } from "bun:test"
 import { authorize } from "./authorize"
 import type { CompiledAuthorizationBundle, CompiledAuthorizationRule, AuthorizationInput, AuthorizationDecision } from "@genioone/protocol/authorization"
@@ -50,12 +51,90 @@ describe("authorize & intersectGrants", () => {
     now: 2000,
     correlationId: "corr-1",
     requestProtocol: "API",
+    authorizationScopes: RESOURCE_SCOPE_VALUES,
   }
 
   test("direct authorization works", () => {
     const result = authorize(mockBundle, baseInput)
     expect(result.disposition).toBe("ALLOW")
     expect(result.allowedPublicModels).toEqual(["gpt-4", "claude-3"])
+  })
+
+  test("verified scopes intersect published API semantics and never replace entitlement", () => {
+    const readBundle: CompiledAuthorizationBundle = {
+      ...mockBundle,
+      capability_operations: [{ resource_id: "res-1", capability_id: "cap-1", operation_semantics: "READ" }],
+    }
+    expect(authorize(readBundle, { ...baseInput, authorizationScopes: [GENIOONE_SCOPES.read] }).disposition).toBe("ALLOW")
+    expect(authorize(readBundle, { ...baseInput, authorizationScopes: [GENIOONE_SCOPES.write] }).reason).toBe("INSUFFICIENT_SCOPE")
+    expect(authorize(mockBundle, { ...baseInput, authorizationScopes: [GENIOONE_SCOPES.read] }).reason).toBe("INSUFFICIENT_SCOPE")
+    expect(authorize(mockBundle, { ...baseInput, authorizationScopes: undefined }).reason).toBe("INSUFFICIENT_SCOPE")
+    expect(authorize(readBundle, { ...baseInput, subjectId: "not-entitled", authorizationScopes: [GENIOONE_SCOPES.read] }).reason).toBe("NO_MATCHING_ENTITLEMENT")
+  })
+
+  test("models require invoke and management scopes cannot authorize Resource execution", () => {
+    const llm = { ...baseInput, requestProtocol: "LLM" as const, requestedPublicModel: "gpt-4" }
+    for (const scopes of [[GENIOONE_SCOPES.read], [GENIOONE_SCOPES.write], ["management:resources:write"]]) {
+      expect(authorize(mockBundle, { ...llm, authorizationScopes: scopes }).reason).toBe("INSUFFICIENT_SCOPE")
+    }
+    expect(authorize(mockBundle, { ...llm, authorizationScopes: [GENIOONE_SCOPES.invoke] }).disposition).toBe("ALLOW")
+  })
+
+  test("MCP discovery and each tool call use their published semantics", () => {
+    const scopedBundle: CompiledAuthorizationBundle = {
+      ...mockBundle,
+      capability_operations: [
+        { resource_id: "res-1", capability_id: "cap-read", mcp_tool: "tool-1", operation_semantics: "READ" },
+        { resource_id: "res-1", capability_id: "cap-write", mcp_tool: "tool-2", operation_semantics: "WRITE" },
+      ],
+    }
+    const mcp = { ...baseInput, requestProtocol: "MCP" as const, authorizationScopes: [GENIOONE_SCOPES.read], mcpMethod: "tools/call", mcpTool: "tool-1" }
+    expect(authorize(scopedBundle, mcp).disposition).toBe("ALLOW")
+    expect(authorize(scopedBundle, { ...mcp, mcpTool: "tool-2" }).reason).toBe("INSUFFICIENT_SCOPE")
+    expect(authorize(scopedBundle, { ...mcp, mcpTool: "unknown-tool" }).reason).toBe("NO_MATCHING_ENTITLEMENT")
+    expect(authorize(scopedBundle, { ...mcp, mcpMethod: "tools/list", mcpTool: undefined }).allowedMcpTools).toEqual(["tool-1"])
+    expect(authorize(scopedBundle, { ...mcp, mcpMethod: "resources/read", mcpTool: undefined }).disposition).toBe("ALLOW")
+    expect(authorize(scopedBundle, { ...mcp, mcpMethod: "tools/list", mcpTool: undefined, authorizationScopes: [GENIOONE_SCOPES.write] }).reason).toBe("INSUFFICIENT_SCOPE")
+    expect(authorize(scopedBundle, { ...mcp, authorizationScopes: [GENIOONE_SCOPES.invoke] }).reason).toBe("INSUFFICIENT_SCOPE")
+    expect(authorize(mockBundle, mcp).reason).toBe("INSUFFICIENT_SCOPE")
+  })
+
+  test("delegated MCP reads constrain the original tool once without requiring write consent", () => {
+    const scopedBundle: CompiledAuthorizationBundle = {
+      ...mockBundle,
+      capability_operations: [{ resource_id: "res-1", capability_id: "cap-read", mcp_tool: "tool-2", operation_semantics: "READ" }],
+    }
+    const delegated: AuthorizationInput = {
+      ...baseInput,
+      subjectId: "usr-agent",
+      subjectKind: "AGENT",
+      authorityMode: "DELEGATED",
+      principalSubjectId: "usr-1",
+      requestProtocol: "MCP",
+      mcpMethod: "tools/call",
+      mcpTool: "tool-2",
+      authorizationScopes: [GENIOONE_SCOPES.read],
+    }
+    expect(authorize(scopedBundle, delegated).disposition).toBe("ALLOW")
+    expect(authorize(scopedBundle, delegated).allowedMcpTools).toEqual(["tool-2"])
+    expect(authorize(scopedBundle, { ...delegated, mcpTool: "tool-3" }).reason).toBe("NO_MATCHING_ENTITLEMENT")
+    expect(authorize(scopedBundle, { ...delegated, authorizationScopes: undefined }).reason).toBe("INSUFFICIENT_SCOPE")
+  })
+
+  test("delegated A2A still requires invoke after Principal and Agent entitlement intersection", () => {
+    const delegated: AuthorizationInput = {
+      ...baseInput,
+      subjectId: "usr-agent",
+      subjectKind: "AGENT",
+      authorityMode: "DELEGATED",
+      principalSubjectId: "usr-1",
+      targetAgentSubjectId: "agent-target",
+      requestProtocol: "A2A",
+      a2aOperation: "SEND_MESSAGE",
+    }
+    expect(authorize(mockBundle, { ...delegated, authorizationScopes: [GENIOONE_SCOPES.invoke] }).disposition).toBe("ALLOW")
+    expect(authorize(mockBundle, { ...delegated, authorizationScopes: [GENIOONE_SCOPES.read] }).reason).toBe("INSUFFICIENT_SCOPE")
+    expect(authorize(mockBundle, { ...delegated, authorizationScopes: undefined }).reason).toBe("INSUFFICIENT_SCOPE")
   })
 
   test("an unrecognized matching disposition does not authorize", () => {

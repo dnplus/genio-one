@@ -1,3 +1,4 @@
+import { MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -525,7 +526,7 @@ test("Routing Reconstruction returns ordered immutable attempts without upstream
       role: "TENANT_ADMINISTRATOR",
       organization_ids: [],
       client_id: "console",
-      scopes: ["genioone-management"],
+      scopes: [MANAGEMENT_SCOPES.auditRead, MANAGEMENT_SCOPES.runtimeWrite],
     }
   })
   await app.register(gatewayActivityHttp, { store, authorizeRuntime: async () => {} })

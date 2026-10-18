@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES, MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -163,25 +164,25 @@ test("Agent Delegation HTTP uses the authenticated Principal and never accepts a
         tenant_id: "tenant-1",
         subject_id: "person-principal",
         client_id: "console",
-        scopes: ["genioone-management"],
         role: "USER",
         organization_ids: [],
+        scopes: [GENIOONE_SCOPES.read, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke, MANAGEMENT_SCOPES.accessRead, MANAGEMENT_SCOPES.accessApprove, MANAGEMENT_SCOPES.accessWrite],
       },
       agent: {
         tenant_id: "tenant-1",
         subject_id: "agent-worker",
         client_id: "agent-runtime",
-        scopes: ["genioone-management"],
         role: "USER",
         organization_ids: [],
+        scopes: [GENIOONE_SCOPES.read, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke, MANAGEMENT_SCOPES.accessRead, MANAGEMENT_SCOPES.accessApprove, MANAGEMENT_SCOPES.accessWrite],
       },
       outsider: {
         tenant_id: "tenant-1",
         subject_id: "person-outsider",
         client_id: "console",
-        scopes: ["genioone-management"],
         role: "USER",
         organization_ids: [],
+        scopes: [GENIOONE_SCOPES.read, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke, MANAGEMENT_SCOPES.accessRead, MANAGEMENT_SCOPES.accessApprove, MANAGEMENT_SCOPES.accessWrite],
       },
     }),
   })

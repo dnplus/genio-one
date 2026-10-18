@@ -1,3 +1,4 @@
+import { RESOURCE_SCOPE_VALUES } from "@genioone/protocol/authorization-scopes"
 import { expect, test } from "bun:test"
 import Fastify from "fastify"
 import { registerHttpObservability } from "@genioone/telemetry/fastify-observability"
@@ -20,9 +21,9 @@ test("Platform personal memory is shared by same-owner Bots and fails closed wit
   process.env.OTEL_EXPORTER_OTLP_ENDPOINT = "http://memory-bot-tools-collector.test"
   const app = Fastify()
   registerHttpObservability(app, "bot-memory-tools-test")
-  const owner: Principal = { tenant_id: "tenant", subject_id: "owner", acting_client_id: "genio-one-bot", scopes: ["genioone-invocation"] }
-  const other: Principal = { tenant_id: "tenant", subject_id: "other", acting_client_id: "genio-one-bot", scopes: ["genioone-invocation"] }
-  const withoutToken: Principal = { tenant_id: "tenant", subject_id: "without-token", acting_client_id: "genio-one-bot", scopes: ["genioone-invocation"] }
+  const owner: Principal = { tenant_id: "tenant", subject_id: "owner", acting_client_id: "genio-one-bot", scopes: [...RESOURCE_SCOPE_VALUES] }
+  const other: Principal = { tenant_id: "tenant", subject_id: "other", acting_client_id: "genio-one-bot", scopes: [...RESOURCE_SCOPE_VALUES] }
+  const withoutToken: Principal = { tenant_id: "tenant", subject_id: "without-token", acting_client_id: "genio-one-bot", scopes: [...RESOURCE_SCOPE_VALUES] }
   const ownerA = registry.create(owner, { name: "A" })
   const ownerB = registry.create(owner, { name: "B" })
   const otherBot = registry.create(other, { name: "Other" })
@@ -285,7 +286,7 @@ test("Bot memory tools join the active-grant Platform MCP contract", async () =>
     client_id: "genio-one-bot",
     role: "USER",
     organization_ids: [],
-    scopes: ["genioone-invocation"],
+    scopes: [...RESOURCE_SCOPE_VALUES],
   }
   const ownerActor = {
     ...botActor,
@@ -309,9 +310,9 @@ test("Bot memory tools join the active-grant Platform MCP contract", async () =>
       authorization_endpoint: "https://identity.join.test/authorize",
       token_endpoint: "https://identity.join.test/token",
       client_id: "genio-one-bot",
-      scopes: ["genioone-invocation"],
+      scopes: [...RESOURCE_SCOPE_VALUES],
       management_client_id: "genio-one-self-service",
-      management_scopes: ["genioone-invocation"],
+      management_scopes: [...RESOURCE_SCOPE_VALUES],
     },
   })
   const enabled = await platform.inject({
@@ -326,7 +327,7 @@ test("Bot memory tools join the active-grant Platform MCP contract", async () =>
   const sessions = new BotToolSessions()
   const broker = new RuntimeBroker({ provision: async () => { throw new Error("not needed") } })
   const app = Fastify()
-  const botPrincipal: Principal = { tenant_id: tenantId, subject_id: ownerId, acting_client_id: "genio-one-bot", scopes: ["genioone-invocation"] }
+  const botPrincipal: Principal = { tenant_id: tenantId, subject_id: ownerId, acting_client_id: "genio-one-bot", scopes: [...RESOURCE_SCOPE_VALUES] }
   const botA = registry.create(botPrincipal, { name: "Join A" })
   const botB = registry.create(botPrincipal, { name: "Join B" })
   const runtime = await broker.start(botPrincipal, { onMessage() {}, onExit() {} }, undefined, "bot-token")

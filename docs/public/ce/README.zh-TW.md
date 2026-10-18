@@ -31,6 +31,7 @@ CE 提供 Platform 控制平面、Gateway Runtime 與 Genio Bot 的原始碼，�
 
 - [第一個團隊工作流程](demo.md)：為組織安裝 CE 示範專案，並在 Genio Bot 完成文件研究到產品需求摘要的範例。
 - [第一筆受控 MCP 請求](first-mcp-request.md)：發布並經由 Gateway 呼叫公開 DeepWiki 的 `read_wiki_structure` 工具。
+- [OAuth 授權與 Application API key](authorization.md)：設定讀寫與管理 scopes、發行金鑰，以及從舊授權設定升級。
 - [Helm](helm.md)：說明自行建置並發布映像檔後的 Kubernetes 部署方式。
 - [疑難排解](troubleshooting.md)：列出本機常見問題與診斷指令。
 - [已知問題與後續修復](known-issues.md)：記錄 CE 安裝與示範驗證期間觀察到的目前限制。

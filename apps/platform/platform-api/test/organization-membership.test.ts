@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES, MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -110,17 +111,17 @@ test("canonical session preserves member visibility and limits Organization muta
         tenant_id: tenantId,
         subject_id: "person-kevin",
         client_id: "management-ui",
-        scopes: ["genioone-management"],
         role: "USER",
         organization_ids: [],
+        scopes: [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.identityRead, MANAGEMENT_SCOPES.identityWrite, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite],
       },
       "tenant-admin": {
         tenant_id: tenantId,
         subject_id: "person-tenant-admin",
         client_id: "management-ui",
-        scopes: ["genioone-management"],
         role: "USER",
         organization_ids: [],
+        scopes: [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.identityRead, MANAGEMENT_SCOPES.identityWrite, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite],
       },
     }),
     identity: modules.identity,
@@ -136,9 +137,9 @@ test("canonical session preserves member visibility and limits Organization muta
       authorization_endpoint: "https://identity.example.test/realms/genio-one/protocol/openid-connect/auth",
       token_endpoint: "https://identity.example.test/realms/genio-one/protocol/openid-connect/token",
       client_id: "self-service-ui",
-      scopes: ["genioone-invocation"],
+      scopes: [GENIOONE_SCOPES.read, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke],
       management_client_id: "management-ui",
-      management_scopes: ["genioone-management"],
+      management_scopes: [MANAGEMENT_SCOPES.identityRead, MANAGEMENT_SCOPES.identityWrite, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite],
     },
   })
   const headers = (token: string) => ({ authorization: `Bearer ${token}` })
@@ -164,7 +165,7 @@ test("canonical session preserves member visibility and limits Organization muta
       role: "ORGANIZATION_ADMINISTRATOR",
       organization_ids: [sales.organization_id, uatAccess.organization_id],
       administrator_organization_ids: [uatAccess.organization_id],
-      scopes: ["genioone-management"],
+      scopes: [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.identityRead, MANAGEMENT_SCOPES.identityWrite, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite],
       acr: "oidc",
       amr: ["oidc"],
     })
@@ -248,10 +249,10 @@ test("Resource details remain member-readable while Connection management and mu
         tenant_id: tenantId,
         subject_id: "person-kevin",
         client_id: "management-ui",
-        scopes: ["genioone-management"],
         role: "ORGANIZATION_ADMINISTRATOR",
         organization_ids: [sales.organization_id, uatAccess.organization_id],
         administrator_organization_ids: [uatAccess.organization_id],
+        scopes: [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.identityRead, MANAGEMENT_SCOPES.identityWrite, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite],
       },
     }),
   })

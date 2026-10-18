@@ -36,6 +36,7 @@
     "test:secure-access:live": "bun scripts/firezone-secure-access-contract.mjs",
     "test:secure-access:apim:live": "bun scripts/secure-access-apim-contract.mjs",
     "test:self-service:live": "bun scripts/self-service-live-contract.mjs",
+    "test:oauth-consent:live": "bun scripts/oauth-consent-live-contract.mjs",
     "verify:production-foundation": "bun scripts/verify-production-foundation.mjs",
     "verify:production-readiness": "bun scripts/verify-production-readiness.mjs",
     "verify:release-artifacts": "bun scripts/release-artifact-contract.mjs",

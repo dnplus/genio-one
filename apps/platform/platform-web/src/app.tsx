@@ -1,3 +1,4 @@
+import { MANAGEMENT_CONSOLE_OAUTH_SCOPES, MANAGEMENT_SCOPE_VALUES, hasAnyScope } from "@genioone/protocol/authorization-scopes"
 import { isTemporarySessionFailure } from "@/lib/session-recovery"
 import { useEffect, useState } from "react"
 import {
@@ -57,7 +58,7 @@ const mockIdentity: IdentitySession = {
   acting_client_id: "genio-one-design-preview",
   role: "TENANT_ADMINISTRATOR",
   administrator_organization_ids: [],
-  scopes: ["genioone-management"],
+  scopes: [...MANAGEMENT_CONSOLE_OAUTH_SCOPES],
   acr: "mock",
   amr: ["mock"],
 }
@@ -110,7 +111,7 @@ export function App() {
           if (!token) throw error
           session = await loadIdentitySession(token)
         }
-        if (!session.scopes.includes("genioone-management")) {
+        if (!hasAnyScope(session.scopes, MANAGEMENT_SCOPE_VALUES)) {
           throw new Error("MANAGEMENT_SCOPE_REQUIRED")
         }
         if (!cancelled) {

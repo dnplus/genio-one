@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES, MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 import { createManagementApi } from "../src/app"
@@ -18,7 +19,7 @@ async function setup() {
     display_name: "Engineering", scope: { subject_ids: [], organization_ids: [org.organization_id], roles: ["USER"], client_ids: ["genio-one-bot"], bot_ids: [], runtime_ids: ["codex"] },
     rules: [{ rule_id: "subscription", group_id: "engineering-group", individual_settings: true, target: { runtime_id: "codex", capability_id: "codex.subscription" }, actions: ["use"], effect: "ALLOW", constraints: [], obligations: [{ kind: "audit", parameters: {} }] }],
   } })
-  const principalAuthenticator = createStaticPrincipalAuthenticator(Object.fromEntries(["admin", "user"].map((id) => [id, { tenant_id: tenantId, subject_id: id, client_id: "console", role: id === "admin" ? "TENANT_ADMINISTRATOR" : "USER", organization_ids: [], scopes: ["genioone-management"] }])))
+  const principalAuthenticator = createStaticPrincipalAuthenticator(Object.fromEntries(["admin", "user"].map((id) => [id, { tenant_id: tenantId, subject_id: id, client_id: "console", role: id === "admin" ? "TENANT_ADMINISTRATOR" : "USER", organization_ids: [], scopes: [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.policiesRead, MANAGEMENT_SCOPES.policiesWrite, MANAGEMENT_SCOPES.policiesPublish] }])))
   const app = await createManagementApi({ modules, principalAuthenticator, resourceCatalog: modules.resources })
   return { app, modules, org }
 }

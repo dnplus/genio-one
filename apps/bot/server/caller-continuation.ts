@@ -1,4 +1,5 @@
 import type { BotServerContext } from "./context"
+import { GENIOONE_SCOPES } from "@genioone/protocol/authorization-scopes"
 import type { Turn } from "./generated/v2/Turn"
 import { assertCapability, PERSONAL_BOT_USE } from "./capability-gate"
 import { BOT_MEMORY_GUIDANCE } from "../shared/bot-memory"
@@ -13,7 +14,7 @@ export async function continueCallers(context: BotServerContext) {
   running.add(context)
   try {
     for (const entry of context.botRegistry.continuations.pending()) {
-      const principal = { tenant_id: entry.tenant_id, subject_id: entry.owner_id, acting_client_id: "genio-one-bot", scopes: ["genioone-invocation"] }
+      const principal = { tenant_id: entry.tenant_id, subject_id: entry.owner_id, acting_client_id: "genio-one-bot", scopes: [GENIOONE_SCOPES.invoke] }
       const session = context.runtimeBroker.findByPrincipal(principal)
       if (!session?.initialized || !session.accessToken) continue
       const bot = context.botRegistry.getOwned(entry.bot_id, principal)

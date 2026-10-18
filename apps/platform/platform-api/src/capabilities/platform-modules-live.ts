@@ -359,7 +359,7 @@ export function createPlatformModuleGraph(
   const metrics = options.clickhouse
     ? createClickHouseGatewayMetricsStore(options.clickhouse)
     : { summarize: async () => { throw Object.assign(new Error("TELEMETRY_STORE_UNAVAILABLE"), { statusCode: 503 }) } }
-  const identity = createPostgresIdentityDirectory({ sql: postgres.sql })
+  const identity = createPostgresIdentityDirectory({ sql: postgres.sql, releasePublisher: lifecycleReleasePublisher, now: options.now })
   const accessGroups = createAccessGroupDirectory({
     repository: createPostgresAccessGroupRepository({ sql: postgres.sql, audit: auditEvents }),
     identity,

@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPE_VALUES, GENIOONE_SCOPES, MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -37,7 +38,7 @@ test("Application OAuth credential binds the active Publication gateway and cano
     oauth_client_id: "genio-app-1",
     oauth_issuer: "http://keycloak.test/realms/genio-one",
     oauth_audience: "genio-one-product-api",
-    oauth_scope: "genioone-invocation",
+    oauth_scope: GENIOONE_SCOPES.read,
     identity_provider_id: "keycloak-local",
     external_subject_id: "service-account-1",
     state: "ACTIVE",
@@ -47,6 +48,7 @@ test("Application OAuth credential binds the active Publication gateway and cano
     revoked_at: null,
   }
   const sql = new FakeSql((text) => {
+    if (text.includes("select distinct gateway_id")) return [{ gateway_id: "gateway-api" }, { gateway_id: "gateway-older" }]
     if (text.includes("from genio_one_applications application")) {
       assert.match(text, /join genio_one_publications publication/)
       assert.doesNotMatch(text, /enforcement_point_id/)
@@ -57,7 +59,7 @@ test("Application OAuth credential binds the active Publication gateway and cano
             type: "OAUTH2",
             issuer: "http://keycloak.test/realms/genio-one",
             audience: "genio-one-product-api",
-            scope: "genioone-invocation",
+            scope: GENIOONE_SCOPES.read,
           },
         },
         gateway_id: "gateway-api",
@@ -99,6 +101,7 @@ test("Application OAuth credential binds the active Publication gateway and cano
   })
 
   const created = await registry.issueOAuthCredential({
+    issuerScopes: [...GENIOONE_SCOPE_VALUES],
     tenantId: "tenant-acme",
     applicationId: "application-1",
     value: {
@@ -111,7 +114,7 @@ test("Application OAuth credential binds the active Publication gateway and cano
   assert.equal(created.credential.state, "ACTIVE")
   assert.equal(created.credential_delivery, "ONE_TIME")
   assert.equal(created.oauth_client_secret, "one-time-secret")
-  assert.deepEqual(published, ["gateway-api"])
+  assert.deepEqual(published, ["gateway-api", "gateway-older"])
   assert.ok(sql.calls.some(({ text }) => text.includes("insert into genio_one_external_identity_bindings")))
   assert.equal(sql.calls.some(({ text }) => text.includes("genio_one_subject_external_identities")), false)
 })
@@ -128,7 +131,7 @@ test("Application OAuth rotation activates one successor and bounds the predeces
     oauth_client_id: "genio-app-old",
     oauth_issuer: "http://keycloak.test/realms/genio-one",
     oauth_audience: "genio-one-product-api",
-    oauth_scope: "genioone-invocation",
+    oauth_scope: GENIOONE_SCOPES.read,
     identity_provider_id: "keycloak-local",
     external_subject_id: "service-account-old",
     state: "ACTIVE",
@@ -146,6 +149,7 @@ test("Application OAuth rotation activates one successor and bounds the predeces
     state: "ACTIVE",
   }
   const sql = new FakeSql((text) => {
+    if (text.includes("select distinct gateway_id")) return [{ gateway_id: "gateway-api" }, { gateway_id: "gateway-older" }]
     if (text.includes("operation_correlation_id =")) return []
     if (text.includes("resource.api_metadata") && text.includes("credential.credential_id")) {
       return [{
@@ -195,6 +199,7 @@ test("Application OAuth rotation activates one successor and bounds the predeces
   })
 
   const created = await registry.rotateCredential({
+    issuerScopes: [...GENIOONE_SCOPE_VALUES],
     tenantId: "tenant-acme",
     applicationId: "application-1",
     credentialId: predecessor.credential_id,
@@ -208,7 +213,7 @@ test("Application OAuth rotation activates one successor and bounds the predeces
   assert.equal(created.credential.application_subject_id, predecessor.application_subject_id)
   assert.equal(created.oauth_client_secret, "successor-secret")
   assert.equal(created.credential_delivery, "ONE_TIME")
-  assert.deepEqual(published, ["gateway-api"])
+  assert.deepEqual(published, ["gateway-api", "gateway-older"])
   const retirement = sql.calls.find(({ text }) => text.includes("set state = 'RETIRED'"))
   assert.deepEqual(retirement?.parameters, [
     "tenant-acme",
@@ -292,4 +297,97 @@ test("expired retired Application credentials are revoked and detached within te
   ])
   const credentialUpdate = sql.calls.find(({ text }) => text.includes("set identity_provider_id = null"))
   assert.deepEqual(credentialUpdate?.parameters, ["tenant-acme", "application-credential-1", 2_000])
+})
+
+test("fresh published OAuth API credentials provision and return the configured nonempty operation scope", async () => {
+  for (const scope of [GENIOONE_SCOPES.read, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke]) {
+    const credentialRow = {
+      credential_id: "application-credential-scope", application_id: "application-scope", application_subject_id: "application-subject-scope",
+      resource_id: "resource-api", capability_id: "operation", generation: 1, kind: "OAUTH2",
+      oauth_client_id: "oauth-scope-client", oauth_issuer: "https://identity.test", oauth_audience: "records", oauth_scope: scope,
+      state: "ACTIVE", created_at: new Date(1_000_000), activated_at: new Date(1_000_000), valid_until: null, revoked_at: null,
+    }
+    const sql = new FakeSql(text => {
+      if (text.includes("from genio_one_applications application")) return [{ application_subject_id: credentialRow.application_subject_id,
+        api_metadata: { inbound_security: { type: "OAUTH2", issuer: credentialRow.oauth_issuer, audience: credentialRow.oauth_audience, scope } }, gateway_id: "gateway-api" }]
+      if (text.includes("select coalesce(max(generation)")) return [{ next_generation: 1 }]
+      if (text.includes("select subject_id from genio_one_external_identity_bindings")) return [{ subject_id: credentialRow.application_subject_id }]
+      if (text.includes("update genio_one_application_api_credentials") && text.includes("returning")) return [credentialRow]
+      return []
+    })
+    let provisionedScope: string | null = null
+    const registry = createPostgresApplicationRegistry({ sql, idFactory: () => "scope", now: () => 1_000,
+      releasePublisher: { async reconcileInTransaction() {} }, oauthProvisioner: {
+        async provision(input) { provisionedScope = input.scope; return { clientId: "oauth-scope-client", clientSecret: "scope-fixture-secret",
+          tokenEndpoint: "https://identity.test/token", issuer: input.issuer, externalSubjectId: "scope-service-account", identityProviderId: "scope-identity" } },
+        async revoke() {},
+      },
+    })
+    const result = await registry.issueOAuthCredential({ issuerScopes: [...GENIOONE_SCOPE_VALUES], tenantId: "tenant-scope", applicationId: credentialRow.application_id,
+      value: { correlation_id: `issue-${scope}`, resource_id: credentialRow.resource_id, capability_id: credentialRow.capability_id } })
+    assert.equal(provisionedScope, scope)
+    assert.equal(result.credential.oauth_scope, scope)
+    assert.deepEqual(result.credential.scopes, [scope])
+    assert.equal(result.credential.kind, "OAUTH2")
+    assert.equal(result.api_key, null)
+    assert.equal(result.oauth_client_secret, "scope-fixture-secret")
+  }
+})
+
+test("OAuth issue and rotation keep GenioOne scopes within verified issuer consent", async () => {
+  for (const operation of ["issue", "rotate"] as const) {
+    for (const configuredScope of [MANAGEMENT_SCOPES.auditRead, GENIOONE_SCOPES.read, "records.lookup"]) {
+      const denied = configuredScope === MANAGEMENT_SCOPES.auditRead
+      const current = {
+        credential_id: "oauth-current", application_id: "application-scope", application_subject_id: "application-subject-scope",
+        resource_id: "resource-scope", capability_id: "records", generation: 1, kind: "OAUTH2",
+        oauth_client_id: "oauth-client", oauth_issuer: "https://identity.test", oauth_audience: "genio-one-product-api",
+        oauth_scope: configuredScope, identity_provider_id: "identity-test", external_subject_id: "service-account-current",
+        state: "ACTIVE", created_at: new Date(1_000_000), activated_at: new Date(1_000_000), valid_until: null, revoked_at: null,
+      }
+      const sql = new FakeSql(text => {
+        if (text.includes("select kind")) return [{ kind: "OAUTH2" }]
+        if (text.includes("select distinct gateway_id")) return [{ gateway_id: "gateway-current" }, { gateway_id: "gateway-older" }]
+        if (text.includes("operation_correlation_id =")) return []
+        if (text.includes("resource.api_metadata")) return [{ ...current,
+          api_metadata: { inbound_security: { type: "OAUTH2", issuer: current.oauth_issuer, audience: current.oauth_audience, scope: configuredScope } },
+          gateway_id: "gateway-current" }]
+        if (text.includes("select coalesce(max(generation)")) return [{ next_generation: 2 }]
+        if (text.includes("select subject_id from genio_one_external_identity_bindings")) return [{ subject_id: current.application_subject_id }]
+        if (text.includes("set state = 'RETIRED'")) return [{ credential_id: current.credential_id }]
+        if (text.includes("set state = 'ACTIVE'") && text.includes("returning")) return [{ ...current,
+          credential_id: "application-credential-successor", generation: 2, external_subject_id: "service-account-successor" }]
+        return []
+      })
+      const published: string[] = []
+      let provisioned = 0
+      const registry = createPostgresApplicationRegistry({ sql, idFactory: () => "successor", now: () => 1_000,
+        releasePublisher: { async reconcileInTransaction({ gatewayId }) { published.push(gatewayId) } },
+        oauthProvisioner: {
+          async provision(input) {
+            provisioned += 1
+            return { clientId: input.clientId, clientSecret: "fixture-secret", tokenEndpoint: "https://identity.test/token",
+              issuer: input.issuer, externalSubjectId: "service-account-successor", identityProviderId: "identity-test" }
+          },
+          async revoke() {},
+        },
+      })
+      const context = { tenantId: "tenant-scope", applicationId: current.application_id,
+        issuerScopes: [MANAGEMENT_SCOPES.credentialsWrite, GENIOONE_SCOPES.read] }
+      const pending = operation === "issue"
+        ? registry.issueOAuthCredential({ ...context, value: { correlation_id: "scope-issue", resource_id: current.resource_id, capability_id: current.capability_id } })
+        : registry.rotateCredential({ ...context, credentialId: current.credential_id, value: { correlation_id: "scope-rotate", grace_period_seconds: 0 } })
+      if (denied) {
+        await assert.rejects(pending, error => error instanceof Error && "code" in error && error.code === "INSUFFICIENT_SCOPE")
+        assert.equal(provisioned, 0)
+        assert.deepEqual(published, [])
+        assert.equal(sql.calls.some(call => /insert into genio_one_application_api_credentials|set state = 'RETIRED'/.test(call.text)), false)
+      } else {
+        const result = await pending
+        assert.equal(result.credential.oauth_scope, configuredScope)
+        assert.equal(provisioned, 1)
+        assert.deepEqual(published, ["gateway-current", "gateway-older"])
+      }
+    }
+  }
 })

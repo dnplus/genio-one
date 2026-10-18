@@ -1,3 +1,4 @@
+import { MANAGEMENT_SCOPE_VALUES } from "@genioone/protocol/authorization-scopes"
 import { expect, test } from "bun:test"
 import { render, screen, waitFor } from "@testing-library/react"
 import { createInstance } from "i18next"
@@ -51,7 +52,7 @@ async function renderManagementApp(
         role,
         organization_ids: role === "ORGANIZATION_ADMINISTRATOR" ? ["org-uat-access"] : [],
         administrator_organization_ids: role === "ORGANIZATION_ADMINISTRATOR" ? ["org-uat-access"] : [],
-        scopes: ["genioone-management"],
+        scopes: [...MANAGEMENT_SCOPE_VALUES],
         acr: "oidc",
         amr: ["oidc"],
       }
@@ -85,7 +86,7 @@ test("a USER canonical session on an Access deep link is sent to Self-service wi
         subject_id: "subject-user",
         acting_client_id: "management-ui",
         role: "USER",
-        scopes: ["genioone-management"],
+        scopes: [...MANAGEMENT_SCOPE_VALUES],
         acr: "oidc",
         amr: ["oidc"],
       }), { status: 200, headers: { "content-type": "application/json" } })

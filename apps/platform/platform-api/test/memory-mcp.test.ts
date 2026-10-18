@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES, RESOURCE_SCOPE_VALUES } from "@genioone/protocol/authorization-scopes"
 import { expect, test } from "bun:test"
 import { randomUUID } from "node:crypto"
 
@@ -54,15 +55,18 @@ async function fixture() {
     modules,
     resourceCatalog: modules.resources,
     principalAuthenticator: createStaticPrincipalAuthenticator({
-      owner: principal({ scopes: ["genioone-invocation"] }),
-      "agent-a": principal({ clientId: "agent-a", scopes: ["genioone-invocation"] }),
-      "agent-b": principal({ clientId: "agent-b", scopes: ["genioone-invocation"] }),
-      other: principal({ subjectId: otherOwnerId, scopes: ["genioone-invocation"] }),
-      "other-tenant": principal({ tenantId: otherTenantId, scopes: ["genioone-invocation"] }),
-      "wrong-client": principal({ clientId: "third-party-client", scopes: ["genioone-invocation"] }),
+      owner: principal({ scopes: [...RESOURCE_SCOPE_VALUES] }),
+      "read-agent": principal({ clientId: "agent-a", scopes: [GENIOONE_SCOPES.read] }),
+      "write-agent": principal({ clientId: "agent-a", scopes: [GENIOONE_SCOPES.write] }),
+      legacy: principal({ clientId: "agent-a", scopes: ["genioone-invocation"] }),
+      "agent-a": principal({ clientId: "agent-a", scopes: [...RESOURCE_SCOPE_VALUES] }),
+      "agent-b": principal({ clientId: "agent-b", scopes: [...RESOURCE_SCOPE_VALUES] }),
+      other: principal({ subjectId: otherOwnerId, scopes: [...RESOURCE_SCOPE_VALUES] }),
+      "other-tenant": principal({ tenantId: otherTenantId, scopes: [...RESOURCE_SCOPE_VALUES] }),
+      "wrong-client": principal({ clientId: "third-party-client", scopes: [...RESOURCE_SCOPE_VALUES] }),
       "missing-scope": principal(),
       "management-only": principal({ scopes: ["genioone-management"] }),
-      "agent-subject": principal({ subjectId: "agent-subject", scopes: ["genioone-invocation"] }),
+      "agent-subject": principal({ subjectId: "agent-subject", scopes: [...RESOURCE_SCOPE_VALUES] }),
     }),
   })
   const ownerHeaders = { authorization: "Bearer owner", "content-type": "application/json" }
@@ -459,4 +463,36 @@ test("personal memory rejects untrusted owners, missing scopes, anonymous calls,
   } finally {
     await app.close()
   }
+})
+
+test("native memory read and write consent cannot cross tool actions", async () => {
+  const { app, ownerHeaders, agentsUrl, mcp } = await fixture()
+  try {
+    const grant = await app.inject({ method: "POST", url: agentsUrl, headers: ownerHeaders, payload: { agent_id: "agent-a" } })
+    expect(grant.statusCode).toBe(201)
+    for (const name of ["memory_remember", "memory_forget"]) {
+      const call = { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name, arguments: {} } }
+      for (const body of [call, [call], [initialize(), call]]) {
+        const denied = await mcp("read-agent", body)
+        expect(denied.statusCode).toBe(403)
+        expect(denied.json().code).toBe("INSUFFICIENT_SCOPE")
+      }
+    }
+    for (const name of ["memory_list", "memory_get", "memory_retrieve", "memory_scope_list"]) {
+      const call = { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name, arguments: {} } }
+      for (const body of [call, [call]]) {
+        const denied = await mcp("write-agent", body)
+        expect(denied.statusCode).toBe(403)
+        expect(denied.json().code).toBe("INSUFFICIENT_SCOPE")
+      }
+    }
+    for (const token of ["missing-scope", "legacy"]) {
+      const denied = await mcp(token, initialize())
+      expect(denied.statusCode).toBe(403)
+      expect(denied.json().code).toBe("INSUFFICIENT_SCOPE")
+    }
+    const read = await mcp("read-agent", { jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "memory_list", arguments: {} } })
+    expect(read.statusCode).toBe(200)
+    expect(read.body).not.toContain("INSUFFICIENT_SCOPE")
+  } finally { await app.close() }
 })

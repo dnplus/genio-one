@@ -1,3 +1,4 @@
+import { platformResourceOAuthScope } from "./resource-oauth-scope"
 import { useEffect, useMemo, useState, type FormEvent } from "react"
 import { LoaderCircleIcon, PlusIcon, Trash2Icon } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -218,7 +219,7 @@ export function CreateResourceWizard({
   const [oauthIssuer, setOauthIssuer] = useState("")
   const [oauthAudience, setOauthAudience] = useState("")
   const [oauthJwksUrl, setOauthJwksUrl] = useState("")
-  const [oauthScope, setOauthScope] = useState("genioone-invocation")
+  const [oauthScope, setOauthScope] = useState("")
   const [documentText, setDocumentText] = useState(sampleOpenApi)
   const [openApiSource, setOpenApiSource] = useState<OpenApiSource>("UPLOAD")
   const [openApiUrl, setOpenApiUrl] = useState("")
@@ -334,6 +335,7 @@ export function CreateResourceWizard({
       if (!oauthIssuer.trim()) missing.push(t("Issuer"))
       if (!oauthAudience.trim()) missing.push(t("Audience"))
       if (!oauthJwksUrl.trim()) missing.push(t("JWKS URL"))
+      if (!oauthScope.trim()) missing.push(t("Scope"))
     }
     if (isApi) {
       if (openApiSource === "UPLOAD" && !openApiFileName) missing.push(t("OpenAPI file"))
@@ -389,7 +391,7 @@ export function CreateResourceWizard({
           oauthJwksUrl: platformOidc
             ? `${effectiveIssuer}/protocol/openid-connect/certs`
             : oauthJwksUrl,
-          oauthScope,
+          oauthScope: platformOidc ? platformResourceOAuthScope(kind === "A2A" ? "A2A" : "API", importedApiOperations(sourceText).map(operation => operation.method)) : oauthScope,
           requestSchemaValidation: schemaValidation,
           enforcementPointId,
           ownerOrganizationId: ownerOrganizationId,

@@ -2,6 +2,7 @@ import { PlatformApiError } from "../errors"
 import type { SqlAdapter, SqlTransaction } from "../../persistence/sql-adapter"
 import type { BootstrapSubjectInput, CreateSelfServiceAgentInput, CreateSubjectInput, Subject } from "./contract"
 import type { IdentityDirectory } from "./module"
+import type { ResourceLifecycleReleasePublisher } from "../resources/module"
 
 type Row = Record<string, unknown>
 
@@ -94,7 +95,36 @@ async function upsertSubject(
   }
 }
 
-export function createPostgresIdentityDirectory(options: { sql: SqlAdapter }): IdentityDirectory {
+export function createPostgresIdentityDirectory(options: {
+  sql: SqlAdapter
+  releasePublisher?: ResourceLifecycleReleasePublisher
+  now?: () => number
+}): IdentityDirectory {
+  const now = options.now ?? (() => Math.floor(Date.now() / 1000))
+  async function reconcileApplicationApiKeyGateways(transaction: SqlTransaction, tenantId: string, subjectId: string) {
+    const gateways = await transaction.query<{ gateway_id: string }>(
+      `select publication.gateway_id
+         from genio_one_application_api_credentials credential
+         join genio_one_applications application
+           on application.tenant_id = credential.tenant_id
+          and application.application_id = credential.application_id
+          and application.subject_id = credential.application_subject_id
+         join genio_one_publications publication
+           on publication.tenant_id = credential.tenant_id
+          and publication.resource_id = credential.resource_id
+        where credential.tenant_id = $1 and credential.application_subject_id = $2
+          and credential.kind = 'API_KEY' and credential.resource_id is not null
+          and credential.expires_at > now() and credential.revoked_at is null
+          and (credential.state = 'ACTIVE' or (credential.state = 'RETIRED' and credential.valid_until > now()))
+          and publication.publication_state in ('PUBLISHED', 'DEPRECATED')
+        order by publication.gateway_id`,
+      [tenantId, subjectId],
+    )
+    if (gateways.rows.length && !options.releasePublisher) throw new PlatformApiError("GATEWAY_RELEASE_PUBLISHER_REQUIRED", 500)
+    for (const gatewayId of new Set(gateways.rows.map(row => row.gateway_id))) {
+      await options.releasePublisher!.reconcileInTransaction({ transaction, tenantId, gatewayId, issuedAt: now() })
+    }
+  }
   const create = async ({ tenantId, value }: { tenantId: string; value: CreateSubjectInput }) => {
     const normalizedTenant = required(tenantId, "TENANT_REQUIRED")
     const subjectId = value.subject_id?.trim() || `agent-${crypto.randomUUID()}`
@@ -201,39 +231,46 @@ export function createPostgresIdentityDirectory(options: { sql: SqlAdapter }): I
       })
     },
     async suspend({ tenantId, subjectId, suspendedBy, value }) {
-      const result = await options.sql.query<Row>(
-        `update genio_one_subjects
-            set suspended_at = coalesce(suspended_at, now()),
-                suspended_by = coalesce(suspended_by, $3),
-                suspension_reason = coalesce(suspension_reason, $4),
-                updated_at = now()
-          where tenant_id = $1 and subject_id = $2
-      returning subject_id, kind, display_name, email, department, suspended_at, suspended_by, suspension_reason`,
-        [
-          required(tenantId, "TENANT_REQUIRED"),
-          required(subjectId, "SUBJECT_REQUIRED"),
-          required(suspendedBy, "SUBJECT_REQUIRED"),
-          value.reason?.trim() || null,
-        ],
-      )
-      const row = result.rows[0]
-      if (!row) throw new PlatformApiError("SUBJECT_NOT_FOUND", 404)
-      return subject(row)
+      return options.sql.transaction(async transaction => {
+        const normalizedTenant = required(tenantId, "TENANT_REQUIRED")
+        const normalizedSubject = required(subjectId, "SUBJECT_REQUIRED")
+        const result = await transaction.query<Row>(
+          `update genio_one_subjects
+              set suspended_at = coalesce(suspended_at, now()),
+                  suspended_by = coalesce(suspended_by, $3),
+                  suspension_reason = coalesce(suspension_reason, $4),
+                  updated_at = now()
+            where tenant_id = $1 and subject_id = $2
+        returning subject_id, kind, display_name, email, department, suspended_at, suspended_by, suspension_reason`,
+          [normalizedTenant, normalizedSubject, required(suspendedBy, "SUBJECT_REQUIRED"), value.reason?.trim() || null],
+        )
+        const row = result.rows[0]
+        if (!row) throw new PlatformApiError("SUBJECT_NOT_FOUND", 404)
+        const changed = subject(row)
+        if (changed.kind === "APPLICATION") await reconcileApplicationApiKeyGateways(transaction, normalizedTenant, normalizedSubject)
+        return changed
+      })
     },
     async restore({ tenantId, subjectId }) {
-      const result = await options.sql.query<Row>(
-        `update genio_one_subjects
-            set suspended_at = null,
-                suspended_by = null,
-                suspension_reason = null,
-                updated_at = now()
-          where tenant_id = $1 and subject_id = $2
-      returning subject_id, kind, display_name, email, department, suspended_at, suspended_by, suspension_reason`,
-        [required(tenantId, "TENANT_REQUIRED"), required(subjectId, "SUBJECT_REQUIRED")],
-      )
-      const row = result.rows[0]
-      if (!row) throw new PlatformApiError("SUBJECT_NOT_FOUND", 404)
-      return subject(row)
+      return options.sql.transaction(async transaction => {
+        const normalizedTenant = required(tenantId, "TENANT_REQUIRED")
+        const normalizedSubject = required(subjectId, "SUBJECT_REQUIRED")
+        const result = await transaction.query<Row>(
+          `update genio_one_subjects
+              set suspended_at = null,
+                  suspended_by = null,
+                  suspension_reason = null,
+                  updated_at = now()
+            where tenant_id = $1 and subject_id = $2
+        returning subject_id, kind, display_name, email, department, suspended_at, suspended_by, suspension_reason`,
+          [normalizedTenant, normalizedSubject],
+        )
+        const row = result.rows[0]
+        if (!row) throw new PlatformApiError("SUBJECT_NOT_FOUND", 404)
+        const changed = subject(row)
+        if (changed.kind === "APPLICATION") await reconcileApplicationApiKeyGateways(transaction, normalizedTenant, normalizedSubject)
+        return changed
+      })
     },
     async authorizationForSubject({ tenantId, subjectId }) {
       const normalizedTenant = required(tenantId, "TENANT_REQUIRED")

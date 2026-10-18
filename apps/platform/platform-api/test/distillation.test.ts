@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES, MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -10,7 +11,7 @@ import type { Principal } from "../src/capabilities/tenancy-auth/contract"
 
 const digest = "a".repeat(64)
 
-function principal(subjectId: string, scopes: string[] = ["genioone-invocation"]): Principal {
+function principal(subjectId: string, scopes: string[] = [GENIOONE_SCOPES.read, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke]): Principal {
   return {
     tenant_id: "tenant-acme",
     subject_id: subjectId,
@@ -395,18 +396,18 @@ test("only a current workspace maintainer can approve a candidate", async () => 
     client_id: "management-ui",
     role: "TENANT_ADMINISTRATOR",
     organization_ids: [],
-    scopes: ["genioone-management"],
+    scopes: [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.accessApprove],
   }
   const botAdmin: Principal = {
     ...admin,
     subject_id: "bot-admin",
     client_id: "genio-one-bot",
-    scopes: ["genioone-invocation"],
+    scopes: [GENIOONE_SCOPES.read, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke],
   }
-  const unscopedAdmin: Principal = {
+  const noScopeAdmin: Principal = {
     tenant_id: "tenant-acme",
-    subject_id: "unscoped-admin",
-    client_id: "management-ui",
+    subject_id: "no-scope-admin",
+    client_id: "unscoped-management",
     role: "TENANT_ADMINISTRATOR",
     organization_ids: [],
   }
@@ -427,11 +428,11 @@ test("only a current workspace maintainer can approve a candidate", async () => 
     principalAuthenticator: createStaticPrincipalAuthenticator({
       admin,
       "bot-admin": botAdmin,
-      "unscoped-admin": unscopedAdmin,
-      owner: principal("owner", ["genioone-invocation", "genioone-management"]),
-      maintainer: principal("maintainer", ["genioone-management"]),
-      "other-maintainer": principal("other-maintainer", ["genioone-management"]),
-      "bot-maintainer": principal("maintainer"),
+      "no-scope-admin": noScopeAdmin,
+      owner: principal("owner", [GENIOONE_SCOPES.read, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.accessApprove]),
+      maintainer: principal("maintainer", [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.accessApprove]),
+      "other-maintainer": principal("other-maintainer", [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.accessApprove]),
+      "bot-maintainer": principal("maintainer", [GENIOONE_SCOPES.invoke]),
       reader: principal("reader"),
       stranger: principal("stranger"),
     }),
@@ -441,7 +442,7 @@ test("only a current workspace maintainer can approve a candidate", async () => 
     subjects: [
       { subject_id: "admin", kind: "PERSON", role: "TENANT_ADMINISTRATOR" },
       { subject_id: "bot-admin", kind: "PERSON", role: "TENANT_ADMINISTRATOR" },
-      { subject_id: "unscoped-admin", kind: "PERSON", role: "TENANT_ADMINISTRATOR" },
+      { subject_id: "no-scope-admin", kind: "PERSON", role: "TENANT_ADMINISTRATOR" },
       { subject_id: "owner", kind: "PERSON" },
       { subject_id: "maintainer", kind: "PERSON" },
       { subject_id: "other-maintainer", kind: "PERSON" },
@@ -614,18 +615,19 @@ test("only a current workspace maintainer can approve a candidate", async () => 
     headers: { authorization: "Bearer admin" },
   })
   assert.equal(managementContributorWorkspace.statusCode, 403)
-  const unscopedWorkspace = await app.inject({
+  const noScopeWorkspace = await app.inject({
     method: "GET",
     url: `/v1/tenants/tenant-acme/team-workspaces/${workspace.json().workspace_id}`,
-    headers: { authorization: "Bearer unscoped-admin" },
+    headers: { authorization: "Bearer no-scope-admin" },
   })
-  assert.equal(unscopedWorkspace.statusCode, 403)
-  const unscopedContributorWorkspace = await app.inject({
+  assert.equal(noScopeWorkspace.statusCode, 403)
+  assert.equal(noScopeWorkspace.json().code, "INSUFFICIENT_SCOPE")
+  const noScopeContributorWorkspace = await app.inject({
     method: "GET",
     url: `/v1/tenants/tenant-acme/team-workspaces/${workspace.json().workspace_id}?access=contributor`,
-    headers: { authorization: "Bearer unscoped-admin" },
+    headers: { authorization: "Bearer no-scope-admin" },
   })
-  assert.equal(unscopedContributorWorkspace.statusCode, 403)
+  assert.equal(noScopeContributorWorkspace.statusCode, 403)
   const contributorWorkspace = await app.inject({
     method: "GET",
     url: `/v1/tenants/tenant-acme/team-workspaces/${workspace.json().workspace_id}`,
@@ -675,12 +677,13 @@ test("only a current workspace maintainer can approve a candidate", async () => 
   assert.equal(managementWorkspaces.statusCode, 200)
   assert.equal(managementWorkspaces.json().some((item: { workspace_id: string }) => item.workspace_id === workspace.json().workspace_id), true)
   assert.equal(managementWorkspaces.json().some((item: { workspace_id: string }) => item.workspace_id === otherWorkspace.json().workspace_id), true)
-  const unscopedWorkspaces = await app.inject({
+  const noScopeWorkspaces = await app.inject({
     method: "GET",
     url: "/v1/tenants/tenant-acme/team-workspaces",
-    headers: { authorization: "Bearer unscoped-admin" },
+    headers: { authorization: "Bearer no-scope-admin" },
   })
-  assert.equal(unscopedWorkspaces.statusCode, 403)
+  assert.equal(noScopeWorkspaces.statusCode, 403)
+  assert.equal(noScopeWorkspaces.json().code, "INSUFFICIENT_SCOPE")
   const botAdminWorkspaces = await app.inject({
     method: "GET",
     url: "/v1/tenants/tenant-acme/team-workspaces",
@@ -947,7 +950,7 @@ test("only a current workspace maintainer can approve a candidate", async () => 
   await app.close()
 })
 
-test("a token without invocation scope cannot create a marker", async () => {
+test("a token without write scope cannot create a marker", async () => {
   const app = await appFor([])
   const created = await app.inject({
     method: "POST",
@@ -959,14 +962,14 @@ test("a token without invocation scope cannot create a marker", async () => {
   await app.close()
 })
 
-test("marker mutations require invocation scope while lists allow management", async () => {
+test("marker mutations require write scope while read scope allows lists", async () => {
   const modules = createInMemoryPlatformModules({ now: () => 1_000 })
   const app = await createManagementApi({
     modules,
     resourceCatalog: modules.resources,
     principalAuthenticator: createStaticPrincipalAuthenticator({
       owner: principal("owner"),
-      console: principal("owner", ["genioone-management"]),
+      console: principal("owner", [GENIOONE_SCOPES.read]),
     }),
   })
   const created = await app.inject({

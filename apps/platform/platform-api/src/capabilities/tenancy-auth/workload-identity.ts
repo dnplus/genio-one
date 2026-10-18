@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES } from "@genioone/protocol/authorization-scopes"
 import { createHash, randomBytes } from "node:crypto"
 import type { Principal, PrincipalAuthenticator, PrincipalRole } from "./contract"
 import { PlatformApiError } from "../errors"
@@ -107,7 +108,7 @@ export class WorkloadIdentityStore {
       role: "USER",
       organization_ids: [],
       client_id: actingClientId,
-      scopes: ["genioone-invocation"],
+      scopes: [GENIOONE_SCOPES.invoke],
       external_identity: {
         provider_id: issuer,
         external_subject_id: externalSubject,
@@ -124,7 +125,7 @@ export class WorkloadIdentityStore {
       token_type: "Bearer",
       access_token: rawToken,
       expires_in: this.defaultTtlSeconds,
-      scope: "genioone-invocation",
+      scope: GENIOONE_SCOPES.invoke,
       subject_id: subjectId,
       acting_client_id: actingClientId,
     }

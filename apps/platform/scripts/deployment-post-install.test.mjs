@@ -1,3 +1,4 @@
+import { BOT_OAUTH_SCOPES, MANAGEMENT_CONSOLE_OAUTH_SCOPES, RESOURCE_SCOPE_VALUES } from "../../../packages/protocol/src/authorization-scopes.ts";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -217,12 +218,7 @@ test("Management Console OIDC client uses the deployment origin and management s
     "https://one.acme.com/*",
   ]);
   assert.deepEqual(client.webOrigins, ["https://one.acme.com", "+"]);
-  assert.deepEqual(client.defaultClientScopes, [
-    "basic",
-    "genioone-management",
-    "application.create",
-    "audit.export",
-  ]);
+  assert.deepEqual(client.defaultClientScopes, ["basic", ...MANAGEMENT_CONSOLE_OAUTH_SCOPES.filter((scope) => scope !== "openid")]);
   assert.equal(client.publicClient, true);
   assert.equal(client.standardFlowEnabled, true);
   assert.equal(client.directAccessGrantsEnabled, false);
@@ -275,11 +271,7 @@ test("Bot OIDC client uses the deployment bot origin and enforces PKCE", async (
     "http://127.0.0.1:5181/*",
   ]);
   assert.deepEqual(client.webOrigins, ["https://bot.acme.com", "+"]);
-  assert.deepEqual(client.defaultClientScopes, [
-    "basic",
-    "genioone-invocation",
-    "genioone-management",
-  ]);
+  assert.deepEqual(client.defaultClientScopes, ["basic", ...BOT_OAUTH_SCOPES.filter((scope) => scope !== "openid")]);
   assert.equal(client.publicClient, true);
   assert.equal(client.attributes["pkce.code.challenge.method"], "S256");
 });
@@ -302,7 +294,9 @@ test("native MCP clients use Authorization Code with S256 and Keycloak dynamic l
           "http://genio-bot.localhost:5181/api/mcp/oauth/callback/*",
         ]
       : ["http://127.0.0.1:*"]);
-    assert.deepEqual(client.defaultClientScopes, ["basic", "genioone-invocation"]);
+    assert.deepEqual(client.defaultClientScopes, ["basic"]);
+    assert.deepEqual(client.optionalClientScopes, clientId === "codex-mcp" ? [...RESOURCE_SCOPE_VALUES, "offline_access"] : RESOURCE_SCOPE_VALUES);
+    assert.equal(client.consentRequired, true);
   }
 });
 
@@ -312,10 +306,10 @@ test("Codex persisted login requires consent and optional offline access without
   const grok = desired.clients.find((client) => client.clientId === "grok-mcp");
   assert.equal(codex.consentRequired, true);
   assert.equal(codex.fullScopeAllowed, false);
-  assert.deepEqual(codex.defaultClientScopes, ["basic", "genioone-invocation"]);
-  assert.deepEqual(codex.optionalClientScopes, ["offline_access"]);
-  assert.equal(grok.consentRequired, undefined);
-  assert.equal(grok.optionalClientScopes, undefined);
+  assert.deepEqual(codex.defaultClientScopes, ["basic"]);
+  assert.deepEqual(codex.optionalClientScopes, [...RESOURCE_SCOPE_VALUES, "offline_access"]);
+  assert.equal(grok.consentRequired, true);
+  assert.deepEqual(grok.optionalClientScopes, RESOURCE_SCOPE_VALUES);
 });
 
 test("Codex offline scope reconciliation adds, reruns, and retracts only the managed optional link", async () => {

@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { networkInterfaces } from "node:os"
 import { join, resolve } from "node:path"
 import process from "node:process"
+import { MANAGEMENT_CONSOLE_OAUTH_SCOPES, SELF_SERVICE_OAUTH_SCOPES } from "@genioone/protocol/authorization-scopes"
 
 const appRoot = resolve(import.meta.dirname, "..")
 const localRoot = join(appRoot, ".local", "gateway-runtime")
@@ -180,7 +181,7 @@ async function main(): Promise<void> {
       role: "TENANT_ADMINISTRATOR",
       organization_ids: ["organization-local"],
       client_id: "platform-console",
-      scopes: ["genioone-management"],
+      scopes: [...MANAGEMENT_CONSOLE_OAUTH_SCOPES],
     },
     [runtimeToken]: {
       tenant_id: tenantId,
@@ -244,9 +245,9 @@ async function main(): Promise<void> {
     authorization_endpoint: `${issuer}/protocol/openid-connect/auth`,
     token_endpoint: `${issuer}/protocol/openid-connect/token`,
     client_id: "genio-one-self-service",
-    scopes: ["openid", "genioone-invocation"],
+    scopes: SELF_SERVICE_OAUTH_SCOPES,
     management_client_id: "genio-one-management-console",
-    management_scopes: ["openid", "genioone-management"],
+    management_scopes: MANAGEMENT_CONSOLE_OAUTH_SCOPES,
   })
   const bootstrapSubjects = JSON.stringify([
     {

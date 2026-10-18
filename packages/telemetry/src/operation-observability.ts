@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import { AsyncLocalStorage } from "node:async_hooks"
 import { exportOtel, otelResource, observabilityOrigin, persistOtel, recordHttpObservation, traceIdentity } from "./otlp-observability"
 import { createDetailBodyDecoder } from "./otlp-detail-capture"
+import { redactApplicationApiKeys } from "./application-api-key-redaction"
 
 export interface ObservationContext { traceId: string; spanId: string; correlationId: string; tenantId: string; subjectId?: string; actingClientId?: string }
 export const observationContext = new AsyncLocalStorage<ObservationContext>()
@@ -31,13 +32,11 @@ function recordBoundary(buffered: Buffer): number {
 }
 const mcpRoute = (path: string) => path.replace(/(\/mcp\/)[A-Za-z0-9_.-]+$/, "$1:configuration")
 
-// Raw evidence: the payload is embedded as JSON (not a nested string) so the collector's
-// credential redaction sees one level of JSON. Nothing is redacted or truncated here.
 export function observationEvidence(value: unknown): string {
   try {
     if (typeof value === "string") { try { value = JSON.parse(value) } catch {} }
     const serializable = value instanceof Response ? { status: value.status, content_type: value.headers.get("content-type"), body: "STREAM_NOT_CONSUMED_BY_OBSERVER" } : value
-    const json = JSON.stringify(serializable, (key, item) => key === "genio_bot/memory" ? { availability: "OMITTED_SENSITIVE_MEMORY_CONTEXT" } : typeof item === "bigint" ? String(item) : item) ?? "null"
+    const json = redactApplicationApiKeys(JSON.stringify(serializable, (key, item) => key === "genio_bot/memory" ? { availability: "OMITTED_SENSITIVE_MEMORY_CONTEXT" } : typeof item === "bigint" ? String(item) : item) ?? "null")
     const digest = createHash("sha256").update(json).digest("hex")
     return `{"availability":"CAPTURED","sha256":"${digest}","original_bytes":${Buffer.byteLength(json)},"value":${json}}`
   } catch { return JSON.stringify({ availability: "UNSERIALIZABLE" }) }
@@ -113,12 +112,12 @@ function observeResponseBody(service: string, context: ObservationContext, respo
 }
 
 export function observationReference(value: unknown): string {
-  const serialized = typeof value === "string" ? value : JSON.stringify(value)
-  const bytes = Buffer.from(serialized ?? "null")
+  const serialized = redactApplicationApiKeys((typeof value === "string" ? value : JSON.stringify(value)) ?? "null")
+  const bytes = Buffer.from(serialized)
   let content = value
   if (typeof value === "string") { try { content = JSON.parse(value) } catch {} }
   const records = Array.isArray(content) ? content : content && typeof content === "object" ? Object.values(content).find(Array.isArray) ?? [] : []
-  return JSON.stringify({ availability: "EXISTING_TELEMETRY_REFERENCE", original_bytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex"), record_count: records.length, references: records.map((record: any) => ({ trace_id: record?.trace_id, span_id: record?.span_id, record_id: record?.record_id })) })
+  return redactApplicationApiKeys(JSON.stringify({ availability: "EXISTING_TELEMETRY_REFERENCE", original_bytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex"), record_count: records.length, references: records.map((record: any) => ({ trace_id: record?.trace_id, span_id: record?.span_id, record_id: record?.record_id })) }))
 }
 
 export function observeOperation<T>(service: string, operation: string, input: unknown, run: () => T, verifiedActor?: Pick<ObservationContext, "subjectId" | "actingClientId">): T {

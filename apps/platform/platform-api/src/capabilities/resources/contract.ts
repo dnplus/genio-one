@@ -26,9 +26,16 @@ export const InstallationServiceKindSchema = Type.Union([
   Type.Literal("GENIO_BOT"),
 ])
 
+export const CapabilityOperationSemanticsSchema = Type.Union([
+  Type.Literal("READ"),
+  Type.Literal("WRITE"),
+  Type.Literal("INVOKE"),
+])
+
 const ResourceCapabilitySchema = Type.Object({
   capability_id: Identifier,
   display_name: Type.String({ minLength: 1, maxLength: 512 }),
+  operation_semantics: Type.Optional(CapabilityOperationSemanticsSchema),
 })
 
 export const ResourcePublicationEndpointSchema = Type.Object({

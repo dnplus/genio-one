@@ -1,3 +1,4 @@
+import { MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import { createHttpConnectionVerifier } from "../src/local-slice-verifiers"
 import { createConnectorHost } from "../../../connectors/host"
 import { createServiceNowHandler } from "../../../connectors/servicenow-csm/server"
@@ -12,7 +13,7 @@ test("management creates and edits site configuration without deployment endpoin
   const tenantId = "connector-test"
   const org = await modules.organizations.create({ tenantId, display_name: "Connector test", slug: "connector-test" })
   const key = "test-connector-configuration-key-0000000001"
-  const app = await createManagementApi({ modules, resourceCatalog: modules.resources, principalAuthenticator: createStaticPrincipalAuthenticator({ "test-token": { tenant_id: tenantId, subject_id: "admin", role: "TENANT_ADMINISTRATOR", organization_ids: [org.organization_id], client_id: "test", scopes: ["genioone-management"] } }), connectorDeployment: { configurationKey: key, endpoints: { "servicenow-csm": "http://connector.test/mcp", mail2000: "http://mail.test/mcp" } } })
+  const app = await createManagementApi({ modules, resourceCatalog: modules.resources, principalAuthenticator: createStaticPrincipalAuthenticator({ "test-token": { tenant_id: tenantId, subject_id: "admin", role: "TENANT_ADMINISTRATOR", organization_ids: [org.organization_id], client_id: "test", scopes: [MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite] } }), connectorDeployment: { configurationKey: key, endpoints: { "servicenow-csm": "http://connector.test/mcp", mail2000: "http://mail.test/mcp" } } })
   const base = `/v1/tenants/${tenantId}`
   try {
     const resource = await app.inject({ headers: { authorization: "Bearer test-token" }, method: "POST", url: `${base}/resources`, payload: { display_name: "CSM", kind: "MCP", owner_organization_id: org.organization_id, environment_id: "test", version: "v1", authentication_strategy: "OAUTH", enforcement_point_id: "gateway", capabilities: [{ capability_id: "mcp.invoke", display_name: "MCP" }] } })

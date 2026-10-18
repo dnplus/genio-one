@@ -1,3 +1,4 @@
+import { MANAGEMENT_CONSOLE_OAUTH_SCOPES } from "@genioone/protocol/authorization-scopes"
 import { expect, test } from "bun:test"
 import { beginBrowserLogin } from "./browser-oidc"
 
@@ -29,7 +30,7 @@ test("account switching forces a fresh OIDC account selection", async () => {
     authorization_endpoint: "https://identity.example.test/realms/genio-one/protocol/openid-connect/auth",
     token_endpoint: "https://identity.example.test/realms/genio-one/protocol/openid-connect/token",
     management_client_id: "genio-one-management-console",
-    management_scopes: ["openid", "genioone-management"],
+    management_scopes: [...MANAGEMENT_CONSOLE_OAUTH_SCOPES],
   }), { status: 200, headers: { "content-type": "application/json" } })) as unknown as typeof fetch
   try {
     await beginBrowserLogin("/management", true, { forceReauthentication: true })
@@ -37,6 +38,7 @@ test("account switching forces a fresh OIDC account selection", async () => {
     expect(authorization.searchParams.get("prompt")).toBe("login")
     expect(authorization.searchParams.get("max_age")).toBe("0")
     expect(authorization.searchParams.get("client_id")).toBe("genio-one-management-console")
+    expect(authorization.searchParams.get("scope")).toBe(MANAGEMENT_CONSOLE_OAUTH_SCOPES.join(" "))
     expect(values.get("genioone.pkce.state:/management")).toBeTruthy()
   } finally {
     globalThis.fetch = originalFetch
@@ -74,7 +76,7 @@ test("beginBrowserLogin fails securely when crypto.getRandomValues is unavailabl
     authorization_endpoint: "https://identity.example.test/realms/genio-one/protocol/openid-connect/auth",
     token_endpoint: "https://identity.example.test/realms/genio-one/protocol/openid-connect/token",
     management_client_id: "genio-one-management-console",
-    management_scopes: ["openid", "genioone-management"],
+    management_scopes: [...MANAGEMENT_CONSOLE_OAUTH_SCOPES],
   }), { status: 200, headers: { "content-type": "application/json" } })) as unknown as typeof fetch
 
   // Mock crypto without getRandomValues

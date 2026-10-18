@@ -2,12 +2,13 @@ import {
   BellIcon,
   CheckIcon,
   CopyIcon,
+  ExternalLinkIcon,
   KeyRoundIcon,
   PlusIcon,
   SaveIcon,
   UserRoundIcon,
 } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { PageHeader } from "@/components/page-header"
@@ -36,6 +37,7 @@ import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import type { IdentitySession } from "@/domain/contracts"
 import { changeConsoleLanguage, type ConsoleLanguage } from "@/i18n"
+import { loadBrowserOidcConfiguration } from "@/lib/browser-oidc"
 import {
   loadPersonalPreferences,
   savePersonalPreferences,
@@ -67,6 +69,58 @@ function PreferenceSwitch({
       </FieldContent>
       <Switch checked={checked} id={id} onCheckedChange={onCheckedChange} />
     </Field>
+  )
+}
+
+function ConnectedApplicationsCard({ mockMode }: { mockMode: boolean }) {
+  const { t } = useTranslation()
+  const [endpoint, setEndpoint] = useState<string | null>(null)
+  const [loading, setLoading] = useState(!mockMode)
+  const [failed, setFailed] = useState(false)
+  const [retry, setRetry] = useState(0)
+
+  useEffect(() => {
+    if (mockMode) return
+    let active = true
+    setLoading(true)
+    setFailed(false)
+    setEndpoint(null)
+    void loadBrowserOidcConfiguration()
+      .then((configuration) => {
+        if (!active || !configuration.account_management_endpoint) return
+        const accountUrl = new URL(configuration.account_management_endpoint)
+        if (accountUrl.protocol === "https:" || accountUrl.protocol === "http:") setEndpoint(accountUrl.href)
+      })
+      .catch(() => { if (active) setFailed(true) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [mockMode, retry])
+
+  return (
+    <Card data-testid="connected-applications-card">
+      <CardHeader className="border-b">
+        <CardTitle>{t("Connected applications")}</CardTitle>
+        <CardDescription>{t("Review and revoke the access you granted to third-party applications.")}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {loading ? <p role="status">{t("Loading connected-application access…")}</p> : failed ? (
+          <Alert variant="destructive"><AlertDescription>{t("Connected-application access could not be loaded. Retry to open your identity account.")}</AlertDescription></Alert>
+        ) : (
+          <p className="text-sm text-muted-foreground">{endpoint
+            ? t("Review connected applications and revoke their authorization in your identity account.")
+            : t("This deployment does not provide a connected-application management page.")}</p>
+        )}
+      </CardContent>
+      {endpoint ? (
+        <CardFooter>
+          <Button asChild variant="outline">
+            <a href={endpoint} target="_blank" rel="noopener noreferrer">
+              {t("Manage connected applications")}<ExternalLinkIcon data-icon="inline-end" />
+            </a>
+          </Button>
+        </CardFooter>
+      ) : failed ? <CardFooter><Button variant="outline" onClick={() => setRetry((current) => current + 1)}>{t("Retry")}</Button></CardFooter> : null}
+    </Card>
   )
 }
 
@@ -269,6 +323,8 @@ export function PersonalSettingsPage({ identity, mockMode }: PersonalSettingsPag
           <Button disabled={!mockMode || hasApiKey} onClick={createApiKey} variant="outline"><PlusIcon data-icon="inline-start" />{t("Create API key")}</Button>
         </CardFooter>
       </Card>
+
+      <ConnectedApplicationsCard mockMode={mockMode} />
 
       <div className="sticky bottom-4 flex justify-end">
         <Button onClick={savePreferences} className="shadow-lg">

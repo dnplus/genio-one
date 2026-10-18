@@ -147,6 +147,8 @@ function assertAuthorizationBundle(value: unknown): asserts value is GatewayPoli
     ...(value && "agent_delegations" in value ? ["agent_delegations"] : []),
     ...(value && "execution_grants" in value ? ["execution_grants"] : []),
     ...(value && "mcp_tool_definitions" in value ? ["mcp_tool_definitions"] : []),
+    ...(value && "capability_operations" in value ? ["capability_operations"] : []),
+    ...(value && "application_api_keys" in value ? ["application_api_keys"] : []),
   ])) {
     throw new Error("authorization bundle contains unknown fields")
   }

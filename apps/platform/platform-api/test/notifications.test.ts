@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -15,17 +16,17 @@ test("Notification subscriptions belong to the authenticated subject", async () 
         tenant_id: "tenant-acme",
         subject_id: "person-first",
         client_id: "management-ui",
-        scopes: ["genioone-management"],
         role: "USER",
         organization_ids: [],
+        scopes: [GENIOONE_SCOPES.read, GENIOONE_SCOPES.write],
       },
       second: {
         tenant_id: "tenant-acme",
         subject_id: "person-second",
         client_id: "management-ui",
-        scopes: ["genioone-management"],
         role: "USER",
         organization_ids: [],
+        scopes: [GENIOONE_SCOPES.read, GENIOONE_SCOPES.write],
       },
     }),
   })

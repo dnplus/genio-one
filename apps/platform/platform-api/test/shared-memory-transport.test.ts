@@ -1,3 +1,4 @@
+import { RESOURCE_SCOPE_VALUES } from "@genioone/protocol/authorization-scopes"
 import { expect, test } from "bun:test"
 import { randomUUID } from "node:crypto"
 import { flushOtel } from "@genioone/telemetry/otlp-observability"
@@ -66,7 +67,7 @@ async function fixture() {
     subjectId: "admin",
     clientId: "genio-one-management-console",
     role: "TENANT_ADMINISTRATOR",
-    scopes: ["genioone-invocation"],
+    scopes: [...RESOURCE_SCOPE_VALUES],
   })
   await modules.identity.bootstrap({
     tenantId,
@@ -143,31 +144,31 @@ async function fixture() {
         clientId: "genio-one-management-console",
         organizationIds,
         administratorOrganizationIds: organizationIds,
-        scopes: ["genioone-invocation"],
+        scopes: [...RESOURCE_SCOPE_VALUES],
       }),
       contributor: principal({
         subjectId: "contributor",
         clientId: "genio-one-self-service",
         organizationIds,
-        scopes: ["genioone-invocation"],
+        scopes: [...RESOURCE_SCOPE_VALUES],
       }),
       reader: principal({
         subjectId: "reader",
         clientId: "genio-one-self-service",
         organizationIds,
-        scopes: ["genioone-invocation"],
+        scopes: [...RESOURCE_SCOPE_VALUES],
       }),
       agent: principal({
         subjectId: "contributor",
         clientId: "agent-a",
         organizationIds,
-        scopes: ["genioone-invocation"],
+        scopes: [...RESOURCE_SCOPE_VALUES],
       }),
       "wrong-client": principal({
         subjectId: "maintainer",
         clientId: "untrusted-agent",
         organizationIds,
-        scopes: ["genioone-invocation"],
+        scopes: [...RESOURCE_SCOPE_VALUES],
       }),
       "missing-invocation": principal({
         subjectId: "maintainer",
@@ -179,7 +180,7 @@ async function fixture() {
         subjectId: "service-agent",
         clientId: "genio-one-self-service",
         organizationIds,
-        scopes: ["genioone-invocation"],
+        scopes: [...RESOURCE_SCOPE_VALUES],
       }),
     }),
   })

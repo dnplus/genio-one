@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPE_VALUES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import { generateKeyPairSync, randomUUID } from "node:crypto"
 import test from "node:test"
@@ -192,7 +193,7 @@ test(
             role: "TENANT_ADMINISTRATOR",
             organization_ids: [],
             client_id: "client-live",
-            scopes: ["genioone-management"],
+            scopes: [...GENIOONE_SCOPE_VALUES],
           },
           "live-runtime-token": {
             tenant_id: tenantId,

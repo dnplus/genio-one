@@ -1,4 +1,6 @@
-import type { FastifyPluginAsync } from "fastify"
+import type { FastifyPluginAsync, FastifySchemaCompiler } from "fastify"
+import type { TSchema } from "typebox"
+import { Check } from "typebox/value"
 import { TypeBoxTypeProvider } from "@fastify/type-provider-typebox"
 
 import {
@@ -10,6 +12,8 @@ import {
   ApplicationListSchema,
   ApplicationSchema,
   ApplicationTenantPathSchema,
+  IssueApplicationCredentialSchema,
+  IssueApplicationApiKeyCredentialSchema,
   IssueApplicationOAuthCredentialSchema,
   RegisterApplicationSchema,
   RevokeApplicationCredentialSchema,
@@ -17,6 +21,17 @@ import {
 } from "./contract"
 import type { ApplicationRegistry } from "./module"
 import { PlatformApiError } from "../errors"
+
+const applicationCredentialValidator: FastifySchemaCompiler<TSchema> = ({ schema, httpPart }) => value => {
+  const selected = httpPart === "body"
+    ? value !== null && typeof value === "object" && !Array.isArray(value) && "kind" in value
+      ? IssueApplicationApiKeyCredentialSchema
+      : IssueApplicationOAuthCredentialSchema
+    : schema
+  return Check(selected, value)
+    ? { value }
+    : { error: new PlatformApiError("REQUEST_VALIDATION_FAILED", 400, "Request validation failed") }
+}
 
 export const applicationHttp: FastifyPluginAsync<{
   registry: ApplicationRegistry
@@ -119,11 +134,13 @@ export const applicationHttp: FastifyPluginAsync<{
   routes.post(
     "/v1/tenants/:tenant_id/applications/:application_id/api-credentials",
     {
+      config: { sensitiveResponse: true },
+      validatorCompiler: applicationCredentialValidator,
       schema: {
-        operationId: "issueApplicationOAuthCredential",
+        operationId: "issueApplicationApiCredential",
         tags: ["Applications"],
         params: ApplicationCredentialPathSchema,
-        body: IssueApplicationOAuthCredentialSchema,
+        body: IssueApplicationCredentialSchema,
         response: { 201: ApplicationApiCredentialCreationSchema },
       },
     },
@@ -134,16 +151,20 @@ export const applicationHttp: FastifyPluginAsync<{
         role: request.principal?.role,
         administratorOrganizationIds: request.principal?.administrator_organization_ids,
       })
-      return reply.code(201).send(await options.registry.issueOAuthCredential({
+      reply.header("cache-control", "no-store")
+      const input = {
         tenantId: request.params.tenant_id,
         applicationId: request.params.application_id,
-        value: request.body,
-      }))
+      }
+      return reply.code(201).send(await ("kind" in request.body
+        ? options.registry.issueApiKeyCredential({ ...input, issuerScopes: request.principal!.scopes ?? [], value: request.body })
+        : options.registry.issueOAuthCredential({ ...input, issuerScopes: request.principal!.scopes ?? [], value: request.body })))
     },
   )
   routes.post(
     "/v1/tenants/:tenant_id/applications/:application_id/api-credentials/:credential_id/rotate",
     {
+      config: { sensitiveResponse: true },
       schema: {
         operationId: "rotateApplicationApiCredential",
         tags: ["Applications"],
@@ -159,7 +180,9 @@ export const applicationHttp: FastifyPluginAsync<{
         role: request.principal?.role,
         administratorOrganizationIds: request.principal?.administrator_organization_ids,
       })
+      reply.header("cache-control", "no-store")
       return reply.code(201).send(await options.registry.rotateCredential({
+        issuerScopes: request.principal!.scopes ?? [],
         tenantId: request.params.tenant_id,
         applicationId: request.params.application_id,
         credentialId: request.params.credential_id,

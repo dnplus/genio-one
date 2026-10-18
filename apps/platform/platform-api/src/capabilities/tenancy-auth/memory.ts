@@ -171,6 +171,7 @@ export function createEnvironmentPrincipalAuthenticator(
           audiences: ["genio-one-product-api", "genio-one-self-service", "genio-one-management-console", "account"],
           jwks_uri: `${issuer}/protocol/openid-connect/certs`,
           algorithms: ["RS256"],
+          access_token_type: { claim: "typ", value: "Bearer" },
           claims: {
             subject: "sub",
             client: "azp",

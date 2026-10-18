@@ -1,3 +1,4 @@
+import { MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -28,7 +29,7 @@ test("OIDC authentication maps only verified claims from the path-selected tenan
         aud: configuration.audiences,
         sub: "person-1",
         azp: "management-ui",
-        scope: "openid genioone-management genioone-management",
+        scope: `openid ${MANAGEMENT_SCOPES.identityRead} ${MANAGEMENT_SCOPES.identityRead}`,
         genio: {
           role: "ORGANIZATION_ADMINISTRATOR",
           organization_ids: ["org-ai", "org-ai"],
@@ -45,7 +46,7 @@ test("OIDC authentication maps only verified claims from the path-selected tenan
       client_id: "management-ui",
       role: "ORGANIZATION_ADMINISTRATOR",
       organization_ids: ["org-ai"],
-      scopes: ["openid", "genioone-management"],
+      scopes: ["openid", MANAGEMENT_SCOPES.identityRead],
       external_identity: {
         provider_id: configuration.issuer,
         external_subject_id: "person-1",
@@ -110,9 +111,9 @@ test("OIDC scope claims preserve explicit grants and default missing or malforme
     { claims: {}, scopes: [] },
     { claims: { scope: "  " }, scopes: [] },
     { claims: { scope: 42 }, scopes: [] },
-    { claims: { scp: "genioone-management" }, scopes: [] },
-    { claims: { scp: ["genioone-management", 42] }, scopes: [] },
-    { claims: { scp: [" genioone-management ", "genioone-management"] }, scopes: ["genioone-management"] },
+    { claims: { scp: MANAGEMENT_SCOPES.identityRead }, scopes: [] },
+    { claims: { scp: [MANAGEMENT_SCOPES.identityRead, 42] }, scopes: [] },
+    { claims: { scp: [` ${MANAGEMENT_SCOPES.identityRead} `, MANAGEMENT_SCOPES.identityRead] }, scopes: [MANAGEMENT_SCOPES.identityRead] },
   ]
   for (const { claims, scopes } of cases) {
     for (const mapped of [false, true]) {
@@ -216,4 +217,38 @@ test("OIDC claim resolution still follows nested own claims", async () => {
   const principal = await authenticator.authenticate({ token: "signed-token", tenantId: "tenant-acme" })
   assert.equal(principal?.subject_id, "person-9")
   assert.equal(principal?.role, "ORGANIZATION_ADMINISTRATOR")
+})
+
+test("Configured access-token type rejects ID tokens and missing or mismatched type claims", async () => {
+  for (const typ of ["Bearer", "ID", undefined, "Refresh", "bearer"]) {
+    const authenticator = createOidcPrincipalAuthenticator({
+      tenants: [{ ...configuration, access_token_type: { claim: "typ", value: "Bearer" } }],
+      async verifyToken() {
+        return { sub: "person-1", azp: "management-ui", typ, scope: MANAGEMENT_SCOPES.identityRead }
+      },
+    })
+    const principal = await authenticator.authenticate({ token: "verified-token", tenantId: "tenant-acme" })
+    assert.equal(principal?.subject_id ?? null, typ === "Bearer" ? "person-1" : null)
+  }
+})
+
+test("Known ID-token markers are rejected even without a provider type mapping", async () => {
+  for (const marker of [{ typ: "ID" }, { token_use: "id" }]) {
+    const authenticator = createOidcPrincipalAuthenticator({
+      tenants: [configuration],
+      async verifyToken() {
+        return { sub: "person-1", azp: "management-ui", scope: MANAGEMENT_SCOPES.identityRead, ...marker }
+      },
+    })
+    assert.equal(await authenticator.authenticate({ token: "verified-id-token", tenantId: "tenant-acme" }), null)
+  }
+})
+
+test("Access-token type configuration validates the claim path and required value", () => {
+  for (const access_token_type of [{ claim: "typ", value: "" }, { claim: "invalid/path", value: "Bearer" }]) {
+    assert.throws(() => createOidcPrincipalAuthenticator({
+      tenants: [{ ...configuration, access_token_type }],
+      async verifyToken() { return {} },
+    }))
+  }
 })

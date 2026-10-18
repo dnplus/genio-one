@@ -1,4 +1,5 @@
 import type { BotServerContext } from "./context"
+import { GENIOONE_SCOPES } from "@genioone/protocol/authorization-scopes"
 import type { BotConnectionContinuation } from "./bot-connection-continuations"
 import type { RuntimeSession } from "./runtime-broker"
 import type { Turn } from "./generated/v2/Turn"
@@ -40,7 +41,7 @@ function principalFor(entry: BotConnectionContinuation) {
     tenant_id: entry.tenantId,
     subject_id: entry.ownerSubjectId,
     acting_client_id: "genio-one-bot",
-    scopes: ["genioone-invocation"],
+    scopes: [GENIOONE_SCOPES.invoke],
   }
 }
 

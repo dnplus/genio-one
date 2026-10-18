@@ -163,6 +163,7 @@ function enforcementChainRow(resourceId: string, connectionId: string): Row {
 }
 
 class PolicyInputTransaction implements SqlTransaction {
+  readonly apiKeyRows: Row[] = []
   readonly calls: Array<{ text: string; parameters: readonly unknown[] }> = []
   readonly chainRows: Row[]
   readonly subjectRows: Row[]
@@ -197,6 +198,9 @@ class PolicyInputTransaction implements SqlTransaction {
     parameters: readonly unknown[] = [],
   ): Promise<SqlQueryResult<Result>> {
     this.calls.push({ text, parameters })
+    if (text.includes("from genio_one_application_api_credentials credential")) {
+      return { rows: this.apiKeyRows as Result[], rowCount: this.apiKeyRows.length }
+    }
     if (text.includes("from genio_one_resources")) {
       return {
         rows: this.resourceRows as Result[],
@@ -533,7 +537,7 @@ test("locks and returns a deterministic model and entitlement snapshot from one 
       },
     ],
   })
-  assert.equal(transaction.calls.length, 12)
+  assert.equal(transaction.calls.length, 13)
 
   const resourceCall = transaction.calls[0]!
   assert.match(resourceCall.text, /from genio_one_resources/i)
@@ -567,27 +571,33 @@ test("locks and returns a deterministic model and entitlement snapshot from one 
   assert.match(entitlementCall.text, /for update of entitlement/i)
   assert.deepEqual(entitlementCall.parameters, [tenantId, ["resource-a", "resource-b"]])
 
-  const aliasCall = transaction.calls[6]!
+  const apiKeyCall = transaction.calls[6]!
+  assert.match(apiKeyCall.text, /credential.kind = 'API_KEY'/)
+  assert.match(apiKeyCall.text, /subject.suspended_at is null/)
+  assert.match(apiKeyCall.text, /entitlement.state = 'ACTIVE'/)
+  assert.deepEqual(apiKeyCall.parameters, [tenantId, ["resource-a", "resource-b"]])
+
+  const aliasCall = transaction.calls[7]!
   assert.match(aliasCall.text, /from genio_one_external_identity_bindings/i)
   assert.deepEqual(aliasCall.parameters, [tenantId, ["subject-1"]])
 
-  const subjectCall = transaction.calls[7]!
+  const subjectCall = transaction.calls[8]!
   assert.match(subjectCall.text, /from genio_one_subjects/i)
   assert.deepEqual(subjectCall.parameters, [tenantId, ["subject-1"]])
 
-  const delegationCall = transaction.calls[8]!
+  const delegationCall = transaction.calls[9]!
   assert.match(delegationCall.text, /from genio_one_agent_delegation_revisions/i)
   assert.deepEqual(delegationCall.parameters, [tenantId, ["resource-a", "resource-b"]])
 
-  const executionGrantCall = transaction.calls[9]!
+  const executionGrantCall = transaction.calls[10]!
   assert.match(executionGrantCall.text, /from genio_one_execution_grants/i)
   assert.deepEqual(executionGrantCall.parameters, [tenantId, ["resource-a", "resource-b"]])
 
-  const usagePolicyCall = transaction.calls[10]!
+  const usagePolicyCall = transaction.calls[11]!
   assert.match(usagePolicyCall.text, /from genio_one_usage_policy_revisions/i)
   assert.deepEqual(usagePolicyCall.parameters, [tenantId])
 
-  const usageContextCall = transaction.calls[11]!
+  const usageContextCall = transaction.calls[12]!
   assert.match(usageContextCall.text, /from genio_one_organization_memberships/i)
   assert.deepEqual(usageContextCall.parameters, [tenantId, ["subject-1"]])
 })
@@ -788,4 +798,37 @@ test("selects the latest immutable routing policy and rejects a missing route po
     }),
     assertErrorCode("GATEWAY_ROUTING_POLICY_MISSING"),
   )
+})
+
+test("freezes resource-bound API key digest, scope ceiling and retirement expiry without secret material", async () => {
+  const transaction = new PolicyInputTransaction(
+    [modelRow()],
+    [entitlementRow()],
+    [resourceRow()],
+    [mappingRow()],
+    [routingPolicyRow()],
+    undefined, [], [], [], [{ subject_id: "subject-1", kind: "APPLICATION" }],
+  )
+  transaction.apiKeyRows.push({
+    credential_id: "application-credential-1", api_key_hash: "a".repeat(64),
+    application_subject_id: "subject-1", resource_id: "resource-a", capability_id: "capability-chat",
+    scopes: '["genioone:invoke","genioone:read"]', expires_at: 300n,
+  })
+  const result = await createPostgresGatewayPolicyInputSource().loadForGatewayInTransaction({
+    transaction, tenantId, candidateResourceId: "resource-a", projections: [projection("resource-a")],
+  })
+  assert.deepEqual(result.application_api_keys, [{
+    credential_id: "application-credential-1", api_key_hash: "a".repeat(64),
+    subject_id: "subject-1", acting_client_id: "application-credential-1",
+    resource_id: "resource-a", capability_id: "capability-chat",
+    scopes: ["genioone:invoke", "genioone:read"], expires_at: 300,
+  }])
+  const query = transaction.calls.find(call => call.text.includes("from genio_one_application_api_credentials credential"))!
+  assert.match(query.text, /least\(credential.expires_at, credential.valid_until\)/)
+  assert.match(query.text, /credential.revoked_at is null/)
+  assert.match(query.text, /credential.valid_until > now\(\)/)
+  transaction.apiKeyRows[0]!.scopes = '["management:identity:write"]'
+  await assert.rejects(createPostgresGatewayPolicyInputSource().loadForGatewayInTransaction({
+    transaction, tenantId, candidateResourceId: "resource-a", projections: [projection("resource-a")],
+  }), assertErrorCode("GATEWAY_POLICY_INPUT_INVALID"))
 })

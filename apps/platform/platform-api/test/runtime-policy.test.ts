@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES, MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import { generateKeyPairSync, randomUUID } from "node:crypto"
 import test from "node:test"
@@ -174,7 +175,7 @@ function principals() {
       client_id: "console",
       role: "TENANT_ADMINISTRATOR",
       organization_ids: [],
-      scopes: ["genioone-management", "genioone-invocation"],
+      scopes: [MANAGEMENT_SCOPES.policiesRead, MANAGEMENT_SCOPES.policiesWrite, MANAGEMENT_SCOPES.policiesPublish, MANAGEMENT_SCOPES.auditRead, GENIOONE_SCOPES.read, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke],
     },
     anrita: {
       tenant_id: tenantId,
@@ -182,7 +183,7 @@ function principals() {
       client_id: "genio-one-bot",
       role: "USER",
       organization_ids: ["org-executive"],
-      scopes: ["genioone-management", "genioone-invocation"],
+      scopes: [MANAGEMENT_SCOPES.policiesRead, MANAGEMENT_SCOPES.policiesWrite, MANAGEMENT_SCOPES.policiesPublish, MANAGEMENT_SCOPES.auditRead, GENIOONE_SCOPES.read, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke],
     },
     dylan: {
       tenant_id: tenantId,
@@ -190,7 +191,7 @@ function principals() {
       client_id: "genio-one-bot",
       role: "USER",
       organization_ids: ["org-engineering"],
-      scopes: ["genioone-management", "genioone-invocation"],
+      scopes: [MANAGEMENT_SCOPES.policiesRead, MANAGEMENT_SCOPES.policiesWrite, MANAGEMENT_SCOPES.policiesPublish, MANAGEMENT_SCOPES.auditRead, GENIOONE_SCOPES.read, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke],
     },
   })
 }

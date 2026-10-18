@@ -4,7 +4,10 @@
   "displayName": "GenioOne Local MVP",
   "loginTheme": "genio-one",
   "internationalizationEnabled": true,
-  "supportedLocales": ["zh-TW", "en"],
+  "supportedLocales": [
+    "zh-TW",
+    "en"
+  ],
   "defaultLocale": "zh-TW",
   "attributes": {
     "genio.login.brandName": "GenioOne",
@@ -129,33 +132,6 @@
       ]
     },
     {
-      "name": "genioone-management",
-      "description": "Access the GenioOne Product API management surface",
-      "protocol": "openid-connect",
-      "attributes": {
-        "include.in.token.scope": "true",
-        "display.on.consent.screen": "false"
-      }
-    },
-    {
-      "name": "application.create",
-      "description": "Register Team-owned GenioOne Application identities",
-      "protocol": "openid-connect",
-      "attributes": {
-        "include.in.token.scope": "true",
-        "display.on.consent.screen": "false"
-      }
-    },
-    {
-      "name": "audit.export",
-      "description": "Export tenant Audit records for an explicitly selected period and Resource",
-      "protocol": "openid-connect",
-      "attributes": {
-        "include.in.token.scope": "true",
-        "display.on.consent.screen": "false"
-      }
-    },
-    {
       "name": "genioone-endpoint-runtime",
       "description": "Endpoint Runtime enrollment, desired-state and activity surface",
       "protocol": "openid-connect",
@@ -174,30 +150,213 @@
       }
     },
     {
-      "name": "genioone-invocation",
-      "description": "Authorize an end-client invocation through One Policy",
+      "name": "genioone:read",
+      "description": "Read your profile, available resources, and authorized resource data.",
       "protocol": "openid-connect",
       "attributes": {
         "include.in.token.scope": "true",
-        "display.on.consent.screen": "false"
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "${genioScope.genioone_read}"
       }
     },
     {
-      "name": "genioone-policy-proposal",
-      "description": "Create and simulate policy proposals without approval or publication authority",
+      "name": "genioone:write",
+      "description": "Update your settings and authorized resource data, and submit access requests.",
       "protocol": "openid-connect",
       "attributes": {
         "include.in.token.scope": "true",
-        "display.on.consent.screen": "false"
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "${genioScope.genioone_write}"
       }
     },
     {
-      "name": "genioone-provider-reconciler",
-      "description": "Provider reconciler management surface",
+      "name": "genioone:invoke",
+      "description": "Invoke authorized models and agents through GenioOne governance.",
       "protocol": "openid-connect",
       "attributes": {
         "include.in.token.scope": "true",
-        "display.on.consent.screen": "false"
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "${genioScope.genioone_invoke}"
+      }
+    },
+    {
+      "name": "management:identity:read",
+      "description": "Read subjects, organizations, applications, and login methods within your administration rights.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "${genioScope.management_identity_read}"
+      }
+    },
+    {
+      "name": "management:identity:write",
+      "description": "Create or update subjects, organizations, applications, and login methods within your administration rights.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "${genioScope.management_identity_write}"
+      }
+    },
+    {
+      "name": "management:resources:read",
+      "description": "Read resource definitions, connections, and providers within your administration rights.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "${genioScope.management_resources_read}"
+      }
+    },
+    {
+      "name": "management:resources:write",
+      "description": "Create, update, or remove resource definitions, connections, and providers within your administration rights.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "${genioScope.management_resources_write}"
+      }
+    },
+    {
+      "name": "management:policies:read",
+      "description": "Read and simulate governance policies within your administration rights.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "${genioScope.management_policies_read}"
+      }
+    },
+    {
+      "name": "management:policies:write",
+      "description": "Create and edit governance policy drafts within your administration rights.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "${genioScope.management_policies_write}"
+      }
+    },
+    {
+      "name": "management:policies:publish",
+      "description": "Approve or publish governance policies within your administration rights.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "${genioScope.management_policies_publish}"
+      }
+    },
+    {
+      "name": "management:access:read",
+      "description": "Read entitlements, access groups, requests, and grants within your administration rights.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "${genioScope.management_access_read}"
+      }
+    },
+    {
+      "name": "management:access:write",
+      "description": "Configure access groups or revoke access within your administration rights.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "${genioScope.management_access_write}"
+      }
+    },
+    {
+      "name": "management:access:approve",
+      "description": "Approve or reject access requests and issue grants within your administration rights.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "${genioScope.management_access_approve}"
+      }
+    },
+    {
+      "name": "management:credentials:read",
+      "description": "Read credential metadata within your administration rights.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "${genioScope.management_credentials_read}"
+      }
+    },
+    {
+      "name": "management:credentials:write",
+      "description": "Issue, rotate, or revoke credentials within your administration rights.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "${genioScope.management_credentials_write}"
+      }
+    },
+    {
+      "name": "management:runtime:read",
+      "description": "Read gateway and endpoint configuration within your administration rights.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "${genioScope.management_runtime_read}"
+      }
+    },
+    {
+      "name": "management:runtime:write",
+      "description": "Configure gateways and endpoints within your administration rights.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "${genioScope.management_runtime_write}"
+      }
+    },
+    {
+      "name": "management:audit:read",
+      "description": "Read tenant audit records and activity within your administration rights.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "${genioScope.management_audit_read}"
+      }
+    },
+    {
+      "name": "management:audit:export",
+      "description": "Export tenant audit records within your administration rights.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "${genioScope.management_audit_export}"
+      }
+    },
+    {
+      "name": "management:system:read",
+      "description": "Read platform configuration, integrations, and diagnostics within your administration rights.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "${genioScope.management_system_read}"
+      }
+    },
+    {
+      "name": "management:system:write",
+      "description": "Update platform configuration and integrations within your administration rights.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "${genioScope.management_system_write}"
       }
     }
   ],
@@ -241,9 +400,29 @@
       ],
       "defaultClientScopes": [
         "basic",
-        "genioone-management",
-        "application.create"
-      ]
+        "genioone:read",
+        "genioone:write",
+        "genioone:invoke",
+        "management:identity:read",
+        "management:identity:write",
+        "management:resources:read",
+        "management:resources:write",
+        "management:policies:read",
+        "management:policies:write",
+        "management:policies:publish",
+        "management:access:read",
+        "management:access:write",
+        "management:access:approve",
+        "management:credentials:read",
+        "management:credentials:write",
+        "management:runtime:read",
+        "management:runtime:write",
+        "management:audit:read",
+        "management:audit:export",
+        "management:system:read",
+        "management:system:write"
+      ],
+      "consentRequired": false
     },
     {
       "clientId": "genio-one-self-service",
@@ -292,8 +471,11 @@
       ],
       "defaultClientScopes": [
         "basic",
-        "genioone-invocation"
-      ]
+        "genioone:read",
+        "genioone:write",
+        "genioone:invoke"
+      ],
+      "consentRequired": false
     },
     {
       "clientId": "genio-one-bot",
@@ -345,9 +527,14 @@
       ],
       "defaultClientScopes": [
         "basic",
-        "genioone-invocation",
-        "genioone-management"
-      ]
+        "genioone:read",
+        "genioone:write",
+        "genioone:invoke",
+        "management:policies:read",
+        "management:policies:write",
+        "management:policies:publish"
+      ],
+      "consentRequired": false
     },
     {
       "clientId": "genio-one-management-console",
@@ -396,10 +583,29 @@
       ],
       "defaultClientScopes": [
         "basic",
-        "genioone-management",
-        "application.create",
-        "audit.export"
-      ]
+        "genioone:read",
+        "genioone:write",
+        "genioone:invoke",
+        "management:identity:read",
+        "management:identity:write",
+        "management:resources:read",
+        "management:resources:write",
+        "management:policies:read",
+        "management:policies:write",
+        "management:policies:publish",
+        "management:access:read",
+        "management:access:write",
+        "management:access:approve",
+        "management:credentials:read",
+        "management:credentials:write",
+        "management:runtime:read",
+        "management:runtime:write",
+        "management:audit:read",
+        "management:audit:export",
+        "management:system:read",
+        "management:system:write"
+      ],
+      "consentRequired": false
     },
     {
       "clientId": "genio-one-management-agent",
@@ -444,8 +650,31 @@
         }
       ],
       "defaultClientScopes": [
-        "basic",
-        "genioone-management"
+        "basic"
+      ],
+      "consentRequired": true,
+      "optionalClientScopes": [
+        "genioone:read",
+        "genioone:write",
+        "genioone:invoke",
+        "management:identity:read",
+        "management:identity:write",
+        "management:resources:read",
+        "management:resources:write",
+        "management:policies:read",
+        "management:policies:write",
+        "management:policies:publish",
+        "management:access:read",
+        "management:access:write",
+        "management:access:approve",
+        "management:credentials:read",
+        "management:credentials:write",
+        "management:runtime:read",
+        "management:runtime:write",
+        "management:audit:read",
+        "management:audit:export",
+        "management:system:read",
+        "management:system:write"
       ]
     },
     {
@@ -488,7 +717,10 @@
           }
         }
       ],
-      "defaultClientScopes": ["basic", "genioone-endpoint-runtime"]
+      "defaultClientScopes": [
+        "basic",
+        "genioone-endpoint-runtime"
+      ]
     },
     {
       "clientId": "genio-one-gateway-runtime",
@@ -527,7 +759,10 @@
           }
         }
       ],
-      "defaultClientScopes": ["basic", "genioone-gateway-runtime"]
+      "defaultClientScopes": [
+        "basic",
+        "genioone-gateway-runtime"
+      ]
     },
     {
       "clientId": "genio-one-provider-reconciler",
@@ -566,17 +801,23 @@
           }
         }
       ],
-      "defaultClientScopes": ["basic", "genioone-provider-reconciler"]
+      "defaultClientScopes": [
+        "basic",
+        "management:resources:read",
+        "management:resources:write",
+        "management:runtime:read",
+        "management:runtime:write"
+      ]
     },
     {
       "clientId": "codex",
       "name": "Codex local verified acting client",
-      "enabled": true,
+      "enabled": false,
       "clientAuthenticatorType": "client-secret",
       "secret": "genio-one-codex-local-secret",
       "publicClient": false,
       "standardFlowEnabled": false,
-      "directAccessGrantsEnabled": true,
+      "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "fullScopeAllowed": false,
       "protocolMappers": [
@@ -616,7 +857,9 @@
           }
         }
       ],
-      "defaultClientScopes": ["basic", "genioone-invocation", "genioone-policy-proposal"]
+      "defaultClientScopes": [
+        "basic"
+      ]
     },
     {
       "clientId": "codex-mcp",
@@ -673,18 +916,18 @@
           }
         }
       ],
-      "defaultClientScopes": ["basic", "genioone-invocation"],
-      "optionalClientScopes": ["offline_access"]
+      "defaultClientScopes": ["basic"],
+      "optionalClientScopes": ["genioone:read", "genioone:write", "genioone:invoke", "offline_access"]
     },
     {
       "clientId": "grok",
       "name": "Grok local verified acting client",
-      "enabled": true,
+      "enabled": false,
       "clientAuthenticatorType": "client-secret",
       "secret": "genio-one-grok-local-secret",
       "publicClient": false,
       "standardFlowEnabled": false,
-      "directAccessGrantsEnabled": true,
+      "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "fullScopeAllowed": false,
       "protocolMappers": [
@@ -724,7 +967,9 @@
           }
         }
       ],
-      "defaultClientScopes": ["basic", "genioone-invocation"]
+      "defaultClientScopes": [
+        "basic"
+      ]
     },
     {
       "clientId": "grok-mcp",
@@ -779,7 +1024,15 @@
           }
         }
       ],
-      "defaultClientScopes": ["basic", "genioone-invocation"]
+      "defaultClientScopes": [
+        "basic"
+      ],
+      "consentRequired": true,
+      "optionalClientScopes": [
+        "genioone:read",
+        "genioone:write",
+        "genioone:invoke"
+      ]
     }
   ],
   "users": [

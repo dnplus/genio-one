@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES, MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -49,10 +50,10 @@ test("Organization Administrator can revoke an Entitlement owned by its Organiza
         tenant_id: "tenant-acme",
         subject_id: "person-org-admin",
         client_id: "management-ui",
-        scopes: ["genioone-management"],
         role: "ORGANIZATION_ADMINISTRATOR",
         organization_ids: ["org-ai"],
         administrator_organization_ids: ["org-ai"],
+        scopes: [MANAGEMENT_SCOPES.accessRead, MANAGEMENT_SCOPES.accessWrite, MANAGEMENT_SCOPES.accessApprove],
       },
       "self-service-token": {
         tenant_id: "tenant-acme",
@@ -60,7 +61,7 @@ test("Organization Administrator can revoke an Entitlement owned by its Organiza
         client_id: "self-service-ui",
         role: "USER",
         organization_ids: [],
-        scopes: ["genioone-invocation"],
+        scopes: [GENIOONE_SCOPES.read, GENIOONE_SCOPES.write],
       },
     }),
   })

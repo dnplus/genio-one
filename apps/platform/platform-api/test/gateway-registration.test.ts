@@ -1,3 +1,4 @@
+import { MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import { createPrivateKey, createPublicKey } from "node:crypto"
 import test from "node:test"
@@ -20,7 +21,7 @@ test("Tenant Administrator registers, provisions once, lists, and retires a Gate
         role: "TENANT_ADMINISTRATOR",
         organization_ids: [],
         client_id: "management-ui",
-        scopes: ["genioone-management"],
+        scopes: [MANAGEMENT_SCOPES.runtimeRead, MANAGEMENT_SCOPES.runtimeWrite],
       },
       runtime: {
         tenant_id: "tenant-acme",

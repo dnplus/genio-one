@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES, MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import { generateKeyPairSync } from "node:crypto"
 import test from "node:test"
@@ -24,7 +25,7 @@ const principals = {
     role: "USER" as const,
     organization_ids: [],
     client_id: "client-user",
-    scopes: ["genioone-management"],
+    scopes: [GENIOONE_SCOPES.invoke, MANAGEMENT_SCOPES.identityRead, MANAGEMENT_SCOPES.identityWrite, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite],
   },
   "org-token": {
     tenant_id: "tenant-acme",
@@ -32,7 +33,7 @@ const principals = {
     role: "ORGANIZATION_ADMINISTRATOR" as const,
     organization_ids: ["org-owned"],
     client_id: "client-org",
-    scopes: ["genioone-management"],
+    scopes: [GENIOONE_SCOPES.invoke, MANAGEMENT_SCOPES.identityRead, MANAGEMENT_SCOPES.identityWrite, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite],
   },
   "tenant-token": {
     tenant_id: "tenant-acme",
@@ -40,7 +41,7 @@ const principals = {
     role: "TENANT_ADMINISTRATOR" as const,
     organization_ids: [],
     client_id: "client-tenant",
-    scopes: ["genioone-management"],
+    scopes: [GENIOONE_SCOPES.invoke, MANAGEMENT_SCOPES.identityRead, MANAGEMENT_SCOPES.identityWrite, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite],
   },
   "other-tenant-token": {
     tenant_id: "tenant-other",
@@ -48,7 +49,7 @@ const principals = {
     role: "TENANT_ADMINISTRATOR" as const,
     organization_ids: [],
     client_id: "client-other",
-    scopes: ["genioone-management"],
+    scopes: [GENIOONE_SCOPES.invoke, MANAGEMENT_SCOPES.identityRead, MANAGEMENT_SCOPES.identityWrite, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite],
   },
 }
 
@@ -187,7 +188,7 @@ test("Management API persists safe authentication receipts and verified authoriz
     ...principals,
     "scope-token": {
       ...principals["user-token"],
-      scopes: ["genioone-invocation"],
+      scopes: [GENIOONE_SCOPES.invoke],
     },
   })
   const app = await createManagementApi(deps)
@@ -339,6 +340,10 @@ test("Management API persists safe authentication receipts and verified authoriz
 
 test("audit export and application creation scope rejections persist authorization decisions", async () => {
   const deps = dependencies()
+  deps.principalAuthenticator = createStaticPrincipalAuthenticator({
+    ...principals,
+    "tenant-token": { ...principals["tenant-token"], scopes: [MANAGEMENT_SCOPES.identityRead] },
+  })
   const app = await createManagementApi(deps)
 
   try {
@@ -386,7 +391,7 @@ test("identity session persists authentication and authorization evidence outsid
       client_id: "browser-client",
       scopes: ["openid"],
       management_client_id: "management-client",
-      management_scopes: ["genioone-management"],
+      management_scopes: [MANAGEMENT_SCOPES.identityRead],
     },
   })
 
@@ -502,7 +507,7 @@ test("Management API applies role checks and rejects body actor spoofing", async
   await app.close()
 })
 
-test("OAuth scopes separate management, invocation, and Gateway Runtime routes", async () => {
+test("OAuth scopes separate resource, management, and Gateway Runtime routes", async () => {
   const modules = createInMemoryPlatformModules()
   const { publicKey } = generateKeyPairSync("ed25519")
   const reportPublicKeyPem = publicKey.export({ type: "spki", format: "pem" }).toString()
@@ -524,15 +529,15 @@ test("OAuth scopes separate management, invocation, and Gateway Runtime routes",
         role: "TENANT_ADMINISTRATOR",
         organization_ids: [],
         client_id: "management-client",
-        scopes: ["genioone-management"],
+        scopes: [MANAGEMENT_SCOPES.identityRead],
       },
-      invocation: {
+      resource: {
         tenant_id: "tenant-acme",
         subject_id: "user-1",
         role: "USER",
         organization_ids: [],
         client_id: "self-service-client",
-        scopes: ["genioone-invocation"],
+        scopes: [GENIOONE_SCOPES.read],
       },
       endpoint: {
         tenant_id: "tenant-acme",
@@ -554,9 +559,9 @@ test("OAuth scopes separate management, invocation, and Gateway Runtime routes",
   })
 
   assert.equal((await inject(app, "management", "GET", "/v1/tenants/tenant-acme/identity")).statusCode, 200)
-  assert.equal((await inject(app, "invocation", "GET", "/v1/tenants/tenant-acme/catalog")).statusCode, 200)
+  assert.equal((await inject(app, "resource", "GET", "/v1/tenants/tenant-acme/catalog")).statusCode, 200)
 
-  for (const token of ["invocation", "endpoint", "gateway"]) {
+  for (const token of ["resource", "endpoint", "gateway"]) {
     const response = await inject(app, token, "GET", "/v1/tenants/tenant-acme/identity")
     assert.equal(response.statusCode, 403)
     assert.equal(response.json().code, "INSUFFICIENT_SCOPE")
@@ -591,8 +596,8 @@ test("missing OAuth grants cannot access tenant routes or establish a browser se
       missing: unscoped,
       empty: { ...unscoped, scopes: [] },
       unrelated: { ...unscoped, scopes: ["openid"] },
-      management: { ...unscoped, scopes: ["genioone-management"] },
-      invocation: { ...unscoped, scopes: ["genioone-invocation"] },
+      management: { ...unscoped, scopes: [MANAGEMENT_SCOPES.identityRead] },
+      invocation: { ...unscoped, scopes: [GENIOONE_SCOPES.invoke] },
     }),
     browserIdentity: {
       tenant_id: "tenant-acme",
@@ -600,9 +605,9 @@ test("missing OAuth grants cannot access tenant routes or establish a browser se
       authorization_endpoint: `${issuer}/auth`,
       token_endpoint: `${issuer}/token`,
       client_id: "self-service-client",
-      scopes: ["genioone-invocation"],
+      scopes: [GENIOONE_SCOPES.invoke],
       management_client_id: "management-client",
-      management_scopes: ["genioone-management"],
+      management_scopes: [MANAGEMENT_SCOPES.identityRead],
     },
   })
   try {
@@ -619,8 +624,8 @@ test("missing OAuth grants cannot access tenant routes or establish a browser se
       }
     }
     for (const [token, scopes] of [
-      ["management", ["genioone-management"]],
-      ["invocation", ["genioone-invocation"]],
+      ["management", [MANAGEMENT_SCOPES.identityRead]],
+      ["invocation", [GENIOONE_SCOPES.invoke]],
     ] as const) {
       const session = await inject(app, token, "GET", "/v1/identity/session")
       assert.equal(session.statusCode, 200, session.body)
@@ -654,7 +659,7 @@ test("verified OIDC identity without a scope claim is denied even with an admini
         return {
           sub: "external-admin",
           azp: "management-client",
-          ...(token === "scoped" ? { scope: "genioone-management" } : {}),
+          ...(token === "scoped" ? { scope: MANAGEMENT_SCOPES.identityRead } : {}),
         }
       },
     }),
@@ -672,6 +677,10 @@ test("verified OIDC identity without a scope claim is denied even with an admini
 
 test("an Organization Administrator cannot self-register a Gateway Runtime", async () => {
   const deps = dependencies()
+  deps.principalAuthenticator = createStaticPrincipalAuthenticator({
+    ...principals,
+    "org-token": { ...principals["org-token"], scopes: ["genioone-gateway-runtime"] },
+  })
   await seedGatewayRuntime(deps.modules, "client-tenant")
   const app = await createManagementApi({
     ...deps,

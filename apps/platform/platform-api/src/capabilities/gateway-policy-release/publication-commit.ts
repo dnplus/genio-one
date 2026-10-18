@@ -247,6 +247,7 @@ function policyRevision(input: {
   subjectContexts: readonly import("@genioone/protocol/authorization").CompiledSubjectContext[]
   agentDelegations: readonly import("@genioone/protocol/authorization").CompiledAgentDelegation[]
   executionGrants: readonly import("@genioone/protocol/authorization").CompiledExecutionGrant[]
+  applicationApiKeys: readonly import("@genioone/protocol/authorization").CompiledApplicationApiKey[]
 }): string {
   return `policy-${sha256({
     projections: projectionReferences(input.projections),
@@ -267,6 +268,7 @@ function policyRevision(input: {
     subject_contexts: input.subjectContexts,
     agent_delegations: input.agentDelegations,
     execution_grants: input.executionGrants,
+    application_api_keys: input.applicationApiKeys,
   })}`
 }
 
@@ -352,6 +354,8 @@ export function createGatewayPublicationReleaseCoordinator(
         .sort((left, right) => compareUtf8(left.delegation_id, right.delegation_id))
       const executionGrants = [...(snapshot.execution_grants ?? [])]
         .sort((left, right) => compareUtf8(left.execution_grant_id, right.execution_grant_id))
+      const applicationApiKeys = [...(snapshot.application_api_keys ?? [])]
+        .sort((left, right) => compareUtf8(left.credential_id, right.credential_id))
       const revision = policyRevision({
         projections,
         enforcementChains,
@@ -369,6 +373,7 @@ export function createGatewayPublicationReleaseCoordinator(
         subjectContexts,
         agentDelegations,
         executionGrants,
+        applicationApiKeys,
       })
       const configuredExpiresAt = input.issuedAt + options.releaseTtlSeconds
       if (!Number.isSafeInteger(configuredExpiresAt)) {
@@ -389,6 +394,7 @@ export function createGatewayPublicationReleaseCoordinator(
         subject_contexts: subjectContexts,
         agent_delegations: agentDelegations,
         execution_grants: executionGrants,
+        application_api_keys: applicationApiKeys,
         usage_policies: usagePolicies,
         usage_contexts: usageContexts,
         resource_owners: resourceOwners,

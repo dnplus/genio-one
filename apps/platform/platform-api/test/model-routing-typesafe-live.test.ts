@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -78,7 +79,7 @@ test("live TypeSafe decision returns a versioned route and labels through the Pl
         client_id: "application-typesafe-live",
         role: "TENANT_ADMINISTRATOR",
         organization_ids: [],
-        scopes: ["genioone-management"],
+        scopes: [GENIOONE_SCOPES.invoke],
       },
     }),
     entitlementResolver: {

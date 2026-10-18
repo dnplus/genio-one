@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -51,7 +52,7 @@ test("invocation model inventory resolves trusted subject and client entitlement
         role: "USER",
         organization_ids: [],
         client_id: "genio-one-bot",
-        scopes: ["genioone-invocation"],
+        scopes: [GENIOONE_SCOPES.read],
       },
     }),
     entitlementResolver,

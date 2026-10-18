@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import { generateKeyPairSync } from "node:crypto"
 import { readFileSync } from "node:fs"
@@ -307,6 +308,31 @@ test("LLM public routes use bounded timeouts by model capability", async () => {
   }
 })
 
+test("API key ingress matches the key header and keeps OAuth JWT and the processing chain mandatory", async () => {
+  const projection = await projector().compile({ tenantId: "tenant-acme", value: request })
+  const oauthRoute = projection.resources.find((value) => value.kind === "HTTPRoute" && value.metadata.name === "resource-ai-chat")!
+  const keyRoute = projection.resources.find((value) => value.kind === "HTTPRoute" && value.metadata.name === "resource-ai-chat-api-key")!
+  assert.ok(keyRoute)
+  assert.deepEqual(keyRoute.spec.hostnames, oauthRoute.spec.hostnames)
+  assert.deepEqual(keyRoute.spec.parentRefs, oauthRoute.spec.parentRefs)
+  assert.deepEqual(keyRoute.spec.rules[0].backendRefs, oauthRoute.spec.rules[0].backendRefs)
+  assert.deepEqual(keyRoute.spec.rules[0].filters, oauthRoute.spec.rules[0].filters)
+  assert.deepEqual(keyRoute.spec.rules[0].matches, [{
+    ...oauthRoute.spec.rules[0].matches[0],
+    headers: [{ name: "x-api-key", type: "RegularExpression", value: "^genio_app_[A-Za-z0-9_-]{43}$" }],
+  }])
+  const oauth = projection.resources.find((value) => value.kind === "SecurityPolicy" && value.metadata.name === "resource-ai-chat-authorization")!
+  const keyed = projection.resources.find((value) => value.kind === "SecurityPolicy" && value.metadata.name === "resource-ai-chat-api-key-authorization")!
+  assert.equal(oauth.spec.jwt.optional, false)
+  assert.equal(oauth.spec.extAuth.failOpen, false)
+  assert.equal(keyed.spec.jwt, undefined)
+  assert.equal(keyed.spec.extAuth.failOpen, false)
+  assert.deepEqual(keyed.spec.extAuth.grpc, oauth.spec.extAuth.grpc)
+  assert.ok(keyed.spec.extAuth.contextExtensions.some((context: any) => context.name === "authentication_scheme" && context.value === "APPLICATION_API_KEY"))
+  const processing = projection.resources.find((value) => value.kind === "EnvoyExtensionPolicy")!
+  assert.ok(processing.spec.targetRefs.some((target: any) => target.name === keyRoute.metadata.name))
+})
+
 test("projection emits native CRD shapes and a signed, secret-free policy bundle", async () => {
   const gatewayProjector = projector()
   const first = await gatewayProjector.compile({ tenantId: "tenant-acme", value: request })
@@ -469,7 +495,7 @@ test("projection emits native CRD shapes and a signed, secret-free policy bundle
   })
   assert.equal(JSON.stringify(credentialPolicy).includes("OPENAI"), false)
 
-  const authorization = first.resources.find((resource) => resource.kind === "SecurityPolicy")!
+  const authorization = first.resources.find((resource) => resource.kind === "SecurityPolicy" && resource.metadata.name === "resource-ai-chat-authorization")!
   assert.equal(authorization.apiVersion, "gateway.envoyproxy.io/v1alpha1")
   assert.equal((authorization.spec.extAuth as { failOpen: boolean }).failOpen, false)
   const extAuth = authorization.spec.extAuth as {
@@ -488,6 +514,9 @@ test("projection emits native CRD shapes and a signed, secret-free policy bundle
       "content-type",
     "x-genio-verified-subject",
     "x-genio-verified-client",
+    "x-genio-verified-scopes",
+    "x-api-key",
+    "authorization",
     "x-request-id",
     "x-genio-correlation-id",
     "x-genio-organization-id",
@@ -510,7 +539,7 @@ test("projection emits native CRD shapes and a signed, secret-free policy bundle
     { name: "request_protocol", type: "Value", value: "LLM" },
     { name: "enforcement_chain_id", type: "Value", value: "chain-resource-ai-7" },
   ])
-  assert.equal(JSON.stringify(extAuth).includes("authorization"), false)
+  assert.equal(extAuth.headersToExtAuth.includes("authorization"), true)
   assert.equal(JSON.stringify(extAuth).includes("x-genio-tenant-id"), false)
   assert.equal((authorization.spec.targetRefs as Array<{ kind: string; name: string }>)[0].kind, "HTTPRoute")
   assert.deepEqual(authorization.spec.jwt, {
@@ -526,6 +555,7 @@ test("projection emits native CRD shapes and a signed, secret-free policy bundle
         claimToHeaders: [
           { claim: "sub", header: "x-genio-verified-subject" },
           { claim: "azp", header: "x-genio-verified-client" },
+          { claim: "scope", header: "x-genio-verified-scopes" },
         ],
       },
     ],
@@ -989,6 +1019,10 @@ test("API projection preserves unspecified parameters and compiles operation ove
   assert.equal(inline.includes('name="locale",action="SET",value="zh-TW"'), true)
   assert.equal(inline.includes("httpCall"), false)
   assert.equal(processing.spec.extProc, undefined)
+  assert.equal(projection.capability_operations?.[0]?.operation_semantics, "READ")
+  const apiKeyRoute = projection.resources.find((value) => value.kind === "HTTPRoute" && value.metadata.name.endsWith("-api-key"))!
+  assert.equal(apiKeyRoute.spec.rules[0].matches[0].method, "GET")
+  assert.deepEqual(apiKeyRoute.spec.rules[0].matches[0].headers, [{ name: "x-api-key", type: "RegularExpression", value: "^genio_app_[A-Za-z0-9_-]{43}$" }])
 
   const a2aResource = {
     ...apiResource,
@@ -1035,6 +1069,8 @@ test("API projection preserves unspecified parameters and compiles operation ove
   }) as GatewayProjectionSnapshot).compile({ tenantId: "tenant-acme", value: request })
   const a2aSecurity = a2aProjection.resources.find((value) =>
     value.kind === "SecurityPolicy" && value.metadata.name.endsWith("-authorization"))!
+  assert.equal(a2aProjection.resources.some((value) => value.kind === "HTTPRoute" && value.metadata.name.endsWith("-api-key")), false)
+  assert.equal(a2aProjection.capability_operations?.[0]?.operation_semantics, "INVOKE")
   assert.deepEqual(a2aSecurity.spec.extAuth.contextExtensions, [
     { name: "tenant_id", type: "Value", value: "tenant-acme" },
     { name: "resource_id", type: "Value", value: "resource-a2a" },
@@ -1182,6 +1218,7 @@ test("MCP projection delegates outbound identity to native backend policy", asyn
   ).compile({ tenantId: "tenant-acme", value: { publication_id: "publication-mcp-1" } })
 
   const route = projection.resources.find((candidate) => candidate.kind === "MCPRoute")!
+  assert.equal(projection.resources.some((value) => value.kind === "HTTPRoute" && value.metadata.name.endsWith("-api-key")), false)
   const backendRef = (route.spec.backendRefs as Array<Record<string, unknown>>)[0]!
   assert.deepEqual(route.spec.hostnames, ["mcp.example.test"])
   assert.equal(route.spec.path, "/mcp")
@@ -1196,11 +1233,12 @@ test("MCP projection delegates outbound identity to native backend policy", asyn
     },
     protectedResourceMetadata: {
       resource: "https://mcp.example.test/mcp",
-      scopesSupported: ["genioone-invocation"],
+      scopesSupported: [GENIOONE_SCOPES.read, GENIOONE_SCOPES.write],
     },
     claimToHeaders: [
       { claim: "sub", header: "x-genio-verified-subject" },
       { claim: "azp", header: "x-genio-verified-client" },
+          { claim: "scope", header: "x-genio-verified-scopes" },
     ],
   })
   const metadataFilter = projection.resources.find(
@@ -1217,7 +1255,7 @@ test("MCP projection delegates outbound identity to native backend policy", asyn
   assert.deepEqual(JSON.parse(directResponse.body.inline), {
     resource: "https://mcp.example.test/mcp",
     authorization_servers: ["https://identity.example.test/realms/acme"],
-    scopes_supported: ["genioone-invocation"],
+    scopes_supported: [GENIOONE_SCOPES.read, GENIOONE_SCOPES.write],
     bearer_methods_supported: ["header"],
   })
   const metadataRoute = projection.resources.find(
@@ -1315,7 +1353,7 @@ test("MCP projection delegates outbound identity to native backend policy", asyn
   const metadataDocumentBytes = (issuer: string) => new TextEncoder().encode(JSON.stringify({
     resource: `https://mcp.example.test${metadataBoundaryEndpoint.base_path}`,
     authorization_servers: [issuer],
-    scopes_supported: ["genioone-invocation"],
+    scopes_supported: [GENIOONE_SCOPES.read, GENIOONE_SCOPES.write],
     bearer_methods_supported: ["header"],
   })).byteLength
   const boundaryIssuerPrefix = "https://identity.example.test/"
@@ -1430,6 +1468,8 @@ test("MCP projection delegates outbound identity to native backend policy", asyn
     }),
   ).compile({ tenantId: "tenant-acme", value: { publication_id: "publication-mcp-unreviewed-1" } })
   assert.equal(unreviewedProjection.mcp_tool_definitions, undefined)
+  assert.equal(projection.capability_operations?.find((operation) => operation.mcp_tool === "jira__search_issues")?.operation_semantics, "READ")
+  assert.equal(unreviewedProjection.capability_operations?.find((operation) => operation.mcp_tool === "jira__search_issues")?.operation_semantics, "WRITE")
   const internalProjection = await projector(
     publicationSnapshot({
       publication_id: "publication-mcp-internal-1",

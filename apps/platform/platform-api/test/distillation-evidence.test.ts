@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES, MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -46,7 +47,7 @@ async function createFixture(options: {
     client_id: "management-ui",
     role: "TENANT_ADMINISTRATOR",
     organization_ids: [],
-    scopes: ["genioone-management"],
+    scopes: [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.accessApprove],
   }
   options.configureModules?.(modules)
   const app = await createManagementApi({
@@ -56,11 +57,11 @@ async function createFixture(options: {
     ...(options.botFetch ? { botServiceEndpoint: "https://bot.example/service", botFetch: options.botFetch } : {}),
     principalAuthenticator: createStaticPrincipalAuthenticator({
       admin,
-      owner: person("owner", ["genioone-invocation", "genioone-management"]),
-      maintainer: person("maintainer", ["genioone-management"]),
-      "other-maintainer": person("other-maintainer", ["genioone-management"]),
-      reader: person("reader", ["genioone-management"]),
-      "invocation-maintainer": person("maintainer", ["genioone-invocation"]),
+      owner: person("owner", [GENIOONE_SCOPES.read, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.accessApprove]),
+      maintainer: person("maintainer", [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.accessApprove]),
+      "other-maintainer": person("other-maintainer", [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.accessApprove]),
+      reader: person("reader", [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.accessApprove]),
+      "invocation-maintainer": person("maintainer", [GENIOONE_SCOPES.invoke]),
     }),
   })
   await modules.identity.bootstrap({

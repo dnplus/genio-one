@@ -1,3 +1,4 @@
+import { MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import { generateKeyPairSync } from "node:crypto"
 import test from "node:test"
@@ -115,7 +116,7 @@ test("Management UI request is claimed once by its Gateway Runtime group and rep
       role: principalRole,
       organization_ids: [],
       client_id: runtimeId,
-      scopes: ["genioone-management"],
+      scopes: [MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.accessApprove, "genioone-gateway-runtime"],
     }
   })
   await app.register(mcpDiscoveryHttp, {

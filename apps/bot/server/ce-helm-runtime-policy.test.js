@@ -15,7 +15,7 @@ import {
 import { createRuntimePolicyClient } from "./runtime-policy"
 import { RuntimePolicyReportLedger } from "./runtime-policy-report-ledger"
 
-const principal = { tenant_id: "tenant-ce", subject_id: "person-ce", acting_client_id: "genio-one-bot", scopes: ["genioone-invocation"] }
+const principal = { tenant_id: "tenant-ce", subject_id: "person-ce", acting_client_id: "genio-one-bot", scopes: ["genioone:invoke"] }
 const input = { principal, botId: "bot-ce", capabilityId: "shell.exec", action: "expose", correlationId: "ce-signing-contract" }
 
 function fixture(db) {

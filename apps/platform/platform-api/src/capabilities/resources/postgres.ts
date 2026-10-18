@@ -172,7 +172,7 @@ function jsonObject(value: unknown, key: string): Record<string, unknown> {
   return parsed as Record<string, unknown>
 }
 
-function capabilities(value: unknown): Array<{ capability_id: string; display_name: string }> {
+function capabilities(value: unknown): ResourceRegistration["capabilities"] {
   const parsed = jsonValue(value, [])
   if (!Array.isArray(parsed)) {
     throw new PlatformApiError("RESOURCE_DATA_INVALID", 500, "Persisted capabilities are invalid")
@@ -186,11 +186,19 @@ function capabilities(value: unknown): Array<{ capability_id: string; display_na
       typeof item.capability_id !== "string" ||
       !item.capability_id.trim() ||
       typeof item.display_name !== "string" ||
-      !item.display_name.trim()
+      !item.display_name.trim() ||
+      (item.operation_semantics !== undefined &&
+        item.operation_semantics !== "READ" &&
+        item.operation_semantics !== "WRITE" &&
+        item.operation_semantics !== "INVOKE")
     ) {
       throw new PlatformApiError("RESOURCE_DATA_INVALID", 500, "Persisted capability is invalid")
     }
-    return { capability_id: item.capability_id, display_name: item.display_name }
+    return {
+      capability_id: item.capability_id,
+      display_name: item.display_name,
+      ...(item.operation_semantics === undefined ? {} : { operation_semantics: item.operation_semantics }),
+    }
   })
 }
 

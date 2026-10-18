@@ -1,4 +1,5 @@
 import type { BotServerContext } from "./context"
+import { GENIOONE_SCOPES } from "@genioone/protocol/authorization-scopes"
 import type { BotQuestion } from "../shared/bot-question"
 import type { RuntimeSession } from "./runtime-broker"
 import type { Turn } from "./generated/v2/Turn"
@@ -50,7 +51,7 @@ export async function deliverQuestionAnswers(context: BotServerContext) {
     for (const entry of context.botRegistry.questions.pending()) {
       const row = context.botRegistry.db.query("select tenant_id, owner_subject_id from bots where id = ?").get(entry.botId) as { tenant_id: string; owner_subject_id: string } | null
       if (!row) continue
-      const principal = { tenant_id: row.tenant_id, subject_id: row.owner_subject_id, acting_client_id: "genio-one-bot", scopes: ["genioone-invocation"] }
+      const principal = { tenant_id: row.tenant_id, subject_id: row.owner_subject_id, acting_client_id: "genio-one-bot", scopes: [GENIOONE_SCOPES.invoke] }
       const session = context.runtimeBroker.findByPrincipal(principal)
       if (!session?.initialized || !session.accessToken) continue
       const release = context.runtimeBroker.claimBotTurn(entry.botId, session.id)

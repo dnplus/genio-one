@@ -44,6 +44,7 @@ export function RegisterApplicationSheet({
   const [input, setInput] = useState(initialInput)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState("")
+  const ownerOrganization = organizations.find((organization) => organization.organization_id === input.ownerOrganizationId)
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -98,7 +99,7 @@ export function RegisterApplicationSheet({
                 required
               >
                 <SelectTrigger id="application-owner-organization" aria-invalid={Boolean(error)}>
-                  <SelectValue placeholder={t("Select an Owner Organization")} />
+                  <SelectValue placeholder={t("Select an Owner Organization")}>{ownerOrganization?.display_name}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>

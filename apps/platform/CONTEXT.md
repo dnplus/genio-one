@@ -132,12 +132,11 @@ permission evidence.
 _Avoid_: OAuth client, API key, arbitrary Subject creation
 
 **Application API Credential**:
-A provider-backed inbound API key generation issued only to a registered
-Application whose Capability Entitlement is active. GenioOne stores lifecycle,
-provider reference, generation and grace metadata but returns the secret value
-only once. Rotation creates a successor generation, bounds the predecessor's
-overlap, and revoke invalidates the selected key without revoking the
-Application Entitlement.
+An OAuth client credential or scoped API key belonging to a registered
+Application, bounded by that Application's current authority and, for Resource
+access, its Capability Entitlement. Each generation has its own expiry,
+rotation overlap and revocation state; possession never grants the creating
+Person's authority to the Application.
 _Avoid_: provider credential, Credential Lease, Entitlement, reusable secret response
 
 **Local Access Group**:

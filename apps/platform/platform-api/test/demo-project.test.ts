@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES, MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import test from "node:test"
 import assert from "node:assert/strict"
 
@@ -64,26 +65,26 @@ async function createApi(options: { geminiCredentialRef?: string; runtimeConnect
         tenant_id: tenantId,
         subject_id: "admin",
         client_id: "console",
-        scopes: ["genioone-management"],
         role: "TENANT_ADMINISTRATOR",
         organization_ids: [organization.organization_id, otherOrganization.organization_id],
+        scopes: [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite],
       },
       organizationAdmin: {
         tenant_id: tenantId,
         subject_id: "organization-admin",
         client_id: "console",
-        scopes: ["genioone-management"],
         role: "ORGANIZATION_ADMINISTRATOR",
         organization_ids: [organization.organization_id],
         administrator_organization_ids: [organization.organization_id],
+        scopes: [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite],
       },
       user: {
         tenant_id: tenantId,
         subject_id: "user",
         client_id: "console",
-        scopes: ["genioone-management"],
         role: "USER",
         organization_ids: [],
+        scopes: [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite],
       },
     }),
     entitlementResolver: modules.entitlements,

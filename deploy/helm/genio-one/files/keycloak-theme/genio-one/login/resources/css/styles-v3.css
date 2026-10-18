@@ -33,6 +33,7 @@ body#keycloak-bg {
     display: block;
     width: min(100%, 440px);
     margin: 0;
+    padding: 0;
     overflow: hidden;
     border: 1px solid var(--genio-brand-line);
     border-radius: 8px;
@@ -116,7 +117,9 @@ body#keycloak-bg {
 }
 
 #kc-page-title {
+    min-width: 0;
     margin: 0;
+    overflow-wrap: anywhere;
     color: var(--genio-brand-ink);
     font-size: 1.5rem;
     font-weight: 650;
@@ -124,13 +127,24 @@ body#keycloak-bg {
     line-height: 1.2;
 }
 
-.pf-v5-c-login__main-header-utilities { margin: 0; }
+.pf-v5-c-login__main-header-utilities { flex: 0 0 auto; margin: 0; }
+
+body[data-page-id="login-login-oauth-grant"] .pf-v5-c-login__main-header {
+    flex-direction: column;
+    align-items: stretch;
+}
+
+body[data-page-id="login-login-oauth-grant"] .pf-v5-c-login__main-header-utilities {
+    order: -1;
+    align-self: flex-end;
+    margin: 0;
+}
 
 .pf-v5-c-login__main-header-utilities .pf-v5-c-form-control,
 #login-select-toggle {
-    width: 112px;
-    min-width: 112px;
-    max-width: 112px;
+    width: 140px;
+    min-width: 140px;
+    max-width: 140px;
 }
 
 .pf-v5-c-login__main-header-utilities .pf-v5-c-form-control {
@@ -260,5 +274,6 @@ input:focus-visible {
     .pf-v5-c-login__header,
     .pf-v5-c-login__main { padding: 24px 20px; }
     .pf-v5-c-login__main-header { display: block; }
+    body[data-page-id="login-login-oauth-grant"] .pf-v5-c-login__main-header { display: flex; }
     .pf-v5-c-login__main-header-utilities { margin-top: 16px; }
 }

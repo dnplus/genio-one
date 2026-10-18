@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPE_VALUES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import { generateKeyPairSync } from "node:crypto"
 import test from "node:test"
@@ -63,7 +64,7 @@ async function createTestManagementApi() {
         role: "TENANT_ADMINISTRATOR",
         organization_ids: ["organization-commerce", "organization-ai"],
         client_id: "application-1",
-        scopes: ["genioone-management"],
+        scopes: [...GENIOONE_SCOPE_VALUES],
       },
     }),
     entitlementResolver: modules.entitlements,

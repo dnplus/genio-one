@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES, MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 import { createManagementApi } from "../src/app"
@@ -17,9 +18,9 @@ test("Endpoint administrator revocation is idempotent and blocks runtime operati
     organization_ids: [], client_id: "endpoint", scopes: ["genioone-endpoint-runtime"] }
   const app = await createManagementApi({ modules, resourceCatalog: modules.resources,
     principalAuthenticator: createStaticPrincipalAuthenticator({ endpoint: principal,
-      user: { ...principal, scopes: ["genioone-management"] },
-      admin: { ...principal, subject_id: "administrator", role: "TENANT_ADMINISTRATOR", scopes: ["genioone-management"] },
-      outsider: { ...principal, tenant_id: "tenant-2", role: "TENANT_ADMINISTRATOR", scopes: ["genioone-management"] },
+      user: { ...principal, scopes: [GENIOONE_SCOPES.read, GENIOONE_SCOPES.write, MANAGEMENT_SCOPES.runtimeRead, MANAGEMENT_SCOPES.runtimeWrite] },
+      admin: { ...principal, subject_id: "administrator", role: "TENANT_ADMINISTRATOR", scopes: [GENIOONE_SCOPES.read, GENIOONE_SCOPES.write, MANAGEMENT_SCOPES.runtimeRead, MANAGEMENT_SCOPES.runtimeWrite] },
+      outsider: { ...principal, tenant_id: "tenant-2", role: "TENANT_ADMINISTRATOR", scopes: [GENIOONE_SCOPES.read, GENIOONE_SCOPES.write, MANAGEMENT_SCOPES.runtimeRead, MANAGEMENT_SCOPES.runtimeWrite] },
     }),
   })
   try {

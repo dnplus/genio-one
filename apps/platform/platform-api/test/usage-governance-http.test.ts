@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES, MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 import Fastify from "fastify"
@@ -29,7 +30,7 @@ test("scoped Organization Administrator manages Use Cases and immutable Usage Po
         organization_ids: [organization.organization_id],
         administrator_organization_ids: [organization.organization_id],
         client_id: "platform-web",
-        scopes: ["genioone-management"],
+        scopes: [MANAGEMENT_SCOPES.identityRead, MANAGEMENT_SCOPES.identityWrite, MANAGEMENT_SCOPES.policiesRead, MANAGEMENT_SCOPES.policiesWrite, MANAGEMENT_SCOPES.policiesPublish],
       },
     }),
   })
@@ -113,7 +114,7 @@ test("Use Case catalogs are member-readable and User mutations are denied", asyn
         role: "USER",
         organization_ids: [own.organization_id],
         client_id: "platform-web",
-        scopes: ["genioone-invocation"],
+        scopes: [GENIOONE_SCOPES.read],
       },
       "other-user": {
         tenant_id: "tenant-acme",
@@ -121,7 +122,7 @@ test("Use Case catalogs are member-readable and User mutations are denied", asyn
         role: "USER",
         organization_ids: [other.organization_id],
         client_id: "platform-web",
-        scopes: ["genioone-invocation"],
+        scopes: [GENIOONE_SCOPES.read],
       },
     }),
   })
@@ -296,11 +297,11 @@ test("management Usage Policy lists use administrator ownership and revisions au
     modules,
     resourceCatalog: modules.resources,
     principalAuthenticator: createStaticPrincipalAuthenticator({
-      "admin-a": { tenant_id: tenantId, subject_id: "admin-a", role: "ORGANIZATION_ADMINISTRATOR", organization_ids: [orgA, orgB], administrator_organization_ids: [orgA], client_id: "platform-web", scopes: ["genioone-management"] },
-      "admin-b": { tenant_id: tenantId, subject_id: "admin-b", role: "ORGANIZATION_ADMINISTRATOR", organization_ids: [orgA, orgB], administrator_organization_ids: [orgB], client_id: "platform-web", scopes: ["genioone-management"] },
-      "member": { tenant_id: tenantId, subject_id: "member", role: "USER", organization_ids: [orgA, orgB], administrator_organization_ids: [], client_id: "platform-web", scopes: ["genioone-management"] },
-      "admin-empty": { tenant_id: tenantId, subject_id: "admin-empty", role: "ORGANIZATION_ADMINISTRATOR", organization_ids: [orgA, orgB], administrator_organization_ids: [], client_id: "platform-web", scopes: ["genioone-management"] },
-      "tenant-admin": { tenant_id: tenantId, subject_id: "tenant-admin", role: "TENANT_ADMINISTRATOR", organization_ids: [], client_id: "platform-web", scopes: ["genioone-management"] },
+      "admin-a": { tenant_id: tenantId, subject_id: "admin-a", role: "ORGANIZATION_ADMINISTRATOR", organization_ids: [orgA, orgB], administrator_organization_ids: [orgA], client_id: "platform-web", scopes: [MANAGEMENT_SCOPES.policiesRead, MANAGEMENT_SCOPES.policiesPublish] },
+      "admin-b": { tenant_id: tenantId, subject_id: "admin-b", role: "ORGANIZATION_ADMINISTRATOR", organization_ids: [orgA, orgB], administrator_organization_ids: [orgB], client_id: "platform-web", scopes: [MANAGEMENT_SCOPES.policiesRead, MANAGEMENT_SCOPES.policiesPublish] },
+      "member": { tenant_id: tenantId, subject_id: "member", role: "USER", organization_ids: [orgA, orgB], administrator_organization_ids: [], client_id: "platform-web", scopes: [MANAGEMENT_SCOPES.policiesRead, MANAGEMENT_SCOPES.policiesPublish] },
+      "admin-empty": { tenant_id: tenantId, subject_id: "admin-empty", role: "ORGANIZATION_ADMINISTRATOR", organization_ids: [orgA, orgB], administrator_organization_ids: [], client_id: "platform-web", scopes: [MANAGEMENT_SCOPES.policiesRead, MANAGEMENT_SCOPES.policiesPublish] },
+      "tenant-admin": { tenant_id: tenantId, subject_id: "tenant-admin", role: "TENANT_ADMINISTRATOR", organization_ids: [], client_id: "platform-web", scopes: [MANAGEMENT_SCOPES.policiesRead, MANAGEMENT_SCOPES.policiesPublish] },
     }),
   })
   const url = `/v1/tenants/${tenantId}/usage-policies`

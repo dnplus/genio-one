@@ -1,3 +1,4 @@
+import { MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -47,7 +48,7 @@ test("Resources module exposes its validated route in OpenAPI", async () => {
         role: "TENANT_ADMINISTRATOR",
         organization_ids: [],
         client_id: "application-1",
-        scopes: ["genioone-management"],
+        scopes: [MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.policiesPublish],
       },
     }),
   })
@@ -233,7 +234,7 @@ test("Resource lifecycle HTTP permits EXTENSION publication and guards other kin
         role: "TENANT_ADMINISTRATOR",
         organization_ids: [],
         client_id: "application-1",
-        scopes: ["genioone-management"],
+        scopes: [MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.policiesPublish],
       },
     }),
   })
@@ -271,7 +272,7 @@ test("publication endpoint rejects invalid hostnames and paths before persistenc
     modules,
     resourceCatalog: modules.resources,
     principalAuthenticator: createStaticPrincipalAuthenticator({
-      "test-token": { tenant_id: "tenant-acme", subject_id: "person-owner", role: "TENANT_ADMINISTRATOR", organization_ids: [], client_id: "application-1", scopes: ["genioone-management"] },
+      "test-token": { tenant_id: "tenant-acme", subject_id: "person-owner", role: "TENANT_ADMINISTRATOR", organization_ids: [], client_id: "application-1", scopes: [MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.policiesPublish] },
     }),
   })
   try {
@@ -322,7 +323,7 @@ test("Resource API rejects installation-owned identity and retirement mutations"
         role: "TENANT_ADMINISTRATOR",
         organization_ids: [],
         client_id: "management-ui",
-        scopes: ["genioone-management"],
+        scopes: [MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.policiesPublish],
       },
     }),
   })

@@ -1,3 +1,4 @@
+import { MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import { generateKeyPairSync } from "node:crypto"
 import test from "node:test"
@@ -526,7 +527,7 @@ test("Gateway Activity direct ingest and materializer share the live PostHog sin
           client_id: "management-client",
           role: "TENANT_ADMINISTRATOR",
           organization_ids: [],
-          scopes: ["genioone-management"],
+          scopes: [MANAGEMENT_SCOPES.auditRead],
         },
         runtime: {
           tenant_id: "tenant-one",

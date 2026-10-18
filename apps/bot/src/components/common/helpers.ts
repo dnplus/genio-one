@@ -1,4 +1,5 @@
 import type { GenioCatalog, GenioIdentity } from "../../lib/genio-one"
+import { RESOURCE_SCOPE_VALUES } from "@genioone/protocol/authorization-scopes"
 import { readBotMessages, readBotThreads, type BotInstance } from "../../bots-storage"
 import { isEnglishBotLocale } from "../../lib/ui-copy"
 
@@ -13,7 +14,7 @@ export function demoIdentity(): GenioIdentity {
     acting_client_id: "genio-one-bot",
     role: "USER",
     organization_ids: ["acme"],
-    scopes: ["genioone-invocation"],
+    scopes: [...RESOURCE_SCOPE_VALUES],
   }
 }
 

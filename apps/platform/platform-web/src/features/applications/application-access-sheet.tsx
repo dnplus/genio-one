@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react"
-import { CheckIcon, CopyIcon, KeyRoundIcon, LoaderCircleIcon, RefreshCwIcon, ShieldPlusIcon, XCircleIcon } from "lucide-react"
+import { LoaderCircleIcon, ShieldPlusIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
 import {
   Select,
   SelectContent,
@@ -25,23 +24,17 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet"
 import type {
-  ApplicationApiCredential,
-  ApplicationApiCredentialCreation,
   ApplicationRegistration,
   FederationExchangeEvent,
   FederationTrustRevision,
   OverviewSnapshot,
 } from "@/domain/contracts"
-import { formatEpochSeconds } from "@/lib/personal-preferences"
+import { ApplicationCredentialsPanel } from "@/features/applications/application-credentials-panel"
 import {
-  createApplicationApiCredential,
   createApplicationFederationTrust,
-  listApplicationApiCredentials,
   listApplicationFederationExchanges,
   listApplicationFederationTrusts,
   requestApplicationAccess,
-  revokeApplicationApiCredential,
-  rotateApplicationApiCredential,
 } from "@/lib/product-api"
 
 type CapabilityOption = {
@@ -50,7 +43,7 @@ type CapabilityOption = {
   resourceName: string
   environmentId: string
   capabilityId: string
-  securityType: "OAUTH2"
+  capabilityName: string
 }
 
 export function ApplicationAccessSheet({
@@ -70,11 +63,8 @@ export function ApplicationAccessSheet({
   const [justification, setJustification] = useState("")
   const [busy, setBusy] = useState("")
   const [error, setError] = useState("")
-  const [issued, setIssued] = useState<ApplicationApiCredentialCreation | null>(null)
-  const [credentials, setCredentials] = useState<ApplicationApiCredential[]>([])
   const [federationTrusts, setFederationTrusts] = useState<FederationTrustRevision[]>([])
   const [federationExchanges, setFederationExchanges] = useState<FederationExchangeEvent[]>([])
-  const [gracePeriodSeconds, setGracePeriodSeconds] = useState("5")
   const [federationDisplayName, setFederationDisplayName] = useState("")
   const [federationIssuer, setFederationIssuer] = useState("")
   const [federationJwksUri, setFederationJwksUri] = useState("")
@@ -84,21 +74,17 @@ export function ApplicationAccessSheet({
   const [federationClaimName, setFederationClaimName] = useState("")
   const [federationClaimValue, setFederationClaimValue] = useState("")
   const [federationMaxTtl, setFederationMaxTtl] = useState("600")
-  const [copiedApiKey, setCopiedApiKey] = useState(false)
-  const [copiedOAuthSecret, setCopiedOAuthSecret] = useState(false)
 
   useEffect(() => {
     if (!open) return
     let active = true
     setError("")
     void Promise.all([
-      listApplicationApiCredentials(tenantId, application.application_id),
       listApplicationFederationTrusts(tenantId, application.application_id),
       listApplicationFederationExchanges(tenantId, application.application_id),
     ])
-      .then(([nextCredentials, nextTrusts, nextExchanges]) => {
+      .then(([nextTrusts, nextExchanges]) => {
         if (!active) return
-        setCredentials(nextCredentials)
         setFederationTrusts(nextTrusts)
         setFederationExchanges(nextExchanges)
       })
@@ -113,9 +99,8 @@ export function ApplicationAccessSheet({
   const options = useMemo<CapabilityOption[]>(
     () => data.resources
       .filter((resource) =>
-        resource.kind === "API"
+        (resource.kind === "API" || resource.kind === "LLM")
         && (resource.lifecycle === "PUBLISHED" || resource.lifecycle === "DEPRECATED")
-        && resource.api?.inbound_security.type === "OAUTH2"
         && (
           resource.publication_endpoint?.visibility === "REQUEST"
           || (
@@ -130,7 +115,7 @@ export function ApplicationAccessSheet({
         resourceName: resource.display_name,
         environmentId: resource.environment_id,
         capabilityId: capability.capability_id,
-        securityType: "OAUTH2",
+        capabilityName: capability.display_name,
       }))),
     [application.owner_organization_id, data.resources],
   )
@@ -138,7 +123,6 @@ export function ApplicationAccessSheet({
   const applicationRequests = data.accessRequests.filter(
     (request) => request.target_subject === application.subject_id,
   )
-  const approved = applicationRequests.filter((request) => request.state === "APPROVED")
   const selectedRequest = selected
     ? applicationRequests.find(
         (request) => {
@@ -161,21 +145,6 @@ export function ApplicationAccessSheet({
     setJustification("")
     setBusy("")
     setError("")
-    setIssued(null)
-    setCopiedApiKey(false)
-    setCopiedOAuthSecret(false)
-  }
-
-  async function copyApiKey(secret: string) {
-    await navigator.clipboard.writeText(secret)
-    setCopiedApiKey(true)
-    window.setTimeout(() => setCopiedApiKey(false), 2000)
-  }
-
-  async function copyOAuthSecret(secret: string) {
-    await navigator.clipboard.writeText(secret)
-    setCopiedOAuthSecret(true)
-    window.setTimeout(() => setCopiedOAuthSecret(false), 2000)
   }
 
   function closeSheet() {
@@ -200,65 +169,6 @@ export function ApplicationAccessSheet({
       await onChanged()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("Application access request failed"))
-    } finally {
-      setBusy("")
-    }
-  }
-
-  async function issueCredential(resourceId: string, capabilityId: string) {
-    setBusy(`${resourceId}::${capabilityId}`)
-    setError("")
-    setIssued(null)
-    try {
-      const creation = await createApplicationApiCredential(
-        tenantId,
-        application.application_id,
-        resourceId,
-        capabilityId,
-      )
-      setIssued(creation)
-      setCredentials(await listApplicationApiCredentials(tenantId, application.application_id))
-      await onChanged()
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : t("API credential issuance failed"))
-    } finally {
-      setBusy("")
-    }
-  }
-
-  async function rotateCredential(credentialId: string) {
-    const grace = Number(gracePeriodSeconds)
-    if (!Number.isInteger(grace) || grace < 0) return
-    setBusy(`rotate::${credentialId}`)
-    setError("")
-    setIssued(null)
-    try {
-      const creation = await rotateApplicationApiCredential(
-        tenantId,
-        application.application_id,
-        credentialId,
-        grace,
-      )
-      setIssued(creation)
-      setCredentials(await listApplicationApiCredentials(tenantId, application.application_id))
-      await onChanged()
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : t("API credential rotation failed"))
-    } finally {
-      setBusy("")
-    }
-  }
-
-  async function revokeCredential(credentialId: string) {
-    setBusy(`revoke::${credentialId}`)
-    setError("")
-    setIssued(null)
-    try {
-      await revokeApplicationApiCredential(tenantId, application.application_id, credentialId)
-      setCredentials(await listApplicationApiCredentials(tenantId, application.application_id))
-      await onChanged()
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : t("API credential revocation failed"))
     } finally {
       setBusy("")
     }
@@ -324,11 +234,9 @@ export function ApplicationAccessSheet({
             {application.display_name} · {application.application_id}
           </SheetDescription>
         </SheetHeader>
-        <ol className="flex gap-3 border-b px-6 py-3 text-xs text-muted-foreground" data-testid="application-access-steps">
-          <li>1. {t("Request")}</li>
-          <li>2. {t("Active Entitlement")}</li>
-          <li>3. {t("Application API Credential")}</li>
-        </ol>
+        <p className="border-b px-6 py-3 text-xs text-muted-foreground">
+          {t("Resource credentials require an active Application Entitlement. Platform API keys use the Application's current role and permissions.")}
+        </p>
 
         <form onSubmit={submitRequest}>
           <FieldGroup className="border-b p-6">
@@ -341,18 +249,18 @@ export function ApplicationAccessSheet({
             <Field>
               <FieldLabel>{t("API / Capability")}</FieldLabel>
               <Select value={selection} onValueChange={setSelection} required>
-                <SelectTrigger className="w-full"><SelectValue placeholder={t("Select a Published API Capability")} /></SelectTrigger>
+                <SelectTrigger className="w-full"><SelectValue placeholder={t("Select a Published API Capability")}>{selected ? `${selected.resourceName} · ${selected.environmentId} · ${selected.capabilityName}` : undefined}</SelectValue></SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
                     {options.map((option) => (
                       <SelectItem key={option.key} value={option.key}>
-                        {option.resourceName} · {option.environmentId} · {option.resourceId} / {option.capabilityId}
+                        {option.resourceName} · {option.environmentId} · {option.capabilityName}
                       </SelectItem>
                     ))}
                   </SelectGroup>
                 </SelectContent>
               </Select>
-              <FieldDescription>{t("Only Published APIs using OAuth Client Credentials inbound security are eligible.")}</FieldDescription>
+              <FieldDescription>{t("Select a published API or model Capability. Credentials use the Application's active access after approval.")}</FieldDescription>
             </Field>
             <Field>
               <FieldLabel htmlFor={`application-justification-${application.application_id}`}>{t("Justification")}</FieldLabel>
@@ -382,100 +290,7 @@ export function ApplicationAccessSheet({
         </form>
 
         <div className="flex flex-col gap-4 p-6">
-          <div>
-            <h3 className="text-sm font-medium">{t("Approved API access")}</h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t("Issue the Keycloak OAuth client only after an active Application Entitlement exists.")}
-            </p>
-          </div>
-          {approved.length ? approved.map((request) => {
-            const key = `${request.resource_id}::${request.capability_id}`
-            return (
-              <div key={request.access_request_id} className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <div className="font-medium">{request.resource_id}</div>
-                  <div className="font-mono text-xs text-muted-foreground">{request.capability_id}</div>
-                </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => void issueCredential(request.resource_id, request.capability_id)}
-                  disabled={Boolean(busy) || issued?.credential.resource_id === request.resource_id}
-                >
-                  {busy === key ? <LoaderCircleIcon data-icon="inline-start" className="animate-spin" /> : <KeyRoundIcon data-icon="inline-start" />}
-                  {t("Issue OAuth client")}
-                </Button>
-              </div>
-            )
-          }) : (
-            <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-              {t("No approved API Capability request is available yet.")}
-            </p>
-          )}
-
-          <div className="mt-2 border-t pt-4">
-            <h3 className="text-sm font-medium">{t("Issued credentials")}</h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t("Rotate active credentials with an explicit grace period, or revoke them immediately.")}
-            </p>
-          </div>
-          <Field>
-            <FieldLabel htmlFor={`credential-grace-${application.application_id}`}>{t("Old key grace period (seconds)")}</FieldLabel>
-            <Input
-              id={`credential-grace-${application.application_id}`}
-              type="number"
-              min="0"
-              step="1"
-              value={gracePeriodSeconds}
-              onChange={(event) => setGracePeriodSeconds(event.target.value)}
-            />
-          </Field>
-          {credentials.length ? credentials.map((credential) => (
-            <div key={credential.credential_id} className="flex flex-col gap-3 rounded-lg border p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <div className="font-mono text-xs">{credential.credential_id}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {credential.resource_id} · {credential.capability_id} · {t("Generation")} {credential.generation}
-                  </div>
-                  {credential.valid_until ? (
-                    <div className="text-xs text-muted-foreground">
-                      {t("Valid until")} {formatEpochSeconds(credential.valid_until)}
-                    </div>
-                  ) : null}
-                </div>
-                <Badge variant="outline">{t(credential.state)}</Badge>
-              </div>
-              {credential.state === "ACTIVE" ? (
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={Boolean(busy) || !Number.isInteger(Number(gracePeriodSeconds)) || Number(gracePeriodSeconds) < 0}
-                    onClick={() => void rotateCredential(credential.credential_id)}
-                  >
-                    {busy === `rotate::${credential.credential_id}` ? <LoaderCircleIcon data-icon="inline-start" className="animate-spin" /> : <RefreshCwIcon data-icon="inline-start" />}
-                    {t("Rotate OAuth client")}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="destructive"
-                    disabled={Boolean(busy)}
-                    onClick={() => void revokeCredential(credential.credential_id)}
-                  >
-                    {busy === `revoke::${credential.credential_id}` ? <LoaderCircleIcon data-icon="inline-start" className="animate-spin" /> : <XCircleIcon data-icon="inline-start" />}
-                    {t("Revoke")}
-                  </Button>
-                </div>
-              ) : null}
-            </div>
-          )) : (
-            <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-              {t("No API credentials have been issued for this Application.")}
-            </p>
-          )}
+          {open ? <ApplicationCredentialsPanel tenantId={tenantId} application={application} data={data} onChanged={onChanged} /> : null}
 
           <form className="mt-2 border-t pt-4" onSubmit={createFederationTrust} data-testid="application-federation-trust">
             <div>
@@ -573,53 +388,6 @@ export function ApplicationAccessSheet({
             </div>
           ) : null}
 
-          {issued?.api_key ? (
-            <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4">
-              <div className="font-medium">{t("Copy this API key now")}</div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {t("GenioOne shows the complete secret only once and does not persist it in canonical state.")}
-              </p>
-              <InputGroup className="mt-3 h-10 bg-background">
-                <InputGroupInput className="font-mono" readOnly value={issued.api_key} aria-label={t("One-time API key")} />
-                <InputGroupAddon align="inline-end">
-                  <InputGroupButton
-                    aria-label={t("Copy API key")}
-                    onClick={() => void copyApiKey(issued.api_key!)}
-                  >
-                    {copiedApiKey ? <CheckIcon /> : <CopyIcon />}
-                    {t(copiedApiKey ? "Copied" : "Copy")}
-                  </InputGroupButton>
-                </InputGroupAddon>
-              </InputGroup>
-              <div className="mt-2 font-mono text-xs text-muted-foreground">{issued.credential.credential_id}</div>
-            </div>
-          ) : null}
-          {issued?.oauth_client_secret ? (
-            <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4" data-testid="oauth-client-secret">
-              <div className="font-medium">{t("Copy this OAuth client secret now")}</div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {t("GenioOne shows the complete client secret only once. Save it with the token endpoint before closing this panel.")}
-              </p>
-              <div className="mt-3 grid gap-2 text-xs">
-                <div><span className="text-muted-foreground">{t("Client ID")}: </span><span className="font-mono">{issued.credential.oauth_client_id ?? "—"}</span></div>
-                <div><span className="text-muted-foreground">{t("Token endpoint")}: </span><span className="break-all font-mono">{issued.oauth_token_endpoint ?? "—"}</span></div>
-                <div><span className="text-muted-foreground">{t("Scope")}: </span><span className="font-mono">{issued.credential.oauth_scope ?? "—"}</span></div>
-              </div>
-              <InputGroup className="mt-3 h-10 bg-background">
-                <InputGroupInput className="font-mono" readOnly value={issued.oauth_client_secret} aria-label={t("One-time OAuth client secret")} />
-                <InputGroupAddon align="inline-end">
-                  <InputGroupButton
-                    aria-label={t("Copy OAuth client secret")}
-                    onClick={() => void copyOAuthSecret(issued.oauth_client_secret!)}
-                  >
-                    {copiedOAuthSecret ? <CheckIcon /> : <CopyIcon />}
-                    {t(copiedOAuthSecret ? "Copied" : "Copy")}
-                  </InputGroupButton>
-                </InputGroupAddon>
-              </InputGroup>
-              <div className="mt-2 font-mono text-xs text-muted-foreground">{issued.credential.credential_id}</div>
-            </div>
-          ) : null}
           {error ? <FieldError>{t(error)}</FieldError> : null}
         </div>
         <SheetFooter className="border-t bg-background px-6 py-4">

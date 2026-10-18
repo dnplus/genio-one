@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 import {
@@ -27,7 +28,7 @@ test("Workload Identity exchanges external token for short-lived acting credenti
   })
 
   assert.equal(result.token_type, "Bearer")
-  assert.equal(result.scope, "genioone-invocation")
+  assert.equal(result.scope, GENIOONE_SCOPES.invoke)
   assert.equal(result.expires_in, 900)
   assert.equal(result.subject_id, "workload:repo:org/app:ref:refs/heads/main")
   assert.equal(result.acting_client_id, "ci-pipeline-1")
@@ -38,7 +39,7 @@ test("Workload Identity exchanges external token for short-lived acting credenti
   assert.equal(principal.tenant_id, "tenant-test")
   assert.equal(principal.role, "USER")
   assert.equal(principal.client_id, "ci-pipeline-1")
-  assert.deepEqual(principal.scopes, ["genioone-invocation"])
+  assert.deepEqual(principal.scopes, [GENIOONE_SCOPES.invoke])
 
   const crossTenantPrincipal = store.authenticate(result.access_token, "tenant-other")
   assert.equal(crossTenantPrincipal, null)

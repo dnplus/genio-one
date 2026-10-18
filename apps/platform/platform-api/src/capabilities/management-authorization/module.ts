@@ -1,3 +1,5 @@
+import { MANAGEMENT_SCOPE_VALUES, hasAnyScope } from "@genioone/protocol/authorization-scopes"
+import { platformRouteScopeRequirements } from "./route-scopes"
 import type { EndpointCredentialIdentity, EndpointRuntimeStore } from "../endpoint-runtime/module"
 import type { FastifyRequest } from "fastify"
 import { randomUUID } from "node:crypto"
@@ -21,8 +23,6 @@ import {
   type TenantRoute,
 } from "../tenancy-auth/routes"
 
-const MANAGEMENT_SCOPE = "genioone-management"
-const INVOCATION_SCOPE = "genioone-invocation"
 const GATEWAY_RUNTIME_SCOPE = "genioone-gateway-runtime"
 const ENDPOINT_RUNTIME_SCOPE = "genioone-endpoint-runtime"
 
@@ -161,11 +161,11 @@ function assertOrganizationManager(principal: Principal, organizationId: string 
 }
 
 function principalHasScope(principal: Principal, allowed: readonly string[]): boolean {
-  return allowed.some((scope) => principal.scopes?.includes(scope) === true)
+  return hasAnyScope(principal.scopes, allowed)
 }
 
-export function principalHasManagementScope(principal: Principal): boolean {
-  return principalHasScope(principal, [MANAGEMENT_SCOPE])
+export function principalHasManagementScope(principal: Principal, scopes: readonly string[] = MANAGEMENT_SCOPE_VALUES): boolean {
+  return principalHasScope(principal, scopes)
 }
 
 function assertPrincipalScope(principal: Principal, allowed: readonly string[]): void {
@@ -255,91 +255,6 @@ function isEndpointRuntimeTransport(route: TenantRoute, method: string): boolean
     ["heartbeat", "enforcements", "ai-activities", "rotate-credential"].includes(route.rest[2]!)
 }
 
-function isPostHogBrowserConfiguration(route: TenantRoute, method: string): boolean {
-  return method === "GET" &&
-    route.rest.length === 3 &&
-    route.rest[0] === "telemetry" &&
-    route.rest[1] === "posthog" &&
-    route.rest[2] === "browser-configuration"
-}
-
-function isSharedMemoryRoute(
-  route: TenantRoute,
-  scope: "organizations" | "team-workspaces",
-): boolean {
-  if (route.rest[0] !== scope || !route.rest[1] || route.rest[2] !== "memories") return false
-  if (route.rest.length === 3) return true
-  if (route.rest.length === 4 && route.rest[3]) return true
-  if (route.rest.length === 5 && route.rest[3] && route.rest[4] === "corrections") return true
-  return route.rest.length === 7 &&
-    Boolean(route.rest[3]) &&
-    route.rest[4] === "corrections" &&
-    Boolean(route.rest[5]) &&
-    route.rest[6] === "review"
-}
-
-function isMemoryRoute(route: TenantRoute, method: string): boolean {
-  if (route.rest.length === 2 && route.rest[0] === "memory" && route.rest[1] === "mcp") return true
-  if (
-    isSharedMemoryRoute(route, "team-workspaces") ||
-    isSharedMemoryRoute(route, "organizations")
-  ) return true
-  if (route.rest[0] !== "me") return false
-  if (route.rest[1] === "memories") return route.rest.length === 2 || route.rest.length === 3
-  if (route.rest[1] === "memory-agents") return route.rest.length === 2 || route.rest.length === 3
-  return method === "GET" && route.rest.length === 2 && route.rest[1] === "memory-scopes"
-}
-
-function isTeamWorkspaceRead(route: TenantRoute, method: string): boolean {
-  return method === "GET" &&
-    route.rest[0] === "team-workspaces" &&
-    (route.rest.length === 1 || (route.rest.length === 2 && Boolean(route.rest[1])))
-}
-
-function assertMemoryInvocationScope(principal: Principal): void {
-  if (principal.scopes?.includes(INVOCATION_SCOPE)) return
-  throw new PlatformApiError(
-    "INSUFFICIENT_SCOPE",
-    403,
-    `The required OAuth scope is missing: ${INVOCATION_SCOPE}`,
-  )
-}
-
-function isInvocationRoute(route: TenantRoute, method: string): boolean {
-  if (isPostHogBrowserConfiguration(route, method)) return true
-  if (isMemoryRoute(route, method)) return true
-  if (route.rest.length === 2 && route.rest[0] === "discovery" && route.rest[1] === "mcp") return true
-  if (method === "POST" && route.rest.length === 2 && route.rest[0] === "me" && route.rest[1] === "agents") return true
-  if (route.rest[0] === "me" && route.rest[1] === "resource-connections") {
-    return (method === "GET" && route.rest.length === 3) ||
-      (method === "POST" && route.rest.length === 5 && ["authorize", "password", "discovery"].includes(route.rest[4]!)) ||
-      (method === "GET" && route.rest.length === 6 && route.rest[4] === "discovery") ||
-      (method === "DELETE" && route.rest.length === 4)
-  }
-  if (method === "GET" && route.rest.length === 0) return true
-  if (method === "GET" && route.rest[0] === "self-service-configuration") return true
-  if (method === "GET" && (route.rest[0] === "catalog" || route.rest[0] === "me")) return true
-  if (method === "GET" && route.rest[0] === "one-policy" && route.rest[1] === "bot-access") return true
-  if (method === "GET" && route.rest[0] === "one-policy" && route.rest[1] === "runtime-effective") return true
-  if (
-    method === "POST" &&
-    route.rest.length === 3 &&
-    route.rest[0] === "me" &&
-    route.rest[1] === "entitlements" &&
-    route.rest[2] === "activate"
-  ) return true
-  if (isManagementOnlyKnowledgeCandidateRoute(route, method)) return false
-  if (method === "GET" && route.rest[0] === "knowledge-candidates") return true
-  if (method === "GET" && route.rest[0] === "distillation-markers") return true
-  if (isTeamWorkspaceRead(route, method)) return true
-  if (method !== "POST") return false
-  if (route.rest[0] === "one-policy" && ["runtime-authorize", "runtime-report"].includes(route.rest[1] ?? "")) return true
-  if (route.rest[0] === "resource-onboarding-requests") return true
-  if (route.rest[0] === "invocations" && route.rest[1] === "authorize") return true
-  return route.rest[0] === "access-requests" &&
-    (route.rest.length === 1 || (route.rest.length === 3 && route.rest[2] === "cancel"))
-}
-
 function isSignedRuntimeReportRoute(route: TenantRoute, request: FastifyRequest): boolean {
   return request.method === "POST" &&
     route.rest.length === 2 &&
@@ -349,29 +264,10 @@ function isSignedRuntimeReportRoute(route: TenantRoute, request: FastifyRequest)
     typeof request.headers[RUNTIME_REPORT_SIGNATURE_HEADER] === "string"
 }
 
-function isManagementOnlyKnowledgeCandidateRoute(route: TenantRoute, method: string): boolean {
-  return method === "GET" &&
-    route.rest.length === 3 &&
-    route.rest[0] === "knowledge-candidates" &&
-    (route.rest[2] === "review-context" || route.rest[2] === "evidence")
-}
-
 function isFirstPartyBotSeedMutation(route: TenantRoute, method: string): boolean {
   return method !== "GET" &&
     route.rest[0] === "one-policy" &&
     route.rest[1] === "first-party-bot"
-}
-
-function isUseCaseCatalogRead(route: TenantRoute, method: string): boolean {
-  return method === "GET" && route.rest.length === 3 && route.rest[0] === "organizations" && route.rest[2] === "use-cases"
-}
-
-function isDistillationBotCancellation(route: TenantRoute, method: string): boolean {
-  return method === "DELETE" &&
-    route.rest.length === 3 &&
-    route.rest[0] === "distillation-markers" &&
-    route.rest[1] === "bots" &&
-    Boolean(route.rest[2])
 }
 
 function isAuditExportRead(route: TenantRoute, method: string): boolean {
@@ -382,18 +278,12 @@ function isAuditEventListRead(route: TenantRoute, method: string): boolean {
   return (method === "GET" || method === "HEAD") && route.rest.length === 1 && route.rest[0] === "audit-events"
 }
 
-function requiredRouteScopes(route: TenantRoute, method: string): readonly string[] {
-  if (isDistillationBotCancellation(route, method)) return [MANAGEMENT_SCOPE, INVOCATION_SCOPE]
-  if (method === "POST" && route.rest[0] === "distillation-markers") return [INVOCATION_SCOPE]
-  if (isManagementOnlyKnowledgeCandidateRoute(route, method)) return [MANAGEMENT_SCOPE]
-  if (isEndpointRuntimeTransport(route, method)) return [ENDPOINT_RUNTIME_SCOPE]
-  if (method === "POST" && route.rest.length === 2 && route.rest[0] === "endpoints" && route.rest[1] === "bootstrap") return [MANAGEMENT_SCOPE, INVOCATION_SCOPE]
+function requiredRouteScopes(route: TenantRoute, method: string, body: unknown): readonly (readonly string[])[] {
+  if (isEndpointRuntimeTransport(route, method)) return [[ENDPOINT_RUNTIME_SCOPE]]
   if (isRuntimeControlTransport(route, method) || isRuntimeSelfRegistration(route, method) || isConnectionHealthObservation(route, method)) {
-    return [GATEWAY_RUNTIME_SCOPE]
+    return [[GATEWAY_RUNTIME_SCOPE]]
   }
-  if (isUseCaseCatalogRead(route, method)) return [MANAGEMENT_SCOPE, INVOCATION_SCOPE]
-  if (isInvocationRoute(route, method)) return [MANAGEMENT_SCOPE, INVOCATION_SCOPE]
-  return [MANAGEMENT_SCOPE]
+  return platformRouteScopeRequirements(route, method, body)
 }
 
 export function createManagementAuthorization(
@@ -615,19 +505,6 @@ export function createManagementAuthorization(
         await recordAuthorizationDecision(request, principal, "DENY", "SYSTEM_SCOPE_RESERVED")
         throw new PlatformApiError("TENANT_ACCESS_DENIED", 403)
       }
-      try {
-        assertPrincipalScope(principal, requiredRouteScopes(route, request.method))
-        if (isMemoryRoute(route, request.method)) assertMemoryInvocationScope(principal)
-        if (isAuditExportRead(route, request.method)) {
-          assertPrincipalScope(principal, ["audit.export"])
-        }
-        if (request.method === "POST" && route.rest.length === 1 && route.rest[0] === "applications") {
-          assertPrincipalScope(principal, ["application.create"])
-        }
-      } catch (error) {
-        await recordAuthorizationDecision(request, principal, "DENY", auditCode(error))
-        throw error
-      }
     },
 
     async normalize(request) {
@@ -635,6 +512,7 @@ export function createManagementAuthorization(
       const principal = request.principal
       if (!route || !principal) return
       const run = async () => {
+        for (const scopes of requiredRouteScopes(route, request.method, request.body)) assertPrincipalScope(principal, scopes)
         if (
           request.method === "POST" &&
           route.rest.length === 3 &&

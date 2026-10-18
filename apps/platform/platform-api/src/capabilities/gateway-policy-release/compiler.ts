@@ -9,6 +9,8 @@ import type {
   CompiledSubjectContext,
   CompiledUsageContext,
   CompiledUsagePolicy,
+  CompiledCapabilityOperation,
+  CompiledApplicationApiKey,
 } from "@genioone/protocol/authorization"
 import { isCompiledAuthorizationBundle } from "../../../../../../runtimes/gateway/services/authorizer/signed-bundle"
 import {
@@ -64,6 +66,7 @@ export interface GatewayPolicyArtifactCompilerInput {
   usage_policies?: readonly CompiledUsagePolicy[]
   usage_contexts?: readonly CompiledUsageContext[]
   resource_owners?: readonly GatewayRoutingResourceOwnerRef[]
+  application_api_keys?: readonly CompiledApplicationApiKey[]
 }
 
 export interface CompiledGatewayPolicyArtifacts {
@@ -347,6 +350,90 @@ function compiledMcpToolDefinitions(
     [left.resource_id, left.exposed_tool_name],
     [right.resource_id, right.exposed_tool_name],
   ))
+}
+
+function projectionRequestProtocol(projection: GatewayProjection): string | undefined {
+  if (projection.resources.some((resource) => resource.kind === "MCPRoute")) return "MCP"
+  for (const resource of projection.resources) {
+    if (!("spec" in resource)) continue
+    const extAuth = resource.spec.extAuth as { contextExtensions?: Array<{ name: string; value: string }> } | undefined
+    const protocol = extAuth?.contextExtensions?.find((context) => context.name === "request_protocol")?.value
+    if (protocol) return protocol
+  }
+  return undefined
+}
+
+function compiledCapabilityOperations(
+  projections: readonly (GatewayProjection & { operation: "APPLY" })[],
+  publicModels: readonly PublicModel[],
+  definitions: readonly CompiledMcpToolDefinition[],
+): CompiledCapabilityOperation[] {
+  const operations: CompiledCapabilityOperation[] = []
+  for (const projection of projections) {
+    const published = new Map(publishedMcpTools(projection).map((tool) => [tool.exposedName, tool]))
+    const protocol = projectionRequestProtocol(projection)
+    const invokes = protocol === "LLM" || protocol === "A2A" || publicModels.some((model) => model.resource_id === projection.resource_id)
+    const identities = new Set<string>()
+    for (const operation of projection.capability_operations ?? []) {
+      const tool = operation.mcp_tool ? published.get(operation.mcp_tool) : undefined
+      const identity = `${operation.capability_id}\u0000${operation.mcp_tool ?? ""}`
+      if (
+        operation.resource_id !== projection.resource_id || identities.has(identity) ||
+        (operation.mcp_tool !== undefined && (!tool || operation.capability_id !== mcpToolCapabilityId(tool.canonicalName) || operation.operation_semantics === "INVOKE")) ||
+        (operation.mcp_tool === undefined && (operation.capability_id !== projection.capability_id || (invokes ? operation.operation_semantics !== "INVOKE" : operation.operation_semantics === "INVOKE")))
+      ) throw new Error("projection capability operation does not match its published target")
+      identities.add(identity)
+    }
+    const route = projection.capability_operations?.find((operation) => operation.mcp_tool === undefined)
+    operations.push({
+      resource_id: projection.resource_id,
+      capability_id: projection.capability_id,
+      operation_semantics: invokes ? "INVOKE" : route?.operation_semantics ?? "WRITE",
+    })
+    for (const tool of published.values()) {
+      const operation = projection.capability_operations?.find((candidate) => candidate.mcp_tool === tool.exposedName)
+      const reviewedReadOnly = definitions.some((definition) => definition.resource_id === projection.resource_id && definition.exposed_tool_name === tool.exposedName)
+      operations.push({
+        resource_id: projection.resource_id,
+        capability_id: mcpToolCapabilityId(tool.canonicalName),
+        mcp_tool: tool.exposedName,
+        operation_semantics: operation?.operation_semantics ?? (reviewedReadOnly ? "READ" : "WRITE"),
+      })
+    }
+  }
+  return operations.sort((left, right) => compareTuple(
+    [left.resource_id, left.capability_id, left.mcp_tool ?? ""],
+    [right.resource_id, right.capability_id, right.mcp_tool ?? ""],
+  ))
+}
+
+function compiledApplicationApiKeys(
+  credentials: readonly CompiledApplicationApiKey[],
+  projections: readonly (GatewayProjection & { operation: "APPLY" })[],
+  subjects: readonly CompiledSubjectContext[],
+  rules: readonly CompiledAuthorizationRule[],
+  issuedAt: number,
+  expiresAt: number,
+): CompiledApplicationApiKey[] {
+  const ids = new Set<string>()
+  const hashes = new Set<string>()
+  const projected: CompiledApplicationApiKey[] = []
+  for (const credential of credentials) {
+    if (ids.has(credential.credential_id) || hashes.has(credential.api_key_hash)) throw new Error("duplicate application API key identity")
+    ids.add(credential.credential_id)
+    hashes.add(credential.api_key_hash)
+    if (!subjects.some((subject) => subject.subject_id === credential.subject_id && subject.kind === "APPLICATION")) continue
+    const projection = projections.find((candidate) => candidate.resource_id === credential.resource_id && candidate.capability_id === credential.capability_id)
+    if (!projection || ["MCP", "A2A"].includes(projectionRequestProtocol(projection) ?? "")) continue
+    if (credential.expires_at <= issuedAt) continue
+    if (!rules.some((rule) =>
+      rule.disposition === "ALLOW" && rule.resource_id === credential.resource_id && rule.capability_id === credential.capability_id &&
+      rule.subject_ids.includes(credential.subject_id) &&
+      (rule.acting_client_ids.includes("*") || rule.acting_client_ids.includes(credential.acting_client_id)),
+    )) continue
+    projected.push({ ...credential, scopes: [...new Set(credential.scopes)].sort(compareUtf8), expires_at: Math.min(credential.expires_at, expiresAt) })
+  }
+  return projected.sort((left, right) => compareUtf8(left.credential_id, right.credential_id))
 }
 
 function assertProjectionShape(
@@ -786,6 +873,10 @@ export function compileGatewayPolicyArtifacts(
     projections,
   )
   const mcpToolDefinitions = compiledMcpToolDefinitions(projections)
+  const capabilityOperations = compiledCapabilityOperations(projections, input.public_models, mcpToolDefinitions)
+  const applicationApiKeys = compiledApplicationApiKeys(
+    input.application_api_keys ?? [], projections, subjectContexts, compiledAuthorization.rules, input.issued_at, effectiveExpiresAt,
+  )
   const authorization_bundle: CompiledAuthorizationBundle = {
     schema_version: 1,
     tenant_id: input.tenant_id,
@@ -827,6 +918,8 @@ export function compileGatewayPolicyArtifacts(
     subject_contexts: subjectContexts,
     agent_delegations: agentDelegations,
     execution_grants: executionGrants,
+    capability_operations: capabilityOperations,
+    application_api_keys: applicationApiKeys,
     ...(mcpToolDefinitions.length > 0 ? { mcp_tool_definitions: mcpToolDefinitions } : {}),
   }
   if (!isCompiledAuthorizationBundle(authorization_bundle)) {

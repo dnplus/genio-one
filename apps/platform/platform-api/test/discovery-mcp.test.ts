@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES } from "@genioone/protocol/authorization-scopes"
 import { expect, test } from "bun:test"
 import { flushOtel } from "@genioone/telemetry/otlp-observability"
 import { createManagementApi } from "../src/app"
@@ -10,7 +11,7 @@ import type { DiscoveryMcpPostHogEvent } from "../src/capabilities/discovery-mcp
 const tenantId = "tenant-discovery"
 const otherTenantId = "tenant-discovery-other"
 const memoryCapabilityId = "genio-one-personal-memory"
-const principal = { tenant_id: tenantId, subject_id: "person-alice", role: "USER" as const, organization_ids: [], client_id: "bot", scopes: ["genioone-invocation"] }
+const principal = { tenant_id: tenantId, subject_id: "person-alice", role: "USER" as const, organization_ids: [], client_id: "bot", scopes: [GENIOONE_SCOPES.read] }
 const owner = { ...principal, client_id: "genio-one-self-service" }
 
 async function fixture(options: { otherTenantEnabled?: boolean } = {}) {
@@ -58,7 +59,7 @@ async function fixture(options: { otherTenantEnabled?: boolean } = {}) {
       authorization_endpoint: "https://identity.example.test/realms/genio-one/protocol/openid-connect/auth",
       token_endpoint: "https://identity.example.test/realms/genio-one/protocol/openid-connect/token",
       client_id: "genio-one-self-service",
-      scopes: ["genioone-invocation"],
+      scopes: [GENIOONE_SCOPES.read],
       management_client_id: "genio-one-management-console",
       management_scopes: ["genioone-management"],
     },
@@ -181,36 +182,19 @@ test("Discovery returns an active agent's native Memory MCP descriptor and its d
   } finally { await app.close() }
 })
 
-test("Discovery hides native Memory MCP from a management-only bearer", async () => {
+test("Discovery rejects legacy management-only consent before exposing native Memory MCP", async () => {
   const { app, post, memoryMcp, grant, telemetry } = await fixture()
   try {
     await grant()
-
-    const search = await post(searchNativeMemory(), "management")
-    expect(search.statusCode).toBe(200)
-    expect(search.json().result.structuredContent.native_capabilities).toEqual([])
-
-    const detail = await post(getNativeMemory(), "management")
-    expect(detail.json().result.isError).toBe(true)
-    expect(detail.body).toContain("NATIVE_CAPABILITY_NOT_FOUND_OR_NOT_VISIBLE")
-
+    for (const request of [searchNativeMemory(), getNativeMemory()]) {
+      const denied = await post(request, "management")
+      expect(denied.statusCode).toBe(403)
+      expect(denied.json().code).toBe("INSUFFICIENT_SCOPE")
+    }
     const direct = await memoryMcp(initialize(3), "management")
     expect(direct.statusCode).toBe(403)
     expect(direct.body).toContain("INSUFFICIENT_SCOPE")
-    expect(telemetry).toHaveLength(2)
-    expect(telemetry[1]).toEqual({
-      tenantId: principal.tenant_id,
-      correlationId: String(detail.headers["x-request-id"]),
-      completionId: expect.any(String),
-      tool: "get_resource",
-      resultCount: 0,
-      latencyMillis: expect.any(Number),
-      statusCode: 200,
-      outcome: "FAILED",
-      errorCode: "NATIVE_CAPABILITY_NOT_FOUND_OR_NOT_VISIBLE",
-      occurredAt: expect.any(Number),
-    })
-    expect(JSON.stringify(telemetry)).not.toContain(memoryCapabilityId)
+    expect(telemetry).toHaveLength(0)
   } finally { await app.close() }
 })
 
@@ -298,7 +282,7 @@ test("Discovery protected-resource metadata is public only for enabled seeded te
     expect(JSON.parse(result.body)).toEqual({
       resource: "https://cp.example.test/v1/tenants/tenant-discovery/discovery/mcp",
       authorization_servers: ["https://identity.example.test/realms/genio-one"],
-      scopes_supported: ["genioone-invocation"],
+      scopes_supported: [GENIOONE_SCOPES.read],
       bearer_methods_supported: ["header"],
     })
     expect(result.headers["cache-control"]).toBe("no-store")

@@ -1128,6 +1128,7 @@ export interface BrowserOidcConfiguration {
   scopes: string[]
   management_client_id?: string
   management_scopes?: string[]
+  account_management_endpoint?: string
 }
 
 export interface AuditExportRecord {
@@ -1413,14 +1414,18 @@ export interface ApplicationApiCredential {
   credential_id: string
   application_id: string
   application_subject_id: string
-  resource_id: string
-  capability_id: string
+  resource_id: string | null
+  capability_id: string | null
   generation: number
-  kind: "API_KEY" | "MTLS" | "JWT" | "MTLS_AND_JWT" | "OAUTH2"
-  oauth_client_id?: string | null
-  oauth_issuer?: string | null
-  oauth_audience?: string | null
-  oauth_scope?: string | null
+  kind: "API_KEY" | "OAUTH2"
+  display_name: string | null
+  scopes: string[]
+  key_prefix: string | null
+  expires_at: number | null
+  oauth_client_id: string | null
+  oauth_issuer: string | null
+  oauth_audience: string | null
+  oauth_scope: string | null
   state: "PROVISIONING" | "ACTIVE" | "RETIRED" | "REVOKED"
   created_at: number
   activated_at: number | null
@@ -1431,10 +1436,17 @@ export interface ApplicationApiCredential {
 export interface ApplicationApiCredentialCreation {
   credential: ApplicationApiCredential
   api_key: string | null
-  oauth_client_secret?: string | null
-  oauth_token_endpoint?: string | null
-  credential_delivery: "ONE_TIME" | "CLIENT_MANAGED"
+  oauth_client_secret: string | null
+  oauth_token_endpoint: string | null
+  credential_delivery: "ONE_TIME"
 }
+
+export type CreateApplicationApiCredentialInput =
+  | { kind: "OAUTH2"; resourceId: string; capabilityId: string }
+  | ({ kind: "API_KEY"; displayName: string; scopes: string[]; expiresAt: number } & (
+    | { resourceId: string; capabilityId: string }
+    | { resourceId?: never; capabilityId?: never }
+  ))
 
 export interface FederationTrustRevision {
   tenant_id: string

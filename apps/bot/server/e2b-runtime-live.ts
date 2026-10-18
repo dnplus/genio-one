@@ -1,4 +1,5 @@
 import { createManagedDesktop } from "./runtime"
+import { GENIOONE_SCOPES } from "@genioone/protocol/authorization-scopes"
 import { RuntimeBroker } from "./runtime-broker"
 
 const broker = new RuntimeBroker({ provision: createManagedDesktop })
@@ -9,7 +10,7 @@ try {
     tenant_id: process.env.GENIO_BOT_TEST_TENANT_ID?.trim() || "tenant-keycloak-local",
     subject_id: process.env.GENIO_BOT_TEST_SUBJECT_ID?.trim() || "person-platform-admin",
     acting_client_id: "genio-one-bot",
-    scopes: ["genioone-invocation"],
+    scopes: [GENIOONE_SCOPES.invoke],
   }, {
     onMessage() {},
     onExit(reason) {

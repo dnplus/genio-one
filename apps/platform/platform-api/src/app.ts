@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPE_VALUES, hasAnyScope } from "@genioone/protocol/authorization-scopes"
 import { endpointRuntimeWebSocket } from "./capabilities/endpoint-runtime/websocket"
 import { registerBrowserTelemetry } from "@genioone/telemetry/browser-telemetry-http"
 import { instrumentModuleGraph } from "@genioone/telemetry/operation-observability"
@@ -80,7 +81,7 @@ import { DemoProjectService } from "./capabilities/demo-project/service"
 import { prepareDemoLlm } from "./capabilities/demo-project/llm-provisioning"
 import { prepareDemoMcp, type DemoMcpGatewayIdentity, type DemoMcpPublicationTarget } from "./capabilities/demo-project/provisioning"
 
-const BROWSER_IDENTITY_SCOPES = ["genioone-management", "genioone-invocation"] as const
+const BROWSER_IDENTITY_SCOPES = GENIOONE_SCOPE_VALUES
 
 export interface ManagementApiDependencies {
   connectorDeployment?: InstalledConnectorDeployment
@@ -105,6 +106,7 @@ export interface ManagementApiDependencies {
     scopes: string[]
     management_client_id: string
     management_scopes: string[]
+    account_management_endpoint?: string
   }
   mcpOAuthPublicOrigin?: string
   discoveryMcpPostHog?: DiscoveryMcpPostHogSink
@@ -153,7 +155,7 @@ function assertMcpOAuthPublicOrigin(value: string | undefined): void {
 }
 
 function assertBrowserPrincipalScope(principal: Principal): void {
-  if (BROWSER_IDENTITY_SCOPES.some((scope) => principal.scopes?.includes(scope) === true)) return
+  if (hasAnyScope(principal.scopes, BROWSER_IDENTITY_SCOPES)) return
   throw new PlatformApiError(
     "INSUFFICIENT_SCOPE",
     403,
@@ -342,6 +344,16 @@ export async function createManagementApi(dependencies: ManagementApiDependencie
     const browserIdentity = dependencies.browserIdentity
     app.get(
       "/v1/identity/browser-configuration",
+      { schema: { operationId: "getBrowserIdentityConfiguration", tags: ["Identity"], response: { 200: Type.Object({
+        issuer: Type.String(),
+        authorization_endpoint: Type.String(),
+        token_endpoint: Type.String(),
+        client_id: Type.String(),
+        scopes: Type.Array(Type.String()),
+        management_client_id: Type.String(),
+        management_scopes: Type.Array(Type.String()),
+        account_management_endpoint: Type.Optional(Type.String()),
+      }) } } },
       async () => ({
         issuer: browserIdentity.issuer,
         authorization_endpoint: browserIdentity.authorization_endpoint,
@@ -350,6 +362,7 @@ export async function createManagementApi(dependencies: ManagementApiDependencie
         scopes: browserIdentity.scopes,
         management_client_id: browserIdentity.management_client_id,
         management_scopes: browserIdentity.management_scopes,
+        ...(browserIdentity.account_management_endpoint ? { account_management_endpoint: browserIdentity.account_management_endpoint } : {}),
       }),
     )
     app.get("/v1/identity/login-branding", {

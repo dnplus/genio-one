@@ -1,3 +1,4 @@
+import { MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -61,17 +62,17 @@ test("Runtime inventory exposes registered and connected Gateway state to Tenant
         tenant_id: "tenant-acme",
         subject_id: "person-admin",
         client_id: "management-ui",
-        scopes: ["genioone-management"],
         role: "TENANT_ADMINISTRATOR",
         organization_ids: [],
+        scopes: [MANAGEMENT_SCOPES.runtimeRead],
       },
       user: {
         tenant_id: "tenant-acme",
         subject_id: "person-user",
         client_id: "management-ui",
-        scopes: ["genioone-management"],
         role: "USER",
         organization_ids: [],
+        scopes: [MANAGEMENT_SCOPES.runtimeRead],
       },
     }),
   })

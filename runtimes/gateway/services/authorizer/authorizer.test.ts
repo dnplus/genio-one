@@ -1,5 +1,6 @@
+import { GENIOONE_SCOPES, RESOURCE_SCOPE_VALUES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
-import { generateKeyPairSync, sign } from "node:crypto"
+import { createHash, generateKeyPairSync, randomBytes, sign } from "node:crypto"
 import { readFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -108,6 +109,7 @@ function bundleSnapshot(): AuthorizationBundleSnapshot {
 
 const input = {
   requestProtocol: "LLM" as const,
+  authorizationScopes: RESOURCE_SCOPE_VALUES,
   tenantId: "tenant-ai",
   subjectId: "person-1",
   actingClientId: "codex",
@@ -330,6 +332,7 @@ function checkRequest(overrides: Record<string, unknown> = {}): Record<string, u
             ["x-genio-correlation-id"]: "caller-correlation",
             ["x-genio-verified-subject"]: input.subjectId,
             ["x-genio-verified-client"]: input.actingClientId,
+            ["x-genio-verified-scopes"]: RESOURCE_SCOPE_VALUES.join(" "),
             ["x-genio-organization-role"]: "TENANT_ADMINISTRATOR",
           },
           body: JSON.stringify({ model: input.requestedPublicModel }),
@@ -359,6 +362,113 @@ function check(
     })
   })
 }
+
+test("native JWT scope transport rejects forged caller scope and returns a scope challenge", async () => {
+  const originalNow = Date.now
+  Date.now = () => now * 1000
+  const { client, stop } = await startAuthorizationClient({ async current() { return bundleSnapshot() } })
+  try {
+    const request = checkRequest()
+    const headers = (request.attributes as any).request.http.headers
+    delete headers["x-genio-verified-scopes"]
+    headers["x-genio-scopes"] = GENIOONE_SCOPES.invoke
+    const denied = await check(client, request)
+    assert.equal(denied.denied_response.status.code, 403)
+    assert.equal(JSON.parse(denied.denied_response.body).code, "INSUFFICIENT_SCOPE")
+    assert.equal(denied.denied_response.headers.find((entry: any) => entry.header.key === "www-authenticate").header.value, `Bearer error="insufficient_scope", scope="${GENIOONE_SCOPES.invoke}"`)
+    headers["x-genio-verified-scopes"] = "management:resources:write"
+    assert.equal((await check(client, request)).denied_response.status.code, 403)
+    headers["x-genio-verified-scopes"] = GENIOONE_SCOPES.invoke
+    const allowed = await check(client, request)
+    assert.equal(allowed.status.code, grpc.status.OK)
+    for (const name of ["x-genio-verified-scopes", "x-genio-scopes", "authorization", "x-api-key"]) {
+      assert.ok(allowed.ok_response.headers_to_remove.includes(name))
+    }
+  } finally {
+    Date.now = originalNow
+    await stop()
+  }
+})
+
+test("application API keys bind one verified Subject, scope ceiling and exact target", async () => {
+  const originalNow = Date.now
+  Date.now = () => now * 1000
+  const rawKey = `genio_app_${randomBytes(32).toString("base64url")}`
+  const credential = {
+    credential_id: "credential-app-1",
+    api_key_hash: createHash("sha256").update(rawKey).digest("hex"),
+    subject_id: "application-1",
+    acting_client_id: "credential-app-1",
+    resource_id: input.resourceId,
+    capability_id: input.capabilityId,
+    scopes: [GENIOONE_SCOPES.invoke],
+    expires_at: now + 120,
+  }
+  let currentBundle: CompiledAuthorizationBundle = {
+    ...bundle,
+    rules: [{ ...bundle.rules[0]!, subject_ids: [credential.subject_id], acting_client_ids: [credential.acting_client_id] }],
+    subject_contexts: [{ subject_id: credential.subject_id, kind: "APPLICATION" }],
+    application_api_keys: [credential],
+  }
+  const events: AuthorizationDecisionEvent[] = []
+  const { client, stop } = await startAuthorizationClient(
+    { async current() { return { ...bundleSnapshot(), bundle: currentBundle } } },
+    undefined, undefined, undefined, undefined, undefined,
+    (event) => events.push(event),
+  )
+  const keyRequest = () => {
+    const request = checkRequest()
+    ;(request.attributes as any).context_extensions.authentication_scheme = "APPLICATION_API_KEY"
+    const headers = (request.attributes as any).request.http.headers
+    delete headers["x-genio-verified-subject"]
+    delete headers["x-genio-verified-client"]
+    delete headers["x-genio-verified-scopes"]
+    headers["x-api-key"] = rawKey
+    headers["x-genio-subject-id"] = "attacker-claimed-subject"
+    headers["x-genio-scopes"] = GENIOONE_SCOPES.write
+    return request
+  }
+  try {
+    const allowed = await check(client, keyRequest())
+    assert.equal(allowed.status.code, grpc.status.OK)
+    const trusted = new Map(allowed.ok_response.headers.map((entry: any) => [entry.header.key, entry.header.value]))
+    assert.equal(trusted.get("x-genio-trusted-subject-id"), credential.subject_id)
+    assert.equal(trusted.get("x-genio-trusted-client-id"), credential.acting_client_id)
+    assert.deepEqual(events[0]?.input.authorizationScopes, [GENIOONE_SCOPES.invoke])
+    assert.equal(JSON.stringify(events).includes(rawKey), false)
+    assert.equal(JSON.stringify(allowed).includes(rawKey), false)
+    assert.ok(allowed.ok_response.headers_to_remove.includes("x-api-key"))
+    assert.ok(allowed.ok_response.headers_to_remove.includes("authorization"))
+
+    const forged = keyRequest()
+    ;(forged.attributes as any).request.http.headers["x-api-key"] = `genio_app_${randomBytes(32).toString("base64url")}`
+    assert.equal((await check(client, forged)).denied_response.status.code, 401)
+    const anonymous = keyRequest()
+    delete (anonymous.attributes as any).request.http.headers["x-api-key"]
+    assert.equal((await check(client, anonymous)).denied_response.status.code, 401)
+    const both = keyRequest()
+    ;(both.attributes as any).request.http.headers.authorization = "Bearer another-credential"
+    assert.equal((await check(client, both)).denied_response.status.code, 401)
+    const mixed = keyRequest()
+    ;(mixed.attributes as any).request.http.headers["x-genio-verified-scopes"] = RESOURCE_SCOPE_VALUES.join(" ")
+    assert.equal((await check(client, mixed)).denied_response.status.code, 401)
+    const otherTarget = keyRequest()
+    ;(otherTarget.attributes as any).context_extensions.resource_id = "another-resource"
+    assert.equal((await check(client, otherTarget)).denied_response.status.code, 401)
+
+    currentBundle = { ...currentBundle, application_api_keys: [{ ...credential, scopes: [GENIOONE_SCOPES.read] }] }
+    assert.equal(JSON.parse((await check(client, keyRequest())).denied_response.body).code, "INSUFFICIENT_SCOPE")
+    currentBundle = { ...currentBundle, application_api_keys: [{ ...credential, expires_at: now }] }
+    assert.equal((await check(client, keyRequest())).denied_response.status.code, 401)
+    currentBundle = { ...currentBundle, application_api_keys: [] }
+    assert.equal((await check(client, keyRequest())).denied_response.status.code, 401)
+    currentBundle = { ...currentBundle, application_api_keys: [credential], rules: [] }
+    assert.equal(JSON.parse((await check(client, keyRequest())).denied_response.body).code, "NO_MATCHING_ENTITLEMENT")
+  } finally {
+    Date.now = originalNow
+    await stop()
+  }
+})
 
 test("authorization audit observation requires a configured origin", async () => {
   const observer = createAuthorizationAuditObserver(undefined, async () => {
@@ -814,7 +924,7 @@ test("delegated Agent authority is the intersection of Principal, Agent, Delegat
           headers: {
             "x-request-id": input.correlationId,
             "x-genio-verified-subject": input.subjectId,
-            "x-genio-verified-client": input.actingClientId,
+            "x-genio-verified-client": input.actingClientId, "x-genio-verified-scopes": RESOURCE_SCOPE_VALUES.join(" "),
             "x-genio-on-behalf-of-subject-id": "person-principal",
           },
           body: JSON.stringify({ model: input.requestedPublicModel }),
@@ -878,7 +988,7 @@ test("A2A admission derives the acting chain from signed identity and ignores ta
           headers: {
             "x-request-id": input.correlationId,
             "x-genio-verified-subject": input.subjectId,
-            "x-genio-verified-client": input.actingClientId,
+            "x-genio-verified-client": input.actingClientId, "x-genio-verified-scopes": RESOURCE_SCOPE_VALUES.join(" "),
           },
           body: JSON.stringify({
             message: { messageId: "message-1", role: "ROLE_USER", parts: [] },
@@ -964,7 +1074,7 @@ test("a required Execution Grant is bound to one action digest and consumed once
   const request = (correlationId: string, grantId?: string, requestBody = body) => checkRequest({
     attributes: {
       context_extensions: { tenant_id: input.tenantId, resource_id: input.resourceId, capability_id: input.capabilityId },
-      request: { http: { method: "POST", path: "/v1/chat/completions", headers: { "x-request-id": correlationId, "x-genio-verified-subject": input.subjectId, "x-genio-verified-client": input.actingClientId, ...(grantId ? { "x-genio-execution-grant-id": grantId } : {}) }, body: requestBody } },
+      request: { http: { method: "POST", path: "/v1/chat/completions", headers: { "x-request-id": correlationId, "x-genio-verified-subject": input.subjectId, "x-genio-verified-client": input.actingClientId, "x-genio-verified-scopes": RESOURCE_SCOPE_VALUES.join(" "), ...(grantId ? { "x-genio-execution-grant-id": grantId } : {}) }, body: requestBody } },
     },
   })
   const unavailableRouting: GatewayRoutingArtifact = {
@@ -1074,7 +1184,7 @@ test("Envoy gRPC ext_authz validates Usage Context and separates usage rejection
           headers: {
             "x-request-id": input.correlationId,
             "x-genio-verified-subject": input.subjectId,
-            "x-genio-verified-client": input.actingClientId,
+            "x-genio-verified-client": input.actingClientId, "x-genio-verified-scopes": RESOURCE_SCOPE_VALUES.join(" "),
             "x-genio-organization-id": "org-consumer",
             "x-genio-use-case-id": "use-case-support",
           },
@@ -1211,7 +1321,7 @@ test("managed Use Case risk emits only the obligations required by the narrowed 
           headers: {
             "x-request-id": input.correlationId,
             "x-genio-verified-subject": input.subjectId,
-            "x-genio-verified-client": input.actingClientId,
+            "x-genio-verified-client": input.actingClientId, "x-genio-verified-scopes": RESOURCE_SCOPE_VALUES.join(" "),
             "x-genio-organization-id": "org-consumer",
             "x-genio-use-case-id": useCaseId,
           },
@@ -1263,7 +1373,7 @@ test("Envoy gRPC ext_authz denies an unentitled model", async () => {
               headers: {
                 "x-request-id": input.correlationId,
                 "x-genio-verified-subject": input.subjectId,
-                "x-genio-verified-client": input.actingClientId,
+                "x-genio-verified-client": input.actingClientId, "x-genio-verified-scopes": RESOURCE_SCOPE_VALUES.join(" "),
               },
               body: JSON.stringify({ model: "provider-secret-model" }),
             },
@@ -1325,7 +1435,7 @@ test("Envoy gRPC ext_authz fails closed when context is missing or spoofed", asy
               headers: {
                 "x-request-id": input.correlationId,
                 "x-genio-verified-subject": input.subjectId,
-                "x-genio-verified-client": input.actingClientId,
+                "x-genio-verified-client": input.actingClientId, "x-genio-verified-scopes": RESOURCE_SCOPE_VALUES.join(" "),
                 "x-genio-trusted-subject-id": "attacker-subject",
               },
             },
@@ -1354,7 +1464,7 @@ test("Envoy gRPC ext_authz fails closed when context is missing or spoofed", asy
                 "x-genio-subject-id": input.subjectId,
                 "x-genio-acting-client-id": input.actingClientId,
                 "x-genio-verified-subject": "different-subject",
-                "x-genio-verified-client": input.actingClientId,
+                "x-genio-verified-client": input.actingClientId, "x-genio-verified-scopes": RESOURCE_SCOPE_VALUES.join(" "),
               },
               body: JSON.stringify({ model: input.requestedPublicModel }),
             },
@@ -1377,7 +1487,7 @@ test("Envoy gRPC ext_authz fails closed when context is missing or spoofed", asy
             headers: {
               "x-request-id": input.correlationId,
               "x-genio-verified-subject": input.subjectId,
-              "x-genio-verified-client": input.actingClientId,
+              "x-genio-verified-client": input.actingClientId, "x-genio-verified-scopes": RESOURCE_SCOPE_VALUES.join(" "),
               "x-ai-eg-model": input.requestedPublicModel,
             },
             body: JSON.stringify({ model: "provider-secret-model" }),
@@ -1400,7 +1510,7 @@ test("Envoy gRPC ext_authz fails closed when context is missing or spoofed", asy
             headers: {
               "x-request-id": input.correlationId,
               "x-genio-verified-subject": input.subjectId,
-              "x-genio-verified-client": input.actingClientId,
+              "x-genio-verified-client": input.actingClientId, "x-genio-verified-scopes": RESOURCE_SCOPE_VALUES.join(" "),
               "x-genio-mcp-oauth-attacker": "Bearer attacker",
             },
             body: JSON.stringify({ method: "tools/list" }),
@@ -1433,7 +1543,7 @@ test("Envoy gRPC ext_authz returns the Subject MCP tool surface without an upstr
             headers: {
               "x-request-id": input.correlationId,
               "x-genio-verified-subject": input.subjectId,
-              "x-genio-verified-client": input.actingClientId,
+              "x-genio-verified-client": input.actingClientId, "x-genio-verified-scopes": RESOURCE_SCOPE_VALUES.join(" "),
             },
             body: JSON.stringify({ jsonrpc: "2.0", id: 42, method: "tools/list", params: {} }),
           },
@@ -1690,7 +1800,7 @@ test("Envoy gRPC ext_authz authorizes authenticated MCP GET and DELETE transport
               headers: {
                 "x-request-id": `${input.correlationId}-${method.toLowerCase()}`,
                 "x-genio-verified-subject": input.subjectId,
-                "x-genio-verified-client": input.actingClientId,
+                "x-genio-verified-client": input.actingClientId, "x-genio-verified-scopes": RESOURCE_SCOPE_VALUES.join(" "),
               },
             },
           },
@@ -1710,6 +1820,7 @@ function mcpCheckRequest(body: unknown, headers: Record<string, string> = {
   "x-request-id": input.correlationId,
   "x-genio-verified-subject": input.subjectId,
   "x-genio-verified-client": input.actingClientId,
+  "x-genio-verified-scopes": RESOURCE_SCOPE_VALUES.join(" "),
 }) {
   return checkRequest({
     attributes: {
@@ -1865,7 +1976,7 @@ test("Envoy gRPC ext_authz injects MCP OAuth headers and fails closed when resol
           headers: {
             "x-request-id": input.correlationId,
             "x-genio-verified-subject": input.subjectId,
-            "x-genio-verified-client": input.actingClientId,
+            "x-genio-verified-client": input.actingClientId, "x-genio-verified-scopes": RESOURCE_SCOPE_VALUES.join(" "),
           },
           body: JSON.stringify({ method: "tools/call", params: { name: "issues.search", arguments: {} } }),
         },
@@ -1982,6 +2093,7 @@ test("Envoy gRPC ext_authz rejects an admitted route with zero healthy Connectio
               "x-request-id": "routing-observation-failure",
               "x-genio-verified-subject": input.subjectId,
               "x-genio-verified-client": input.actingClientId,
+              "x-genio-verified-scopes": GENIOONE_SCOPES.invoke,
             },
             body: JSON.stringify({ model: input.requestedPublicModel }),
           },

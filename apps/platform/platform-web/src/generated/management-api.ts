@@ -26,6 +26,17 @@ export type GetManagementApiHealth200 = {
   api_mode: string;
 };
 
+export type GetBrowserIdentityConfiguration200 = {
+  issuer: string;
+  authorization_endpoint: string;
+  token_endpoint: string;
+  client_id: string;
+  scopes: string[];
+  management_client_id: string;
+  management_scopes: string[];
+  account_management_endpoint?: string;
+};
+
 export type GetLoginBranding200 = {
   /**
      * @minLength 1
@@ -138,6 +149,10 @@ export const ListResources200ItemOperationalState = {  UNKNOWN: 'UNKNOWN',
   DEGRADED: 'DEGRADED',
   UNAVAILABLE: 'UNAVAILABLE',
 } as const
+export const ListResources200ItemCapabilitiesItemOperationSemantics = {  READ: 'READ',
+  WRITE: 'WRITE',
+  INVOKE: 'INVOKE',
+} as const
 export type ListResources200ItemCapabilitiesItem = {
   /**
      * @minLength 1
@@ -149,6 +164,7 @@ export type ListResources200ItemCapabilitiesItem = {
      * @maxLength 512
      */
   display_name: string;
+  operation_semantics?: typeof ListResources200ItemCapabilitiesItemOperationSemantics[keyof typeof ListResources200ItemCapabilitiesItemOperationSemantics];
 };
 
 export type ListResources200ItemMcpAuthorization = {
@@ -457,6 +473,10 @@ export const CreateResourceBodyAuthenticationStrategy = {  NONE: 'NONE',
   API_KEY: 'API_KEY',
   MTLS: 'MTLS',
 } as const
+export const CreateResourceBodyCapabilitiesItemOperationSemantics = {  READ: 'READ',
+  WRITE: 'WRITE',
+  INVOKE: 'INVOKE',
+} as const
 export type CreateResourceBodyCapabilitiesItem = {
   /**
      * @minLength 1
@@ -468,6 +488,7 @@ export type CreateResourceBodyCapabilitiesItem = {
      * @maxLength 512
      */
   display_name: string;
+  operation_semantics?: typeof CreateResourceBodyCapabilitiesItemOperationSemantics[keyof typeof CreateResourceBodyCapabilitiesItemOperationSemantics];
 };
 
 export type CreateResourceBodyApiInboundSecurity = {
@@ -817,6 +838,10 @@ export const CreateResource201OperationalState = {  UNKNOWN: 'UNKNOWN',
   DEGRADED: 'DEGRADED',
   UNAVAILABLE: 'UNAVAILABLE',
 } as const
+export const CreateResource201CapabilitiesItemOperationSemantics = {  READ: 'READ',
+  WRITE: 'WRITE',
+  INVOKE: 'INVOKE',
+} as const
 export type CreateResource201CapabilitiesItem = {
   /**
      * @minLength 1
@@ -828,6 +853,7 @@ export type CreateResource201CapabilitiesItem = {
      * @maxLength 512
      */
   display_name: string;
+  operation_semantics?: typeof CreateResource201CapabilitiesItemOperationSemantics[keyof typeof CreateResource201CapabilitiesItemOperationSemantics];
 };
 
 export type CreateResource201McpAuthorization = {
@@ -1306,6 +1332,10 @@ export const ImportOpenApiResource201OperationalState = {  UNKNOWN: 'UNKNOWN',
   DEGRADED: 'DEGRADED',
   UNAVAILABLE: 'UNAVAILABLE',
 } as const
+export const ImportOpenApiResource201CapabilitiesItemOperationSemantics = {  READ: 'READ',
+  WRITE: 'WRITE',
+  INVOKE: 'INVOKE',
+} as const
 export type ImportOpenApiResource201CapabilitiesItem = {
   /**
      * @minLength 1
@@ -1317,6 +1347,7 @@ export type ImportOpenApiResource201CapabilitiesItem = {
      * @maxLength 512
      */
   display_name: string;
+  operation_semantics?: typeof ImportOpenApiResource201CapabilitiesItemOperationSemantics[keyof typeof ImportOpenApiResource201CapabilitiesItemOperationSemantics];
 };
 
 export type ImportOpenApiResource201McpAuthorization = {
@@ -1707,6 +1738,10 @@ export const GetResource200OperationalState = {  UNKNOWN: 'UNKNOWN',
   DEGRADED: 'DEGRADED',
   UNAVAILABLE: 'UNAVAILABLE',
 } as const
+export const GetResource200CapabilitiesItemOperationSemantics = {  READ: 'READ',
+  WRITE: 'WRITE',
+  INVOKE: 'INVOKE',
+} as const
 export type GetResource200CapabilitiesItem = {
   /**
      * @minLength 1
@@ -1718,6 +1753,7 @@ export type GetResource200CapabilitiesItem = {
      * @maxLength 512
      */
   display_name: string;
+  operation_semantics?: typeof GetResource200CapabilitiesItemOperationSemantics[keyof typeof GetResource200CapabilitiesItemOperationSemantics];
 };
 
 export type GetResource200McpAuthorization = {
@@ -2014,6 +2050,10 @@ export type GetResource200 = {
   created_at: number;
 };
 
+export const UpdateResourceBodyCapabilitiesItemOperationSemantics = {  READ: 'READ',
+  WRITE: 'WRITE',
+  INVOKE: 'INVOKE',
+} as const
 export type UpdateResourceBodyCapabilitiesItem = {
   /**
      * @minLength 1
@@ -2025,6 +2065,7 @@ export type UpdateResourceBodyCapabilitiesItem = {
      * @maxLength 512
      */
   display_name: string;
+  operation_semantics?: typeof UpdateResourceBodyCapabilitiesItemOperationSemantics[keyof typeof UpdateResourceBodyCapabilitiesItemOperationSemantics];
 };
 
 export const UpdateResourceBodyExtensionMetadataPackageType = {  BOT: 'BOT',
@@ -2271,6 +2312,10 @@ export const UpdateResource200OperationalState = {  UNKNOWN: 'UNKNOWN',
   DEGRADED: 'DEGRADED',
   UNAVAILABLE: 'UNAVAILABLE',
 } as const
+export const UpdateResource200CapabilitiesItemOperationSemantics = {  READ: 'READ',
+  WRITE: 'WRITE',
+  INVOKE: 'INVOKE',
+} as const
 export type UpdateResource200CapabilitiesItem = {
   /**
      * @minLength 1
@@ -2282,6 +2327,7 @@ export type UpdateResource200CapabilitiesItem = {
      * @maxLength 512
      */
   display_name: string;
+  operation_semantics?: typeof UpdateResource200CapabilitiesItemOperationSemantics[keyof typeof UpdateResource200CapabilitiesItemOperationSemantics];
 };
 
 export type UpdateResource200McpAuthorization = {
@@ -2681,6 +2727,10 @@ export const TransitionResourceLifecycle200OperationalState = {  UNKNOWN: 'UNKNO
   DEGRADED: 'DEGRADED',
   UNAVAILABLE: 'UNAVAILABLE',
 } as const
+export const TransitionResourceLifecycle200CapabilitiesItemOperationSemantics = {  READ: 'READ',
+  WRITE: 'WRITE',
+  INVOKE: 'INVOKE',
+} as const
 export type TransitionResourceLifecycle200CapabilitiesItem = {
   /**
      * @minLength 1
@@ -2692,6 +2742,7 @@ export type TransitionResourceLifecycle200CapabilitiesItem = {
      * @maxLength 512
      */
   display_name: string;
+  operation_semantics?: typeof TransitionResourceLifecycle200CapabilitiesItemOperationSemantics[keyof typeof TransitionResourceLifecycle200CapabilitiesItemOperationSemantics];
 };
 
 export type TransitionResourceLifecycle200McpAuthorization = {
@@ -3117,6 +3168,10 @@ export const SetResourcePublicationEndpoint200OperationalState = {  UNKNOWN: 'UN
   DEGRADED: 'DEGRADED',
   UNAVAILABLE: 'UNAVAILABLE',
 } as const
+export const SetResourcePublicationEndpoint200CapabilitiesItemOperationSemantics = {  READ: 'READ',
+  WRITE: 'WRITE',
+  INVOKE: 'INVOKE',
+} as const
 export type SetResourcePublicationEndpoint200CapabilitiesItem = {
   /**
      * @minLength 1
@@ -3128,6 +3183,7 @@ export type SetResourcePublicationEndpoint200CapabilitiesItem = {
      * @maxLength 512
      */
   display_name: string;
+  operation_semantics?: typeof SetResourcePublicationEndpoint200CapabilitiesItemOperationSemantics[keyof typeof SetResourcePublicationEndpoint200CapabilitiesItemOperationSemantics];
 };
 
 export type SetResourcePublicationEndpoint200McpAuthorization = {
@@ -4815,18 +4871,6 @@ export type RegisterApplication201 = {
   created_at: number;
 };
 
-export type ListApplicationApiCredentials200ItemKind = typeof ListApplicationApiCredentials200ItemKind[keyof typeof ListApplicationApiCredentials200ItemKind];
-
-
-export const ListApplicationApiCredentials200ItemKind = {
-  OAUTH2: 'OAUTH2',
-} as const;
-
-export const ListApplicationApiCredentials200ItemState = {  PROVISIONING: 'PROVISIONING',
-  ACTIVE: 'ACTIVE',
-  RETIRED: 'RETIRED',
-  REVOKED: 'REVOKED',
-} as const
 export type ListApplicationApiCredentials200Item = {
   /**
      * @minLength 1
@@ -4843,6 +4887,21 @@ export type ListApplicationApiCredentials200Item = {
      * @maxLength 256
      */
   application_subject_id: string;
+  /** @minimum 1 */
+  generation: number;
+  state: 'PROVISIONING' | 'ACTIVE' | 'RETIRED' | 'REVOKED';
+  /** @minimum 0 */
+  created_at: number;
+  activated_at: number | null;
+  valid_until: number | null;
+  revoked_at: number | null;
+  /**
+     * @maxItems 64
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  scopes: string[];
+  kind: 'OAUTH2';
   /**
      * @minLength 1
      * @maxLength 256
@@ -4853,9 +4912,6 @@ export type ListApplicationApiCredentials200Item = {
      * @maxLength 256
      */
   capability_id: string;
-  /** @minimum 1 */
-  generation: number;
-  kind: ListApplicationApiCredentials200ItemKind;
   /**
      * @minLength 1
      * @maxLength 256
@@ -4876,15 +4932,68 @@ export type ListApplicationApiCredentials200Item = {
      * @maxLength 256
      */
   oauth_scope: string;
-  state: typeof ListApplicationApiCredentials200ItemState[keyof typeof ListApplicationApiCredentials200ItemState];
+  /** @nullable */
+  display_name: null;
+  /** @nullable */
+  key_prefix: null;
+  /** @nullable */
+  expires_at: null;
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  credential_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  application_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  application_subject_id: string;
+  /** @minimum 1 */
+  generation: number;
+  state: 'PROVISIONING' | 'ACTIVE' | 'RETIRED' | 'REVOKED';
   /** @minimum 0 */
   created_at: number;
   activated_at: number | null;
   valid_until: number | null;
   revoked_at: number | null;
+  /**
+     * @maxItems 64
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  scopes: string[];
+  kind: 'API_KEY';
+  resource_id: string | null;
+  capability_id: string | null;
+  /** @nullable */
+  oauth_client_id: null;
+  /** @nullable */
+  oauth_issuer: null;
+  /** @nullable */
+  oauth_audience: null;
+  /** @nullable */
+  oauth_scope: null;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  display_name: string;
+  /**
+     * @minLength 1
+     * @maxLength 64
+     */
+  key_prefix: string;
+  /** @minimum 1 */
+  expires_at: number;
 };
 
-export type IssueApplicationOAuthCredentialBody = {
+export type IssueApplicationApiCredentialBody = {
   /**
      * @minLength 1
      * @maxLength 256
@@ -4904,21 +5013,40 @@ export type IssueApplicationOAuthCredentialBody = {
   client_certificate_pem?: null;
   /** @nullable */
   jwt_client_id?: null;
+} | {
+  kind: 'API_KEY';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  correlation_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  display_name: string;
+  /**
+     * @minItems 1
+     * @maxItems 64
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  scopes: string[];
+  /** @minimum 1 */
+  expires_at: number;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  resource_id?: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  capability_id?: string;
 };
 
-export type IssueApplicationOAuthCredential201CredentialKind = typeof IssueApplicationOAuthCredential201CredentialKind[keyof typeof IssueApplicationOAuthCredential201CredentialKind];
-
-
-export const IssueApplicationOAuthCredential201CredentialKind = {
-  OAUTH2: 'OAUTH2',
-} as const;
-
-export const IssueApplicationOAuthCredential201CredentialState = {  PROVISIONING: 'PROVISIONING',
-  ACTIVE: 'ACTIVE',
-  RETIRED: 'RETIRED',
-  REVOKED: 'REVOKED',
-} as const
-export type IssueApplicationOAuthCredential201Credential = {
+export type IssueApplicationApiCredential201Credential = {
   /**
      * @minLength 1
      * @maxLength 256
@@ -4934,6 +5062,21 @@ export type IssueApplicationOAuthCredential201Credential = {
      * @maxLength 256
      */
   application_subject_id: string;
+  /** @minimum 1 */
+  generation: number;
+  state: 'PROVISIONING' | 'ACTIVE' | 'RETIRED' | 'REVOKED';
+  /** @minimum 0 */
+  created_at: number;
+  activated_at: number | null;
+  valid_until: number | null;
+  revoked_at: number | null;
+  /**
+     * @maxItems 64
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  scopes: string[];
+  kind: 'OAUTH2';
   /**
      * @minLength 1
      * @maxLength 256
@@ -4944,9 +5087,6 @@ export type IssueApplicationOAuthCredential201Credential = {
      * @maxLength 256
      */
   capability_id: string;
-  /** @minimum 1 */
-  generation: number;
-  kind: IssueApplicationOAuthCredential201CredentialKind;
   /**
      * @minLength 1
      * @maxLength 256
@@ -4967,33 +5107,80 @@ export type IssueApplicationOAuthCredential201Credential = {
      * @maxLength 256
      */
   oauth_scope: string;
-  state: typeof IssueApplicationOAuthCredential201CredentialState[keyof typeof IssueApplicationOAuthCredential201CredentialState];
+  /** @nullable */
+  display_name: null;
+  /** @nullable */
+  key_prefix: null;
+  /** @nullable */
+  expires_at: null;
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  credential_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  application_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  application_subject_id: string;
+  /** @minimum 1 */
+  generation: number;
+  state: 'PROVISIONING' | 'ACTIVE' | 'RETIRED' | 'REVOKED';
   /** @minimum 0 */
   created_at: number;
   activated_at: number | null;
   valid_until: number | null;
   revoked_at: number | null;
+  /**
+     * @maxItems 64
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  scopes: string[];
+  kind: 'API_KEY';
+  resource_id: string | null;
+  capability_id: string | null;
+  /** @nullable */
+  oauth_client_id: null;
+  /** @nullable */
+  oauth_issuer: null;
+  /** @nullable */
+  oauth_audience: null;
+  /** @nullable */
+  oauth_scope: null;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  display_name: string;
+  /**
+     * @minLength 1
+     * @maxLength 64
+     */
+  key_prefix: string;
+  /** @minimum 1 */
+  expires_at: number;
 };
 
-export type IssueApplicationOAuthCredential201CredentialDelivery = typeof IssueApplicationOAuthCredential201CredentialDelivery[keyof typeof IssueApplicationOAuthCredential201CredentialDelivery];
+export type IssueApplicationApiCredential201CredentialDelivery = typeof IssueApplicationApiCredential201CredentialDelivery[keyof typeof IssueApplicationApiCredential201CredentialDelivery];
 
 
-export const IssueApplicationOAuthCredential201CredentialDelivery = {
+export const IssueApplicationApiCredential201CredentialDelivery = {
   ONE_TIME: 'ONE_TIME',
 } as const;
 
-export type IssueApplicationOAuthCredential201 = {
-  credential: IssueApplicationOAuthCredential201Credential;
-  /** @nullable */
-  api_key: null;
-  /** @minLength 1 */
-  oauth_client_secret: string;
-  /**
-     * @minLength 1
-     * @maxLength 2048
-     */
-  oauth_token_endpoint: string;
-  credential_delivery: IssueApplicationOAuthCredential201CredentialDelivery;
+export type IssueApplicationApiCredential201 = {
+  credential: IssueApplicationApiCredential201Credential;
+  api_key: string | null;
+  oauth_client_secret: string | null;
+  oauth_token_endpoint: string | null;
+  credential_delivery: IssueApplicationApiCredential201CredentialDelivery;
 };
 
 export type RotateApplicationApiCredentialBody = {
@@ -5009,18 +5196,6 @@ export type RotateApplicationApiCredentialBody = {
   grace_period_seconds: number;
 };
 
-export type RotateApplicationApiCredential201CredentialKind = typeof RotateApplicationApiCredential201CredentialKind[keyof typeof RotateApplicationApiCredential201CredentialKind];
-
-
-export const RotateApplicationApiCredential201CredentialKind = {
-  OAUTH2: 'OAUTH2',
-} as const;
-
-export const RotateApplicationApiCredential201CredentialState = {  PROVISIONING: 'PROVISIONING',
-  ACTIVE: 'ACTIVE',
-  RETIRED: 'RETIRED',
-  REVOKED: 'REVOKED',
-} as const
 export type RotateApplicationApiCredential201Credential = {
   /**
      * @minLength 1
@@ -5037,6 +5212,21 @@ export type RotateApplicationApiCredential201Credential = {
      * @maxLength 256
      */
   application_subject_id: string;
+  /** @minimum 1 */
+  generation: number;
+  state: 'PROVISIONING' | 'ACTIVE' | 'RETIRED' | 'REVOKED';
+  /** @minimum 0 */
+  created_at: number;
+  activated_at: number | null;
+  valid_until: number | null;
+  revoked_at: number | null;
+  /**
+     * @maxItems 64
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  scopes: string[];
+  kind: 'OAUTH2';
   /**
      * @minLength 1
      * @maxLength 256
@@ -5047,9 +5237,6 @@ export type RotateApplicationApiCredential201Credential = {
      * @maxLength 256
      */
   capability_id: string;
-  /** @minimum 1 */
-  generation: number;
-  kind: RotateApplicationApiCredential201CredentialKind;
   /**
      * @minLength 1
      * @maxLength 256
@@ -5070,12 +5257,65 @@ export type RotateApplicationApiCredential201Credential = {
      * @maxLength 256
      */
   oauth_scope: string;
-  state: typeof RotateApplicationApiCredential201CredentialState[keyof typeof RotateApplicationApiCredential201CredentialState];
+  /** @nullable */
+  display_name: null;
+  /** @nullable */
+  key_prefix: null;
+  /** @nullable */
+  expires_at: null;
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  credential_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  application_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  application_subject_id: string;
+  /** @minimum 1 */
+  generation: number;
+  state: 'PROVISIONING' | 'ACTIVE' | 'RETIRED' | 'REVOKED';
   /** @minimum 0 */
   created_at: number;
   activated_at: number | null;
   valid_until: number | null;
   revoked_at: number | null;
+  /**
+     * @maxItems 64
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  scopes: string[];
+  kind: 'API_KEY';
+  resource_id: string | null;
+  capability_id: string | null;
+  /** @nullable */
+  oauth_client_id: null;
+  /** @nullable */
+  oauth_issuer: null;
+  /** @nullable */
+  oauth_audience: null;
+  /** @nullable */
+  oauth_scope: null;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  display_name: string;
+  /**
+     * @minLength 1
+     * @maxLength 64
+     */
+  key_prefix: string;
+  /** @minimum 1 */
+  expires_at: number;
 };
 
 export type RotateApplicationApiCredential201CredentialDelivery = typeof RotateApplicationApiCredential201CredentialDelivery[keyof typeof RotateApplicationApiCredential201CredentialDelivery];
@@ -5087,15 +5327,9 @@ export const RotateApplicationApiCredential201CredentialDelivery = {
 
 export type RotateApplicationApiCredential201 = {
   credential: RotateApplicationApiCredential201Credential;
-  /** @nullable */
-  api_key: null;
-  /** @minLength 1 */
-  oauth_client_secret: string;
-  /**
-     * @minLength 1
-     * @maxLength 2048
-     */
-  oauth_token_endpoint: string;
+  api_key: string | null;
+  oauth_client_secret: string | null;
+  oauth_token_endpoint: string | null;
   credential_delivery: RotateApplicationApiCredential201CredentialDelivery;
 };
 
@@ -5107,18 +5341,6 @@ export type RevokeApplicationApiCredentialBody = {
   correlation_id: string;
 };
 
-export type RevokeApplicationApiCredential200Kind = typeof RevokeApplicationApiCredential200Kind[keyof typeof RevokeApplicationApiCredential200Kind];
-
-
-export const RevokeApplicationApiCredential200Kind = {
-  OAUTH2: 'OAUTH2',
-} as const;
-
-export const RevokeApplicationApiCredential200State = {  PROVISIONING: 'PROVISIONING',
-  ACTIVE: 'ACTIVE',
-  RETIRED: 'RETIRED',
-  REVOKED: 'REVOKED',
-} as const
 export type RevokeApplicationApiCredential200 = {
   /**
      * @minLength 1
@@ -5135,6 +5357,21 @@ export type RevokeApplicationApiCredential200 = {
      * @maxLength 256
      */
   application_subject_id: string;
+  /** @minimum 1 */
+  generation: number;
+  state: 'PROVISIONING' | 'ACTIVE' | 'RETIRED' | 'REVOKED';
+  /** @minimum 0 */
+  created_at: number;
+  activated_at: number | null;
+  valid_until: number | null;
+  revoked_at: number | null;
+  /**
+     * @maxItems 64
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  scopes: string[];
+  kind: 'OAUTH2';
   /**
      * @minLength 1
      * @maxLength 256
@@ -5145,9 +5382,6 @@ export type RevokeApplicationApiCredential200 = {
      * @maxLength 256
      */
   capability_id: string;
-  /** @minimum 1 */
-  generation: number;
-  kind: RevokeApplicationApiCredential200Kind;
   /**
      * @minLength 1
      * @maxLength 256
@@ -5168,12 +5402,65 @@ export type RevokeApplicationApiCredential200 = {
      * @maxLength 256
      */
   oauth_scope: string;
-  state: typeof RevokeApplicationApiCredential200State[keyof typeof RevokeApplicationApiCredential200State];
+  /** @nullable */
+  display_name: null;
+  /** @nullable */
+  key_prefix: null;
+  /** @nullable */
+  expires_at: null;
+} | {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  credential_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  application_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  application_subject_id: string;
+  /** @minimum 1 */
+  generation: number;
+  state: 'PROVISIONING' | 'ACTIVE' | 'RETIRED' | 'REVOKED';
   /** @minimum 0 */
   created_at: number;
   activated_at: number | null;
   valid_until: number | null;
   revoked_at: number | null;
+  /**
+     * @maxItems 64
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  scopes: string[];
+  kind: 'API_KEY';
+  resource_id: string | null;
+  capability_id: string | null;
+  /** @nullable */
+  oauth_client_id: null;
+  /** @nullable */
+  oauth_issuer: null;
+  /** @nullable */
+  oauth_audience: null;
+  /** @nullable */
+  oauth_scope: null;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  display_name: string;
+  /**
+     * @minLength 1
+     * @maxLength 64
+     */
+  key_prefix: string;
+  /** @minimum 1 */
+  expires_at: number;
 };
 
 export const ListApplicationFederationTrustRevisions200ItemAlgorithmsItem = {  RS256: 'RS256',
@@ -26307,6 +26594,10 @@ export const ReviewResourcePublication200OperationalState = {  UNKNOWN: 'UNKNOWN
   DEGRADED: 'DEGRADED',
   UNAVAILABLE: 'UNAVAILABLE',
 } as const
+export const ReviewResourcePublication200CapabilitiesItemOperationSemantics = {  READ: 'READ',
+  WRITE: 'WRITE',
+  INVOKE: 'INVOKE',
+} as const
 export type ReviewResourcePublication200CapabilitiesItem = {
   /**
      * @minLength 1
@@ -26318,6 +26609,7 @@ export type ReviewResourcePublication200CapabilitiesItem = {
      * @maxLength 512
      */
   display_name: string;
+  operation_semantics?: typeof ReviewResourcePublication200CapabilitiesItemOperationSemantics[keyof typeof ReviewResourcePublication200CapabilitiesItemOperationSemantics];
 };
 
 export type ReviewResourcePublication200McpAuthorization = {
@@ -26971,6 +27263,25 @@ export type CompileGatewayProjection200 = ({
   response_filter_order: string[];
 };
 };
+  /** @maxItems 1025 */
+  capability_operations?: ({
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  resource_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  capability_id: string;
+  operation_semantics: 'READ' | 'WRITE' | 'INVOKE';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  mcp_tool?: string;
+})[];
   /** @maxItems 1024 */
   mcp_tool_definitions?: ({
   /**
@@ -27326,6 +27637,25 @@ export type CompileGatewayProjection200 = ({
   response_filter_order: string[];
 };
 };
+  /** @maxItems 1025 */
+  capability_operations?: ({
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  resource_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  capability_id: string;
+  operation_semantics: 'READ' | 'WRITE' | 'INVOKE';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  mcp_tool?: string;
+})[];
   /** @maxItems 1024 */
   mcp_tool_definitions?: ({
   /**
@@ -39394,6 +39724,25 @@ export type GetGatewayAggregateReleasePackage200ProjectionsItemProjection = ({
   response_filter_order: string[];
 };
 };
+  /** @maxItems 1025 */
+  capability_operations?: ({
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  resource_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  capability_id: string;
+  operation_semantics: 'READ' | 'WRITE' | 'INVOKE';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  mcp_tool?: string;
+})[];
   /** @maxItems 1024 */
   mcp_tool_definitions?: ({
   /**
@@ -39749,6 +40098,25 @@ export type GetGatewayAggregateReleasePackage200ProjectionsItemProjection = ({
   response_filter_order: string[];
 };
 };
+  /** @maxItems 1025 */
+  capability_operations?: ({
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  resource_id: string;
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  capability_id: string;
+  operation_semantics: 'READ' | 'WRITE' | 'INVOKE';
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  mcp_tool?: string;
+})[];
   /** @maxItems 1024 */
   mcp_tool_definitions?: ({
   /**
@@ -41063,19 +41431,19 @@ export const getManagementApiHealth = async ( options?: Parameters<typeof manage
 
 
 
-export type getV1IdentityBrowserConfigurationResponse200 = {
-  data: void
+export type getBrowserIdentityConfigurationResponse200 = {
+  data: GetBrowserIdentityConfiguration200
   status: 200
 }
 
-export type getV1IdentityBrowserConfigurationResponseSuccess = (getV1IdentityBrowserConfigurationResponse200) & {
+export type getBrowserIdentityConfigurationResponseSuccess = (getBrowserIdentityConfigurationResponse200) & {
   headers: Headers;
 };
 ;
 
-export type getV1IdentityBrowserConfigurationResponse = (getV1IdentityBrowserConfigurationResponseSuccess)
+export type getBrowserIdentityConfigurationResponse = (getBrowserIdentityConfigurationResponseSuccess)
 
-export const getGetV1IdentityBrowserConfigurationUrl = () => {
+export const getGetBrowserIdentityConfigurationUrl = () => {
 
 
 
@@ -41083,9 +41451,9 @@ export const getGetV1IdentityBrowserConfigurationUrl = () => {
   return `/v1/identity/browser-configuration`
 }
 
-export const getV1IdentityBrowserConfiguration = async ( options?: Parameters<typeof managementApiFetch>[1]): Promise<getV1IdentityBrowserConfigurationResponse> => {
+export const getBrowserIdentityConfiguration = async ( options?: Parameters<typeof managementApiFetch>[1]): Promise<getBrowserIdentityConfigurationResponse> => {
 
-  return managementApiFetch<getV1IdentityBrowserConfigurationResponse>(getGetV1IdentityBrowserConfigurationUrl(),
+  return managementApiFetch<getBrowserIdentityConfigurationResponse>(getGetBrowserIdentityConfigurationUrl(),
   {
     ...options,
     method: 'GET'
@@ -42324,19 +42692,19 @@ export const listApplicationApiCredentials = async (tenantId: string,
 
 
 
-export type issueApplicationOAuthCredentialResponse201 = {
-  data: IssueApplicationOAuthCredential201
+export type issueApplicationApiCredentialResponse201 = {
+  data: IssueApplicationApiCredential201
   status: 201
 }
 
-export type issueApplicationOAuthCredentialResponseSuccess = (issueApplicationOAuthCredentialResponse201) & {
+export type issueApplicationApiCredentialResponseSuccess = (issueApplicationApiCredentialResponse201) & {
   headers: Headers;
 };
 ;
 
-export type issueApplicationOAuthCredentialResponse = (issueApplicationOAuthCredentialResponseSuccess)
+export type issueApplicationApiCredentialResponse = (issueApplicationApiCredentialResponseSuccess)
 
-export const getIssueApplicationOAuthCredentialUrl = (tenantId: string,
+export const getIssueApplicationApiCredentialUrl = (tenantId: string,
     applicationId: string,) => {
 
 
@@ -42345,9 +42713,9 @@ export const getIssueApplicationOAuthCredentialUrl = (tenantId: string,
   return `/v1/tenants/${encodeURIComponent(String(tenantId))}/applications/${encodeURIComponent(String(applicationId))}/api-credentials`
 }
 
-export const issueApplicationOAuthCredential = async (tenantId: string,
+export const issueApplicationApiCredential = async (tenantId: string,
     applicationId: string,
-    issueApplicationOAuthCredentialBody: IssueApplicationOAuthCredentialBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<issueApplicationOAuthCredentialResponse> => {
+    issueApplicationApiCredentialBody: IssueApplicationApiCredentialBody, options?: Parameters<typeof managementApiFetch>[1]): Promise<issueApplicationApiCredentialResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -42363,12 +42731,12 @@ export const issueApplicationOAuthCredential = async (tenantId: string,
     }
     return headers;
   };
-return managementApiFetch<issueApplicationOAuthCredentialResponse>(getIssueApplicationOAuthCredentialUrl(tenantId,applicationId),
+return managementApiFetch<issueApplicationApiCredentialResponse>(getIssueApplicationApiCredentialUrl(tenantId,applicationId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(issueApplicationOAuthCredentialBody)
+    body: JSON.stringify(issueApplicationApiCredentialBody)
   }
 );}
 

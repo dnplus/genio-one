@@ -1,4 +1,8 @@
+import { isGenioOneScope } from "@genioone/protocol/authorization-scopes"
+import { assertApplicationCredentialScopeCeiling } from "./api-keys"
+import { reconcileApplicationResourceGateways } from "./gateway-releases"
 import { createHash } from "node:crypto"
+import { applicationApiKeyCredential, createPostgresApplicationApiKeyLifecycle } from "./api-keys-postgres"
 
 import type { SqlAdapter, SqlTransaction } from "../../persistence/sql-adapter"
 import { PlatformApiError } from "../errors"
@@ -17,7 +21,7 @@ type PreparedOAuthCredential = {
   applicationId: string
   credentialId: string
   applicationSubjectId: string
-  gatewayId: string
+  resourceId: string
   clientId: string
   issuer: string
   audience: string
@@ -65,16 +69,18 @@ const COLUMNS = `tenant_id, application_id, subject_id, display_name,
 const CREDENTIAL_COLUMNS = `credential_id, application_id, application_subject_id,
   resource_id, capability_id, generation, kind, oauth_client_id, oauth_issuer,
   oauth_audience, oauth_scope, identity_provider_id, external_subject_id,
-  state, created_at, activated_at, valid_until, revoked_at`
+  state, created_at, activated_at, valid_until, revoked_at, display_name, scopes, api_key_prefix, expires_at`
 
 const CREDENTIAL_JOIN_COLUMNS = `credential.credential_id, credential.application_id,
   credential.application_subject_id, credential.resource_id, credential.capability_id,
   credential.generation, credential.kind, credential.oauth_client_id,
   credential.oauth_issuer, credential.oauth_audience, credential.oauth_scope,
   credential.identity_provider_id, credential.external_subject_id, credential.state,
-  credential.created_at, credential.activated_at, credential.valid_until, credential.revoked_at`
+  credential.created_at, credential.activated_at, credential.valid_until, credential.revoked_at,
+  credential.display_name, credential.scopes, credential.api_key_prefix, credential.expires_at`
 
 function credential(row: Row): ApplicationApiCredential {
+  if (row.kind === "API_KEY") return applicationApiKeyCredential(row)
   return {
     credential_id: text(row, "credential_id"),
     application_id: text(row, "application_id"),
@@ -87,6 +93,10 @@ function credential(row: Row): ApplicationApiCredential {
     oauth_issuer: text(row, "oauth_issuer"),
     oauth_audience: text(row, "oauth_audience"),
     oauth_scope: text(row, "oauth_scope"),
+    display_name: null,
+    scopes: text(row, "oauth_scope").split(/\s+/).filter(Boolean),
+    key_prefix: null,
+    expires_at: null,
     state: text(row, "state") as ApplicationApiCredential["state"],
     created_at: optionalTimestamp(row, "created_at") ?? 0,
     activated_at: optionalTimestamp(row, "activated_at"),
@@ -149,6 +159,7 @@ export function createPostgresApplicationRegistry(options: {
 }): ApplicationRegistry {
   const idFactory = options.idFactory ?? (() => crypto.randomUUID())
   const now = options.now ?? (() => Math.floor(Date.now() / 1000))
+  const apiKeys = createPostgresApplicationApiKeyLifecycle({ ...options, idFactory, now })
   async function markProvisioningRevoked(prepared: PreparedOAuthCredential): Promise<void> {
     await options.sql.query(
       `update genio_one_application_api_credentials
@@ -223,12 +234,8 @@ export function createPostgresApplicationRegistry(options: {
         if (!result.rows[0]) {
           throw new PlatformApiError("APPLICATION_CREDENTIAL_STATE_CONFLICT", 409)
         }
-        await options.releasePublisher!.reconcileInTransaction({
-          transaction,
-          tenantId: prepared.tenantId,
-          gatewayId: prepared.gatewayId,
-          issuedAt: now(),
-        })
+        await reconcileApplicationResourceGateways({ transaction, releasePublisher: options.releasePublisher,
+          tenantId: prepared.tenantId, resourceId: prepared.resourceId, issuedAt: now() })
         return credential(result.rows[0])
       })
       return {
@@ -308,7 +315,9 @@ export function createPostgresApplicationRegistry(options: {
       )
       return result.rows.map(credential)
     },
-    async issueOAuthCredential({ tenantId, applicationId, value }) {
+    issueApiKeyCredential: apiKeys.issueApiKeyCredential,
+    authenticateApiKey: apiKeys.authenticateApiKey,
+    async issueOAuthCredential({ tenantId, applicationId, value, issuerScopes }) {
       if (!options.oauthProvisioner) {
         throw new PlatformApiError("APPLICATION_CREDENTIAL_PROVISIONER_UNAVAILABLE", 503)
       }
@@ -354,7 +363,7 @@ export function createPostgresApplicationRegistry(options: {
           `select credential_id
              from genio_one_application_api_credentials
             where tenant_id = $1 and application_id = $2
-              and resource_id = $3 and capability_id = $4 and state = 'ACTIVE'
+              and resource_id = $3 and capability_id = $4 and kind = 'OAUTH2' and state = 'ACTIVE'
             limit 1
             for update`,
           [tenantId, applicationId, value.resource_id, value.capability_id],
@@ -364,10 +373,11 @@ export function createPostgresApplicationRegistry(options: {
           `select coalesce(max(generation), 0)::integer + 1 as next_generation
              from genio_one_application_api_credentials
             where tenant_id = $1 and application_id = $2
-              and resource_id = $3 and capability_id = $4`,
+              and resource_id = $3 and capability_id = $4 and kind = 'OAUTH2'`,
           [tenantId, applicationId, value.resource_id, value.capability_id],
         )
         const configuration = oauthConfiguration(row.api_metadata)
+        assertApplicationCredentialScopeCeiling(configuration.scope.split(/\s+/).filter(isGenioOneScope), issuerScopes)
         const credentialId = `application-credential-${idFactory()}`
         const clientId = applicationClientId({ tenantId, credentialId })
         const generation = Number(generationResult.rows[0]?.next_generation)
@@ -402,14 +412,19 @@ export function createPostgresApplicationRegistry(options: {
           applicationId,
           credentialId,
           applicationSubjectId: text(row, "application_subject_id"),
-          gatewayId: text(row, "gateway_id"),
+          resourceId: value.resource_id,
           clientId,
           ...configuration,
         }
       })
       return provisionAndActivate(prepared)
     },
-    async rotateCredential({ tenantId, applicationId, credentialId, value }) {
+    async rotateCredential({ tenantId, applicationId, credentialId, value, issuerScopes }) {
+      const selectedKind = await options.sql.query<Row>(
+        `select kind from genio_one_application_api_credentials where tenant_id = $1 and application_id = $2 and credential_id = $3`,
+        [tenantId, applicationId, credentialId],
+      )
+      if (selectedKind.rows[0]?.kind === "API_KEY") return apiKeys.rotate({ tenantId, applicationId, credentialId, value, issuerScopes })
       if (!options.oauthProvisioner) {
         throw new PlatformApiError("APPLICATION_CREDENTIAL_PROVISIONER_UNAVAILABLE", 503)
       }
@@ -465,6 +480,7 @@ export function createPostgresApplicationRegistry(options: {
         const current = selected.rows[0]
         if (!current) throw new PlatformApiError("APPLICATION_CREDENTIAL_NOT_ROTATABLE", 409)
         const predecessor = credential(current)
+        if (predecessor.kind !== "OAUTH2") throw new PlatformApiError("APPLICATION_CREDENTIAL_DATA_INVALID", 500)
         if (predecessor.state !== "ACTIVE") {
           throw new PlatformApiError("APPLICATION_CREDENTIAL_STATE_CONFLICT", 409)
         }
@@ -472,7 +488,7 @@ export function createPostgresApplicationRegistry(options: {
           `select coalesce(max(generation), 0)::integer + 1 as next_generation
              from genio_one_application_api_credentials
             where tenant_id = $1 and application_id = $2
-              and resource_id = $3 and capability_id = $4`,
+              and resource_id = $3 and capability_id = $4 and kind = 'OAUTH2'`,
           [tenantId, applicationId, predecessor.resource_id, predecessor.capability_id],
         )
         const generation = Number(generationResult.rows[0]?.next_generation)
@@ -480,6 +496,7 @@ export function createPostgresApplicationRegistry(options: {
           throw new PlatformApiError("APPLICATION_CREDENTIAL_DATA_INVALID", 500)
         }
         const configuration = oauthConfiguration(current.api_metadata)
+        assertApplicationCredentialScopeCeiling([...predecessor.scopes, ...configuration.scope.split(/\s+/)].filter(isGenioOneScope), issuerScopes)
         const successorCredentialId = `application-credential-${idFactory()}`
         const clientId = applicationClientId({ tenantId, credentialId: successorCredentialId })
         await transaction.query(
@@ -511,7 +528,7 @@ export function createPostgresApplicationRegistry(options: {
           applicationId,
           credentialId: successorCredentialId,
           applicationSubjectId: predecessor.application_subject_id,
-          gatewayId: text(current, "gateway_id"),
+          resourceId: predecessor.resource_id,
           clientId,
           ...configuration,
         }
@@ -530,7 +547,12 @@ export function createPostgresApplicationRegistry(options: {
         }
       })
     },
-    async revokeCredential({ tenantId, applicationId, credentialId }) {
+    async revokeCredential({ tenantId, applicationId, credentialId, correlationId }) {
+      const selectedKind = await options.sql.query<Row>(
+        `select kind from genio_one_application_api_credentials where tenant_id = $1 and application_id = $2 and credential_id = $3`,
+        [tenantId, applicationId, credentialId],
+      )
+      if (selectedKind.rows[0]?.kind === "API_KEY") return apiKeys.revoke({ tenantId, applicationId, credentialId, correlationId })
       if (!options.oauthProvisioner) {
         throw new PlatformApiError("APPLICATION_CREDENTIAL_PROVISIONER_UNAVAILABLE", 503)
       }
@@ -560,6 +582,7 @@ export function createPostgresApplicationRegistry(options: {
       if (!current) throw new PlatformApiError("APPLICATION_CREDENTIAL_NOT_FOUND", 404)
       const mapped = credential(current)
       if (mapped.state === "REVOKED") return mapped
+      if (mapped.kind !== "OAUTH2") throw new PlatformApiError("APPLICATION_CREDENTIAL_DATA_INVALID", 500)
       await options.oauthProvisioner.revoke({ clientId: mapped.oauth_client_id })
       return options.sql.transaction(async (transaction) => {
         if (current.identity_provider_id && current.external_subject_id) {
@@ -582,15 +605,8 @@ export function createPostgresApplicationRegistry(options: {
             returning ${CREDENTIAL_COLUMNS}`,
           [tenantId, applicationId, credentialId],
         )
-        const gatewayId = text(current, "gateway_id").trim()
-        if (gatewayId) {
-          await options.releasePublisher!.reconcileInTransaction({
-            transaction,
-            tenantId,
-            gatewayId,
-            issuedAt: now(),
-          })
-        }
+        await reconcileApplicationResourceGateways({ transaction, releasePublisher: options.releasePublisher,
+          tenantId, resourceId: mapped.resource_id, issuedAt: now() })
         return credential(result.rows[0]!)
       })
     },
@@ -599,7 +615,7 @@ export function createPostgresApplicationRegistry(options: {
       const at = now()
       const selected = await options.sql.query<Row>(
         `select tenant_id, credential_id, application_subject_id, oauth_client_id,
-                identity_provider_id, external_subject_id
+                identity_provider_id, external_subject_id, resource_id
            from genio_one_application_api_credentials
           where state = 'RETIRED' and valid_until <= to_timestamp($1)
             and identity_provider_id is not null and external_subject_id is not null
@@ -623,7 +639,7 @@ export function createPostgresApplicationRegistry(options: {
               text(candidate, "application_subject_id"),
             ],
           )
-          return transaction.query<Row>(
+          const updated = await transaction.query<Row>(
             `update genio_one_application_api_credentials
                 set identity_provider_id = null, external_subject_id = null
               where tenant_id = $1 and credential_id = $2 and state = 'RETIRED'
@@ -632,6 +648,9 @@ export function createPostgresApplicationRegistry(options: {
               returning credential_id`,
             [text(candidate, "tenant_id"), text(candidate, "credential_id"), at],
           )
+          if (updated.rows[0]) await reconcileApplicationResourceGateways({ transaction, releasePublisher: options.releasePublisher,
+            tenantId: text(candidate, "tenant_id"), resourceId: text(candidate, "resource_id"), issuedAt: at })
+          return updated
         })
         if (result.rows[0]) retired += 1
       }

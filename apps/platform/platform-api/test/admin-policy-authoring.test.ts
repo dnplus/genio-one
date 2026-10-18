@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES, MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 import { createManagementApi } from "../src/app"
@@ -13,8 +14,8 @@ test("Bot policy draft is isolated, role protected, published with history and u
   const modules = createInMemoryPlatformModules()
   const botAccessPolicy = createDefaultOnePolicy({ drafts: modules.policyDrafts as import("../src/capabilities/one-policy/drafts").MemoryPolicyDraftStore, policyAuditSink: modules.auditEvents })
   const app = await createManagementApi({ modules: { ...modules, botAccessPolicy }, resourceCatalog: modules.resources, principalAuthenticator: createStaticPrincipalAuthenticator({
-    admin: { tenant_id: tenantId, subject_id: "admin", client_id: "genio-one-bot", role: "TENANT_ADMINISTRATOR", organization_ids: [], scopes: ["genioone-management", "genioone-invocation"] },
-    user: { tenant_id: tenantId, subject_id: "user", client_id: "genio-one-bot", role: "USER", organization_ids: [], scopes: ["genioone-management", "genioone-invocation"] },
+    admin: { tenant_id: tenantId, subject_id: "admin", client_id: "genio-one-bot", role: "TENANT_ADMINISTRATOR", organization_ids: [], scopes: [MANAGEMENT_SCOPES.policiesRead, MANAGEMENT_SCOPES.policiesWrite, MANAGEMENT_SCOPES.policiesPublish, MANAGEMENT_SCOPES.auditRead, GENIOONE_SCOPES.read, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke] },
+    user: { tenant_id: tenantId, subject_id: "user", client_id: "genio-one-bot", role: "USER", organization_ids: [], scopes: [MANAGEMENT_SCOPES.policiesRead, MANAGEMENT_SCOPES.policiesWrite, MANAGEMENT_SCOPES.policiesPublish, MANAGEMENT_SCOPES.auditRead, GENIOONE_SCOPES.read, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke] },
   }) })
   const base = `/v1/tenants/${tenantId}/one-policy/first-party-bot`
   const decisionPath = `/v1/tenants/${tenantId}/one-policy/bot-access`
@@ -62,9 +63,9 @@ test("draft stores isolate tenants and preserve a newer draft when an older publ
 test("tenant-admin authoring settings persist the four-eyes gate and record the change", async () => {
   const modules = createInMemoryPlatformModules()
   const app = await createManagementApi({ modules, resourceCatalog: modules.resources, principalAuthenticator: createStaticPrincipalAuthenticator({
-    admin: { tenant_id: tenantId, subject_id: "admin", client_id: "console", role: "TENANT_ADMINISTRATOR", organization_ids: [], scopes: ["genioone-management"] },
-    reviewer: { tenant_id: tenantId, subject_id: "reviewer", client_id: "console", role: "TENANT_ADMINISTRATOR", organization_ids: [], scopes: ["genioone-management"] },
-    user: { tenant_id: tenantId, subject_id: "user", client_id: "console", role: "USER", organization_ids: [], scopes: ["genioone-management"] },
+    admin: { tenant_id: tenantId, subject_id: "admin", client_id: "console", role: "TENANT_ADMINISTRATOR", organization_ids: [], scopes: [MANAGEMENT_SCOPES.policiesRead, MANAGEMENT_SCOPES.policiesWrite, MANAGEMENT_SCOPES.policiesPublish, MANAGEMENT_SCOPES.auditRead] },
+    reviewer: { tenant_id: tenantId, subject_id: "reviewer", client_id: "console", role: "TENANT_ADMINISTRATOR", organization_ids: [], scopes: [MANAGEMENT_SCOPES.policiesRead, MANAGEMENT_SCOPES.policiesWrite, MANAGEMENT_SCOPES.policiesPublish, MANAGEMENT_SCOPES.auditRead] },
+    user: { tenant_id: tenantId, subject_id: "user", client_id: "console", role: "USER", organization_ids: [], scopes: [MANAGEMENT_SCOPES.policiesRead, MANAGEMENT_SCOPES.policiesWrite, MANAGEMENT_SCOPES.policiesPublish, MANAGEMENT_SCOPES.auditRead] },
   }) })
   const settingsPath = `/v1/tenants/${tenantId}/one-policy/authoring-settings`
   const draftPath = `/v1/tenants/${tenantId}/one-policy/first-party-bot/draft`
@@ -101,7 +102,7 @@ test("Resource policy draft survives editor reload, validates on publish and bec
   const resource = await modules.resources.createResource({ tenantId, value: { display_name: "QA MCP", kind: "MCP", owner_organization_id: organization.organization_id, authentication_strategy: "OAUTH", environment_id: "test", version: "v1", capabilities: [{ capability_id: "read", display_name: "Read" }], enforcement_point_id: "ai-gateway" } })
   const connection = await modules.connections.create({ tenantId, resourceId: resource.resource_id, value: { display_name: "QA upstream", connection_kind: "MCP", endpoint: "https://qa.example.test/mcp", supported_obligations: [] } })
   await modules.connections.verify({ tenantId, resourceId: resource.resource_id, connectionId: connection.connection_id })
-  const app = await createManagementApi({ modules, resourceCatalog: modules.resources, principalAuthenticator: createStaticPrincipalAuthenticator({ admin: { tenant_id: tenantId, subject_id: "admin", client_id: "console", role: "TENANT_ADMINISTRATOR", organization_ids: [], scopes: ["genioone-management"] } }) })
+  const app = await createManagementApi({ modules, resourceCatalog: modules.resources, principalAuthenticator: createStaticPrincipalAuthenticator({ admin: { tenant_id: tenantId, subject_id: "admin", client_id: "console", role: "TENANT_ADMINISTRATOR", organization_ids: [], scopes: [MANAGEMENT_SCOPES.policiesRead, MANAGEMENT_SCOPES.policiesWrite, MANAGEMENT_SCOPES.policiesPublish, MANAGEMENT_SCOPES.auditRead] } }) })
   const base = `/v1/tenants/${tenantId}/resources/${resource.resource_id}/capabilities/read`
   const definition = { one_policy_revision: 1, eligible_connection_ids: [connection.connection_id], steps: [
     { step_id: "authenticate", kind: "AUTHENTICATE", phase: "REQUEST", implementation: "NATIVE", config: { schema_version: "genio.one.auth.jwt.v1", provider: "keycloak", issuer: "https://identity.example.test", audiences: ["genio-one"], remote_jwks_uri: "https://identity.example.test/jwks", subject_claim: "sub", client_claim: "azp" } },

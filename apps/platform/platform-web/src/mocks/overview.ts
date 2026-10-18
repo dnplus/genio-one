@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES } from "@genioone/protocol/authorization-scopes"
 import type {
   ApiGatewayActivityEvent,
   ApiGatewayTransactionDetail,
@@ -265,7 +266,7 @@ function resources(): ResourceRegistration[] {
                 issuer: "https://identity.example.internal",
                 audience: definition.id,
                 jwks_url: "https://identity.example.internal/.well-known/jwks.json",
-                scope: "genioone-invocation",
+                scope: GENIOONE_SCOPES.invoke,
               },
         request_schema_validation: definition.id !== "legacy-billing-api",
         operations: capabilities.map((capability, operationIndex) => ({

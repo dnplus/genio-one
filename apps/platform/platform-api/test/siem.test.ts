@@ -1,3 +1,4 @@
+import { MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -19,17 +20,17 @@ test("SIEM configuration is limited to Tenant Administrators", async () => {
         tenant_id: "tenant-acme",
         subject_id: "person-admin",
         client_id: "management-ui",
-        scopes: ["genioone-management"],
         role: "TENANT_ADMINISTRATOR",
         organization_ids: [],
+        scopes: [MANAGEMENT_SCOPES.systemRead, MANAGEMENT_SCOPES.systemWrite],
       },
       user: {
         tenant_id: "tenant-acme",
         subject_id: "person-user",
         client_id: "management-ui",
-        scopes: ["genioone-management"],
         role: "USER",
         organization_ids: [],
+        scopes: [MANAGEMENT_SCOPES.systemRead, MANAGEMENT_SCOPES.systemWrite],
       },
     }),
   })

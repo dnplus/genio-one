@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES, MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import { createInMemoryEndpointRuntimeStore } from "../src/capabilities/endpoint-runtime/memory"
 import assert from "node:assert/strict"
 import test from "node:test"
@@ -16,7 +17,7 @@ const organizationPrincipal: Principal = {
   organization_ids: ["organization-owner"],
   administrator_organization_ids: ["organization-owner"],
   client_id: "management-ui",
-  scopes: ["genioone-management"],
+  scopes: [GENIOONE_SCOPES.invoke, MANAGEMENT_SCOPES.identityWrite, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.accessRead, MANAGEMENT_SCOPES.systemRead, MANAGEMENT_SCOPES.auditRead, MANAGEMENT_SCOPES.auditExport],
 }
 
 function request(value: {
@@ -131,8 +132,9 @@ test("Management authorization classifies Gateway Runtime transport independentl
     token: "accepted",
   })
 
+  await module.authenticate(input)
   await assert.rejects(
-    module.authenticate(input),
+    module.normalize(input),
     (error: unknown) => error instanceof PlatformApiError && error.code === "INSUFFICIENT_SCOPE",
   )
 })
@@ -143,7 +145,7 @@ test("Memory invocation routes require an explicit invocation scope", async () =
     role: "USER",
     organization_ids: [],
     administrator_organization_ids: [],
-    scopes: ["genioone-invocation"],
+    scopes: [GENIOONE_SCOPES.read, GENIOONE_SCOPES.write],
   }
   const module = authorization(invocationUser)
   const allowed = [
@@ -187,8 +189,10 @@ test("Memory invocation routes require an explicit invocation scope", async () =
       method: "GET",
       token: "accepted",
     })
+    const denied = authorization(principal)
+    await denied.authenticate(input)
     await assert.rejects(
-      authorization(principal).authenticate(input),
+      denied.normalize(input),
       (error: unknown) => error instanceof PlatformApiError && error.code === "INSUFFICIENT_SCOPE",
     )
   }
@@ -222,8 +226,9 @@ test("Memory invocation scope denial is recorded as an authorization decision", 
     token: "accepted",
   })
 
+  await module.authenticate(input)
   await assert.rejects(
-    module.authenticate(input),
+    module.normalize(input),
     (error: unknown) => error instanceof PlatformApiError && error.code === "INSUFFICIENT_SCOPE",
   )
 
@@ -249,7 +254,7 @@ test("Memory invocation classification accepts only the exact shared paths", asy
     role: "USER",
     organization_ids: [],
     administrator_organization_ids: [],
-    scopes: ["genioone-invocation"],
+    scopes: [GENIOONE_SCOPES.read, GENIOONE_SCOPES.write],
   }
   const module = authorization(invocationUser)
 
@@ -275,8 +280,9 @@ test("Memory invocation classification accepts only the exact shared paths", asy
       method: route.method,
       token: "accepted",
     })
+    await module.authenticate(input)
     await assert.rejects(
-      module.authenticate(input),
+      module.normalize(input),
       (error: unknown) => error instanceof PlatformApiError && error.code === "INSUFFICIENT_SCOPE",
     )
   }
@@ -401,6 +407,7 @@ test("member Resource reads do not grant Connection management visibility", asyn
   const member = authorization({ ...organizationPrincipal, role: "USER", administrator_organization_ids: [] })
   const resourceDetail = request({ url: "/v1/tenants/tenant-acme/resources/resource-owned", method: "GET", token: "accepted" })
   await member.authenticate(resourceDetail)
+  await member.normalize(resourceDetail)
   await member.authorize(resourceDetail)
 
   for (const principal of [
@@ -410,6 +417,7 @@ test("member Resource reads do not grant Connection management visibility", asyn
     const module = authorization(principal)
     const connections = request({ url: "/v1/tenants/tenant-acme/resources/resource-owned/connections", method: "GET", token: "accepted" })
     await module.authenticate(connections)
+    await module.normalize(connections)
     await assert.rejects(module.authorize(connections), (error: unknown) =>
       error instanceof PlatformApiError && error.code === "RESOURCE_OWNER_OR_TENANT_ADMIN_REQUIRED")
   }
@@ -417,6 +425,7 @@ test("member Resource reads do not grant Connection management visibility", asyn
   const owner = authorization()
   const ownedConnections = request({ url: "/v1/tenants/tenant-acme/resources/resource-owned/connections", method: "GET", token: "accepted" })
   await owner.authenticate(ownedConnections)
+  await owner.normalize(ownedConnections)
   await owner.authorize(ownedConnections)
 })
 
@@ -426,6 +435,7 @@ test("raw tenant telemetry requires tenant administration rather than organizati
       const module = authorization({ ...organizationPrincipal, role })
       const input = request({ url: `/v1/tenants/tenant-acme/${path}`, method: "GET", token: "accepted" })
       await module.authenticate(input)
+      await module.normalize(input)
       if (role === "TENANT_ADMINISTRATOR") await module.authorize(input)
       else await assert.rejects(module.authorize(input), error => error instanceof PlatformApiError && error.statusCode === 403)
     }
@@ -441,6 +451,7 @@ test("audit event list requires Tenant Administrator authorization", async () =>
       token: "accepted",
     })
     await module.authenticate(input)
+    await module.normalize(input)
     if (role === "TENANT_ADMINISTRATOR") {
       await module.authorize(input)
     } else {
@@ -454,13 +465,14 @@ test("audit event list requires Tenant Administrator authorization", async () =>
 
 test("audit export read requires Tenant Administrator authorization", async () => {
   for (const role of ["USER", "ORGANIZATION_ADMINISTRATOR", "TENANT_ADMINISTRATOR"] as const) {
-    const module = authorization({ ...organizationPrincipal, role, scopes: ["genioone-management", "audit.export"] })
+    const module = authorization({ ...organizationPrincipal, role, scopes: [MANAGEMENT_SCOPES.auditExport] })
     const input = request({
       url: "/v1/tenants/tenant-acme/audit-export",
       method: "GET",
       token: "accepted",
     })
     await module.authenticate(input)
+    await module.normalize(input)
     if (role === "TENANT_ADMINISTRATOR") {
       await module.authorize(input)
     } else {

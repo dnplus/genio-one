@@ -14,6 +14,7 @@ const storage = new Map<string, string>()
 
 async function withBrowserStorage(run: () => void | Promise<void>) {
   storage.clear()
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window")
   Object.defineProperty(globalThis, "window", {
     configurable: true,
     value: {
@@ -26,7 +27,8 @@ async function withBrowserStorage(run: () => void | Promise<void>) {
   try {
     await run()
   } finally {
-    Reflect.deleteProperty(globalThis, "window")
+    if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow)
+    else Reflect.deleteProperty(globalThis, "window")
   }
 }
 

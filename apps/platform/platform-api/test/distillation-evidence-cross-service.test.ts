@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES, MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -59,22 +60,22 @@ function turn(turnId: string, userText: string, assistantText: string): Turn {
 test("Platform and Bot preserve live evidence authorization through review", async () => {
   const modules = createInMemoryPlatformModules({ now: () => 1_000 })
   const registry = new BotRegistry(":memory:")
-  const owner = principal("owner", ["genioone-management", "genioone-invocation"])
-  const maintainer = principal("maintainer", ["genioone-management"])
-  const reader = principal("reader", ["genioone-management"])
+  const owner = principal("owner", [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.accessApprove, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke])
+  const maintainer = principal("maintainer", [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.accessApprove])
+  const reader = principal("reader", [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.accessApprove])
   const admin: Principal = {
     tenant_id: tenantId,
     subject_id: "admin",
     client_id: "management-ui",
     role: "TENANT_ADMINISTRATOR",
     organization_ids: [],
-    scopes: ["genioone-management"],
+    scopes: [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.accessApprove],
   }
   const bot = registry.create({
     tenant_id: tenantId,
     subject_id: owner.subject_id,
     acting_client_id: "genio-one-bot",
-    scopes: ["genioone-management", "genioone-invocation"],
+    scopes: [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.accessApprove, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke],
   }, { name: "Evidence Bot", description: "Evidence source" })
   const successAssistant = `助手可見答案 ${"a".repeat(120_000)}`
   registry.rememberThread(bot.id, "thread-success")
@@ -98,9 +99,9 @@ test("Platform and Bot preserve live evidence authorization through review", asy
         authorization_endpoint: "https://identity.example/auth",
         token_endpoint: "https://identity.example/token",
         client_id: "management-ui",
-        scopes: ["genioone-management", "genioone-invocation"],
+        scopes: [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.accessApprove, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke],
         management_client_id: "management-ui",
-        management_scopes: ["genioone-management"],
+        management_scopes: [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.accessApprove],
       },
       botServiceEndpoint: "http://bot.integration.test",
       botFetch: async (input, init) => {

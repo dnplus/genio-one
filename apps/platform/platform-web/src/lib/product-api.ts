@@ -56,6 +56,7 @@ import type {
   ApiVersionMigrationNotice,
   ApplicationApiCredential,
   ApplicationApiCredentialCreation,
+  CreateApplicationApiCredentialInput,
   ApplicationRegistration,
   AccessNotification,
   AccessReviewScope,
@@ -714,8 +715,7 @@ export async function requestApplicationAccess(
 export async function createApplicationApiCredential(
   tenantId: string,
   applicationId: string,
-  resourceId: string,
-  capabilityId: string,
+  input: CreateApplicationApiCredentialInput,
 ) {
   return requestJson<ApplicationApiCredentialCreation>(
     `/v1/tenants/${encodeURIComponent(tenantId)}/applications/${encodeURIComponent(applicationId)}/api-credentials`,
@@ -723,10 +723,22 @@ export async function createApplicationApiCredential(
       method: "POST",
       body: JSON.stringify({
         correlation_id: `console-application-credential-${crypto.randomUUID()}`,
-        resource_id: resourceId,
-        capability_id: capabilityId,
-        client_certificate_pem: null,
-        jwt_client_id: null,
+        kind: input.kind,
+        ...(input.kind === "API_KEY"
+          ? {
+              display_name: input.displayName.trim(),
+              scopes: input.scopes,
+              expires_at: input.expiresAt,
+              ...(input.resourceId
+                ? { resource_id: input.resourceId, capability_id: input.capabilityId }
+                : {}),
+            }
+          : {
+              resource_id: input.resourceId,
+              capability_id: input.capabilityId,
+              client_certificate_pem: null,
+              jwt_client_id: null,
+            }),
       }),
     },
   )

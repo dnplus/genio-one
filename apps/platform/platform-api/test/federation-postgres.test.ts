@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -55,7 +56,7 @@ const exchangeInput = {
   resource_id: "resource-api",
   capability_id: "incident.list",
   audience: "genio-one-product-api",
-  scope: "genioone-invocation",
+  scope: GENIOONE_SCOPES.invoke,
 }
 
 test("Federation Trust revisions are immutable and advance one active head", async () => {
@@ -105,7 +106,7 @@ test("trusted workload exchange is bounded by the active Application credential 
         generation: 2,
         oauth_client_id: "genio-app-2",
         oauth_audience: "genio-one-product-api",
-        oauth_scope: "genioone-invocation",
+        oauth_scope: GENIOONE_SCOPES.invoke,
       }]
     }
     return []
@@ -135,7 +136,7 @@ test("trusted workload exchange is bounded by the active Application credential 
           accessToken: "bounded-keycloak-token",
           tokenType: "Bearer",
           expiresIn: 300,
-          scope: "genioone-invocation",
+          scope: GENIOONE_SCOPES.invoke,
         }
       },
     },
@@ -143,7 +144,7 @@ test("trusted workload exchange is bounded by the active Application credential 
 
   const exchanged = await service.exchange({ tenantId: "tenant-acme", value: exchangeInput })
 
-  assert.deepEqual(brokerInput, { clientId: "genio-app-2", scope: "genioone-invocation" })
+  assert.deepEqual(brokerInput, { clientId: "genio-app-2", scope: GENIOONE_SCOPES.invoke })
   assert.equal(exchanged.application_subject_id, "application-subject-1")
   assert.equal(exchanged.credential_generation, 2)
   assert.equal(exchanged.access_token, "bounded-keycloak-token")

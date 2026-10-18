@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES, MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -123,7 +124,7 @@ test("memory development OIDC derives Organization Administrator scope from cano
   let app: Awaited<ReturnType<typeof createConfiguredManagementApi>> | null = null
   const token = (subject: string, role: string) => new SignJWT({
     azp: "management-ui",
-    scope: "genioone-management",
+    scope: [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.identityRead, MANAGEMENT_SCOPES.identityWrite, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.accessApprove].join(" "),
     groups: ["untrusted-organization"],
     realm_access: { roles: [role] },
   })
@@ -169,9 +170,9 @@ test("memory development OIDC derives Organization Administrator scope from cano
           authorization_endpoint: `${issuer}/protocol/openid-connect/auth`,
           token_endpoint: `${issuer}/protocol/openid-connect/token`,
           client_id: "self-service-ui",
-          scopes: ["genioone-invocation"],
+          scopes: [GENIOONE_SCOPES.read, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke],
           management_client_id: "management-ui",
-          management_scopes: ["genioone-management"],
+          management_scopes: [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.identityRead, MANAGEMENT_SCOPES.identityWrite, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.accessApprove],
         }),
         GENIO_ONE_BOOTSTRAP_SUBJECTS_JSON: JSON.stringify([
           {
@@ -254,7 +255,7 @@ test("configured memory API uses its Bot service endpoint without reading the pr
       client_id: "management-ui",
       role: "TENANT_ADMINISTRATOR",
       organization_ids: [],
-      scopes: ["genioone-management"],
+      scopes: [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.identityRead, MANAGEMENT_SCOPES.identityWrite, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.accessApprove, MANAGEMENT_SCOPES.accessRead, MANAGEMENT_SCOPES.accessWrite],
     },
     owner: {
       tenant_id: tenantId,
@@ -262,7 +263,7 @@ test("configured memory API uses its Bot service endpoint without reading the pr
       client_id: "management-ui",
       role: "USER",
       organization_ids: [],
-      scopes: ["genioone-management", "genioone-invocation"],
+      scopes: [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.identityRead, MANAGEMENT_SCOPES.identityWrite, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.accessApprove, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke],
     },
     maintainer: {
       tenant_id: tenantId,
@@ -270,7 +271,7 @@ test("configured memory API uses its Bot service endpoint without reading the pr
       client_id: "management-ui",
       role: "USER",
       organization_ids: [],
-      scopes: ["genioone-management"],
+      scopes: [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.identityRead, MANAGEMENT_SCOPES.identityWrite, MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.accessApprove],
     },
   }
   const previousBotEndpoint = process.env.GENIO_BOT_SERVICE_ENDPOINT

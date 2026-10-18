@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES, MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -69,7 +70,7 @@ function principal(subjectId: string, tenant = tenantId): Principal {
     role: subjectId === "admin" ? "TENANT_ADMINISTRATOR" : subjectId === "org-admin" ? "ORGANIZATION_ADMINISTRATOR" : "USER",
     organization_ids: subjectId === "org-admin" ? ["org-1"] : [],
     administrator_organization_ids: subjectId === "org-admin" ? ["org-1"] : [],
-    scopes: ["genioone-management", "genioone-invocation"],
+    scopes: [MANAGEMENT_SCOPES.accessRead, MANAGEMENT_SCOPES.accessWrite, MANAGEMENT_SCOPES.identityRead, MANAGEMENT_SCOPES.identityWrite, MANAGEMENT_SCOPES.policiesRead, MANAGEMENT_SCOPES.auditRead, GENIOONE_SCOPES.read, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke],
   }
 }
 

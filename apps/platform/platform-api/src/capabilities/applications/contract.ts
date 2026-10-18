@@ -37,18 +37,11 @@ export const ApplicationCredentialItemPathSchema = Type.Object({
   credential_id: Identifier,
 }, { additionalProperties: false })
 
-export const ApplicationApiCredentialSchema = Type.Object({
+const CredentialFields = {
   credential_id: Identifier,
   application_id: Identifier,
   application_subject_id: Identifier,
-  resource_id: Identifier,
-  capability_id: Identifier,
   generation: Type.Integer({ minimum: 1 }),
-  kind: Type.Literal("OAUTH2"),
-  oauth_client_id: Identifier,
-  oauth_issuer: Type.String({ minLength: 1, maxLength: 2048 }),
-  oauth_audience: Identifier,
-  oauth_scope: Identifier,
   state: Type.Union([
     Type.Literal("PROVISIONING"),
     Type.Literal("ACTIVE"),
@@ -59,7 +52,41 @@ export const ApplicationApiCredentialSchema = Type.Object({
   activated_at: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
   valid_until: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
   revoked_at: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
+  scopes: Type.Array(Identifier, { maxItems: 64 }),
+}
+
+export const ApplicationOAuthCredentialSchema = Type.Object({
+  ...CredentialFields,
+  kind: Type.Literal("OAUTH2"),
+  resource_id: Identifier,
+  capability_id: Identifier,
+  oauth_client_id: Identifier,
+  oauth_issuer: Type.String({ minLength: 1, maxLength: 2048 }),
+  oauth_audience: Identifier,
+  oauth_scope: Identifier,
+  display_name: Type.Null(),
+  key_prefix: Type.Null(),
+  expires_at: Type.Null(),
 }, { additionalProperties: false })
+
+export const ApplicationApiKeyCredentialSchema = Type.Object({
+  ...CredentialFields,
+  kind: Type.Literal("API_KEY"),
+  resource_id: Type.Union([Identifier, Type.Null()]),
+  capability_id: Type.Union([Identifier, Type.Null()]),
+  oauth_client_id: Type.Null(),
+  oauth_issuer: Type.Null(),
+  oauth_audience: Type.Null(),
+  oauth_scope: Type.Null(),
+  display_name: Type.String({ minLength: 1, maxLength: 256 }),
+  key_prefix: Type.String({ minLength: 1, maxLength: 64 }),
+  expires_at: Type.Integer({ minimum: 1 }),
+}, { additionalProperties: false })
+
+export const ApplicationApiCredentialSchema = Type.Union([
+  ApplicationOAuthCredentialSchema,
+  ApplicationApiKeyCredentialSchema,
+])
 
 export const ApplicationApiCredentialListSchema = Type.Array(ApplicationApiCredentialSchema)
 
@@ -70,6 +97,21 @@ export const IssueApplicationOAuthCredentialSchema = Type.Object({
   client_certificate_pem: Type.Optional(Type.Null()),
   jwt_client_id: Type.Optional(Type.Null()),
 }, { additionalProperties: false })
+
+export const IssueApplicationApiKeyCredentialSchema = Type.Object({
+  kind: Type.Literal("API_KEY"),
+  correlation_id: Identifier,
+  display_name: Type.String({ minLength: 1, maxLength: 256 }),
+  scopes: Type.Array(Identifier, { minItems: 1, maxItems: 64, uniqueItems: true }),
+  expires_at: Type.Integer({ minimum: 1 }),
+  resource_id: Type.Optional(Identifier),
+  capability_id: Type.Optional(Identifier),
+}, { additionalProperties: false })
+
+export const IssueApplicationCredentialSchema = Type.Union([
+  IssueApplicationOAuthCredentialSchema,
+  IssueApplicationApiKeyCredentialSchema,
+])
 
 export const RotateApplicationCredentialSchema = Type.Object({
   correlation_id: Identifier,
@@ -82,9 +124,9 @@ export const RevokeApplicationCredentialSchema = Type.Object({
 
 export const ApplicationApiCredentialCreationSchema = Type.Object({
   credential: ApplicationApiCredentialSchema,
-  api_key: Type.Null(),
-  oauth_client_secret: Type.String({ minLength: 1 }),
-  oauth_token_endpoint: Type.String({ minLength: 1, maxLength: 2048 }),
+  api_key: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+  oauth_client_secret: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+  oauth_token_endpoint: Type.Union([Type.String({ minLength: 1, maxLength: 2048 }), Type.Null()]),
   credential_delivery: Type.Literal("ONE_TIME"),
 }, { additionalProperties: false })
 
@@ -94,3 +136,6 @@ export type ApplicationApiCredential = Static<typeof ApplicationApiCredentialSch
 export type ApplicationApiCredentialCreation = Static<typeof ApplicationApiCredentialCreationSchema>
 export type IssueApplicationOAuthCredentialInput = Static<typeof IssueApplicationOAuthCredentialSchema>
 export type RotateApplicationCredentialInput = Static<typeof RotateApplicationCredentialSchema>
+
+export type ApplicationApiKeyCredential = Static<typeof ApplicationApiKeyCredentialSchema>
+export type IssueApplicationApiKeyCredentialInput = Static<typeof IssueApplicationApiKeyCredentialSchema>

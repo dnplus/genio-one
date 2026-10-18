@@ -9,10 +9,12 @@ export function tenantRoute(request: {
   url: string
   raw?: { url?: string }
   routeOptions?: { url?: string }
+  params?: unknown
 }): TenantRoute | null {
   const rawPath = (request.raw?.url ?? request.url).split("?", 1)[0]!
   const rawSegments = rawPath.split("/").slice(1)
-  const matchedTenantRoute = request.routeOptions?.url?.startsWith("/v1/tenants/:") === true
+  const templateSegments = request.routeOptions?.url?.split("/").slice(1)
+  const matchedTenantRoute = templateSegments?.[0] === "v1" && templateSegments[1] === "tenants" && templateSegments[2] === ":tenant_id"
   const rawTenantRoute = rawSegments[0] === "v1" && rawSegments[1] === "tenants"
   let decodedSegments: string[]
   try {
@@ -23,19 +25,33 @@ export function tenantRoute(request: {
   }
   const decodedTenantRoute = decodedSegments[0] === "v1" && decodedSegments[1] === "tenants"
   if (!matchedTenantRoute && !rawTenantRoute && !decodedTenantRoute) return null
-  if (
-    !decodedTenantRoute ||
-    !decodedSegments[2] ||
-    decodedSegments.some((segment, index) =>
-      (segment.length === 0 && index !== decodedSegments.length - 1) ||
-      segment === "." ||
-      segment === ".." ||
-      segment.includes("/") ||
-      segment.includes("\\") ||
-      segment.includes("\0"),
-    )
-  ) throw new PlatformApiError("INVALID_TENANT_PATH", 400)
+  if (!decodedTenantRoute || !decodedSegments[2] || rawPath.includes("\\") || rawPath.includes("\0")) {
+    throw new PlatformApiError("INVALID_TENANT_PATH", 400)
+  }
   if (decodedSegments.at(-1) === "") decodedSegments.pop()
+  if (matchedTenantRoute) {
+    const parameters = request.params
+    if (!parameters || typeof parameters !== "object" || Array.isArray(parameters) || decodedSegments.length !== templateSegments.length) {
+      throw new PlatformApiError("INVALID_TENANT_PATH", 400)
+    }
+    const segments = templateSegments.map((segment, index) => {
+      if (!segment.startsWith(":")) {
+        if (decodedSegments[index] !== segment) throw new PlatformApiError("INVALID_TENANT_PATH", 400)
+        return segment
+      }
+      const parameter = Object.hasOwn(parameters, segment.slice(1))
+        ? (parameters as Record<string, unknown>)[segment.slice(1)]
+        : undefined
+      if (typeof parameter !== "string" || !parameter || parameter.includes("\0") || parameter !== decodedSegments[index]) {
+        throw new PlatformApiError("INVALID_TENANT_PATH", 400)
+      }
+      return parameter
+    })
+    return { tenantId: segments[2]!, rest: segments.slice(3) }
+  }
+  if (decodedSegments.some((segment) =>
+    !segment || segment === "." || segment === ".." || segment.includes("/") || segment.includes("\\") || segment.includes("\0"),
+  )) throw new PlatformApiError("INVALID_TENANT_PATH", 400)
   return { tenantId: decodedSegments[2]!, rest: decodedSegments.slice(3) }
 }
 

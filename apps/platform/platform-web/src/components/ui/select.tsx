@@ -84,7 +84,7 @@ function SelectContent({
   align?: React.ComponentProps<typeof SelectPrimitive.Positioner>["align"]
 }) {
   const content = (
-    <SelectPrimitive.Positioner align={align} alignItemWithTrigger={position === "item-aligned"}>
+    <SelectPrimitive.Positioner className="z-50" align={align} alignItemWithTrigger={position === "item-aligned"}>
     <SelectPrimitive.Popup
         data-slot="select-content"
         data-align-trigger={position === "item-aligned"}

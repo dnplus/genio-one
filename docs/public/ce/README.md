@@ -31,6 +31,7 @@ For the local path, use a Linux or macOS host with Docker Engine, Docker Compose
 
 - [First team workflow](demo.md) installs the CE starter materials for one Organization and runs the Context7-to-product-brief example in Genio Bot.
 - [First governed MCP request](first-mcp-request.md) publishes and calls the public DeepWiki `read_wiki_structure` tool through the Gateway.
+- [OAuth authorization and Application API keys](authorization.md) covers scopes, key issuance, and migration from earlier authorization settings (Traditional Chinese).
 - [Helm](helm.md) describes a Kubernetes deployment after you build and publish your own images.
 - [Troubleshooting](troubleshooting.md) lists expected local failures and diagnostic commands.
 - [Known issues and follow-ups](known-issues.md) records current limitations observed during CE installation and demo validation.

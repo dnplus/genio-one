@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -320,6 +321,7 @@ test("broad allow cannot remove mandatory CUSTOMER_DATA handling", () => {
   })
   const decision = authorize(result.authorization_bundle, {
     requestProtocol: "LLM",
+    authorizationScopes: [GENIOONE_SCOPES.invoke],
     tenantId: TENANT_ID,
     subjectId: "person-engineer",
     actingClientId: "engineering-client",
@@ -390,6 +392,7 @@ test("freezes One Policy authorization obligations into every matching entitleme
   assert.deepEqual(result.authorization_bundle.rules[0]?.required_obligations, ["execution.confirmation"])
   assert.deepEqual(authorize(result.authorization_bundle, {
     requestProtocol: "LLM",
+    authorizationScopes: [GENIOONE_SCOPES.invoke],
     tenantId: TENANT_ID,
     subjectId: "subject-1",
     actingClientId: "client-1",
@@ -480,6 +483,23 @@ test("compiles Subject-specific MCP tool Capabilities on one MCP route", () => {
     ],
   } satisfies GatewayPolicyArtifactCompilerInput
   const result = compileGatewayPolicyArtifacts(compilerInput)
+  const readOperation = result.authorization_bundle.capability_operations?.find((operation) => operation.mcp_tool === "engineering__issues.search")
+  const writeOperation = result.authorization_bundle.capability_operations?.find((operation) => operation.mcp_tool === "engineering__issues.delete")
+  assert.equal(readOperation?.operation_semantics, "READ")
+  assert.equal(writeOperation?.operation_semantics, "WRITE")
+  assert.equal(authorize(result.authorization_bundle, {
+    requestProtocol: "MCP",
+    tenantId: TENANT_ID,
+    subjectId: "subject-delete",
+    actingClientId: "codex",
+    resourceId,
+    capabilityId: routeCapability,
+    authorizationScopes: [GENIOONE_SCOPES.read],
+    mcpMethod: "tools/call",
+    mcpTool: "engineering__issues.delete",
+    correlationId: "scope-read-rejects-delete",
+    now: ISSUED_AT,
+  }).reason, "INSUFFICIENT_SCOPE")
   assert.deepEqual(result.authorization_bundle.rules.map((rule) => ({
     subject: rule.subject_ids[0],
     capability: rule.capability_id,
@@ -524,6 +544,34 @@ test("compiles Subject-specific MCP tool Capabilities on one MCP route", () => {
     }),
     /is not published/,
   )
+})
+
+test("signs application keys only inside an entitled published target and release lifetime", () => {
+  const source = baseInput()
+  const credential = {
+    credential_id: "client-1",
+    api_key_hash: "d".repeat(64),
+    subject_id: "subject-1",
+    acting_client_id: "client-1",
+    resource_id: "resource-z",
+    capability_id: "chat",
+    scopes: [GENIOONE_SCOPES.invoke],
+    expires_at: EXPIRES_AT + 500,
+  }
+  const keyed: GatewayPolicyArtifactCompilerInput = {
+    ...source,
+    subject_contexts: [{ subject_id: "subject-1", kind: "APPLICATION" }],
+    application_api_keys: [credential],
+  }
+  const result = compileGatewayPolicyArtifacts(keyed)
+  assert.deepEqual(result.authorization_bundle.application_api_keys, [{ ...credential, expires_at: EXPIRES_AT }])
+  assert.equal(result.authorization_bundle.capability_operations?.find((operation) => operation.resource_id === "resource-z")?.operation_semantics, "INVOKE")
+  assert.deepEqual(compileGatewayPolicyArtifacts({ ...keyed, entitlements: [] }).authorization_bundle.application_api_keys, [])
+  assert.deepEqual(compileGatewayPolicyArtifacts({ ...keyed, subject_contexts: [{ subject_id: "subject-1", kind: "PERSON" }] }).authorization_bundle.application_api_keys, [])
+  assert.deepEqual(compileGatewayPolicyArtifacts({ ...keyed, application_api_keys: [{ ...credential, resource_id: "unpublished-resource" }] }).authorization_bundle.application_api_keys, [])
+  assert.deepEqual(compileGatewayPolicyArtifacts({ ...keyed, application_api_keys: [{ ...credential, expires_at: ISSUED_AT }] }).authorization_bundle.application_api_keys, [])
+  assert.throws(() => compileGatewayPolicyArtifacts({ ...keyed, application_api_keys: [credential, credential] }), /duplicate application API key/)
+  assert.throws(() => compileGatewayPolicyArtifacts({ ...keyed, application_api_keys: [{ ...credential, scopes: ["management:resources:read"] }] }), /compiled authorization bundle failed validation/)
 })
 
 test("turns null principals into wildcard entries and exposes only the stable model name", () => {

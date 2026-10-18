@@ -1,3 +1,4 @@
+import { MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import { generateKeyPairSync } from "node:crypto"
 import test from "node:test"
@@ -163,7 +164,7 @@ test("ARD publisher serves an HTTP manifest and MCP card through publication wit
         client_id: "ard-http-admin-client",
         role: "TENANT_ADMINISTRATOR",
         organization_ids: [organization.organization_id],
-        scopes: ["genioone-management"],
+        scopes: [MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.policiesRead, MANAGEMENT_SCOPES.policiesWrite, MANAGEMENT_SCOPES.policiesPublish, MANAGEMENT_SCOPES.accessApprove, MANAGEMENT_SCOPES.runtimeWrite],
       },
       [runtimeToken]: {
         tenant_id: tenantId,

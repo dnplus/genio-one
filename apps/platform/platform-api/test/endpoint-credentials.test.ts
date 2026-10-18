@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES, GENIOONE_SCOPE_VALUES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 import { createInMemoryEndpointRuntimeStore } from "../src/capabilities/endpoint-runtime/memory"
@@ -68,9 +69,9 @@ test("Runtime HTTP refuses ordinary OIDC principals and credential use outside t
   const app = await createManagementApi({ modules, resourceCatalog: modules.resources,
     principalAuthenticator: createStaticPrincipalAuthenticator({
       user: { tenant_id: "tenant-1", subject_id: "person-1", role: "USER",
-        organization_ids: [], client_id: "browser", scopes: ["genioone-invocation", "genioone-endpoint-runtime"] },
+        organization_ids: [], client_id: "browser", scopes: [GENIOONE_SCOPES.write, "genioone-endpoint-runtime"] },
       admin: { tenant_id: "tenant-1", subject_id: "administrator", role: "TENANT_ADMINISTRATOR",
-        organization_ids: [], client_id: "admin", scopes: ["genioone-management"] },
+        organization_ids: [], client_id: "admin", scopes: [...GENIOONE_SCOPE_VALUES] },
     }) })
   try {
     const root = "/v1/tenants/tenant-1/endpoints"

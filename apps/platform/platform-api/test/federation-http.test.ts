@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES, MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -32,10 +33,10 @@ test("Organization owner manages Federation Trust while token exchange authentic
         tenant_id: "tenant-acme",
         subject_id: "person-owner",
         client_id: "management-ui",
-        scopes: ["genioone-management"],
         role: "ORGANIZATION_ADMINISTRATOR",
         organization_ids: [organization.organization_id],
         administrator_organization_ids: [organization.organization_id],
+        scopes: [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.credentialsRead, MANAGEMENT_SCOPES.credentialsWrite],
       },
     }),
   })
@@ -71,7 +72,7 @@ test("Organization owner manages Federation Trust while token exchange authentic
       resource_id: "resource-api",
       capability_id: "incident.list",
       audience: "genio-one-product-api",
-      scope: "genioone-invocation",
+      scope: GENIOONE_SCOPES.invoke,
     },
   })
   assert.equal(anonymousExchange.statusCode, 503)
@@ -123,18 +124,18 @@ test("Federation Trust mutations require owner management scope while membership
         tenant_id: tenantId,
         subject_id: "person-kevin",
         client_id: "management-ui",
-        scopes: ["genioone-management"],
         role: "ORGANIZATION_ADMINISTRATOR",
         organization_ids: [sales.organization_id, uatAccess.organization_id],
         administrator_organization_ids: [uatAccess.organization_id],
+        scopes: [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.credentialsRead, MANAGEMENT_SCOPES.credentialsWrite],
       },
       "tenant-admin": {
         tenant_id: tenantId,
         subject_id: "person-tenant-admin",
         client_id: "management-ui",
-        scopes: ["genioone-management"],
         role: "TENANT_ADMINISTRATOR",
         organization_ids: [],
+        scopes: [GENIOONE_SCOPES.read, MANAGEMENT_SCOPES.credentialsRead, MANAGEMENT_SCOPES.credentialsWrite],
       },
     }),
   })

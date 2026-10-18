@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify"
+import { GENIOONE_SCOPES } from "@genioone/protocol/authorization-scopes"
 import { credentialCorrelation, issueAgentRuntimeCredential, invocationAccessTokens } from "../agent-runtime-token"
 import { requestAccessToken, requestPrincipal, verifyGenioOneAccessToken } from "../auth"
 import type { BotInvocationRequest } from "../bot-registry"
@@ -66,7 +67,7 @@ async function executeApprovedBotInvocation(context: BotServerContext, requestId
     tenant_id: invocation.tenantId,
     subject_id: invocation.targetOwnerSubjectId,
     acting_client_id: "genio-one-bot",
-    scopes: ["genioone-invocation"],
+    scopes: [GENIOONE_SCOPES.invoke],
   }
   const targetBot = botRegistry.get(invocation.targetBotId, targetPrincipal)
   if (!targetBot) {

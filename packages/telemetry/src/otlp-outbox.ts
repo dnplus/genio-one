@@ -2,6 +2,7 @@ import { mkdir, open, readdir, readFile, rename, stat, unlink } from "node:fs/pr
 import { join } from "node:path"
 import { hostname } from "node:os"
 import { randomUUID } from "node:crypto"
+import { redactApplicationApiKeys } from "./application-api-key-redaction"
 
 type Envelope = { signal: Signal; body: unknown }
 type Pending = { payload: string; bytes: number; created: number; resolve: (saved: boolean) => void }
@@ -39,7 +40,7 @@ export class OtlpOutbox {
 
   enqueue(signal: Signal, body: unknown): Promise<boolean> {
     try {
-      const payload = JSON.stringify({ signal, body })
+      const payload = redactApplicationApiKeys(JSON.stringify({ signal, body }))
       const bytes = Buffer.byteLength(payload)
       if (this.stopped || bytes > (this.options.maxBytes ?? 256 * 1024 * 1024) || this.pendingBytes + bytes > (this.options.maxPendingBytes ?? 8 * 1024 * 1024)) {
         this.report({ event: "otel.outbox.dropped", reason: this.stopped ? "closed" : "memory_capacity", bytes })

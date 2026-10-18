@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPE_VALUES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -31,7 +32,7 @@ test("Organization Administrator registers and reads only Organization-owned App
         tenant_id: "tenant-acme",
         subject_id: "person-org-admin",
         client_id: "management-ui",
-        scopes: ["genioone-management", "application.create"],
+        scopes: [...GENIOONE_SCOPE_VALUES],
         role: "ORGANIZATION_ADMINISTRATOR",
         organization_ids: [owned.organization_id],
         administrator_organization_ids: [owned.organization_id],
@@ -40,7 +41,7 @@ test("Organization Administrator registers and reads only Organization-owned App
         tenant_id: "tenant-acme",
         subject_id: "person-user",
         client_id: "management-ui",
-        scopes: ["genioone-management", "application.create"],
+        scopes: [...GENIOONE_SCOPE_VALUES],
         role: "USER",
         organization_ids: [],
       },
@@ -170,7 +171,7 @@ test("Application credential mutations require owner management scope while memb
         tenant_id: tenantId,
         subject_id: "person-kevin",
         client_id: "management-ui",
-        scopes: ["genioone-management"],
+        scopes: [...GENIOONE_SCOPE_VALUES],
         role: "ORGANIZATION_ADMINISTRATOR",
         organization_ids: [sales.organization_id, uatAccess.organization_id],
         administrator_organization_ids: [uatAccess.organization_id],
@@ -179,7 +180,7 @@ test("Application credential mutations require owner management scope while memb
         tenant_id: tenantId,
         subject_id: "person-tenant-admin",
         client_id: "management-ui",
-        scopes: ["genioone-management"],
+        scopes: [...GENIOONE_SCOPE_VALUES],
         role: "TENANT_ADMINISTRATOR",
         organization_ids: [],
       },

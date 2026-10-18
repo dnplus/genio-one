@@ -1,3 +1,4 @@
+import { BOT_OAUTH_SCOPES, GENIOONE_SCOPES, MANAGEMENT_SCOPES, SELF_SERVICE_OAUTH_SCOPES } from "@genioone/protocol/authorization-scopes"
 import { beforeEach, describe, expect, test } from "bun:test"
 import { beginGenioLogin, BOT_OIDC_DEFAULT_SCOPES, clearGenioTokens, completeGenioLogin, decodeJwtPayload, isJwtExpired, loadGenioRefreshToken, loadGenioToken, resolveBotOidcScopes, storeGenioTokens } from "./genio-one"
 
@@ -136,19 +137,19 @@ describe("Bot OIDC scope contract", () => {
     }
   }
 
-  test("does not reuse self-service browser-configuration scopes with the bot client", () => {
-    const scopes = resolveBotOidcScopes({
-      management_scopes: ["openid", "genioone-management"],
-    })
-    expect(scopes).toContain("openid")
-    expect(scopes).toContain("genioone-invocation")
-    expect(scopes).toContain("genioone-management")
-    // Self-service-only shape must not be what we authorize with.
-    expect(scopes).not.toEqual(["openid", "genioone-invocation"])
+  test("Bot requests only its preauthorized resource and policy scopes", () => {
+    const scopes = resolveBotOidcScopes()
+    expect(scopes).toEqual([...BOT_OAUTH_SCOPES])
+    expect(scopes).toContain(GENIOONE_SCOPES.write)
+    expect(scopes).toContain(GENIOONE_SCOPES.invoke)
+    expect(scopes).toContain(MANAGEMENT_SCOPES.policiesPublish)
+    expect(scopes).not.toContain(MANAGEMENT_SCOPES.credentialsWrite)
+    expect(scopes).not.toContain("genioone-management")
+    expect(scopes).not.toEqual([...SELF_SERVICE_OAUTH_SCOPES])
   })
 
-  test("defaults include management even when management_scopes omitted", () => {
-    expect(resolveBotOidcScopes()).toEqual([...BOT_OIDC_DEFAULT_SCOPES])
+  test("Bot scope defaults match the shared catalog without browser management scopes", () => {
+    expect(BOT_OIDC_DEFAULT_SCOPES).toEqual(BOT_OAUTH_SCOPES)
   })
 
   test("explicit account switching starts login with reauthentication", async () => {

@@ -1,3 +1,4 @@
+import { MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
 import test from "node:test"
@@ -87,7 +88,7 @@ function principals() {
       client_id: "management-ui",
       role: "TENANT_ADMINISTRATOR",
       organization_ids: [],
-      scopes: ["genioone-management", "audit.export"],
+      scopes: [MANAGEMENT_SCOPES.auditExport, MANAGEMENT_SCOPES.identityRead],
     },
     "admin-b": {
       tenant_id: tenantB,
@@ -95,7 +96,7 @@ function principals() {
       client_id: "management-ui",
       role: "TENANT_ADMINISTRATOR",
       organization_ids: [],
-      scopes: ["genioone-management", "audit.export"],
+      scopes: [MANAGEMENT_SCOPES.auditExport],
     },
     "org-admin-a": {
       tenant_id: tenantA,
@@ -103,7 +104,7 @@ function principals() {
       client_id: "management-ui",
       role: "ORGANIZATION_ADMINISTRATOR",
       organization_ids: ["organization-a"],
-      scopes: ["genioone-management", "audit.export"],
+      scopes: [MANAGEMENT_SCOPES.auditExport],
     },
   })
 }

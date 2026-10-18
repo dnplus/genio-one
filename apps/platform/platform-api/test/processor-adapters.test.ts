@@ -1,3 +1,4 @@
+import { MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -47,7 +48,7 @@ function authenticator() {
       client_id: "management-ui",
       role: "TENANT_ADMINISTRATOR",
       organization_ids: [],
-      scopes: ["genioone-management"],
+      scopes: [MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.policiesRead, MANAGEMENT_SCOPES.policiesWrite, MANAGEMENT_SCOPES.policiesPublish],
     },
     "organization-admin": {
       tenant_id: tenantId,
@@ -55,7 +56,7 @@ function authenticator() {
       client_id: "management-ui",
       role: "ORGANIZATION_ADMINISTRATOR",
       organization_ids: [],
-      scopes: ["genioone-management"],
+      scopes: [MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.policiesRead, MANAGEMENT_SCOPES.policiesWrite, MANAGEMENT_SCOPES.policiesPublish],
     },
     "tenant-user": {
       tenant_id: tenantId,
@@ -63,7 +64,7 @@ function authenticator() {
       client_id: "management-ui",
       role: "USER",
       organization_ids: [],
-      scopes: ["genioone-management"],
+      scopes: [MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.policiesRead, MANAGEMENT_SCOPES.policiesWrite, MANAGEMENT_SCOPES.policiesPublish],
     },
     "other-tenant-admin": {
       tenant_id: otherTenantId,
@@ -71,7 +72,7 @@ function authenticator() {
       client_id: "management-ui",
       role: "TENANT_ADMINISTRATOR",
       organization_ids: [],
-      scopes: ["genioone-management"],
+      scopes: [MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite, MANAGEMENT_SCOPES.policiesRead, MANAGEMENT_SCOPES.policiesWrite, MANAGEMENT_SCOPES.policiesPublish],
     },
   })
 }

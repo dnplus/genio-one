@@ -1,3 +1,4 @@
+import { RESOURCE_SCOPE_VALUES, hasAnyScope } from "@genioone/protocol/authorization-scopes"
 import type { FastifyPluginAsync } from "fastify"
 import { randomUUID } from "node:crypto"
 import { httpRequestCorrelationId, recordHttpMcpToolCompletion } from "@genioone/telemetry/fastify-observability"
@@ -7,8 +8,6 @@ import type { ResourceConnectionRegistry } from "../connections/module"
 import { isPlatformApiError, PlatformApiError } from "../errors"
 import type { SharedMemoryDirectory } from "../memories/module"
 import type { DiscoveryMcpPostHogSink } from "./posthog"
-
-const invocationScope = "genioone-invocation"
 
 type DiscoveryMcpHttpOptions = {
   access: AccessGovernanceStore
@@ -94,7 +93,7 @@ export const discoveryMcpHttp: FastifyPluginAsync<DiscoveryMcpHttpOptions> = asy
       return reply.send({
         resource: connection.endpoint,
         authorization_servers: [browserIdentity.issuer],
-        scopes_supported: browserIdentity.scopes.includes("genioone-invocation") ? ["genioone-invocation"] : [],
+        scopes_supported: RESOURCE_SCOPE_VALUES.filter(scope => browserIdentity.scopes.includes(scope)),
         bearer_methods_supported: ["header"],
       })
     })
@@ -120,7 +119,7 @@ export const discoveryMcpHttp: FastifyPluginAsync<DiscoveryMcpHttpOptions> = asy
         subjectId: principal.subject_id, clientId: principal.client_id, role: principal.role, organizationIds: principal.organization_ids,
       } }),
       nativeCapabilities: async () => {
-        if (!principal.scopes?.includes(invocationScope)) return []
+        if (!hasAnyScope(principal.scopes, RESOURCE_SCOPE_VALUES)) return []
         try {
           await options.memories.listPersonalAsAgent(principal, { limit: 1 })
         } catch (error) {

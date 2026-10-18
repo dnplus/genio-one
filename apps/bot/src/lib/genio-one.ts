@@ -1,3 +1,4 @@
+import { BOT_OAUTH_SCOPES } from "@genioone/protocol/authorization-scopes"
 export interface GenioIdentity {
   tenant_id: string
   subject_id: string
@@ -50,8 +51,7 @@ interface BrowserConfiguration {
   management_scopes?: string[]
 }
 
-/** Bot client authorize scopes: invocation + management (subject registration). */
-export const BOT_OIDC_DEFAULT_SCOPES = ["openid", "genioone-invocation", "genioone-management"] as const
+export const BOT_OIDC_DEFAULT_SCOPES = BOT_OAUTH_SCOPES
 
 const tokenKey = "genioone.bot.access_token"
 const refreshKey = "genioone.bot.refresh_token"
@@ -63,22 +63,9 @@ function clientId() {
   return import.meta.env.VITE_GENIO_ONE_BOT_OIDC_CLIENT_ID || "genio-one-bot"
 }
 
-/**
- * Never reuse self-service `browser-configuration.scopes` with `genio-one-bot`.
- */
-export function resolveBotOidcScopes(config?: Pick<BrowserConfiguration, "management_scopes">): string[] {
+export function resolveBotOidcScopes(): string[] {
   const fromEnv = (import.meta.env.VITE_GENIO_ONE_BOT_OIDC_SCOPES as string | undefined)?.trim()
-  if (fromEnv) {
-    return fromEnv.split(/\s+/).filter(Boolean)
-  }
-  // Pair genio-one-bot with invocation + management. Do not use self-service `scopes`.
-  const rawManagement = config?.management_scopes
-  const management = Array.isArray(rawManagement)
-    ? rawManagement.filter((scope) => typeof scope === "string" && scope.trim())
-    : []
-  const merged = new Set<string>(["openid", "genioone-invocation", ...management])
-  merged.add("genioone-management")
-  return [...merged]
+  return fromEnv ? [...new Set(fromEnv.split(/\s+/).filter(Boolean))] : [...BOT_OIDC_DEFAULT_SCOPES]
 }
 
 function base64Url(bytes: Uint8Array) {
@@ -212,7 +199,7 @@ export async function beginGenioLogin(options: { forceReauthentication?: boolean
     response_type: "code",
     client_id: clientId(),
     redirect_uri: location.origin,
-    scope: resolveBotOidcScopes(config).join(" "),
+    scope: resolveBotOidcScopes().join(" "),
     state,
     code_challenge: base64Url(new Uint8Array(digest)),
     code_challenge_method: "S256",

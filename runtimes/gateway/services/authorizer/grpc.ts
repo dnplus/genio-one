@@ -2,6 +2,7 @@ import { isAudioMultipart, transcriptionFields } from "../shared/audio-transcrip
 import { readFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
+import { createHash } from "node:crypto"
 
 import grpc from "@grpc/grpc-js"
 import protoLoader from "@grpc/proto-loader"
@@ -61,6 +62,7 @@ import {
   USE_CASE_HEADER,
   VERIFIED_CLIENT_HEADER,
   VERIFIED_SUBJECT_HEADER,
+  VERIFIED_SCOPES_HEADER,
 } from "../shared/enforcement-headers"
 import type { GatewayReleaseReference } from "@genioone/protocol/runtime-command"
 import {
@@ -364,6 +366,20 @@ function requestHeaders(request: EnvoyCheckRequest): Map<string, string> {
   return headerMap(request.attributes?.request?.http?.headers)
 }
 
+function applicationApiKeyHash(request: EnvoyCheckRequest): string | undefined {
+  const key = requestHeaders(request).get("x-api-key")
+  if (key === undefined) return undefined
+  if (!/^genio_app_[A-Za-z0-9_-]{43}$/.test(key)) throw new Error("APPLICATION_API_KEY_INVALID")
+  return createHash("sha256").update(key).digest("hex")
+}
+
+function verifiedScopes(headers: Map<string, string>): string[] {
+  const value = optional(headers, VERIFIED_SCOPES_HEADER)
+  if (!value) return []
+  if (!/^[\x21\x23-\x5b\x5d-\x7e ]+$/.test(value)) throw new Error("verified OAuth scopes are invalid")
+  return [...new Set(value.split(" ").filter(Boolean))].sort()
+}
+
 function parsedRequestBody(request: EnvoyCheckRequest): Record<string, unknown> | undefined {
   const http = request.attributes?.request?.http
   const raw = http?.raw_body && http.raw_body.byteLength > 0
@@ -494,14 +510,25 @@ function authorizationInputFromCheckRequest(
   if (protocol !== "LLM" && protocol !== "MCP" && protocol !== "API" && protocol !== "A2A") {
     throw new Error("authorization request protocol is invalid")
   }
+  const apiKey = applicationApiKeyHash(request)
+  const authenticationScheme = headerMap(request.attributes?.context_extensions).get("authentication_scheme")
+  if (authenticationScheme === "APPLICATION_API_KEY" && apiKey === undefined) throw new Error("APPLICATION_API_KEY_REQUIRED")
+  if (apiKey !== undefined) {
+    if (protocol !== "API" && protocol !== "LLM") throw new Error("APPLICATION_API_KEY_RESOURCE_UNSUPPORTED")
+    if (authenticationScheme !== "APPLICATION_API_KEY") throw new Error("APPLICATION_API_KEY_AUTHENTICATION_UNAVAILABLE")
+    if (headers.has("authorization") || headers.has(VERIFIED_SUBJECT_HEADER) || headers.has(VERIFIED_CLIENT_HEADER) || headers.has(VERIFIED_SCOPES_HEADER)) {
+      throw new Error("CALLER_CREDENTIALS_AMBIGUOUS")
+    }
+  }
   const body = multipartFields ?? parsedRequestBody(request)
   const requestMethod = request.attributes?.request?.http?.method || headers.get(":method") || "POST"
   const requestPath = request.attributes?.request?.http?.path || headers.get(":path") || "/"
   return {
     requestProtocol: protocol,
     tenantId: requiredContext(request, "tenant_id"),
-    subjectId: required(headers, VERIFIED_SUBJECT_HEADER),
-    actingClientId: required(headers, VERIFIED_CLIENT_HEADER),
+    subjectId: apiKey === undefined ? required(headers, VERIFIED_SUBJECT_HEADER) : "",
+    actingClientId: apiKey === undefined ? required(headers, VERIFIED_CLIENT_HEADER) : "",
+    authorizationScopes: apiKey === undefined ? verifiedScopes(headers) : [],
     resourceId: requiredContext(request, "resource_id"),
     capabilityId: requiredContext(request, "capability_id"),
     requestedPublicModel: requestedPublicModel(body, protocol === "LLM"),
@@ -651,6 +678,7 @@ function deniedResponse(
   httpCode: number,
   reason: string,
   details = "",
+  requiredScopes?: readonly string[],
 ): EnvoyCheckResponse {
   return {
     status: { code: statusCode, message: reason },
@@ -661,6 +689,10 @@ function deniedResponse(
           header: { key: "content-type", value: "application/json" },
           append_action: 2,
         },
+        ...(requiredScopes?.length ? [{
+          header: { key: "www-authenticate", value: `Bearer error="insufficient_scope", scope="${requiredScopes.join(" ")}"` },
+          append_action: 2,
+        }] : []),
       ],
       body: JSON.stringify({ code: reason, ...(details ? { details } : {}) }),
     },
@@ -824,6 +856,22 @@ function createExternalAuthorizerHandler(
     void bundleSource
       .current()
       .then(async ({ bundle, releaseReference, routingArtifact }) => {
+        const apiKeyHash = applicationApiKeyHash(call.request)
+        if (apiKeyHash !== undefined) {
+          const credential = bundle.application_api_keys?.find((candidate) => candidate.api_key_hash === apiKeyHash)
+          if (!credential || credential.expires_at <= input.now || credential.resource_id !== input.resourceId || credential.capability_id !== input.capabilityId) {
+            callback(null, deniedResponse(grpc.status.UNAUTHENTICATED, 401, "APPLICATION_API_KEY_INVALID"))
+            return
+          }
+          const application = bundle.subject_contexts?.find((context) => context.subject_id === credential.subject_id && context.kind === "APPLICATION")
+          if (!application) {
+            callback(null, deniedResponse(grpc.status.UNAUTHENTICATED, 401, "APPLICATION_API_KEY_INVALID"))
+            return
+          }
+          input.subjectId = credential.subject_id
+          input.actingClientId = credential.acting_client_id
+          input.authorizationScopes = credential.scopes
+        }
         const subjectContext = bundle.subject_contexts?.find((context) =>
           context.subject_id === input.subjectId
         )
@@ -956,6 +1004,7 @@ function createExternalAuthorizerHandler(
               unavailable ? 503 : 403,
               decision.reason,
               decision.decisionId,
+              decision.requiredScopes,
             ),
           )
           return

@@ -7,6 +7,28 @@ import { tmpdir } from "node:os"
 
 import { mock, test } from "bun:test"
 
+if (process.env.GENIO_ONE_HANDOFF_TEST_CHILD !== "1") {
+  test("local AIGW handoff executes in an isolated process", async () => {
+    const child = Bun.spawn([process.execPath, "test", "--no-orphans", "--timeout", "10000", import.meta.filename], {
+      cwd: import.meta.dirname,
+      env: { ...process.env, GENIO_ONE_HANDOFF_TEST_CHILD: "1" },
+      stdout: "pipe", stderr: "pipe",
+    })
+    const timeout = setTimeout(() => child.kill(), 25_000)
+    try {
+      const [stdout, stderr, exitCode] = await Promise.all([
+        new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited,
+      ])
+      process.stdout.write(stdout)
+      process.stderr.write(stderr)
+      assert.equal(exitCode, 0, `${stdout}\n${stderr}`)
+      assert.match(`${stdout}\n${stderr}`, /8 pass/)
+    } finally {
+      clearTimeout(timeout)
+      if (child.exitCode === null) child.kill()
+    }
+  }, 30_000)
+} else {
 let handoffPath = ""
 let releaseCalls = 0
 let listenerCalls = 0
@@ -341,3 +363,4 @@ test("unexpected Processor exit preserves its triage handoff for recovery", asyn
     await rm(stateRoot, { recursive: true, force: true })
   }
 })
+}

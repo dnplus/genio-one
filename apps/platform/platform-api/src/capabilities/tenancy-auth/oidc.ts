@@ -37,6 +37,7 @@ export interface OidcTenantConfiguration {
   jwks_uri: string
   algorithms: string[]
   claims: OidcClaimMapping
+  access_token_type?: { claim: string; value: string }
   principal_mappings?: Array<{
     external_subject_id: string
     subject_id: string
@@ -123,6 +124,7 @@ function validateConfiguration(
     throw new Error("Invalid OIDC algorithms")
   }
   if (!isRecord(value.claims)) throw new Error("Invalid OIDC claims")
+  if (value.access_token_type !== undefined && (!isRecord(value.access_token_type) || !nonEmptyString(value.access_token_type.value))) throw new Error("Invalid OIDC access_token_type")
 
   return {
     tenant_id: value.tenant_id.trim(),
@@ -133,6 +135,7 @@ function validateConfiguration(
     audiences,
     jwks_uri: oidcUrl(value.jwks_uri, "jwks_uri", allowInsecureLoopback, allowInsecureHttp),
     algorithms,
+    ...(value.access_token_type ? { access_token_type: { claim: claimPath(value.access_token_type.claim, "access_token_type"), value: value.access_token_type.value.trim() } } : {}),
     claims: {
       subject: claimPath(value.claims.subject, "subject"),
       client: claimPath(value.claims.client, "client"),
@@ -188,6 +191,8 @@ function principalFromPayload(
   configuration: OidcTenantConfiguration,
   payload: JWTPayload,
 ): Principal | null {
+  if (payload.typ === "ID" || payload.token_use === "id") return null
+  if (configuration.access_token_type && claim(payload, configuration.access_token_type.claim) !== configuration.access_token_type.value) return null
   const externalSubject = claim(payload, configuration.claims.subject)
   const client = claim(payload, configuration.claims.client)
   if (!nonEmptyString(externalSubject) || !nonEmptyString(client)) return null

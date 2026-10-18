@@ -15,9 +15,10 @@ import { ModelRoutingPolicySchema } from "../model-routing/contract"
 import type { ConnectionModelMapping, PublicModel } from "../models/contract"
 import { ConnectionModelMappingSchema, PublicModelSchema } from "../models/contract"
 import type { GatewayRoutingConnectionFact, GatewayRoutingPricingFact, GatewayRoutingResourceOwnerRef } from "./routing-compiler"
-import type { CompiledAgentDelegation, CompiledExecutionGrant, CompiledSubjectContext, CompiledUsageContext } from "@genioone/protocol/authorization"
+import type { CompiledApplicationApiKey, CompiledAgentDelegation, CompiledExecutionGrant, CompiledSubjectContext, CompiledUsageContext } from "@genioone/protocol/authorization"
 import type { UsagePolicyLimits, UsagePolicyRevision, UsagePolicySelectors } from "../usage-governance/contract"
 import { compareUtf8 } from "@genioone/protocol/canonical"
+import { RESOURCE_SCOPE_VALUES } from "@genioone/protocol/authorization-scopes"
 
 type DatabaseRow = Record<string, unknown>
 
@@ -33,6 +34,7 @@ export interface GatewayPolicyInputSnapshot {
   subject_contexts?: CompiledSubjectContext[]
   agent_delegations?: CompiledAgentDelegation[]
   execution_grants?: CompiledExecutionGrant[]
+  application_api_keys?: CompiledApplicationApiKey[]
   usage_policies?: UsagePolicyRevision[]
   usage_contexts?: CompiledUsageContext[]
   pricing?: GatewayRoutingPricingFact[]
@@ -303,6 +305,25 @@ function routingPolicy(row: DatabaseRow): ModelRoutingPolicy {
   return value
 }
 
+function applicationApiKey(row: DatabaseRow): CompiledApplicationApiKey {
+  const hash = requiredString(row.api_key_hash)
+  const scopes = stringArray(parseJson(row.scopes, "GATEWAY_POLICY_INPUT_INVALID"))
+  if (!/^[0-9a-f]{64}$/.test(hash) || new Set(scopes).size !== scopes.length || scopes.some(scope => !(RESOURCE_SCOPE_VALUES as readonly string[]).includes(scope))) {
+    throw new PlatformApiError("GATEWAY_POLICY_INPUT_INVALID", 500)
+  }
+  const credentialId = requiredString(row.credential_id)
+  return {
+    credential_id: credentialId,
+    api_key_hash: hash,
+    subject_id: requiredString(row.application_subject_id),
+    acting_client_id: credentialId,
+    resource_id: requiredString(row.resource_id),
+    capability_id: requiredString(row.capability_id),
+    scopes: scopes.sort(compareUtf8),
+    expires_at: positiveInteger(row.expires_at),
+  }
+}
+
 function resourceIds(
   tenantId: string,
   projections: readonly GatewayProjection[],
@@ -556,7 +577,44 @@ export function createPostgresGatewayPolicyInputSource(): GatewayPolicyInputSour
       )) {
         throw new PlatformApiError("GATEWAY_POLICY_INPUT_MISMATCH", 409)
       }
+      const apiKeyRows = await input.transaction.query<DatabaseRow>(
+        `select credential.credential_id, credential.api_key_hash,
+                credential.application_subject_id, credential.resource_id,
+                credential.capability_id, credential.scopes,
+                extract(epoch from case when credential.state = 'RETIRED'
+                  then least(credential.expires_at, credential.valid_until)
+                  else credential.expires_at end)::bigint as expires_at
+           from genio_one_application_api_credentials credential
+           join genio_one_applications application
+             on application.tenant_id = credential.tenant_id
+            and application.application_id = credential.application_id
+            and application.subject_id = credential.application_subject_id
+           join genio_one_subjects subject
+             on subject.tenant_id = credential.tenant_id
+            and subject.subject_id = credential.application_subject_id
+          where credential.tenant_id = $1 and credential.resource_id = any($2::text[])
+            and credential.kind = 'API_KEY' and credential.revoked_at is null
+            and credential.expires_at > now()
+            and (credential.state = 'ACTIVE' or (credential.state = 'RETIRED' and credential.valid_until > now()))
+            and subject.kind = 'APPLICATION' and subject.suspended_at is null
+            and exists (
+              select 1 from genio_one_model_entitlements entitlement
+               where entitlement.tenant_id = credential.tenant_id
+                 and entitlement.subject_id = credential.application_subject_id
+                 and entitlement.resource_id = credential.resource_id
+                 and entitlement.capability_id = credential.capability_id
+                 and (entitlement.client_id is null or entitlement.client_id = credential.credential_id)
+                 and entitlement.state = 'ACTIVE' and entitlement.starts_at <= now()
+                 and (entitlement.expires_at is null or entitlement.expires_at > now())
+            )
+          order by credential.credential_id
+          for update of credential, application, subject`,
+        [input.tenantId, resources],
+      )
+      const applicationApiKeys = apiKeyRows.rows.map(applicationApiKey)
+        .filter(key => scopeKeys.has(`${key.resource_id}\u0000${key.capability_id}`))
       const subjectIds = [...new Set([
+        ...applicationApiKeys.map(key => key.subject_id),
         ...entitlements
           .map((entry) => entry.subject_id)
           .filter((value): value is string => typeof value === "string"),
@@ -711,6 +769,7 @@ export function createPostgresGatewayPolicyInputSource(): GatewayPolicyInputSour
         subject_aliases: subjectAliases,
         subject_contexts: subjectContexts,
         agent_delegations: agentDelegations,
+        ...(applicationApiKeys.length ? { application_api_keys: applicationApiKeys } : {}),
         ...(executionGrants.length > 0 ? { execution_grants: executionGrants } : {}),
         usage_policies: [...usagePolicyById.values()],
         usage_contexts: usageContexts,

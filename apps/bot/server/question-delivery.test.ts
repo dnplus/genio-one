@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { GENIOONE_SCOPES } from "@genioone/protocol/authorization-scopes"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -24,7 +25,10 @@ function setup(databasePath = ":memory:", artifactStoreRoot = join(tmpdir(), "qu
     botToolSessions: new BotToolSessions(),
     runtimeBroker: {
       claimBotTurn: (id: string) => gate.claimBotTurn(id),
-      findByPrincipal: () => session,
+      findByPrincipal: (owner: { scopes: string[] }) => {
+        expect(owner.scopes).toEqual([GENIOONE_SCOPES.invoke])
+        return session
+      },
       accessTokenForBot: (runtimeId: string, botId: string) => runtimeId === session.id && botId === bot.id ? session.accessToken : undefined,
       request: async (_id: string, method: string, params: any) => { requests.push({ method, params }); return response(method, params) },
     },

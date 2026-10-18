@@ -19,10 +19,11 @@
   "issuer" $oidcIssuer
   "authorization_endpoint" (printf "%s/protocol/openid-connect/auth" $oidcIssuer)
   "token_endpoint" (printf "%s/protocol/openid-connect/token" $oidcIssuer)
+  "account_management_endpoint" (printf "%s/account/" $oidcIssuer)
   "client_id" "genio-one-self-service"
-  "scopes" (list "openid" "genioone-invocation")
+  "scopes" (list "openid" "genioone:read" "genioone:write" "genioone:invoke")
   "management_client_id" "genio-one-management-console"
-  "management_scopes" (list "openid" "genioone-management")
+  "management_scopes" (list "openid" "genioone:read" "genioone:write" "genioone:invoke" "management:identity:read" "management:identity:write" "management:resources:read" "management:resources:write" "management:policies:read" "management:policies:write" "management:policies:publish" "management:access:read" "management:access:write" "management:access:approve" "management:credentials:read" "management:credentials:write" "management:runtime:read" "management:runtime:write" "management:audit:read" "management:audit:export" "management:system:read" "management:system:write")
 -}}
 {{- $oidcTenants := list (dict
   "tenant_id" .Values.tenant.id
@@ -31,6 +32,7 @@
   "audiences" (list "genio-one-product-api")
   "jwks_uri" $oidcJwksUri
   "algorithms" (list "RS256")
+  "access_token_type" (dict "claim" "typ" "value" "Bearer")
   "claims" (dict
     "subject" "sub"
     "client" "azp"

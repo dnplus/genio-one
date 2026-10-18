@@ -5,6 +5,7 @@ import * as Value from "typebox/value"
 
 import type { AccessGroupDirectory } from "../access-groups/module"
 import { PlatformApiError } from "../errors"
+import { MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import { principalHasManagementScope } from "../management-authorization/module"
 import type { OrganizationDirectory } from "../organizations/module"
 import type { Principal } from "../tenancy-auth/contract"
@@ -88,7 +89,7 @@ function requireTenantAdministrator(principal: Principal): void {
 }
 
 function isManagementTenantAdministrator(principal: Principal): boolean {
-  return principal.role === "TENANT_ADMINISTRATOR" && principalHasManagementScope(principal)
+  return principal.role === "TENANT_ADMINISTRATOR" && principalHasManagementScope(principal, [MANAGEMENT_SCOPES.resourcesRead])
 }
 
 function requireAuthorization(authorization: string | undefined): string {

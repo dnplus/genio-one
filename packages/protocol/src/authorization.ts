@@ -2,6 +2,26 @@ export const AUTHORIZATION_BUNDLE_SCHEMA_VERSION = 1 as const
 
 export type AuthorizationDisposition = "ALLOW" | "DENY"
 
+export type CapabilityOperationSemantics = "READ" | "WRITE" | "INVOKE"
+
+export interface CompiledCapabilityOperation {
+  resource_id: string
+  capability_id: string
+  operation_semantics: CapabilityOperationSemantics
+  mcp_tool?: string
+}
+
+export interface CompiledApplicationApiKey {
+  credential_id: string
+  api_key_hash: string
+  subject_id: string
+  acting_client_id: string
+  resource_id: string
+  capability_id: string
+  scopes: string[]
+  expires_at: number
+}
+
 export interface CompiledAuthorizationRule {
   rule_id: string
   disposition: AuthorizationDisposition
@@ -42,6 +62,8 @@ export interface CompiledAuthorizationBundle {
   agent_delegations?: CompiledAgentDelegation[]
   execution_grants?: CompiledExecutionGrant[]
   mcp_tool_definitions?: CompiledMcpToolDefinition[]
+  capability_operations?: CompiledCapabilityOperation[]
+  application_api_keys?: CompiledApplicationApiKey[]
 }
 
 export interface CompiledSubjectContext {
@@ -111,6 +133,7 @@ export interface AuthorizationInput {
   tenantId: string
   subjectId: string
   actingClientId: string
+  authorizationScopes?: readonly string[]
   resourceId: string
   capabilityId: string
   requestedPublicModel?: string
@@ -150,6 +173,7 @@ export interface AuthorizationDecision {
     | "EXECUTION_GRANT_INVALID"
     | "EXECUTION_GRANT_STORE_UNAVAILABLE"
     | "DELEGATION_NOT_ALLOWED"
+    | "INSUFFICIENT_SCOPE"
   decisionId: string
   ruleId?: string
   supportingRuleIds?: string[]
@@ -167,6 +191,7 @@ export interface AuthorizationDecision {
   allowedActions?: string[]
   requiredObligations: string[]
   validUntil?: number
+  requiredScopes?: string[]
   bundleRevision: string
   policyVersion: string
 }

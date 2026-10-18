@@ -1,3 +1,4 @@
+import { MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -44,7 +45,7 @@ test("MCP routing stores the stable native tool namespace", async () => {
         role: "TENANT_ADMINISTRATOR",
         organization_ids: [organization.organization_id],
         client_id: "application-1",
-        scopes: ["genioone-management"],
+        scopes: [MANAGEMENT_SCOPES.resourcesRead, MANAGEMENT_SCOPES.resourcesWrite],
       },
     }),
   })

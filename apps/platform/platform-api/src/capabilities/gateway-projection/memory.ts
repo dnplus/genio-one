@@ -10,6 +10,9 @@ import { PROCESSOR_SAFETY_DECISIONS_HEADER } from "../../../../../../runtimes/ga
 import { mcpOAuthHeaderName } from "../../../../../../runtimes/gateway/services/shared/mcp-oauth-handoff"
 import { isModelCandidateEffect } from "../../../../../../runtimes/gateway/services/shared/model-candidate-effect"
 import { isEd25519Signature } from "@genioone/protocol/ed25519-signature"
+import type { CompiledCapabilityOperation } from "@genioone/protocol/authorization"
+import { GENIOONE_SCOPES } from "@genioone/protocol/authorization-scopes"
+import { mcpToolCapabilityId } from "../../../../../../runtimes/gateway/services/shared/mcp-tool-capability"
 
 import { PlatformApiError } from "../errors"
 import {
@@ -965,6 +968,47 @@ function approvedMcpToolDefinitions(
   return definitions
 }
 
+function publishedCapabilityOperations(
+  snapshot: GatewayProjectionSnapshot,
+  backendRefs: readonly Record<string, unknown>[],
+  definitions: readonly GatewayMcpToolDefinition[],
+): CompiledCapabilityOperation[] {
+  const resource = snapshot.resource
+  const routeCapability = resource.capabilities.find((capability) => capability.capability_id === snapshot.capability_id)
+  const invokes = resource.kind === "LLM" || Boolean(resource.api?.a2a)
+  if (!invokes && resource.capabilities.some((capability) => capability.operation_semantics === "INVOKE")) {
+    throw new PlatformApiError("RESOURCE_OPERATION_SEMANTICS_INVALID", 422)
+  }
+  const operations: CompiledCapabilityOperation[] = [{
+    resource_id: snapshot.resource_id,
+    capability_id: snapshot.capability_id,
+    operation_semantics: invokes ? "INVOKE" : routeCapability?.operation_semantics ?? (
+      resource.kind === "API" && resource.api && resource.api.operations.length > 0 && resource.api.operations.every((operation) => operation.method === "GET" || operation.method === "HEAD")
+        ? "READ"
+        : "WRITE"
+    ),
+  }]
+  const reviewedReadOnly = new Set(definitions.map((definition) => definition.exposed_tool_name))
+  for (const backend of backendRefs) {
+    const tools = (backend.toolSelector as { include?: string[] } | undefined)?.include ?? []
+    for (const tool of tools) {
+      const capabilityId = mcpToolCapabilityId(tool)
+      const capability = resource.capabilities.find((candidate) => candidate.capability_id === capabilityId)
+      const exposedName = `${backend.name}__${tool}`
+      operations.push({
+        resource_id: snapshot.resource_id,
+        capability_id: capabilityId,
+        mcp_tool: exposedName,
+        operation_semantics: capability?.operation_semantics ?? (reviewedReadOnly.has(exposedName) ? "READ" : "WRITE"),
+      })
+    }
+  }
+  return operations.sort((left, right) => compareUtf8(
+    `${left.capability_id}\u0000${left.mcp_tool ?? ""}`,
+    `${right.capability_id}\u0000${right.mcp_tool ?? ""}`,
+  ))
+}
+
 function providerSchemaPrefix(parsed: ParsedEndpoint): Record<string, string> {
   return parsed.pathPrefix ? { prefix: parsed.pathPrefix } : {}
 }
@@ -1382,6 +1426,7 @@ function authorizationPolicy(
             claimToHeaders: [
               { claim: jwtConfig.subject_claim, header: "x-genio-verified-subject" },
               { claim: jwtConfig.client_claim, header: "x-genio-verified-client" },
+              { claim: "scope", header: "x-genio-verified-scopes" },
             ],
           },
         ],
@@ -1399,6 +1444,33 @@ function authorizationPolicy(
       ),
     },
   )
+}
+
+function applicationApiKeyIngress(
+  route: GatewayNativeResource,
+  authorization: GatewayNativeResource,
+): { route: GatewayNativeResource; authorization: GatewayNativeResource } {
+  const keyRoute = structuredClone(route)
+  keyRoute.metadata.name = kubernetesName(`${route.metadata.name}-api-key`, "HTTPRoute")
+  keyRoute.spec.rules = (keyRoute.spec.rules as Array<Record<string, any>>).map((rule) => ({
+    ...rule,
+    matches: (rule.matches?.length ? rule.matches : [{}]).map((match: Record<string, any>) => ({
+      ...match,
+      headers: [...(match.headers ?? []), { name: "x-api-key", type: "RegularExpression", value: "^genio_app_[A-Za-z0-9_-]{43}$" }],
+    })),
+  }))
+  const extAuth = structuredClone(authorization.spec.extAuth) as Record<string, any>
+  if (extAuth.failOpen !== false || !extAuth.grpc || !Array.isArray(extAuth.contextExtensions)) {
+    throw new PlatformApiError("APPLICATION_API_KEY_AUTHORIZATION_INVALID", 422)
+  }
+  extAuth.contextExtensions.push({ name: "authentication_scheme", type: "Value", value: "APPLICATION_API_KEY" })
+  const keyAuthorization = structuredClone(authorization)
+  keyAuthorization.metadata.name = kubernetesName(`${keyRoute.metadata.name}-authorization`, "SecurityPolicy")
+  keyAuthorization.spec = {
+    targetRefs: [{ group: GATEWAY_API_GROUP, kind: "HTTPRoute", name: keyRoute.metadata.name }],
+    extAuth,
+  }
+  return { route: keyRoute, authorization: keyAuthorization }
 }
 
 function validateApiOAuthProjection(
@@ -1453,6 +1525,9 @@ function authorizationExtAuth(
       "content-type",
       "x-genio-verified-subject",
       "x-genio-verified-client",
+      "x-genio-verified-scopes",
+      "x-api-key",
+      "authorization",
       "x-request-id",
       "x-genio-correlation-id",
       "x-genio-organization-id",
@@ -2080,11 +2155,12 @@ export function createInMemoryGatewayProjector(
               },
               protectedResourceMetadata: {
                 resource: `https://${publication.hostname}${publication.base_path}`,
-                scopesSupported: ["genioone-invocation"],
+                scopesSupported: [GENIOONE_SCOPES.read, GENIOONE_SCOPES.write],
               },
               claimToHeaders: [
                 { claim: jwtConfig.subject_claim, header: "x-genio-verified-subject" },
                 { claim: jwtConfig.client_claim, header: "x-genio-verified-client" },
+                { claim: "scope", header: "x-genio-verified-scopes" },
               ],
             },
             extAuth: authorizationExtAuth(
@@ -2374,6 +2450,10 @@ export function createInMemoryGatewayProjector(
             rendererOptions,
           )
         : undefined
+      const publicRoute = routeResources.find((candidate) => candidate.kind === "HTTPRoute" && candidate.metadata.name === routeName)
+      const keyIngress = securityPolicy && publicRoute && !apiMetadata?.a2a
+        ? applicationApiKeyIngress(publicRoute, securityPolicy)
+        : undefined
       const processingPolicy = extensionPolicy(
         safeChain,
         rendererOptions.processor,
@@ -2387,7 +2467,7 @@ export function createInMemoryGatewayProjector(
         requestPreludeLua,
         resource.kind === "MCP"
           ? [kubernetesName(`ai-eg-mcp-main-${routeName}`, "generated MCP main HTTPRoute")]
-          : [routeName],
+          : [routeName, ...(keyIngress ? [keyIngress.route.metadata.name] : [])],
       )
       const sidecarBackends = [
         ...(authorizeStep
@@ -2426,6 +2506,7 @@ export function createInMemoryGatewayProjector(
             )]
           : []),
         ...(securityPolicy ? [securityPolicy] : []),
+        ...(keyIngress ? [keyIngress.route, keyIngress.authorization] : []),
         ...sidecarBackends,
         ...(processingPolicy
           ? [
@@ -2466,6 +2547,7 @@ export function createInMemoryGatewayProjector(
         policy_bundle: {
           enforcement_chain: safeChain,
         },
+        capability_operations: publishedCapabilityOperations(snapshot, mcpBackendRefs, sortedMcpToolDefinitions),
         ...(sortedMcpToolDefinitions.length > 0
           ? { mcp_tool_definitions: sortedMcpToolDefinitions }
           : {}),

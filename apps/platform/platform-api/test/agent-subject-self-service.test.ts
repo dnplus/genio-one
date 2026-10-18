@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES, MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -63,7 +64,7 @@ async function createApp(lifecycle: () => "ENABLED" | "DISABLED", identityLookup
         role: "USER",
         organization_ids: [],
         client_id: "genio-one-bot",
-        scopes: ["genioone-management", "genioone-invocation"],
+        scopes: [MANAGEMENT_SCOPES.identityRead, MANAGEMENT_SCOPES.identityWrite, GENIOONE_SCOPES.read, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke],
       },
       secondUser: {
         tenant_id: tenantId,
@@ -71,7 +72,7 @@ async function createApp(lifecycle: () => "ENABLED" | "DISABLED", identityLookup
         role: "USER",
         organization_ids: [],
         client_id: "genio-one-bot",
-        scopes: ["genioone-management", "genioone-invocation"],
+        scopes: [MANAGEMENT_SCOPES.identityRead, MANAGEMENT_SCOPES.identityWrite, GENIOONE_SCOPES.read, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke],
       },
       otherTenantUser: {
         tenant_id: "tenant-other",
@@ -79,7 +80,7 @@ async function createApp(lifecycle: () => "ENABLED" | "DISABLED", identityLookup
         role: "USER",
         organization_ids: [],
         client_id: "genio-one-bot",
-        scopes: ["genioone-management", "genioone-invocation"],
+        scopes: [MANAGEMENT_SCOPES.identityRead, MANAGEMENT_SCOPES.identityWrite, GENIOONE_SCOPES.read, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke],
       },
       agentUser: {
         tenant_id: tenantId,
@@ -87,7 +88,7 @@ async function createApp(lifecycle: () => "ENABLED" | "DISABLED", identityLookup
         role: "USER",
         organization_ids: [],
         client_id: "genio-one-bot",
-        scopes: ["genioone-management", "genioone-invocation"],
+        scopes: [MANAGEMENT_SCOPES.identityRead, MANAGEMENT_SCOPES.identityWrite, GENIOONE_SCOPES.read, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke],
       },
       applicationUser: {
         tenant_id: tenantId,
@@ -95,7 +96,7 @@ async function createApp(lifecycle: () => "ENABLED" | "DISABLED", identityLookup
         role: "USER",
         organization_ids: [],
         client_id: "genio-one-bot",
-        scopes: ["genioone-management", "genioone-invocation"],
+        scopes: [MANAGEMENT_SCOPES.identityRead, MANAGEMENT_SCOPES.identityWrite, GENIOONE_SCOPES.read, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke],
       },
       unregisteredUser: {
         tenant_id: tenantId,
@@ -103,7 +104,7 @@ async function createApp(lifecycle: () => "ENABLED" | "DISABLED", identityLookup
         role: "USER",
         organization_ids: [],
         client_id: "genio-one-bot",
-        scopes: ["genioone-management", "genioone-invocation"],
+        scopes: [MANAGEMENT_SCOPES.identityRead, MANAGEMENT_SCOPES.identityWrite, GENIOONE_SCOPES.read, GENIOONE_SCOPES.write, GENIOONE_SCOPES.invoke],
       },
     }),
   })

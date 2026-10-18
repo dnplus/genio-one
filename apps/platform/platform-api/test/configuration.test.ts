@@ -1,3 +1,4 @@
+import { GENIOONE_SCOPES, MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -37,17 +38,17 @@ test("Tenant configuration lifecycle keeps publish and convergence separate", as
         tenant_id: "tenant-acme",
         subject_id: "person-admin",
         client_id: "management-ui",
-        scopes: ["genioone-management"],
         role: "TENANT_ADMINISTRATOR",
         organization_ids: [],
+        scopes: [MANAGEMENT_SCOPES.systemRead, MANAGEMENT_SCOPES.systemWrite, MANAGEMENT_SCOPES.policiesPublish],
       },
       user: {
         tenant_id: "tenant-acme",
         subject_id: "person-user",
         client_id: "self-service-ui",
-        scopes: ["genioone-management"],
         role: "USER",
         organization_ids: [],
+        scopes: [GENIOONE_SCOPES.read],
       },
     }),
   })
@@ -139,17 +140,17 @@ test("a configured Self-service projector converges the published revision", asy
         tenant_id: "tenant-acme",
         subject_id: "person-admin",
         client_id: "management-ui",
-        scopes: ["genioone-management"],
         role: "TENANT_ADMINISTRATOR",
         organization_ids: [],
+        scopes: [MANAGEMENT_SCOPES.systemRead, MANAGEMENT_SCOPES.systemWrite, MANAGEMENT_SCOPES.policiesPublish],
       },
       user: {
         tenant_id: "tenant-acme",
         subject_id: "person-user",
         client_id: "self-service-ui",
-        scopes: ["genioone-management"],
         role: "USER",
         organization_ids: [],
+        scopes: [GENIOONE_SCOPES.read],
       },
     }),
   })
@@ -200,18 +201,18 @@ test("the public login branding route exposes only the published tenant branding
       authorization_endpoint: "http://127.0.0.1:58080/realms/genio-one/protocol/openid-connect/auth",
       token_endpoint: "http://127.0.0.1:58080/realms/genio-one/protocol/openid-connect/token",
       client_id: "genio-one-management-console",
-      scopes: ["openid", "genioone-management"],
+      scopes: ["openid", MANAGEMENT_SCOPES.systemRead, MANAGEMENT_SCOPES.systemWrite, MANAGEMENT_SCOPES.policiesPublish],
       management_client_id: "genio-one-management-console",
-      management_scopes: ["openid", "genioone-management"],
+      management_scopes: ["openid", MANAGEMENT_SCOPES.systemRead, MANAGEMENT_SCOPES.systemWrite, MANAGEMENT_SCOPES.policiesPublish],
     },
     principalAuthenticator: createStaticPrincipalAuthenticator({
       admin: {
         tenant_id: "tenant-acme",
         subject_id: "person-admin",
         client_id: "management-ui",
-        scopes: ["genioone-management"],
         role: "TENANT_ADMINISTRATOR",
         organization_ids: [],
+        scopes: [MANAGEMENT_SCOPES.systemRead, MANAGEMENT_SCOPES.systemWrite, MANAGEMENT_SCOPES.policiesPublish],
       },
     }),
   })

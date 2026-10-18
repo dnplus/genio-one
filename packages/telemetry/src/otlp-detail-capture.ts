@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto"
 import { persistOtel } from "./otlp-observability"
+import { redactApplicationApiKeys } from "./application-api-key-redaction"
 
 export const GATEWAY_DETAIL_RETENTION_SECONDS = 86_400
 
@@ -80,11 +81,6 @@ function booleanAttribute(key: string, value: boolean) {
 
 export type DetailBodyCapture = { value: string; encoding: "utf8" | "utf8-lossy"; digest: string }
 
-// Raw capture only. Credential redaction runs once, server side, in the analytics collector
-// (transform/redact_credentials), which can only read text: bodies are therefore always exported
-// as UTF-8 text, never an encoding the collector cannot see through. Invalid UTF-8 is decoded
-// lossily (U+FFFD) and flagged utf8-lossy; the exact original bytes are identified by sha256.
-// Pass final=false for successive parts of one stream so a character split across parts survives.
 export function createDetailBodyDecoder(): (body: Uint8Array, final?: boolean) => DetailBodyCapture {
   const strict = new TextDecoder("utf-8", { fatal: true })
   const lossy = new TextDecoder("utf-8")
@@ -92,8 +88,9 @@ export function createDetailBodyDecoder(): (body: Uint8Array, final?: boolean) =
   // The lossy decoder always produces the text, so bytes it buffered from an earlier part are
   // replayed correctly when the sequence turns out invalid; the strict decoder only detects that.
   return (body, final = true) => {
-    const digest = createHash("sha256").update(body).digest("hex")
-    const value = lossy.decode(body, { stream: !final })
+    const decoded = lossy.decode(body, { stream: !final })
+    const value = redactApplicationApiKeys(decoded)
+    const digest = createHash("sha256").update(value === decoded ? body : value).digest("hex")
     if (encoding === "utf8") {
       try {
         strict.decode(body, { stream: !final })

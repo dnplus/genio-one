@@ -1,3 +1,4 @@
+import { BOT_OAUTH_SCOPES, GENIOONE_SCOPE_VALUES, MANAGEMENT_CONSOLE_OAUTH_SCOPES } from "../../../packages/protocol/src/authorization-scopes.ts";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
@@ -177,7 +178,7 @@ async function tenantAdministratorAccessToken(environment, fetchImpl) {
       client_secret: required(environment, "GENIO_ONE_KEYCLOAK_CLIENT_SECRET"),
       username: required(environment, "GENIO_ONE_BOOTSTRAP_ADMIN_USERNAME"),
       password: required(environment, "GENIO_ONE_BOOTSTRAP_ADMIN_PASSWORD"),
-      scope: "genioone-management",
+      scope: MANAGEMENT_CONSOLE_OAUTH_SCOPES.join(" "),
     }),
   });
   if (typeof token?.access_token !== "string" || !token.access_token) {
@@ -448,11 +449,7 @@ export function configureBotClient(desired, environment) {
     "http://127.0.0.1:5181/*",
   ];
   botClient.webOrigins = [botOrigin, "+"];
-  botClient.defaultClientScopes = [
-    "basic",
-    "genioone-invocation",
-    "genioone-management",
-  ];
+  botClient.defaultClientScopes = ["basic", ...BOT_OAUTH_SCOPES.filter((scope) => scope !== "openid")];
   return botClient;
 }
 
@@ -701,6 +698,25 @@ export async function reconcileKeycloakUsers({
   }
 }
 
+export async function reconcileKeycloakClientScopes({ realmUrl, clientId, defaultClientScopes, optionalClientScopes, scopeCatalog, managedScopeNames, headers, fetchImpl }) {
+  for (const [assignment, names] of [["default", defaultClientScopes], ["optional", optionalClientScopes]]) {
+    const assignmentUrl = `${realmUrl}/clients/${clientId}/${assignment}-client-scopes`;
+    const currentScopes = await requestJson(fetchImpl, assignmentUrl, { headers });
+    for (const scope of currentScopes) {
+      if (managedScopeNames.has(scope.name) && !names.includes(scope.name)) {
+        await requestJson(fetchImpl, `${assignmentUrl}/${scope.id}`, { method: "DELETE", headers }, [204]);
+      }
+    }
+    for (const name of names) {
+      const scope = scopeCatalog.find((candidate) => candidate.name === name);
+      if (!scope) throw new Error(`Keycloak client scope ${name} does not exist`);
+      if (!currentScopes.some((candidate) => candidate.id === scope.id)) {
+        await requestJson(fetchImpl, `${assignmentUrl}/${scope.id}`, { method: "PUT", headers }, [204]);
+      }
+    }
+  }
+}
+
 export async function reconcileCodexOfflineAccess({ realmUrl, client, clientId, scopes, headers, fetchImpl = fetch }) {
   if (client.clientId !== "codex-mcp") return;
   const desired = (client.optionalClientScopes ?? []).includes("offline_access");
@@ -814,11 +830,11 @@ async function keycloakReconcile(environment, fetchImpl = fetch) {
     }
   }
 
-  const managedScopeNames = new Set(
-    (desired.clientScopes ?? [])
-      .map((scope) => scope.name)
-      .filter((name) => name.startsWith("genioone-")),
-  );
+  const managedScopeNames = new Set([
+    ...GENIOONE_SCOPE_VALUES,
+    ...(desired.clientScopes ?? []).map((scope) => scope.name).filter((name) => name.startsWith("genioone-")),
+    "genioone-management", "genioone-invocation", "genioone-policy-proposal", "genioone-provider-reconciler", "application.create", "audit.export",
+  ]);
   for (const client of desired.clients ?? []) {
     let matches = await requestJson(
       fetchImpl,
@@ -828,7 +844,7 @@ async function keycloakReconcile(environment, fetchImpl = fetch) {
     if (matches.length > 1) {
       throw new Error(`Keycloak returned duplicate client ${client.clientId}`);
     }
-    const { defaultClientScopes = [], optionalClientScopes, protocolMappers = [], ...clientProfile } = client;
+    const { defaultClientScopes = [], optionalClientScopes = [], protocolMappers = [], ...clientProfile } = client;
     if (matches.length === 0) {
       await requestJson(
         fetchImpl,
@@ -886,33 +902,10 @@ async function keycloakReconcile(environment, fetchImpl = fetch) {
         );
       }
     }
-    const currentDefaultScopes = await requestJson(
-      fetchImpl,
-      `${realmUrl}/clients/${clientId}/default-client-scopes`,
-      { headers },
-    );
-    for (const scope of currentDefaultScopes) {
-      if (managedScopeNames.has(scope.name) && !defaultClientScopes.includes(scope.name)) {
-        await requestJson(
-          fetchImpl,
-          `${realmUrl}/clients/${clientId}/default-client-scopes/${scope.id}`,
-          { method: "DELETE", headers },
-          [204],
-        );
-      }
-    }
-    for (const name of defaultClientScopes) {
-      const scope = existingScopes.find((candidate) => candidate.name === name);
-      if (!scope) throw new Error(`Keycloak client scope ${name} does not exist`);
-      if (!currentDefaultScopes.some((candidate) => candidate.id === scope.id)) {
-        await requestJson(
-          fetchImpl,
-          `${realmUrl}/clients/${clientId}/default-client-scopes/${scope.id}`,
-          { method: "PUT", headers },
-          [204],
-        );
-      }
-    }
+    await reconcileKeycloakClientScopes({
+      realmUrl, clientId, defaultClientScopes, optionalClientScopes,
+      scopeCatalog: existingScopes, managedScopeNames, headers, fetchImpl,
+    });
     await reconcileCodexOfflineAccess({ realmUrl, client: { clientId: client.clientId, optionalClientScopes }, clientId, scopes: existingScopes, headers, fetchImpl });
   }
 

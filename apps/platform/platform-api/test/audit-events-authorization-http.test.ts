@@ -1,3 +1,4 @@
+import { MANAGEMENT_SCOPES } from "@genioone/protocol/authorization-scopes"
 import assert from "node:assert/strict"
 import test from "node:test"
 import Fastify from "fastify"
@@ -18,7 +19,7 @@ function principal(role: Principal["role"]): Principal {
     client_id: "management-ui",
     role,
     organization_ids: role === "TENANT_ADMINISTRATOR" ? [] : ["organization-a"],
-    scopes: ["genioone-management"],
+    scopes: [MANAGEMENT_SCOPES.auditRead],
   }
 }
 
