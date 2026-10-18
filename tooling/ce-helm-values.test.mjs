@@ -45,6 +45,14 @@ test("CE Helm values generator emits usable Ed25519 signing keys and matching ke
   const payload = Buffer.from("bot runtime report")
   assert.equal(verify(null, payload, reportPublic, sign(null, payload, reportPrivate)), true)
   assert.notEqual(literals.botRuntimeReportPrivateKeyPem, literals.runtimeCommandSigningPrivateKeyPem)
+  const responseKeys = JSON.parse(literals.platformRuntimePolicyResponseVerificationKeysJson)
+  assert.deepEqual(Object.keys(responseKeys), [runtimeReport.generatedResponseKeyId])
+  const responsePrivate = createPrivateKey(literals.platformRuntimePolicyResponsePrivateKeyPem)
+  const responsePublic = createPublicKey(responseKeys[runtimeReport.generatedResponseKeyId])
+  assert.equal(responsePrivate.asymmetricKeyType, "ed25519")
+  assert.equal(responsePublic.asymmetricKeyType, "ed25519")
+  assert.equal(verify(null, payload, responsePublic, sign(null, payload, responsePrivate)), true)
+  assert.equal(verify(null, payload, reportPublic, sign(null, payload, responsePrivate)), false)
 })
 
 test("CE Helm values generator writes the required values with private permissions", () => {
@@ -66,8 +74,11 @@ test("CE Helm values generator writes the required values with private permissio
       "downstreamCredentialsJson",
       "botRuntimeReportPrivateKeyPem",
       "botRuntimeReportPublicKeyPem",
+      "platformRuntimePolicyResponsePrivateKeyPem",
+      "platformRuntimePolicyResponseVerificationKeysJson",
     ]) assert.match(content, new RegExp(`^  ${name}:`, "m"))
     assert.match(content, /^runtimeReport:\n  generatedKeyId: "genio-one-bot-runtime-v1"$/m)
+    assert.match(content, /^  generatedResponseKeyId: "genio-one-runtime-policy-response-v1"$/m)
     assert.match(content, /BEGIN PRIVATE KEY/)
     assert.match(content, /key_id/)
     assert.match(content, /schema_version/)

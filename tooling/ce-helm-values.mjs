@@ -47,6 +47,8 @@ export function generateSecretValues() {
   const policyArtifact = keyPair()
   const releaseRoot = keyPair()
   const botRuntimeReport = keyPair()
+  const runtimePolicyResponse = keyPair()
+  const responseKeyId = "genio-one-runtime-policy-response-v1"
   const values = {
     postgresPassword,
     valkeyPassword: randomSecret(),
@@ -57,8 +59,6 @@ export function generateSecretValues() {
     tenantAdministratorPassword: randomSecret(),
     productApiClientSecret: randomSecret(),
     egressAttributionKey: randomSecret(32),
-    // Keep these values while the shared chart supports its EE API-management profile.
-    // They are unused when apiManagement.enabled is false.
     graviteeDatabasePassword: randomSecret(),
     graviteeAdminPassword: randomSecret(),
     graviteeJwtSecret: randomSecret(32),
@@ -78,11 +78,13 @@ export function generateSecretValues() {
     archifyConnectorBearerToken: randomSecret(32),
     botRuntimeReportPrivateKeyPem: botRuntimeReport.privateKeyPem,
     botRuntimeReportPublicKeyPem: botRuntimeReport.publicKeyPem,
+    platformRuntimePolicyResponsePrivateKeyPem: runtimePolicyResponse.privateKeyPem,
+    platformRuntimePolicyResponseVerificationKeysJson: JSON.stringify({ [responseKeyId]: runtimePolicyResponse.publicKeyPem }),
   }
   return {
     values,
     literals,
-    runtimeReport: { generatedKeyId: "genio-one-bot-runtime-v1" },
+    runtimeReport: { generatedKeyId: "genio-one-bot-runtime-v1", generatedResponseKeyId: responseKeyId },
   }
 }
 
@@ -92,6 +94,7 @@ export function renderSecretValues() {
     "# Generated for one CE Helm installation. Keep private; do not commit or rotate in place.",
     "runtimeReport:",
     `  generatedKeyId: ${JSON.stringify(runtimeReport.generatedKeyId)}`,
+    `  generatedResponseKeyId: ${JSON.stringify(runtimeReport.generatedResponseKeyId)}`,
     "secrets:",
     ...Object.entries(values).map(([name, value]) => `  ${name}: ${JSON.stringify(value)}`),
     ...Object.entries(literals).map(([name, value]) => literal(name, value).trimEnd()),

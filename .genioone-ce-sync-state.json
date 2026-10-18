@@ -578,6 +578,10 @@
       "sha256": "4e11f96047a5edd83c9c2420239b2bf1868f2c987fc3039a5b47012fba2de48e",
       "mode": 420
     },
+    "apps/bot/server/ce-helm-runtime-policy.test.js": {
+      "sha256": "ca09859b9e37831b6fd78945de6e4dac1b419689b63592895193819b58ded272",
+      "mode": 420
+    },
     "apps/bot/server/cloudflare-hands.test.ts": {
       "sha256": "123802dc215a6924de8bcd012e7ab79cad5b50188e5e44da77bb958ad0dd604a",
       "mode": 420
@@ -10047,11 +10051,11 @@
       "mode": 420
     },
     "tooling/ce-helm-values.mjs": {
-      "sha256": "031eb5b3acdeea98aa4db463d363bc493dc082e6bfa45a11cac2e8887d8a0757",
+      "sha256": "91ad082479eb01d175797c9428e0e9753ae1d1ceca0b509eebe55c8e0115d2d8",
       "mode": 420
     },
     "tooling/ce-helm-values.test.mjs": {
-      "sha256": "51fbbe3ab6e9e77613cd2e33b9cb4e59c053dfa8794e90d7b1f79111020015e6",
+      "sha256": "54b8f1998952a9b0833f28a5906d2c3990fff100fda90d863b2d9b74da87cea1",
       "mode": 420
     },
     "tooling/ce-mcp-smoke.mjs": {
