@@ -45,6 +45,7 @@ test("CE Helm values generator emits usable Ed25519 signing keys and matching ke
   const payload = Buffer.from("bot runtime report")
   assert.equal(verify(null, payload, reportPublic, sign(null, payload, reportPrivate)), true)
   assert.notEqual(literals.botRuntimeReportPrivateKeyPem, literals.runtimeCommandSigningPrivateKeyPem)
+  assert.equal(runtimeReport.generatedResponseKeyId, "genio-one-runtime-policy-response-v1")
   const responseKeys = JSON.parse(literals.platformRuntimePolicyResponseVerificationKeysJson)
   assert.deepEqual(Object.keys(responseKeys), [runtimeReport.generatedResponseKeyId])
   const responsePrivate = createPrivateKey(literals.platformRuntimePolicyResponsePrivateKeyPem)
@@ -53,6 +54,7 @@ test("CE Helm values generator emits usable Ed25519 signing keys and matching ke
   assert.equal(responsePublic.asymmetricKeyType, "ed25519")
   assert.equal(verify(null, payload, responsePublic, sign(null, payload, responsePrivate)), true)
   assert.equal(verify(null, payload, reportPublic, sign(null, payload, responsePrivate)), false)
+  assert.notEqual(literals.platformRuntimePolicyResponsePrivateKeyPem, literals.botRuntimeReportPrivateKeyPem)
 })
 
 test("CE Helm values generator writes the required values with private permissions", () => {

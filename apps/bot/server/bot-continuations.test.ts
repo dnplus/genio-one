@@ -38,7 +38,7 @@ test("uncertain continuation survives database reopen and reconciles the accepte
     store = new BotContinuations(db)
     const entry = store.pending()[0]!
     expect(entry.state).toBe("starting")
-    expect(store.reconcile(entry, [{ id: "turn", status: "completed", itemsView: "full", error: null, startedAt: 1, completedAt: 2, durationMs: 1000, items: [{ type: "userMessage", id: "user", clientId: entry.client_id, content: [] }] } as Turn])).toBe(true)
+    expect(store.reconcile(entry, [{ id: "turn", rootTurnId: null, status: "completed", itemsView: "full", error: null, startedAt: 1, completedAt: 2, durationMs: 1000, items: [{ type: "userMessage", id: "user", clientId: entry.client_id, content: [] }] } as Turn])).toBe(true)
     expect(store.pending()).toHaveLength(0)
   } finally { db.close(); rmSync(dir, { recursive: true, force: true }) }
 })

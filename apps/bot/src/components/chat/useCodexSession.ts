@@ -308,7 +308,7 @@ export function useCodexSession({
   const connectionGenerationRef = useRef(0)
   const modelRouteGenerationRef = useRef(0)
   const prepareModelProvider = useCallback(async (client: CodexClient, route: ModelRoute, generation = modelRouteGenerationRef.current, options: { skipResume?: boolean } = {}) => {
-    const isCurrentRoute = () => isMountedRef.current && modelRouteGenerationRef.current === generation && canonicalModelRoute(activeBotRef.current.modelRoute) === route
+    const isCurrentRoute = () => isMountedRef.current && clientRef.current === client && modelRouteGenerationRef.current === generation && canonicalModelRoute(activeBotRef.current.modelRoute) === route
     if (!isCurrentRoute()) return
     const presentation = modelRoutePresentation(route)
     if (!presentation.requiresLogin) {
@@ -522,6 +522,8 @@ export function useCodexSession({
     if (demo) return
     const client = new CodexClient()
     clientRef.current = client
+    let disposed = false
+    const isCurrentConnection = () => !disposed && isMountedRef.current && clientRef.current === client
     let initialized = false
     const resetConnection = client.onStatusChange((status) => {
       if (status === "connecting" || status === "reconnecting" || status === "disconnected") {
@@ -537,8 +539,10 @@ export function useCodexSession({
     })
 
     const prepareCodexSession = async () => {
+      if (!isCurrentConnection()) return
       if (!initialized) {
         await client.initialize()
+        if (!isCurrentConnection()) return
         initialized = true
       }
       try {
@@ -546,6 +550,7 @@ export function useCodexSession({
           active?: RuntimeDetails | null
           tiers?: Partial<Record<"none" | "headless" | "desktop", RuntimeDetails>>
         }
+        if (!isCurrentConnection()) return
         if (runtimeStatus.active) {
           runtimeDetailsRef.current = runtimeStatus.active
           if (isMountedRef.current) setRuntime(runtimeStatus.active)
@@ -553,12 +558,14 @@ export function useCodexSession({
         if (runtimeStatus.tiers && isMountedRef.current) setRuntimeTiers(runtimeStatus.tiers)
       } catch {}
 
+      if (!isCurrentConnection()) return
       await selectBotRef.current(activeBotRef.current.id)
+      if (!isCurrentConnection()) return
       try {
         const skillsRes = await client.request("skills/list", {}) as {
           data?: Array<{ skills?: Array<{ name: string; description: string; path: string }> }>
         }
-        if (skillsRes?.data && isMountedRef.current) {
+        if (skillsRes?.data && isCurrentConnection()) {
           const mapped = skillsRes.data.flatMap((d) => d.skills || []).map((s) => ({
             id: s.name,
             name: s.name,
@@ -569,6 +576,7 @@ export function useCodexSession({
         }
       } catch {}
 
+      if (!isCurrentConnection()) return
       await prepareModelProvider(client, canonicalModelRoute(activeBotRef.current.modelRoute))
     }
 
@@ -623,7 +631,7 @@ export function useCodexSession({
     }
 
     const unsubscribe = registerCodexStreamListeners({
-      isMounted: () => isMountedRef.current,
+      isMounted: isCurrentConnection,
       safeTimeout,
       client,
       tokenRef,
@@ -674,7 +682,7 @@ export function useCodexSession({
     })
 
     void client.connect(tokenRef.current).catch((error) => {
-      if (!isMountedRef.current) return
+      if (!isCurrentConnection()) return
       const message = error instanceof Error ? error.message : "連線失敗"
       setRuntimeState(runtimeFailureMessage(error))
       setAgentState("exclaim")
@@ -685,6 +693,7 @@ export function useCodexSession({
     })
 
     return () => {
+      disposed = true
       setThreadReady(false)
       setChannelReady(false)
       startThreadRef.current = async () => false
@@ -707,9 +716,10 @@ export function useCodexSession({
     setElicitationRequest(null)
     setPersonalConnectionRequests([])
     setTurnRunning(false)
+    const client = clientRef.current
     void prepareBotRef.current()
       .catch((error) => {
-        if (isMountedRef.current) setRuntimeState(error instanceof Error ? error.message : "Bot 載入失敗")
+        if (isMountedRef.current && clientRef.current === client) setRuntimeState(error instanceof Error ? error.message : "Bot 載入失敗")
       })
   }, [demo, botConfigurationKey])
 

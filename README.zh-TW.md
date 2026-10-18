@@ -33,7 +33,7 @@ GenioOne 協助團隊將 AI 代理連上工作中使用的工具與模型。你�
 
 ## 快速開始
 
-準備 macOS 或 Linux、Docker 與 Compose、Git、Node.js、pnpm **12.4.2** 及 Bun **1.4.2**。
+準備 macOS 或 Linux、Docker 與 Compose、Git、Node.js、pnpm **12.10.1** 及 Bun **1.4.2**。
 
 ```sh
 curl -fsSL https://genio.sh/install.sh | sh

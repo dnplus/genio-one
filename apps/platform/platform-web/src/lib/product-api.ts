@@ -1536,71 +1536,34 @@ async function standardEnforcementSteps(
   return steps
 }
 
-export async function saveResourceEnforcementChain(
-  tenantId: string,
-  resourceId: string,
-  capabilityId: string,
-  onePolicyRevision: number,
-  processSteps: readonly EditableEnforcementProcessStep[],
-  inboundSecurity?: ApiInboundSecurity,
-  requireExecutionConfirmation = false,
-  eligibleConnectionIds?: readonly string[],
-) {
-  return requestJson<EnforcementChainRevisionView>(
-    enforcementChainPath(tenantId, resourceId, capabilityId),
-    {
-      method: "POST",
-      body: JSON.stringify({
-        one_policy_revision: onePolicyRevision,
-        ...(eligibleConnectionIds ? { eligible_connection_ids: eligibleConnectionIds } : {}),
-        steps: await standardEnforcementSteps(processSteps, inboundSecurity, requireExecutionConfirmation),
-      }),
-    },
-  )
+export function resourcePublicationCapabilities(resource: Pick<ResourceRegistration, "kind" | "capabilities">) {
+  return resource.kind === "MCP"
+    ? resource.capabilities.filter((capability) => !capability.capability_id.startsWith("mcp-tool-"))
+    : resource.capabilities
 }
 
-export async function saveStandardResourceEnforcement(
+export async function requireResourcePublicationEnforcement(
   tenantId: string,
   resource: ResourceRegistration,
 ) {
-  await Promise.all(resource.capabilities.map(async (capability) => {
-    try {
-      const latest = await getLatestResourceEnforcementChain(
-        tenantId,
-        resource.resource_id,
-        capability.capability_id,
-      )
-      if (resource.lifecycle !== "PUBLISHED") return
-      const processSteps = latest.chain.steps.flatMap((step) =>
-        step.kind === "PROCESS" && step.hooks
-          ? [{ step_id: step.step_id, hooks: step.hooks }]
-          : [],
-      )
-      await saveResourceEnforcementChain(
-        tenantId,
-        resource.resource_id,
-        capability.capability_id,
-        latest.one_policy_revision + 1,
-        processSteps,
-        resource.api?.inbound_security,
-        latest.chain.steps.some((step) =>
-          step.kind === "AUTHORIZE" &&
-          Array.isArray(step.config?.required_obligations) &&
-          step.config.required_obligations.includes("execution.confirmation")),
-        latest.chain.eligible_connection_ids,
-      )
-    } catch (error) {
-      if (!(error instanceof ProductApiError) || error.status !== 404) throw error
-      await saveResourceEnforcementChain(
-        tenantId,
-        resource.resource_id,
-        capability.capability_id,
-        1,
-        [],
-        resource.api?.inbound_security,
-      )
-    }
-  }))
+  const capabilities = resourcePublicationCapabilities(resource)
+  if (capabilities.length !== 1) {
+    throw new ProductApiError("AI_GATEWAY_PUBLICATION_CAPABILITY_UNSUPPORTED", 422, [{
+      code: "AI_GATEWAY_PUBLICATION_CAPABILITY_UNSUPPORTED",
+      field: "capabilities",
+      message: "A Gateway Resource requires exactly one route Capability",
+    }])
+  }
+  try {
+    await getLatestResourceEnforcementChain(tenantId, resource.resource_id, capabilities[0].capability_id)
+  } catch (error) {
+    if (!(error instanceof ProductApiError) || error.status !== 404) throw error
+    throw new ProductApiError("ENFORCEMENT_CHAIN_REQUIRED", 422, [{
+      code: "ENFORCEMENT_CHAIN_REQUIRED",
+      field: "enforcement_chain",
+      message: "Publish this Resource's One Policy draft before requesting publication.",
+    }])
+  }
 }
 
 export async function reviewResourcePublication(

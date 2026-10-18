@@ -25,7 +25,7 @@ CE 提供 Platform 控制平面、Gateway Runtime 與 Genio Bot 的原始碼，�
 
 你需要準備主機、支援服務容器，以及所選供應者與外部服務需要的憑證及存取權。CE 不包含供應者金鑰。
 
-本機流程需使用具備 Docker Engine、Docker Compose、Git、Node.js、pnpm `12.4.2` 與 Bun `1.4.2` 的 Linux 或 macOS 主機。完整前置條件、服務位址與重啟方式請看[本機快速入門](quickstart.md)。Kubernetes 部署則請先建置並發布叢集可拉取的映像檔，再依照 [Helm](helm.md) 操作。
+本機流程需使用具備 Docker Engine、Docker Compose、Git、Node.js、pnpm `12.10.1` 與 Bun `1.4.2` 的 Linux 或 macOS 主機。完整前置條件、服務位址與重啟方式請看[本機快速入門](quickstart.md)。Kubernetes 部署則請先建置並發布叢集可拉取的映像檔，再依照 [Helm](helm.md) 操作。
 
 ## 文件導覽
 

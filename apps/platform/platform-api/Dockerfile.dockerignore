@@ -24,6 +24,8 @@ apps/platform/platform-api/dist/
 !apps/connectors/configuration.ts
 !apps/connectors/discovery/
 !apps/connectors/discovery/**
+!apps/connectors/memory/
+!apps/connectors/memory/**
 **/node_modules/**
 **/dist/**
 

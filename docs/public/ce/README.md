@@ -25,7 +25,7 @@ Start with the included Genio Bot, or follow the [MCP request guide](first-mcp-r
 
 You provide the host, supporting containers, provider credentials, connection approvals, and access to external services. CE does not contain provider secrets.
 
-For the local path, use a Linux or macOS host with Docker Engine, Docker Compose, Git, Node.js, pnpm `12.4.2`, and Bun `1.4.2`. The [Quickstart](quickstart.md) has the complete local prerequisites, service addresses, and restart instructions. For Kubernetes, build and publish images to a registry your cluster can pull from, then use [Helm](helm.md).
+For the local path, use a Linux or macOS host with Docker Engine, Docker Compose, Git, Node.js, pnpm `12.10.1`, and Bun `1.4.2`. The [Quickstart](quickstart.md) has the complete local prerequisites, service addresses, and restart instructions. For Kubernetes, build and publish images to a registry your cluster can pull from, then use [Helm](helm.md).
 
 ## Guides
 

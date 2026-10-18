@@ -9,16 +9,16 @@ annotations:
 dependencies:
   - name: gateway-helm
     alias: envoy-gateway
-    version: v1.9.1
+    version: v1.9.2
     repository: oci://docker.io/envoyproxy
     condition: aiMcpGateway.enabled
   - name: ai-gateway-crds-helm
     alias: envoy-ai-gateway-crds
-    version: v1.1.0
+    version: v1.2.0
     repository: oci://docker.io/envoyproxy
     condition: aiMcpGateway.installCrds
   - name: ai-gateway-helm
     alias: envoy-ai-gateway
-    version: v1.1.0
+    version: v1.2.0
     repository: oci://docker.io/envoyproxy
     condition: aiMcpGateway.enabled

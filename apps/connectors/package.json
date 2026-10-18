@@ -2,6 +2,7 @@
   "name": "genio-connectors",
   "private": true,
   "version": "0.1.0",
+  "license": "Apache-2.0",
   "type": "module",
   "scripts": {
     "dev:servicenow": "bun --watch servicenow-csm/main.ts",
@@ -21,17 +22,17 @@
   },
   "dependencies": {
     "@genioone/telemetry": "workspace:*",
-    "@modelcontextprotocol/sdk": "1.30.0",
-    "imapflow": "2.0.5",
-    "mailparser": "3.9.28",
-    "nodemailer": "10.0.10",
-    "tsdav": "^2.3.3",
-    "typebox": "1.3.34",
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "imapflow": "2.2.10",
+    "mailparser": "3.9.36",
+    "nodemailer": "10.0.16",
+    "tsdav": "^2.4.0",
+    "typebox": "1.3.36",
     "zod": "4.6.5"
   },
   "devDependencies": {
     "@types/bun": "1.4.2",
-    "@types/mailparser": "^3.4.6",
+    "@types/mailparser": "^3.9.0",
     "@types/nodemailer": "^8.0.2",
     "typescript": "7.0.2"
   }

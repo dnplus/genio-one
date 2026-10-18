@@ -163,7 +163,7 @@ export class BotTimelineStore {
     if (typeof threadId !== "string" || typeof turnId !== "string") return
     this.liveTurns.set(JSON.stringify([botId, threadId, turnId]), ++this.liveRevision)
     const current: StoredTurn = this.getTurn(botId, threadId, turnId) ?? {
-      id: turnId, items: [], itemsView: "full", status: "inProgress", startedAt: null, completedAt: null, durationMs: null, error: null,
+      id: turnId, rootTurnId: null, items: [], itemsView: "full", status: "inProgress", startedAt: null, completedAt: null, durationMs: null, error: null,
     } satisfies Turn
     if ((method === "turn/started" || method === "turn/completed") && params.turn) {
       if (method === "turn/started" && current.status !== "inProgress") return

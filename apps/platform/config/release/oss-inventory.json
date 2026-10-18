@@ -3,57 +3,57 @@
   "components": [
     {
       "name": "PostgreSQL",
-      "version": "18.6-alpine",
-      "image": "postgres@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2",
+      "version": "18.6-alpine3.24",
+      "image": "postgres@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873",
       "license": "PostgreSQL",
       "source": "https://www.postgresql.org/about/licence/"
     },
     {
       "name": "Valkey",
-      "version": "9.1.2-alpine",
-      "image": "valkey/valkey@sha256:a0dbf4c1d5708782907c10e2c72deff317518518b5288a58416981d9db95d30b",
+      "version": "9.1.2-alpine3.24",
+      "image": "valkey/valkey@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11",
       "license": "BSD-3-Clause",
       "source": "https://github.com/valkey-io/valkey"
     },
     {
       "name": "OpenTelemetry Collector Contrib",
-      "version": "0.161.0",
-      "image": "otel/opentelemetry-collector-contrib@sha256:fd328de2552466ad78385e1b1289c3f2402b1c45f265b252aab1955b42845ac1",
+      "version": "0.162.0",
+      "image": "otel/opentelemetry-collector-contrib@sha256:39923a8e431bd1f57be82411999d389fcfe40857492e4365456d97a4c1f74be6",
       "license": "Apache-2.0",
       "source": "https://github.com/open-telemetry/opentelemetry-collector-contrib"
     },
     {
       "name": "Keycloak",
-      "version": "26.7.4",
-      "image": "quay.io/keycloak/keycloak@sha256:82a77884f3af238beab1e7afd63b5f530e1b5c0590bd7aa60b40a40463e29b2c",
+      "version": "26.8.0",
+      "image": "quay.io/keycloak/keycloak@sha256:b0f60d489d51c5d113390bdf5461d4c06e6051be026c05549f2e1e10ec352bcc",
       "license": "Apache-2.0",
       "source": "https://github.com/keycloak/keycloak"
     },
     {
       "name": "ClickHouse",
-      "version": "26.8.6.5",
-      "image": "clickhouse/clickhouse-server@sha256:a73b5c0fb6f88e02357aead0906ad53882b07e4d202327489798844ba745e64d",
+      "version": "26.9.13.15",
+      "image": "clickhouse/clickhouse-server@sha256:04fc72b8a58e58200c706f375ef81ec7112de3515e898de63f6c72843d7a2eeb",
       "license": "Apache-2.0",
       "source": "https://github.com/ClickHouse/ClickHouse"
     },
     {
       "name": "Gravitee APIM Management API",
-      "version": "4.12.19",
-      "image": "graviteeio/apim-management-api@sha256:242bb755629160f5353bdb4a46dd18b5e05273df9593d0d7ce49a947b8823249",
+      "version": "4.12.21",
+      "image": "graviteeio/apim-management-api@sha256:94f5e9318d0e01f55f55eaddfce062ced55bdcf7730b71528b022afc9bd48173",
       "license": "Apache-2.0",
       "source": "https://github.com/gravitee-io/gravitee-api-management"
     },
     {
       "name": "Gravitee APIM Gateway",
-      "version": "4.12.19",
-      "image": "graviteeio/apim-gateway@sha256:5b5837c79dd06ca4726e230dfc6460f62ee2a503dde828e908943a3a9186d537",
+      "version": "4.12.21",
+      "image": "graviteeio/apim-gateway@sha256:1e675eec55c3e2ee151fb2e25f57d9443cae1d3b371eb29c2aaf53b9f97dfe94",
       "license": "Apache-2.0",
       "source": "https://github.com/gravitee-io/gravitee-api-management"
     },
     {
       "name": "NGINX",
-      "version": "1.30.5-alpine",
-      "image": "nginx@sha256:bf3201ab56f23e5954646379c775d511fc466e9f11376d9725361064ad07ed35",
+      "version": "1.30.5-alpine3.24",
+      "image": "nginx@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94",
       "license": "BSD-2-Clause",
       "source": "https://github.com/nginx/nginx"
     }

@@ -34,6 +34,7 @@ test("reopens an uncertain continuation and reconciles the accepted native clien
     expect(recovered).toMatchObject({ state: "starting", clientId })
     expect(store.reconcile(recovered, [{
       id: "continued-turn",
+      rootTurnId: null,
       status: "completed",
       itemsView: "full",
       error: null,

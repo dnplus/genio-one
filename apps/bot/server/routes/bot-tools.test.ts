@@ -131,7 +131,7 @@ test("Bot MCP binds the caller to its credential and preserves existing handoff 
     const blockedGuardedSchedule = await call("create_schedule", { clientRequestId: "read-only-guarded", prompt: "write", schedule: { kind: "once", at: scheduleAt } })
     expect(blockedGuardedSchedule.json().result.content[0].text).toBe("CONNECTION_CONTINUATION_READ_ONLY")
     const guarded = registry.connectionContinuations.get("read-only-continuation")
-    registry.connectionContinuations.reconcile(guarded, [{ id: "continued-turn", status: "completed", itemsView: "full", error: null, startedAt: 1, completedAt: 2, durationMs: 1, items: [{ type: "userMessage", id: "continued-input", clientId: guarded.clientId, content: [] }] } as Turn])
+    registry.connectionContinuations.reconcile(guarded, [{ id: "continued-turn", rootTurnId: null, status: "completed", itemsView: "full", error: null, startedAt: 1, completedAt: 2, durationMs: 1, items: [{ type: "userMessage", id: "continued-input", clientId: guarded.clientId, content: [] }] } as Turn])
     const terminalAfterGuardedSchedule = await call("create_schedule", { clientRequestId: "after-guarded-terminal", prompt: "write", schedule: { kind: "once", at: scheduleAt } })
     expect(terminalAfterGuardedSchedule.json().result.isError).toBe(false)
     await broker.stop(runtime.id)

@@ -1,17 +1,17 @@
-ARG GENIO_ONE_GRAVITEE_BASE_IMAGE=graviteeio/apim-gateway:4.12.19
+ARG GENIO_ONE_GRAVITEE_BASE_IMAGE=graviteeio/apim-gateway@sha256:1e675eec55c3e2ee151fb2e25f57d9443cae1d3b371eb29c2aaf53b9f97dfe94
 FROM ${GENIO_ONE_GRAVITEE_BASE_IMAGE}
 
 ARG GENIO_ONE_GRAVITEE_HOME
 
 USER root
 RUN mkdir -p "${GENIO_ONE_GRAVITEE_HOME}/plugins/ext/repository-jdbc"
-ADD --checksum=sha256:6e0e4cc2d8cae902084f8a2b18728b073a6fd9d1f87c9d8bff8f298c18185b93 \
-  https://repo.maven.apache.org/maven2/org/postgresql/postgresql/42.7.13/postgresql-42.7.13.jar \
-  /tmp/postgresql-42.7.13.jar
+ADD --checksum=sha256:73914527305a40cce504b0d3d90b23caf565136912d607ae8ae7c5895512332c \
+  https://repo.maven.apache.org/maven2/org/postgresql/postgresql/42.7.14/postgresql-42.7.14.jar \
+  /tmp/postgresql-42.7.14.jar
 RUN install -o 1001 -g 1000 -m 0644 \
-  /tmp/postgresql-42.7.13.jar \
-  "${GENIO_ONE_GRAVITEE_HOME}/plugins/ext/repository-jdbc/postgresql-42.7.13.jar" \
-  && rm /tmp/postgresql-42.7.13.jar
+  /tmp/postgresql-42.7.14.jar \
+  "${GENIO_ONE_GRAVITEE_HOME}/plugins/ext/repository-jdbc/postgresql-42.7.14.jar" \
+  && rm /tmp/postgresql-42.7.14.jar
 
 # Management API only: retain Gravitee's native in-memory administrator
 # provider, but source its credential from the deployment Secret instead of

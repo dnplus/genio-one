@@ -35,7 +35,7 @@ Follow the [demo walkthrough](docs/public/ce/demo.md), or start with a [single M
 
 ## Quickstart
 
-You need macOS or Linux, Docker with Compose, Git, Node.js, pnpm **12.4.2**, and Bun **1.4.2**.
+You need macOS or Linux, Docker with Compose, Git, Node.js, pnpm **12.10.1**, and Bun **1.4.2**.
 
 ```sh
 curl -fsSL https://genio.sh/install.sh | sh

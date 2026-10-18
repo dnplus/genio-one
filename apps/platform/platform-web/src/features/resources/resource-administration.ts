@@ -15,7 +15,7 @@ import {
   ProductApiError,
   requestResourcePublication,
   reviewResourcePublication,
-  saveStandardResourceEnforcement,
+  requireResourcePublicationEnforcement,
   verifyResourceConnection,
 } from "@/lib/product-api"
 
@@ -44,7 +44,7 @@ export type ResourceAdministrationStage =
   | "VERIFY_CONNECTION"
   | "MAP_PUBLIC_MODEL"
   | "PREPARE_ROUTING"
-  | "PREPARE_ENFORCEMENT"
+  | "CHECK_ENFORCEMENT"
   | "REQUEST_PUBLICATION"
   | "REVIEW_PUBLICATION"
 
@@ -89,7 +89,7 @@ export interface ResourceAdministrationOperations {
   addConnectionModelMapping: typeof addConnectionModelMapping
   createPublicModel: typeof createPublicModel
   ensureStandardModelRoutingPolicy: typeof ensureStandardModelRoutingPolicy
-  saveStandardResourceEnforcement: typeof saveStandardResourceEnforcement
+  requireResourcePublicationEnforcement: typeof requireResourcePublicationEnforcement
   requestResourcePublication: typeof requestResourcePublication
   reviewResourcePublication: typeof reviewResourcePublication
 }
@@ -102,7 +102,7 @@ const defaultOperations: ResourceAdministrationOperations = {
   addConnectionModelMapping,
   createPublicModel,
   ensureStandardModelRoutingPolicy,
-  saveStandardResourceEnforcement,
+  requireResourcePublicationEnforcement,
   requestResourcePublication,
   reviewResourcePublication,
 }
@@ -323,9 +323,9 @@ export function createResourceAdministration(
       if (input.prepareStandardWorkflow) {
         stages.push(
           { id: "PREPARE_ROUTING", run: () => operations.ensureStandardModelRoutingPolicy(input.tenantId, input.resource) },
-          { id: "PREPARE_ENFORCEMENT", run: () => operations.saveStandardResourceEnforcement(input.tenantId, input.resource) },
         )
       }
+      stages.push({ id: "CHECK_ENFORCEMENT", run: () => operations.requireResourcePublicationEnforcement(input.tenantId, input.resource) })
       stages.push({
         id: "REQUEST_PUBLICATION",
         run: async () => {

@@ -46,6 +46,7 @@ export default defineConfig({
     },
     proxy: {
       "/healthz": process.env.GENIO_ONE_PLATFORM_ORIGIN ?? "http://127.0.0.1:58082",
+      "/openapi.json": process.env.GENIO_ONE_PLATFORM_ORIGIN ?? "http://127.0.0.1:58082",
       "/v1": {
         target: process.env.GENIO_ONE_PLATFORM_ORIGIN ?? "http://127.0.0.1:58082",
         ws: true,

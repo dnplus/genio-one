@@ -1,7 +1,7 @@
 FROM oven/bun:1.4.2 AS build
 
 WORKDIR /workspace
-RUN bun add --global pnpm@12.4.2
+RUN bun add --global pnpm@12.10.1
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/platform/package.json apps/platform/package.json
@@ -22,7 +22,7 @@ RUN cd apps/platform \
 
 FROM debian:bookworm-slim AS kubectl
 ARG TARGETARCH
-ARG KUBECTL_VERSION=v1.36.4
+ARG KUBECTL_VERSION=v1.37.1
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends ca-certificates curl \
     && curl --fail --location --silent --show-error \

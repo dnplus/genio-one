@@ -1,7 +1,7 @@
 # Codex app-server ownership boundary
 
-Genio Bot pins Codex CLI/app-server `0.159.2` to upstream tag `rust-v0.159.2` and commit
-`ff6aec96948b70d94983af2641a6b67c94faeff5`. The executable and the generated
+Genio Bot pins Codex CLI/app-server `0.162.0` to upstream tag `rust-v0.162.0` and commit
+`c1382380de69521303b416720a52f42d51af6248`. The executable and the generated
 TypeScript protocol must move together.
 
 ## Owned by Codex app-server
@@ -117,11 +117,13 @@ walking skeleton is sealed.
 - [Remote exec-server contract](https://github.com/openai/codex/blob/78c290807ce710180111df227df3b7a4fe845452/codex-rs/exec-server/README.md)
 - [Environment add protocol](https://github.com/openai/codex/blob/78c290807ce710180111df227df3b7a4fe845452/codex-rs/app-server-protocol/src/protocol/v2/environment.rs)
 
-## 0.153.4 upgrade verification
+## Current runtime verification
 
-The Docker runtime, E2B exec-server default, local development dependency, and
-upstream manifest are pinned to 0.153.4. Run protocol generation through the Bot
-package script so it resolves the package-owned executable rather than a global
-CLI. The checked-in protocol already matched this release and regeneration was
-byte-identical. See [upgrade comparison](codex-app-server-upgrade-20260908.md) for
-verified behavior and remaining deployment boundaries.
+The Docker runtime, E2B exec-server default, local development dependency,
+Local Hands executor, and upstream manifest are pinned to 0.162.0. Run protocol
+generation through the Bot package script so it resolves the package-owned
+executable. The generated protocol comes from the same installed release.
+Current upgrade checks are recorded in
+[`codex-upgrade.json`](../../../internal/validation/oss-refresh-followup-20261009/codex-upgrade.json).
+The [0.153.4 upgrade comparison](codex-app-server-upgrade-20260908.md) remains
+historical verification of that release.

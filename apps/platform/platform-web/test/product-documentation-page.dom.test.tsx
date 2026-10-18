@@ -23,7 +23,7 @@ test("Product documentation switches documents, filters the index, and renders M
     expect(screen.getByRole("heading", { name: "Product documentation" })).toBeTruthy()
     expect(screen.getByRole("heading", { name: "GenioOne product concept" })).toBeTruthy()
     expect(screen.getByRole("columnheader", { name: "Component" })).toBeTruthy()
-    await waitFor(() => expect(screen.getAllByRole("img", { name: "Product diagram" }).length).toBe(2), { timeout: 5000 })
+    await waitFor(() => expect(screen.queryAllByRole("img", { name: "Product diagram" }).length).toBe(2), { timeout: 5000 })
 
     await user.click(screen.getByRole("button", { name: /Initial setup/ }))
     await waitFor(() => expect(screen.getByRole("heading", { name: "Initial setup" })).toBeTruthy())

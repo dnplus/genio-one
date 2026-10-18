@@ -2,6 +2,8 @@
 # for the target cluster in an additional, untracked values file.
 platform:
   replicas: 1
+  connectionVerification:
+    allowedHosts: [mcp.deepwiki.com]
 
 gateway:
   replicas: 1

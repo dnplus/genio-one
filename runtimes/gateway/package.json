@@ -19,14 +19,14 @@
     "@genioone/telemetry": "workspace:*",
     "@grpc/grpc-js": "^1.14.5",
     "@grpc/proto-loader": "^0.8.1",
-    "@modelcontextprotocol/client": "2.0.0",
-    "redis": "^6.2.1",
-    "typebox": "1.3.34",
+    "@modelcontextprotocol/client": "2.3.1",
+    "redis": "^6.3.0",
+    "typebox": "1.3.36",
     "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@types/bun": "^1.4.2",
-    "@types/node": "26.6.1",
+    "@types/node": "26.6.4",
     "typescript": "7.0.2"
   }
 }

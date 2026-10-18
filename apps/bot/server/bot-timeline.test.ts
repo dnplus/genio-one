@@ -130,6 +130,7 @@ test("legacy import is repeatable and cannot masquerade as native history", () =
   expect(registry.readTimeline(principal, bot.id)).toHaveLength(2)
   registry.rememberThread(bot.id, "native")
   registry.recordRuntimeEvent(principal, JSON.stringify({ method: "item/completed", params: { threadId: "native", turnId: "turn", item: { type: "userMessage", id: "user", content: [{ type: "text", text: "相同內容" }] } } }))
+  expect(registry.timeline.storedTurn(bot.id, "native", "turn")?.turn.rootTurnId).toBeNull()
   registry.timeline.importLegacy(bot.id, [{ ...entries[0], position: 2, message: { role: "user", text: "相同內容", id: "user", runtimeThreadId: "native" } }])
   const afterNative = registry.readTimeline(principal, bot.id)
   expect(afterNative).toHaveLength(3)
@@ -141,11 +142,12 @@ test("server timeline retains a background reply and merges snapshots by native 
   const bot = registry.create(principal, { name: "A", description: "Timeline owner" })
   registry.rememberThread(bot.id, "thread-a")
   const event = (method: string, params: Record<string, unknown>) => registry!.recordRuntimeEvent(principal, JSON.stringify({ method, params: { threadId: "thread-a", turnId: "turn-a", ...params } }))
-  event("turn/started", { turn: { id: "turn-a", status: "inProgress", startedAt: 1788700000, items: [] } })
+  event("turn/started", { turn: { id: "turn-a", rootTurnId: "root-a", status: "inProgress", startedAt: 1788700000, items: [] } })
   event("item/agentMessage/delta", { itemId: "answer", delta: "保留" })
   event("item/agentMessage/delta", { itemId: "answer", delta: "結果" })
   event("item/completed", { item: { type: "agentMessage", id: "answer", text: "保留結果" } })
   event("turn/completed", { turn: { id: "turn-a", status: "completed", items: [] } })
+  expect(registry.timeline.storedTurn(bot.id, "thread-a", "turn-a")?.turn.rootTurnId).toBe("root-a")
   const timeline = registry.readTimeline(principal, bot.id)
   expect(timeline).toHaveLength(1)
   expect(timeline[0]).toMatchObject({ id: "thread-a:answer", text: "保留結果", role: "assistant", createdAt: 1788700000000 })
@@ -162,6 +164,7 @@ test("MCP HTML artifacts are verified, retained in durable timeline, and exclude
   const invalid = { name: "../unsafe.html", mimeType: "text/html", text, sha256 }
   registry.timeline.putTurn(bot.id, "thread", {
     id: "turn",
+    rootTurnId: null,
     status: "completed",
     itemsView: "full",
     startedAt: null,

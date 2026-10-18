@@ -125,7 +125,7 @@ test("Resource policy only preselects READY connections and prevents selecting d
         <ResourceEnforcementChainCard canEdit connections={connections} onSaved={async () => {}} resource={resource} tenantId="tenant-acme" />
       </I18nextProvider>,
     )
-    await waitFor(() => expect(screen.queryByText("Loading")).toBeNull())
+    await waitFor(() => expect(screen.queryByText("Loading") === null).toBeTrue())
     await user.click(screen.getByRole("button", { name: "Edit policy" }))
     const card = within(screen.getByTestId("resource-enforcement-chain"))
     const candidates = card.getAllByRole("checkbox")

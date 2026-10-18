@@ -53,13 +53,13 @@ images:
     tag: 0.1.0-dev.1
     digest: ""
     pullPolicy: IfNotPresent
-  postgres: postgres@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2
-  valkey: valkey/valkey@sha256:a0dbf4c1d5708782907c10e2c72deff317518518b5288a58416981d9db95d30b
-  otelCollector: otel/opentelemetry-collector-contrib@sha256:fd328de2552466ad78385e1b1289c3f2402b1c45f265b252aab1955b42845ac1
-  keycloak: quay.io/keycloak/keycloak@sha256:82a77884f3af238beab1e7afd63b5f530e1b5c0590bd7aa60b40a40463e29b2c
-  clickhouse: clickhouse/clickhouse-server@sha256:a73b5c0fb6f88e02357aead0906ad53882b07e4d202327489798844ba745e64d
-  graviteeManagement: genio-one/gravitee-management-api:4.12.19-postgresql-42.7.13
-  graviteeGateway: genio-one/gravitee-gateway:4.12.19-postgresql-42.7.13
+  postgres: postgres@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+  valkey: valkey/valkey@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11
+  otelCollector: otel/opentelemetry-collector-contrib@sha256:39923a8e431bd1f57be82411999d389fcfe40857492e4365456d97a4c1f74be6
+  keycloak: quay.io/keycloak/keycloak@sha256:b0f60d489d51c5d113390bdf5461d4c06e6051be026c05549f2e1e10ec352bcc
+  clickhouse: clickhouse/clickhouse-server@sha256:04fc72b8a58e58200c706f375ef81ec7112de3515e898de63f6c72843d7a2eeb
+  graviteeManagement: genio-one/gravitee-management-api:4.12.21-postgresql-42.7.14
+  graviteeGateway: genio-one/gravitee-gateway:4.12.21-postgresql-42.7.14
 
 secrets:
   existingSecret: ""
@@ -316,11 +316,20 @@ aiMcpGateway:
   enforcementPointId: genio-ai-mcp-gateway
 
 envoy-gateway:
+  global:
+    images:
+      envoyGateway:
+        image: docker.io/envoyproxy/gateway@sha256:9d67017c442a70e6ae9f1a358e6c80eb653c67c2e40823d9a991e0daf37ba926
+      envoyProxy:
+        image: docker.io/envoyproxy/envoy@sha256:7369b033550a14997e5d698677b7b51f0210a80754f5d084c5caa1a78268267b
+      ratelimit:
+        image: docker.io/envoyproxy/ratelimit@sha256:5fdd8e3ae335ab6d64316f8d2fd9a886830075cbbb40a1d8065c869275909162
   config:
     envoyGateway:
       extensionApis:
         enableEnvoyPatchPolicy: true
         enableBackend: true
+        enableLua: true
       extensionManager:
         hooks:
           xdsTranslator:
@@ -336,7 +345,12 @@ envoy-gateway:
             port: 1063
 
 envoy-ai-gateway:
+  extProc:
+    image:
+      tag: v1.2.0@sha256:4af909a6f64ee6b97968995fec88c4fd3c41d020c6bcb7ca07136fdfffaa598c
   controller:
+    image:
+      tag: v1.2.0@sha256:4d663346354321a677c4e942017277f690d0d7715f8e3348a535db174679e4f8
     resources:
       requests: { cpu: 100m, memory: 128Mi }
       limits: { cpu: 500m, memory: 512Mi }

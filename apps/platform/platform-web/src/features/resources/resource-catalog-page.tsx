@@ -60,7 +60,7 @@ import {
 } from "@/features/resources/resource-versioning"
 import { isMockMode } from "@/lib/runtime-mode"
 import { formatEpochSeconds } from "@/lib/personal-preferences"
-import { ProductApiError, createResource, setResourceLifecycle, setResourcePublicationEndpoint, transitionResourceConnectionLifecycle, updateResource, verifyResourcePublicationDns } from "@/lib/product-api"
+import { ProductApiError, createResource, resourcePublicationCapabilities, setResourceLifecycle, setResourcePublicationEndpoint, transitionResourceConnectionLifecycle, updateResource, verifyResourcePublicationDns } from "@/lib/product-api"
 
 type ResourceRow = {
   capabilityCount: number
@@ -771,7 +771,7 @@ function ResourceDetail({
         <CardHeader>
           <div className="flex items-center justify-between gap-3">
             <CardTitle>{t("Controls")}</CardTitle>
-            {!resource.builtin_service && ["LLM", "MCP", "API"].includes(resource.kind) ? <Button asChild size="sm" variant="outline"><a href={`?view=policy&policy=${encodeURIComponent(JSON.stringify([resource.resource_id, resource.capabilities[0]?.capability_id ?? ""]))}`}>{t("Open policy")}</a></Button> : null}
+            {!resource.builtin_service && ["LLM", "MCP", "API"].includes(resource.kind) ? <Button asChild size="sm" variant="outline"><a href={`?view=policy&policy=${encodeURIComponent(JSON.stringify([resource.resource_id, resourcePublicationCapabilities(resource)[0]?.capability_id ?? ""]))}`}>{t("Open policy")}</a></Button> : null}
           </div>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -798,6 +798,7 @@ function ResourceDetail({
       {!resource.builtin_service && ["LLM", "MCP", "API"].includes(resource.kind) ? <ResourceEnforcementChainCard
         canEdit={canManageResource}
         connections={connections}
+        initialCapabilityId={resourcePublicationCapabilities(resource)[0]?.capability_id}
         refreshKey={publicModelRevision}
         resource={resource}
         tenantId={tenantId}
@@ -939,6 +940,7 @@ export function ResourceCatalogPage({
   const [publicationError, setPublicationError] = useState<{
     code: string
     violations: ReadonlyArray<{ code: string; message: string; field?: string }>
+    policyTarget?: { resourceId: string; capabilityId: string }
   } | null>(null)
   const isTenantAdministrator = identity.role === "TENANT_ADMINISTRATOR"
     || (data.identity?.tenant_administrators.includes(identity.subject_id) ?? false)
@@ -1018,6 +1020,7 @@ export function ResourceCatalogPage({
             <li key={`${violation.code}:${violation.field ?? ""}`}>{t(violation.message)}</li>
           ))}
         </ul>
+        {publicationError.policyTarget ? <Button asChild className="mt-3" variant="outline"><a href={`?view=policy&policy=${encodeURIComponent(JSON.stringify([publicationError.policyTarget.resourceId, publicationError.policyTarget.capabilityId]))}`}>{t("Open policy")}</a></Button> : null}
       </AlertDescription>
     </Alert>
   ) : null
@@ -1065,7 +1068,14 @@ export function ResourceCatalogPage({
       if (outcome.status === "FAILED") throw outcome.error
       await onRefresh()
     } catch (caught) {
-      setPublicationError(publicationErrorDetails(caught))
+      const details = publicationErrorDetails(caught)
+      const capability = resourcePublicationCapabilities(resource)[0]
+      setPublicationError({
+        ...details,
+        ...(capability && details.violations.some((violation) => violation.code === "ENFORCEMENT_CHAIN_REQUIRED")
+          ? { policyTarget: { resourceId: resource.resource_id, capabilityId: capability.capability_id } }
+          : {}),
+      })
       await onRefresh().catch(() => undefined)
     } finally {
       setPublishingResourceId(null)

@@ -1,14 +1,165 @@
 import assert from "node:assert/strict"
 import { spawn } from "node:child_process"
 import { EventEmitter, once } from "node:events"
-import { resolve } from "node:path"
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises"
+import { createServer } from "node:net"
+import { tmpdir } from "node:os"
+import { join, resolve } from "node:path"
 import test from "node:test"
 
-import { adoptDistillationProcessor, canCompleteTriageRecovery, canRestartStandaloneDistillationTriage, configureDistillationLaunch, distillationLaunchConfiguration, distillationLaunchState, distillationPortRole, existingServiceLaunchIsCurrent, launchConfigurationDigest, nextTriageHandoffAction, nextTriageRestoreAction, reconcileDistillationLaunchConfiguration, runtimePolicyReportEnvironment, runtimePolicyResponseEnvironment, serviceLaunchState, services, serviceOwnerMatches, shouldMonitorUnmanagedTriageHandoff, signalVerifiedServiceOwner, startupServiceNames, syncPricingCatalogInBackground, triageHandoffPhase, triageHandoffStartupRecoveryOptions, triggerUnmanagedTriageRecovery, unmanagedTriageRecoveryOptions, waitForHealthy, watchServiceExit } from "./local-dev.mjs"
+import { adoptDistillationProcessor, canCompleteTriageRecovery, canRestartStandaloneDistillationTriage, configureDistillationLaunch, descendantServiceOwners, distillationLaunchConfiguration, distillationLaunchState, distillationPortRole, existingServiceLaunchIsCurrent, launchConfigurationDigest, nextTriageHandoffAction, nextTriageRestoreAction, reconcileDistillationLaunchConfiguration, runtimePolicyReportEnvironment, runtimePolicyResponseEnvironment, serviceLaunchState, services, serviceOwnerMatches, shouldMonitorUnmanagedTriageHandoff, signalVerifiedServiceOwner, startupServiceNames, stopManagedServices, stopServiceOwners, syncPricingCatalogInBackground, triageHandoffPhase, triageHandoffStartupRecoveryOptions, triggerUnmanagedTriageRecovery, unmanagedTriageRecoveryOptions, waitForHealthy, watchServiceExit } from "./local-dev.mjs"
+import { portIsOccupied, processCommand, processCwd } from "../runtimes/gateway/controller/local-port-owner.mjs"
 
 function fixtureChild(script) {
   return spawn(process.execPath, ["-e", script], { stdio: "ignore" })
 }
+
+async function shutdownFixture({ listenDelayMs = 0, foreignCwd = false, ignoreTerm = false } = {}) {
+  const directory = await realpath(await mkdtemp(join(tmpdir(), "genio-local-dev-stop-")))
+  const cwd = join(directory, "checkout")
+  const workerCwd = foreignCwd ? join(directory, "other-checkout") : cwd
+  await mkdir(cwd)
+  if (foreignCwd) await mkdir(workerCwd)
+  const statePath = join(directory, "worker.json")
+  const workerPath = join(directory, "local-dev-worker.mjs")
+  await writeFile(workerPath, `
+import { writeFileSync } from "node:fs"
+import { createServer } from "node:net"
+const [statePath, port, delay, ignoreTerm] = process.argv.slice(2)
+const record = (phase) => writeFileSync(statePath, JSON.stringify({ pid: process.pid, phase }))
+if (ignoreTerm === "true") process.on("SIGTERM", () => {})
+record("starting")
+setTimeout(() => createServer().listen(Number(port), "127.0.0.1", () => record("listening")), Number(delay))
+`)
+  const reservation = createServer()
+  await new Promise((resolveListen) => reservation.listen(0, "127.0.0.1", resolveListen))
+  const port = reservation.address().port
+  await new Promise((resolveClose) => reservation.close(resolveClose))
+  const child = spawn(process.execPath, ["-e", `
+const { spawn } = require("node:child_process")
+const [cwd, script, ...args] = process.argv.slice(1)
+const worker = spawn(process.execPath, [script, ...args], { cwd, detached: true, stdio: "ignore" })
+worker.unref()
+process.on("message", (message) => { if (message === "exit") process.exit(0) })
+setInterval(() => {}, 1_000)
+`, workerCwd, workerPath, statePath, String(port), String(listenDelayMs), String(ignoreTerm)], {
+    cwd,
+    stdio: ["ignore", "ignore", "ignore", "ipc"],
+  })
+  const service = { name: "fixture-app", cwd, port, marker: "local-dev-worker.mjs" }
+  const state = async (phase) => {
+    const deadline = Date.now() + 5_000
+    while (Date.now() < deadline) {
+      try {
+        const current = JSON.parse(await readFile(statePath, "utf8"))
+        if (!phase || current.phase === phase) return current
+      } catch {}
+      await new Promise((resolveWait) => setTimeout(resolveWait, 20))
+    }
+    throw new Error(`fixture worker did not reach ${phase ?? "starting"}`)
+  }
+  return {
+    service,
+    child,
+    state,
+    async cleanup() {
+      try {
+        const current = await state()
+        const owner = { pid: String(current.pid), cwd: processCwd(String(current.pid)), command: processCommand(String(current.pid)) }
+        if (serviceOwnerMatches({ ...service, cwd: workerCwd }, owner)) {
+          await stopServiceOwners({ ...service, cwd: workerCwd }, { expectedOwners: [owner], graceMs: 100 })
+        }
+      } finally {
+        if (child.exitCode === null && child.signalCode === null) {
+          const exited = once(child, "exit")
+          child.kill("SIGTERM")
+          await exited
+        }
+        await rm(directory, { recursive: true, force: true })
+      }
+    },
+  }
+}
+
+test("managed shutdown stops a separate listener after its pnpm-style wrapper has exited", { timeout: 10_000 }, async () => {
+  const fixture = await shutdownFixture()
+  try {
+    const { pid } = await fixture.state("listening")
+    const exited = once(fixture.child, "exit")
+    fixture.child.send("exit")
+    await exited
+    assert.equal(await portIsOccupied(fixture.service.port), true)
+    assert.equal(await stopManagedServices([{ service: fixture.service, child: fixture.child }]), true)
+    assert.equal(await portIsOccupied(fixture.service.port), false)
+    assert.equal(processCwd(String(pid)), "")
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
+test("an exited wrapper is tolerated while its ChildProcess exit event is still pending", { timeout: 10_000 }, async () => {
+  const fixture = await shutdownFixture()
+  try {
+    await fixture.state("listening")
+    const exited = once(fixture.child, "exit")
+    fixture.child.send("exit")
+    await exited
+    const pendingChild = {
+      pid: fixture.child.pid,
+      exitCode: null,
+      signalCode: null,
+      kill() { assert.fail("an exited wrapper must not be signaled") },
+    }
+    assert.equal(await stopManagedServices([{ service: fixture.service, child: pendingChild }]), true)
+    assert.equal(await portIsOccupied(fixture.service.port), false)
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
+test("managed shutdown captures an owned startup descendant before it begins listening", { timeout: 10_000 }, async () => {
+  const fixture = await shutdownFixture({ listenDelayMs: 1_000 })
+  try {
+    const { pid } = await fixture.state("starting")
+    assert.equal(await portIsOccupied(fixture.service.port), false)
+    assert.ok(descendantServiceOwners(fixture.service, fixture.child.pid).some((owner) => owner.pid === String(pid)))
+    assert.equal(await stopManagedServices([{ service: fixture.service, child: fixture.child }]), true)
+    await new Promise((resolveWait) => setTimeout(resolveWait, 1_100))
+    assert.equal(await portIsOccupied(fixture.service.port), false)
+    assert.equal(processCwd(String(pid)), "")
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
+test("managed shutdown refuses a listener and descendant from another checkout", { timeout: 10_000 }, async () => {
+  const fixture = await shutdownFixture({ foreignCwd: true })
+  try {
+    const { pid } = await fixture.state("listening")
+    assert.deepEqual(descendantServiceOwners(fixture.service, fixture.child.pid), [])
+    const reports = []
+    assert.equal(await stopManagedServices([{ service: fixture.service, child: fixture.child }], { report: (event) => reports.push(event) }), false)
+    assert.equal(reports.length, 1)
+    assert.equal(reports[0].event, "local-dev.service-stop-failed")
+    assert.match(reports[0].message, /outside this checkout/)
+    assert.equal(await portIsOccupied(fixture.service.port), true)
+    assert.match(processCwd(String(pid)), /other-checkout$/)
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
+test("a TERM-resistant owned listener is revalidated before bounded forced shutdown", { timeout: 10_000 }, async () => {
+  const fixture = await shutdownFixture({ ignoreTerm: true })
+  try {
+    const { pid } = await fixture.state("listening")
+    await stopServiceOwners(fixture.service, { child: fixture.child, graceMs: 100 })
+    assert.equal(await portIsOccupied(fixture.service.port), false)
+    assert.equal(processCwd(String(pid)), "")
+  } finally {
+    await fixture.cleanup()
+  }
+})
 
 test("local development supervisor owns the complete GenioOne web path", () => {
   assert.deepEqual(services.map((service) => [service.name, service.port]), [
@@ -43,7 +194,7 @@ test("Mail2000 connector and Bot service are ready before the Platform API boots
   const api = services.find((service) => service.name === "platform-api")
   assert.equal(api.env.GENIO_BOT_SERVICE_ENDPOINT, "http://127.0.0.1:5181")
   assert.equal(api.env.GENIO_ONE_CONNECTION_VERIFIER_ALLOW_HTTP, "1")
-  assert.equal(api.env.GENIO_ONE_CONNECTION_VERIFIER_ALLOWED_HOSTS, "127.0.0.1,localhost,::1")
+  assert.equal(api.env.GENIO_ONE_CONNECTION_VERIFIER_ALLOWED_HOSTS, "127.0.0.1,localhost,::1,mcp.deepwiki.com")
   const mail2000 = services.find((service) => service.name === "mail2000-connector")
   assert.equal(mail2000.env.CONNECTOR_PORT, "58111")
 })

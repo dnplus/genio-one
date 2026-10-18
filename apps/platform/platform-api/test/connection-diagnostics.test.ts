@@ -117,6 +117,36 @@ test("MCP diagnostics reject a declared oversized response and cancel its body",
   assert.equal(cancelled, true)
 })
 
+test("MCP diagnostics require an exact allowed host before probing the documented DeepWiki endpoint", async () => {
+  const methods: string[] = []
+  const verifier = createHttpConnectionVerifier({
+    allowedHosts: ["localhost", "mcp.deepwiki.com"],
+    fetcher: async (endpoint, init) => {
+      assert.equal(String(endpoint), "https://mcp.deepwiki.com/mcp")
+      const body = JSON.parse(String(init?.body)) as { method: string }
+      methods.push(body.method)
+      if (body.method === "initialize") return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { protocolVersion: "2025-06-18" } }), { headers: { "content-type": "application/json" } })
+      if (body.method === "notifications/initialized") return new Response(null, { status: 202 })
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: 2, result: { tools: [{ name: "read_wiki_structure", inputSchema: { type: "object" } }] } }), { headers: { "content-type": "application/json" } })
+    },
+  })
+  for (const endpoint of ["https://mcp.deepwiki.com.attacker.example/mcp", "https://169.254.169.254/mcp", "https://10.0.0.1/mcp"]) {
+    const result = await verifier.diagnose!({ connection: { ...mcpConnection, endpoint } })
+    assert.equal(result.passed, false)
+    assert.equal(result.reason_code, "CONNECTION_LIVE_TEST_UNAVAILABLE")
+    assert.equal(result.http_status, null)
+  }
+  const insecure = await verifier.diagnose!({ connection: { ...mcpConnection, endpoint: "http://mcp.deepwiki.com/mcp" } })
+  assert.equal(insecure.passed, false)
+  assert.equal(insecure.reason_code, "CONNECTION_HTTP_DISABLED")
+  assert.equal(methods.length, 0)
+  const result = await verifier.diagnose!({ connection: { ...mcpConnection, endpoint: "https://mcp.deepwiki.com/mcp" } })
+  assert.equal(result.passed, true)
+  assert.equal(result.reason_code, "CONNECTION_TEST_PASSED")
+  assert.equal(result.http_status, 200)
+  assert.deepEqual(methods, ["initialize", "notifications/initialized", "tools/list"])
+})
+
 test("API verification uses only the response status", async () => {
   const verifier = createHttpConnectionVerifier({
     fetcher: async () => new Response("ignored", {

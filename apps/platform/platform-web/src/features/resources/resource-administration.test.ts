@@ -22,7 +22,7 @@ function operations(
     addConnectionModelMapping: async () => { throw new Error("unexpected mapping") },
     createPublicModel: async () => { throw new Error("unexpected public model") },
     ensureStandardModelRoutingPolicy: async () => { throw new Error("unexpected routing") },
-    saveStandardResourceEnforcement: async () => { throw new Error("unexpected enforcement") },
+    requireResourcePublicationEnforcement: async () => { throw new Error("unexpected enforcement") },
     requestResourcePublication: async () => { throw new Error("unexpected request") },
     reviewResourcePublication: async () => { throw new Error("unexpected review") },
     ...overrides,
@@ -125,13 +125,13 @@ test("Publication failures preserve API violations and expose unexpected errors"
   assert.deepEqual(unexpected.violations, [{ code: "BROWSER_OIDC_UNAVAILABLE", message: "BROWSER_OIDC_UNAVAILABLE" }])
 })
 
-test("Published successor changes use the publication snapshot path while initial Draft publication prepares standard policy", async () => {
+test("Published successor changes verify existing policy before requesting the publication snapshot", async () => {
   const resource = createMockOverview().resources[0]!
   const published = { ...resource, lifecycle: "PUBLISHED" as const }
   const calls: string[] = []
   const administration = createResourceAdministration(operations({
     ensureStandardModelRoutingPolicy: async () => { calls.push("routing") },
-    saveStandardResourceEnforcement: async () => { calls.push("enforcement") },
+    requireResourcePublicationEnforcement: async () => { calls.push("enforcement") },
     requestResourcePublication: async () => {
       calls.push("request")
       return { request_id: "publication-successor-1" }
@@ -161,7 +161,7 @@ test("Published successor changes use the publication snapshot path while initia
     })
     assert.equal(review.status, "SUCCEEDED")
   }
-  assert.deepEqual(calls, ["request", "review"])
+  assert.deepEqual(calls, ["enforcement", "request", "review"])
 })
 
 test("Connection workflow reports the exact partial-failure stage and stops", async () => {
@@ -226,7 +226,7 @@ test("Standard publication preparation freezes inputs before request; approval o
   const calls: string[] = []
   const administration = createResourceAdministration(operations({
     ensureStandardModelRoutingPolicy: async () => { calls.push("routing") },
-    saveStandardResourceEnforcement: async () => { calls.push("enforcement") },
+    requireResourcePublicationEnforcement: async () => { calls.push("enforcement") },
     requestResourcePublication: async () => {
       calls.push("request")
       return { request_id: "publication-request-1" }
@@ -253,4 +253,93 @@ test("Standard publication preparation freezes inputs before request; approval o
   })
   assert.equal(review.status, "SUCCEEDED")
   assert.deepEqual(calls, ["routing", "enforcement", "request", "approve"])
+})
+
+test("missing published route policy stops publication before requesting or approving a snapshot", async () => {
+  const resource = createMockOverview().resources.find((candidate) => candidate.lifecycle === "DRAFT")!
+  const calls: string[] = []
+  const administration = createResourceAdministration(operations({
+    ensureStandardModelRoutingPolicy: async () => { calls.push("routing") },
+    requireResourcePublicationEnforcement: async () => {
+      calls.push("enforcement")
+      throw new ProductApiError("ENFORCEMENT_CHAIN_REQUIRED", 422)
+    },
+    requestResourcePublication: async () => { calls.push("request"); return { request_id: "unexpected" } },
+    reviewResourcePublication: async () => { calls.push("review"); return resource },
+  }))
+  const outcome = await administration.requestPublication({ tenantId: resource.tenant_id, resource, prepareStandardWorkflow: true, autoApprove: true })
+  assert.equal(outcome.status, "FAILED")
+  if (outcome.status === "FAILED") {
+    assert.equal(outcome.failedStage, "CHECK_ENFORCEMENT")
+    assert.deepEqual(outcome.completedStages, ["PREPARE_ROUTING"])
+    assert.equal(publicationErrorDetails(outcome.error).code, "ENFORCEMENT_CHAIN_REQUIRED")
+  }
+  assert.deepEqual(calls, ["routing", "enforcement"])
+})
+
+test("formal MCP publication reads only the route policy and never writes retired enforcement", async () => {
+  const originalFetch = globalThis.fetch
+  const resource = {
+    ...createMockOverview().resources.find((candidate) => candidate.kind === "MCP")!,
+    lifecycle: "DRAFT" as const,
+    capabilities: [
+      { capability_id: "mcp-tool-read_wiki", display_name: "Read wiki" },
+      { capability_id: "mcp.invoke", display_name: "Invoke MCP" },
+      { capability_id: "mcp-tool-search", display_name: "Search" },
+    ],
+  }
+  const calls: Array<{ url: string; method: string }> = []
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input)
+    const method = init?.method ?? "GET"
+    calls.push({ url, method })
+    if (url.endsWith("/capabilities/mcp.invoke/enforcement-chain") && method === "GET") {
+      return new Response(JSON.stringify({ one_policy_revision: 1 }), { status: 200 })
+    }
+    if (url.endsWith("/publication-requests") && method === "POST") return new Response(JSON.stringify({ request_id: "request-1" }), { status: 200 })
+    if (url.endsWith("/publication-requests/request-1/review") && method === "POST") return new Response(JSON.stringify({ ...resource, lifecycle: "PUBLISHED" }), { status: 200 })
+    throw new Error(`Unexpected publication request: ${method} ${url}`)
+  }) as typeof fetch
+  try {
+    const outcome = await createResourceAdministration().requestPublication({ tenantId: resource.tenant_id, resource, prepareStandardWorkflow: true, autoApprove: true })
+    assert.equal(outcome.status, "SUCCEEDED")
+    assert.deepEqual(calls.map(({ method, url }) => [method, url.split(`/resources/${resource.resource_id}`)[1]]), [
+      ["GET", "/capabilities/mcp.invoke/enforcement-chain"],
+      ["POST", "/publication-requests"],
+      ["POST", "/publication-requests/request-1/review"],
+    ])
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("a missing MCP route policy cannot be substituted by an existing tool policy or a retired direct write", async () => {
+  const originalFetch = globalThis.fetch
+  const resource = {
+    ...createMockOverview().resources.find((candidate) => candidate.kind === "MCP")!,
+    lifecycle: "DRAFT" as const,
+    capabilities: [
+      { capability_id: "mcp-tool-read_wiki", display_name: "Read wiki" },
+      { capability_id: "mcp.invoke", display_name: "Invoke MCP" },
+    ],
+  }
+  const calls: Array<{ url: string; method: string }> = []
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input)
+    const method = init?.method ?? "GET"
+    calls.push({ url, method })
+    if (url.endsWith("/capabilities/mcp.invoke/enforcement-chain") && method === "GET") {
+      return new Response(JSON.stringify({ code: "ENFORCEMENT_CHAIN_NOT_FOUND" }), { status: 404 })
+    }
+    if (url.includes("/capabilities/mcp-tool-read_wiki/") && method === "GET") return new Response(JSON.stringify({ one_policy_revision: 1 }), { status: 200 })
+    throw new Error(`Unexpected publication request: ${method} ${url}`)
+  }) as typeof fetch
+  try {
+    const outcome = await createResourceAdministration().requestPublication({ tenantId: resource.tenant_id, resource, prepareStandardWorkflow: true, autoApprove: true })
+    assert.equal(outcome.status, "FAILED")
+    if (outcome.status === "FAILED") assert.equal(publicationErrorDetails(outcome.error).code, "ENFORCEMENT_CHAIN_REQUIRED")
+    assert.deepEqual(calls, [{ url: `/v1/tenants/${resource.tenant_id}/resources/${resource.resource_id}/capabilities/mcp.invoke/enforcement-chain`, method: "GET" }])
+  } finally {
+    globalThis.fetch = originalFetch
+  }
 })

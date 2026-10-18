@@ -348,7 +348,7 @@ const services = [
       GENIO_ONE_PLATFORM_ORIGIN: localPlatformOrigin,
       GENIO_BOT_SERVICE_ENDPOINT: localBotServiceEndpoint,
       GENIO_ONE_CONNECTION_VERIFIER_ALLOW_HTTP: "1",
-      GENIO_ONE_CONNECTION_VERIFIER_ALLOWED_HOSTS: "127.0.0.1,localhost,::1",
+      GENIO_ONE_CONNECTION_VERIFIER_ALLOWED_HOSTS: "127.0.0.1,localhost,::1,mcp.deepwiki.com",
     },
     // A healthy API started outside this supervisor (for example `pnpm dev:api`) cannot report
     // whether it received the installed-connector environment, so its launch must be recorded.
@@ -471,6 +471,7 @@ const services = [
 const startupServiceNames = ["distillation-triage", "mail2000-connector", "bot-server", "platform-api", "platform-web", "bot-web"]
 
 const children = new Map()
+const managedServices = new Map()
 let stopping = false
 let keepAlive
 
@@ -650,22 +651,98 @@ async function waitForPortFree(port) {
   throw new Error(`Port ${port} did not become available`)
 }
 
-async function stopStale(service) {
-  const owners = serviceOwners(service)
+function readProcessOwner(pid) {
+  const owner = { pid: String(pid), cwd: processCwd(String(pid)), command: processCommand(String(pid)) }
+  if (!owner.cwd && owner.command) {
+    const state = spawnSync("ps", ["-p", owner.pid, "-o", "stat="], { encoding: "utf8" })
+    if (state.status === 0 && state.stdout.trim().startsWith("Z")) owner.command = ""
+  }
+  return owner
+}
+
+export function descendantServiceOwners(service, parentPid) {
+  if (!parentPid) return []
+  const result = spawnSync("ps", ["-Ao", "pid=,ppid="], { encoding: "utf8" })
+  if (result.status !== 0) throw new Error(`${service.name} child process ownership could not be inspected`)
+  const processes = result.stdout.trim().split(/\r?\n/).map((line) => line.trim().split(/\s+/))
+  const descendants = new Set([String(parentPid)])
+  let added = true
+  while (added) {
+    added = false
+    for (const [pid, ppid] of processes) {
+      if (!/^\d+$/.test(pid) || !descendants.has(ppid) || descendants.has(pid)) continue
+      descendants.add(pid)
+      added = true
+    }
+  }
+  descendants.delete(String(parentPid))
+  return [...descendants].map(readProcessOwner).filter((owner) => serviceOwnerMatches(service, owner))
+}
+
+export async function stopServiceOwners(service, { child, expectedOwners, graceMs = 5_000 } = {}) {
+  let owners = expectedOwners ?? serviceOwners(service)
   if (owners.length === 0) {
-    if (await portIsOccupied(service.port)) assertServiceOwners(service, owners)
-    return
+    if (await portIsOccupied(service.port)) {
+      owners = expectedOwners ?? serviceOwners(service)
+      assertServiceOwners(service, owners)
+    }
+  } else {
+    assertServiceOwners(service, owners)
   }
-  assertServiceOwners(service, owners)
-  for (const owner of owners) {
-    signalVerifiedServiceOwner({
-      service,
-      owner,
-      currentOwner: { cwd: processCwd(owner.pid), command: processCommand(owner.pid) },
-      signal(pid) { process.kill(Number(pid), "SIGTERM") },
-    })
+  const childActive = () => child && child.exitCode === null && child.signalCode === null
+  const currentWrapper = childActive() ? readProcessOwner(child.pid) : null
+  const wrapperOwner = currentWrapper && (currentWrapper.cwd || currentWrapper.command) ? currentWrapper : null
+  if (wrapperOwner && wrapperOwner.cwd !== service.cwd) {
+    throw new Error(`${service.name} child process is outside this checkout`)
   }
-  await waitForPortFree(service.port)
+  const captured = new Map(owners.map((owner) => [owner.pid, owner]))
+  if (childActive() && wrapperOwner) {
+    for (const owner of descendantServiceOwners(service, child.pid)) captured.set(owner.pid, owner)
+  }
+  const signalOwners = (signal, recheckOnly = false) => {
+    for (const owner of captured.values()) {
+      const currentOwner = readProcessOwner(owner.pid)
+      if (recheckOnly && portOwnerRevalidation(owner, currentOwner) !== "current") continue
+      signalVerifiedServiceOwner({ service, owner, currentOwner, signal(pid) { process.kill(Number(pid), signal) } })
+    }
+  }
+  const signalChild = (signal) => {
+    if (!childActive() || !wrapperOwner) return
+    const state = portOwnerRevalidation(wrapperOwner, readProcessOwner(child.pid))
+    if (state === "exited") return
+    if (state !== "current") throw new Error(`${service.name} child process changed before signal`)
+    child.kill(signal)
+  }
+  const waitUntilStopped = async (timeoutMs) => {
+    const deadline = Date.now() + timeoutMs
+    do {
+      const processesStopped = [...captured.values()].every((owner) =>
+        portOwnerRevalidation(owner, readProcessOwner(owner.pid)) !== "current",
+      )
+      const wrapperStopped = !childActive() || !wrapperOwner
+        || portOwnerRevalidation(wrapperOwner, readProcessOwner(child.pid)) !== "current"
+      if (processesStopped && wrapperStopped && !(await portIsOccupied(service.port))) return true
+      await new Promise((resolveWait) => setTimeout(resolveWait, 100))
+    } while (Date.now() < deadline)
+    return false
+  }
+  signalOwners("SIGTERM")
+  signalChild("SIGTERM")
+  if (await waitUntilStopped(graceMs)) return
+  signalOwners("SIGKILL", true)
+  signalChild("SIGKILL")
+  if (!(await waitUntilStopped(2_000))) throw new Error(`${service.name} port ${service.port} did not stop`)
+}
+
+export async function stopManagedServices(records, { report = (event) => process.stderr.write(`${JSON.stringify(event)}\n`) } = {}) {
+  const servicesToStop = [...records]
+  const results = await Promise.allSettled(servicesToStop.map(({ service, child }) => stopServiceOwners(service, { child })))
+  for (let index = 0; index < results.length; index += 1) {
+    if (results[index].status !== "rejected") continue
+    const error = results[index].reason
+    report({ event: "local-dev.service-stop-failed", service: servicesToStop[index].service.name, message: error instanceof Error ? error.message : String(error) })
+  }
+  return results.every((result) => result.status === "fulfilled")
 }
 
 async function stopDistillationTriage(service) {
@@ -711,13 +788,20 @@ function spawnService(service) {
     stdio: "inherit",
   })
   children.set(service.name, child)
+  managedServices.set(service.name, { service, child })
   watchServiceExit(child, service, {
     report: (event) => {
-      if (service.onUnexpectedExit?.() === "ignore") return
+      if (service.onUnexpectedExit?.() === "ignore") {
+        if (managedServices.get(service.name)?.child === child) managedServices.delete(service.name)
+        return
+      }
       process.stderr.write(`${JSON.stringify(event)}\n`)
     },
     onUnexpectedExit: (code) => {
-      if (service.onUnexpectedExit?.() === "ignore") return
+      if (service.onUnexpectedExit?.() === "ignore") {
+        if (managedServices.get(service.name)?.child === child) managedServices.delete(service.name)
+        return
+      }
       shutdown(code)
     },
   })
@@ -731,7 +815,7 @@ export function watchServiceExit(child, service, {
   onUnexpectedExit = (exitCode) => shutdown(exitCode),
 } = {}) {
   child.once("exit", (code, signal) => {
-    children.delete(service.name)
+    if (children.get(service.name) === child) children.delete(service.name)
     if (isStopping()) return
     const supervisorExitCode = typeof code === "number" && code !== 0 ? code : 1
     report({ event: "local-dev.service-exit", service: service.name, code, signal })
@@ -776,7 +860,7 @@ async function ensureService(service) {
       process.stdout.write(`${JSON.stringify({ event: "local-dev.service-existing", service: service.name, port: service.port })}\n`)
       return true
     }
-    await stopStale(service)
+    await stopServiceOwners(service)
     if (stopping) return false
     process.stdout.write(`${JSON.stringify({ event: "local-dev.service-launch-configuration-restarted", service: service.name, port: service.port })}\n`)
     if (!spawnService(service)) return false
@@ -791,7 +875,7 @@ async function ensureService(service) {
     return ensureService(service)
   }
   if (result && service.stale(result.body, result.response)) {
-    await stopStale(service)
+    await stopServiceOwners(service)
     if (stopping) return false
     process.stdout.write(`${JSON.stringify({ event: "local-dev.service-stale-restarted", service: service.name, port: service.port })}\n`)
   } else if (occupied) {
@@ -864,9 +948,12 @@ async function shutdown(code = 0) {
   if (stopping) return
   stopping = true
   if (keepAlive) clearInterval(keepAlive)
-  for (const child of children.values()) child.kill("SIGTERM")
-  await new Promise((resolveWait) => setTimeout(resolveWait, 300))
-  process.exitCode = code
+  for (const [name, child] of children) {
+    if (!managedServices.has(name)) child.kill("SIGTERM")
+  }
+  const stopped = await stopManagedServices(managedServices.values())
+  managedServices.clear()
+  process.exitCode = code || (stopped ? 0 : 1)
 }
 
 export async function prepareLocalSupport({
@@ -903,7 +990,7 @@ async function main(options) {
     current: distillationLaunchState(configuration, serviceOwners(bot), standaloneTriageOwners()),
     hasAdoptedProcessor: () => serviceOwners(triage)
       .some((owner) => distillationPortRole(owner, root) === "processor"),
-    stopBot: () => stopStale(bot),
+    stopBot: () => stopServiceOwners(bot),
     stopTriage: () => stopDistillationTriage(triage),
   })
   if (stopping) return

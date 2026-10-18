@@ -14,7 +14,6 @@ platform:
   connectionVerification:
     # Keep the default HTTPS verifier for public upstreams such as DeepWiki.
     allowHttp: false
-    allowedHosts: []
   publicationDnsVerification:
     allowLocalhost: true
   resources:

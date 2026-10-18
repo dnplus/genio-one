@@ -70,7 +70,7 @@ flowchart LR
 
 ## 驗證紀錄
 
-進度由 `.walking-skeleton-default-tools.json` 追蹤。以下是 2026-09-21 的提交版驗證；各證據檔保留實際執行的前後端來源與已知限制。
+以下是 2026-09-21 的提交版驗證；[原始驗收證據](../../../internal/evidence/bot/uat-default-tools-20260921/)保留實際執行的前後端來源與已知限制。
 
 | 層級 | 狀態 | 證據與限制 |
 | --- | --- | --- |

@@ -193,7 +193,7 @@ allowBuilds:
   workerd: true
 
 minimumReleaseAgeExclude:
-  - '@openai/codex@0.159.2-darwin-arm64 || 0.159.2-darwin-x64 || 0.159.2-linux-arm64 || 0.159.2-linux-x64 || 0.159.2-win32-arm64 || 0.159.2-win32-x64 || 0.159.2'
+  - '@openai/codex@0.162.0-darwin-arm64 || 0.162.0-darwin-x64 || 0.162.0-linux-arm64 || 0.162.0-linux-x64 || 0.162.0-win32-arm64 || 0.162.0-win32-x64 || 0.162.0'
 `
 }
 
@@ -223,7 +223,7 @@ function publicRootPackage() {
       build: "pnpm --filter genio-one build && pnpm --filter genio-one-bot build && pnpm --filter @genioone/gateway build",
       verify: "pnpm check && pnpm test && pnpm build",
     },
-    packageManager: "pnpm@12.4.2",
+    packageManager: "pnpm@12.10.1",
   }
 }
 
@@ -265,7 +265,7 @@ Follow the [demo walkthrough](docs/public/ce/demo.md), or start with a [single M
 
 ## Quickstart
 
-You need macOS or Linux, Docker with Compose, Git, Node.js, pnpm **12.4.2**, and Bun **1.4.2**.
+You need macOS or Linux, Docker with Compose, Git, Node.js, pnpm **12.10.1**, and Bun **1.4.2**.
 
 \`\`\`sh
 curl -fsSL https://genio.sh/install.sh | sh
@@ -357,7 +357,7 @@ GenioOne 協助團隊將 AI 代理連上工作中使用的工具與模型。你�
 
 ## 快速開始
 
-準備 macOS 或 Linux、Docker 與 Compose、Git、Node.js、pnpm **12.4.2** 及 Bun **1.4.2**。
+準備 macOS 或 Linux、Docker 與 Compose、Git、Node.js、pnpm **12.10.1** 及 Bun **1.4.2**。
 
 \`\`\`sh
 curl -fsSL https://genio.sh/install.sh | sh

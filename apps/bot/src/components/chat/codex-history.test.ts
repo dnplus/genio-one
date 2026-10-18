@@ -4,7 +4,7 @@ import type { CodexClient } from "../../lib/codex-client"
 import { readEarlierCodexTurns, readCodexTurns, reconstructTurnMessages } from "./codex-history"
 
 function turn(id: string, status: Turn["status"] = "completed"): Turn {
-  return { id, status, startedAt: 1788700000, completedAt: null, durationMs: null, error: null, itemsView: "full", items: [
+  return { id, rootTurnId: null, status, startedAt: 1788700000, completedAt: null, durationMs: null, error: null, itemsView: "full", items: [
     { type: "userMessage", id: `${id}-user`, clientId: null, content: [{ type: "text", text: "保留原文", text_elements: [] }] },
     { type: "plan", id: `${id}-plan`, text: "確認來源後回答" },
     { type: "contextCompaction", id: `${id}-compact` },

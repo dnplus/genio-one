@@ -43,7 +43,8 @@ function rpc(socket: WebSocket) {
 test("Local Hands runs real Endpoint exec-server commands, reports outcomes, blocks revoked policy and never falls back", async () => {
   const directory = mkdtempSync(join(tmpdir(), "genio-local-hands-test-"))
   const registry = new BotRegistry(join(directory, "registry.sqlite"), join(directory, "artifacts"))
-  const broker = new RuntimeBroker({ provision: async () => { throw new Error("unexpected cloud provisioning") } })
+  let cloudProvisioningAttempts = 0
+  const broker = new RuntimeBroker({ provision: async () => { cloudProvisioningAttempts += 1; throw new Error("unexpected cloud provisioning") } })
   const principal = { tenant_id: "local-hands-test", subject_id: "test-owner", acting_client_id: "genio-one-bot", scopes: [] }
   const bot = registry.create(principal, { name: "Local Hands test", description: "Dedicated integration test" })
   const receipts: RuntimePolicyReportInput[] = []
@@ -88,7 +89,8 @@ test("Local Hands runs real Endpoint exec-server commands, reports outcomes, blo
     const reusedClosed = new Promise<number>((resolve) => reused.once("close", (code) => resolve(code)))
     reused.send(JSON.stringify({ token: pairing.token }))
     expect(await reusedClosed).toBe(1008)
-    consumer = new WebSocket(hands.executorUrl(details.environmentId))
+    const executorUrl = hands.executorUrl(details.environmentId)
+    consumer = new WebSocket(executorUrl)
     const request = rpc(consumer)
     await opened(consumer)
     const init = await request("initialize", { clientName: "genio-local-hands-integration" })
@@ -115,7 +117,13 @@ test("Local Hands runs real Endpoint exec-server commands, reports outcomes, blo
     await expect(request("process/start", { processId: "denied", argv: ["/bin/sh", "-c", "printf overwritten > result.txt"], cwd: pathToFileURL(details.cwd).href, env: {}, tty: false, pipeStdin: false })).rejects.toThrow("socket closed")
     expect(readFileSync(file, "utf8")).toBe("native filesystem edit")
     expect(session.details.execReady).toBe(false)
-    expect(session.details.kind).toBe("endpoint")
+    expect(session.details.tier).toBe("none")
+    expect(session.leases.headless).toBeUndefined()
+    expect(session.runtimeDetails.headless).toBeUndefined()
+    expect(() => hands.executorUrl(details.environmentId)).toThrow("LOCAL_HANDS_DISCONNECTED")
+    const revoked = new WebSocket(executorUrl)
+    const revokedClosed = new Promise<number>((resolve) => revoked.once("close", (code) => resolve(code)))
+    expect(await revokedClosed).toBe(1008)
     const deadline = Date.now() + 5000
     let stopped = false
     while (Date.now() < deadline) {
@@ -124,7 +132,7 @@ test("Local Hands runs real Endpoint exec-server commands, reports outcomes, blo
     }
     expect(stopped).toBe(true)
     expect(receipts.some((item) => item.reasonCode === "LOCAL_HANDS_RESULT_UNCONFIRMED" && item.outcome === "FAILED")).toBe(true)
-    await expect(broker.ensure(session.id, "headless", bot.id)).rejects.toThrow("LOCAL_HANDS_DISCONNECTED")
+    expect(cloudProvisioningAttempts).toBe(0)
     await hands.stop(session, bot.id)
     expect(session.leases.headless).toBeUndefined()
     deny = false

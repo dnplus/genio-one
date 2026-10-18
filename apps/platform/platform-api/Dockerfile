@@ -4,7 +4,7 @@ WORKDIR /workspace
 
 # pnpm remains the monorepo dependency and lockfile authority. Bun owns the
 # TypeScript runtime and bundling loop inside this image.
-RUN bun add --global pnpm@12.4.2
+RUN bun add --global pnpm@12.10.1
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/platform/package.json apps/platform/package.json
@@ -26,6 +26,7 @@ COPY apps/platform/platform-api apps/platform/platform-api
 COPY apps/connectors/mail2000/site.ts ./apps/connectors/mail2000/site.ts
 COPY apps/connectors/configuration.ts apps/connectors/configuration.ts
 COPY apps/connectors/discovery apps/connectors/discovery
+COPY apps/connectors/memory apps/connectors/memory
 RUN cd apps/platform \
     && bun run build:web \
     && bun run build:api \
