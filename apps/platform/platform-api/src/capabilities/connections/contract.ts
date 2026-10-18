@@ -432,7 +432,8 @@ export function canonicalizeDownstreamIdentity(
         const issuer = new URL(client.issuer)
         const authorization = new URL(client.authorization_endpoint)
         const token = new URL(client.token_endpoint)
-        if ([issuer, authorization, token].some((url) => url.protocol !== "https:" || url.username || url.password || url.hash || url.search || url.origin !== issuer.origin)) return null
+        if ([issuer, authorization, token].some((url) => url.protocol !== "https:" || url.username || url.password || url.hash || url.origin !== issuer.origin)) return null
+        if (issuer.search || token.search) return null
         if (!client.client_id.trim() || /[\u0000\r\n]/.test(client.client_id) || !Array.isArray(client.scopes) || client.scopes.length > 64 || client.scopes.some((scope) => !scope || /\s/.test(scope))) return null
         return { mode: "USER_OAUTH", oauth_client: { ...client, client_id: client.client_id.trim(), scopes: [...new Set(client.scopes)] } }
       } catch {

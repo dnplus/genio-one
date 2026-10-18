@@ -10,6 +10,7 @@ import type { ApiGatewayActivityEvent, AuditEvent, DecisionAuditEvent, Governanc
 import { createMockOverview } from "@/mocks/overview"
 import { AuditQueryTable } from "@/features/activity/audit-query-table"
 import { AuditDecisionSheet } from "@/features/activity/audit-decision-sheet"
+import productI18n from "@/i18n"
 
 const data: Pick<OverviewSnapshot, "applications" | "connections" | "identity" | "resources"> = {
   applications: [], connections: [], identity: null, resources: [],
@@ -236,7 +237,7 @@ for (const event of events) {
     await i18n.init({ lng: "en", resources: { en: { translation: {} } } })
     render(<I18nextProvider i18n={i18n}><AuditJourney event={event} /></I18nextProvider>)
 
-    await user.click(screen.getByRole("row", { name: "View details" }))
+    await user.click(screen.getByRole("row", { name: `Open audit event ${event.audit_event_id}` }))
     const sheet = await screen.findByTestId("governance-audit-sheet")
     expect(within(sheet).getAllByText("test-admin")).toHaveLength(2)
     expect(within(sheet).getByText(event.correlation_id)).toBeTruthy()
@@ -258,7 +259,7 @@ test("ACCESS_GOVERNANCE_CHANGE keeps the access subject, actor, resource, capabi
   await i18n.init({ lng: "en", resources: { en: { translation: {} } } })
   render(<I18nextProvider i18n={i18n}><AuditJourney event={accessGovernanceEvent} snapshot={accessData} /></I18nextProvider>)
 
-  const row = screen.getByRole("row", { name: "View details" })
+  const row = screen.getByRole("row", { name: `Open audit event ${accessGovernanceEvent.audit_event_id}` })
   expect(within(row).getByText("person-uat-anrita")).toBeTruthy()
   expect(within(row).getByText("person-uat-kevin")).toBeTruthy()
   expect(within(row).getByText("resource-uat-access")).toBeTruthy()
@@ -287,7 +288,7 @@ test("ACCESS_GOVERNANCE_CHANGE opens when the client identifier is absent", asyn
   } as unknown as GovernanceAuditEvent
   render(<I18nextProvider i18n={i18n}><AuditJourney event={event} snapshot={accessData} /></I18nextProvider>)
 
-  await user.click(screen.getByRole("row", { name: "View details" }))
+  await user.click(screen.getByRole("row", { name: `Open audit event ${event.audit_event_id}` }))
   const sheet = await screen.findByTestId("governance-audit-sheet")
   const client = within(sheet).getByText("Client")
   expect(client.parentElement?.textContent).toContain("—")
@@ -308,7 +309,7 @@ test("INVOCATION_OUTCOME detail resolves governed labels with execution and cano
     </I18nextProvider>,
   )
 
-  await user.click(screen.getByRole("row", { name: "View details" }))
+  await user.click(screen.getByRole("row", { name: `Open audit event ${governedInvocationEvent.audit_event_id}` }))
   const sheet = await screen.findByRole("dialog")
   expect(within(sheet).getByText("Anrita")).toBeTruthy()
   expect(within(sheet).getByText("Client Self Service")).toBeTruthy()
@@ -333,4 +334,16 @@ test("INVOCATION_OUTCOME detail resolves governed labels with execution and cano
   expect(usage.textContent).toContain("GATEWAY_RECEIPT")
   expect(usage.textContent).toContain("ACTUAL USD 0.125000")
   expect(usage.textContent).toContain("fixture-catalog@2026-09")
+})
+
+
+test("Traditional Chinese Audit rows identify the event before opening its details", async () => {
+  const user = userEvent.setup()
+  const i18n = createInstance()
+  await i18n.init({ lng: "zh-TW", fallbackLng: "en", keySeparator: false, resources: productI18n.options.resources })
+  render(<I18nextProvider i18n={i18n}><AuditJourney event={accessGovernanceEvent} snapshot={accessData} /></I18nextProvider>)
+
+  await user.click(screen.getByRole("row", { name: `開啟稽核事件 ${accessGovernanceEvent.audit_event_id}` }))
+  const sheet = await screen.findByTestId("governance-audit-sheet")
+  expect(within(sheet).getByText(accessGovernanceEvent.correlation_id)).toBeTruthy()
 })

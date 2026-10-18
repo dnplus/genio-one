@@ -1,6 +1,8 @@
 import { Type } from "typebox"
 import type { Static } from "typebox"
 
+import type { SqlTransaction } from "../../persistence/sql-adapter"
+
 const Identifier = Type.String({ minLength: 1, maxLength: 256 })
 const Timestamp = Type.Integer({ minimum: 0 })
 
@@ -56,8 +58,8 @@ export interface RuntimeRegistrationKey {
 }
 
 export interface RuntimeControlStore {
-  registerGatewayRuntime(input: RegisterGatewayRuntimeInput): Promise<RuntimeRegistration>
-  getGatewayRuntime(input: RuntimeRegistrationKey): Promise<RuntimeRegistration | null>
+  registerGatewayRuntime(input: RegisterGatewayRuntimeInput & { transaction?: SqlTransaction }): Promise<RuntimeRegistration>
+  getGatewayRuntime(input: RuntimeRegistrationKey & { transaction?: SqlTransaction }): Promise<RuntimeRegistration | null>
   listGatewayRuntimes(input: { tenantId: string; targetId?: string }): Promise<RuntimeRegistration[]>
   claimGatewaySessionLease(input: {
     tenantId: string

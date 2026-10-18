@@ -31,7 +31,7 @@ export function AuditQueryTable({ events, onOpen }: { events: AuditEvent[]; onOp
         const operation = governance
           ? event.kind === "POLICY_CHANGE" ? event.action : event.operation
           : event.target ?? ""
-        return <TableRow key={event.audit_event_id} aria-label={t("View details")}
+        return <TableRow key={event.audit_event_id} aria-label={t("Open audit event {{id}}", { id: event.audit_event_id })}
           className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
           onClick={() => onOpen(event)} onKeyDown={(keyboardEvent) => {
             if (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") {

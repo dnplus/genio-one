@@ -2,6 +2,12 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import { createHash } from "node:crypto"
 import { canonicalizeDownstreamIdentity } from "../src/capabilities/connections/contract"
+import { PlatformApiError } from "../src/capabilities/errors"
+import { createInMemoryResourceConnectionRegistry } from "../src/capabilities/connections/memory"
+import { createInMemoryOrganizationDirectory } from "../src/capabilities/organizations/memory"
+import { createInMemoryProviderProfileCatalog } from "../src/capabilities/providers/memory"
+import { createInMemoryResourceRegistry } from "../src/capabilities/resources/memory"
+import { createResourceMemoryState } from "../src/capabilities/resources/state"
 import type { ResourceConnectionRegistry } from "../src/capabilities/connections/module"
 import { createInMemoryMcpOAuthStore } from "../src/capabilities/mcp-oauth/memory"
 import { createMcpOAuthSecretCodec } from "../src/capabilities/mcp-oauth/crypto"
@@ -146,4 +152,109 @@ test("a connector site change cannot reuse or refresh an earlier site's OAuth to
   await assert.rejects(service.resolveAccessToken(owner), /MCP_OAUTH_REAUTHORIZATION_REQUIRED/)
   assert.equal(await service.status(owner), null)
   assert.equal(refreshCalls, 0)
+})
+
+async function registeredOAuthFixture() {
+  const tenantId = "tenant-acme"
+  const state = createResourceMemoryState()
+  const organizations = createInMemoryOrganizationDirectory()
+  const organization = await organizations.create({ tenantId, display_name: "Acme", slug: "acme" })
+  const resources = createInMemoryResourceRegistry({ state, organizations })
+  const connections = createInMemoryResourceConnectionRegistry({
+    state, resources, providers: createInMemoryProviderProfileCatalog(),
+  })
+  const resource = await resources.createResource({
+    tenantId,
+    value: {
+      display_name: "Configured OAuth",
+      kind: "MCP",
+      owner_organization_id: organization.organization_id,
+      authentication_strategy: "NONE",
+      environment_id: "local",
+      version: "1.0.0",
+      capabilities: [{ capability_id: "mcp.invoke", display_name: "Invoke" }],
+      enforcement_point_id: "ai-gateway",
+    },
+  })
+  return { connections, tenantId, resourceId: resource.resource_id }
+}
+
+for (const scopes of [["useraccount"], []]) {
+  test(`registered OAuth preserves provider query and owns authorization parameters with ${scopes.length} scopes`, async () => {
+    const { connections, tenantId, resourceId } = await registeredOAuthFixture()
+    const endpoint = new URL(client.authorization_endpoint)
+    endpoint.search = new URLSearchParams([
+      ["sysparm_tenant", "acme_corp"], ["sysparm_tenant", "second"], ["login_hint", "admin"],
+      ...["response_type", "client_id", "redirect_uri", "state", "code_challenge", "code_challenge_method", "scope"]
+        .flatMap((name) => [[name, "endpoint-value"], [name, "duplicate-value"]]),
+    ]).toString()
+    const configuredClient = { ...client, authorization_endpoint: endpoint.toString(), scopes }
+    const registered = await connections.create({
+      tenantId, resourceId,
+      value: {
+        display_name: "Primary", connection_kind: "MCP", endpoint: "https://connector.internal/mcp",
+        downstream_identity: { mode: "USER_OAUTH", oauth_client: configuredClient },
+      },
+    })
+    assert.deepEqual((await connections.get({ tenantId, resourceId, connectionId: registered.connection_id })).downstream_identity.oauth_client, configuredClient)
+    const store = createInMemoryMcpOAuthStore()
+    let codeVerifier = ""
+    const service = createMcpOAuthService({
+      store, codec: createMcpOAuthSecretCodec(Buffer.alloc(32, 7)), connections,
+      identity: { async canonicalSubjectId(input) { return input.subjectId } },
+      publicOrigin: "https://cp.example.com", managementUiOrigin: "https://ui.example.com",
+      exchangeConfiguredCode: async (input) => {
+        assert.deepEqual(input.client, configuredClient)
+        assert.equal(input.redirectUri, "https://cp.example.com/v1/mcp-oauth/callback")
+        codeVerifier = input.verifier
+        return { access_token: "registered-access", token_type: "Bearer", issuer: client.issuer }
+      },
+    })
+    const owner = { tenantId, resourceId, connectionId: registered.connection_id, subjectId: "user-one" }
+    const started = await service.start(owner)
+    const authorization = new URL(started.authorization_url)
+    assert.deepEqual(authorization.searchParams.getAll("sysparm_tenant"), ["acme_corp", "second"])
+    assert.deepEqual(authorization.searchParams.getAll("login_hint"), ["admin"])
+    for (const [name, value] of [
+      ["response_type", "code"], ["client_id", client.client_id],
+      ["redirect_uri", "https://cp.example.com/v1/mcp-oauth/callback"], ["code_challenge_method", "S256"],
+    ]) assert.deepEqual(authorization.searchParams.getAll(name), [value])
+    assert.deepEqual(authorization.searchParams.getAll("scope"), scopes.length ? [scopes.join(" ")] : [])
+    const oauthState = authorization.searchParams.get("state")
+    assert.ok(oauthState)
+    assert.equal(authorization.searchParams.getAll("state").length, 1)
+    assert.notEqual(oauthState, "endpoint-value")
+    assert.notEqual(oauthState, "duplicate-value")
+    await service.complete({ state: oauthState, code: "one-use-code", iss: client.issuer })
+    assert.deepEqual(authorization.searchParams.getAll("code_challenge"), [createHash("sha256").update(codeVerifier).digest("base64url")])
+    assert.equal((await service.resolveAccessToken(owner)).accessToken, "registered-access")
+  })
+}
+
+test("OAuth registration keeps issuer, token and Connection endpoint URL restrictions", async () => {
+  const { connections, tenantId, resourceId } = await registeredOAuthFixture()
+  for (const invalidClient of [
+    { ...client, issuer: `${client.issuer}?tenant=acme` },
+    { ...client, token_endpoint: `${client.token_endpoint}?tenant=acme` },
+    { ...client, authorization_endpoint: `${client.authorization_endpoint}#fragment` },
+    { ...client, authorization_endpoint: "https://user:password@acme.service-now.com/authorize?tenant=acme" },
+    { ...client, authorization_endpoint: "http://acme.service-now.com/authorize?tenant=acme" },
+    { ...client, authorization_endpoint: "https://other.example.com/authorize?tenant=acme" },
+  ]) {
+    await assert.rejects(connections.create({
+      tenantId, resourceId,
+      value: {
+        display_name: "Invalid", connection_kind: "MCP", endpoint: "https://connector.internal/mcp",
+        downstream_identity: { mode: "USER_OAUTH", oauth_client: invalidClient },
+      },
+    }), (error: unknown) => error instanceof PlatformApiError && error.code === "MCP_IDENTITY_CONFIGURATION_INVALID")
+  }
+  await assert.rejects(connections.create({
+    tenantId, resourceId,
+    value: {
+      display_name: "Invalid", connection_kind: "MCP", endpoint: "https://connector.internal/mcp?tenant=acme",
+      downstream_identity: { mode: "USER_OAUTH", oauth_client: client },
+    },
+  }), (error: unknown) => error instanceof PlatformApiError && error.code === "CONNECTION_ENDPOINT_SUFFIX_FORBIDDEN")
+  assert.deepEqual(await connections.list({ tenantId, resourceId }), [])
 })

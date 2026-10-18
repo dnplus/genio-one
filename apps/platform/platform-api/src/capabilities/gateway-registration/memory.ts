@@ -8,7 +8,18 @@ export function createInMemoryGatewayRegistrationRepository(options: {
   const values = new Map<string, GatewayRegistration>()
   const now = options.now ?? (() => Math.floor(Date.now() / 1_000))
   const key = (tenantId: string, runtimeId: string) => `${tenantId}\u0000${runtimeId}`
-  return {
+  const locks = new Set<string>()
+  const repository: GatewayRegistrationRepository = {
+    async withLifecycleLock({ tenantId, runtimeId }, work) {
+      const entryKey = key(tenantId, runtimeId)
+      if (locks.has(entryKey)) throw new PlatformApiError("GATEWAY_LIFECYCLE_IN_PROGRESS", 409)
+      locks.add(entryKey)
+      try {
+        return await work(repository, undefined)
+      } finally {
+        locks.delete(entryKey)
+      }
+    },
     async list({ tenantId }) {
       return [...values.values()]
         .filter((value) => value.tenant_id === tenantId)
@@ -71,4 +82,5 @@ export function createInMemoryGatewayRegistrationRepository(options: {
       return structuredClone(retired)
     },
   }
+  return repository
 }

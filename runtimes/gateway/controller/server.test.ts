@@ -236,3 +236,20 @@ describe("connectionHealthHostAllowed", () => {
     expect(connectionHealthHostAllowed("not a url")).toBe(false)
   })
 })
+
+for (const allowedHost of ["[::1]", "::1", "[fd00::1]", "fd00::1"]) {
+  test(`connection health accepts IPv6 allowlist hostname ${allowedHost}`, () => {
+    const original = process.env.GENIO_ONE_CONNECTION_HEALTH_ALLOWED_HOSTS
+    try {
+      process.env.GENIO_ONE_CONNECTION_HEALTH_ALLOWED_HOSTS = ` ${allowedHost} `
+      expect(connectionHealthHostAllowed("http://[::1]:8080/health")).toBe(true)
+      expect(connectionHealthHostAllowed("http://[fd00::1]:8080/health")).toBe(allowedHost.includes("fd00"))
+      expect(connectionHealthHostAllowed("http://[fd00::2]:8080/health")).toBe(false)
+      expect(connectionHealthHostAllowed("http://user:pass@[fd00::1]:8080/health")).toBe(false)
+      expect(connectionHealthHostAllowed("ftp://[fd00::1]/health")).toBe(false)
+    } finally {
+      if (original === undefined) delete process.env.GENIO_ONE_CONNECTION_HEALTH_ALLOWED_HOSTS
+      else process.env.GENIO_ONE_CONNECTION_HEALTH_ALLOWED_HOSTS = original
+    }
+  })
+}

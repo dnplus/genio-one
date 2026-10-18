@@ -6,6 +6,9 @@ const supportedLanguages = ["en", "zh-TW"] as const
 export type ConsoleLanguage = (typeof supportedLanguages)[number]
 
 const en: Record<string, string> = {
+  "Open access request {{id}}": "Open access request {{id}}",
+  "Open decision {{id}}": "Open decision {{id}}",
+  "Open audit event {{id}}": "Open audit event {{id}}",
   "Edit {{name}}": "Edit {{name}}",
   "Toggle membership for {{name}}": "Toggle membership for {{name}}",
   "Select role for {{name}}": "Select role for {{name}}",
@@ -1549,6 +1552,9 @@ const en: Record<string, string> = {
 }
 
 const zhTW: Record<string, string> = {
+  "Open access request {{id}}": "開啟存取申請 {{id}}",
+  "Open decision {{id}}": "開啟決策 {{id}}",
+  "Open audit event {{id}}": "開啟稽核事件 {{id}}",
   "Edit {{name}}": "編輯 {{name}}",
   "Toggle membership for {{name}}": "切換 {{name}} 的成員資格",
   "Select role for {{name}}": "選擇 {{name}} 的角色",

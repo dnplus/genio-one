@@ -1,4 +1,4 @@
-import type { SqlAdapter } from "../../persistence/sql-adapter"
+import type { SqlAdapter, SqlTransaction } from "../../persistence/sql-adapter"
 import { PlatformApiError } from "../errors"
 import type { GatewayRegistration } from "./contract"
 import type { GatewayRegistrationRepository } from "./module"
@@ -63,8 +63,12 @@ function registration(row: Row): GatewayRegistration {
 export function createPostgresGatewayRegistrationRepository(options: {
   sql: SqlAdapter
 }): GatewayRegistrationRepository {
+  return createRepository(options.sql, options.sql)
+}
+
+function createRepository(sql: SqlTransaction, adapter: SqlAdapter): GatewayRegistrationRepository {
   const get: GatewayRegistrationRepository["get"] = async ({ tenantId, runtimeId }) => {
-    const result = await options.sql.query<Row>(
+    const result = await sql.query<Row>(
       `select ${COLUMNS}
          from genio_one_gateway_registrations
         where tenant_id = $1 and runtime_id = $2`,
@@ -73,8 +77,18 @@ export function createPostgresGatewayRegistrationRepository(options: {
     return result.rows[0] ? registration(result.rows[0]) : null
   }
   return {
+    async withLifecycleLock({ tenantId, runtimeId }, work) {
+      return adapter.transaction(async (transaction) => {
+        const result = await transaction.query<{ acquired: boolean }>(
+          `select pg_try_advisory_xact_lock(hashtextextended($1, 0)) as acquired`,
+          [JSON.stringify(["gateway-registration", tenantId, runtimeId])],
+        )
+        if (!result.rows[0]?.acquired) throw new PlatformApiError("GATEWAY_LIFECYCLE_IN_PROGRESS", 409)
+        return work(createRepository(transaction, adapter), transaction)
+      })
+    },
     async list({ tenantId }) {
-      const result = await options.sql.query<Row>(
+      const result = await sql.query<Row>(
         `select ${COLUMNS}
            from genio_one_gateway_registrations
           where tenant_id = $1
@@ -86,7 +100,7 @@ export function createPostgresGatewayRegistrationRepository(options: {
     get,
     async create({ tenantId, actorSubjectId, gatewayId, value }) {
       try {
-        const result = await options.sql.query<Row>(
+        const result = await sql.query<Row>(
           `insert into genio_one_gateway_registrations
              (tenant_id, runtime_id, display_name, gateway_id, site_id, region,
               labels, identity_client_id, state, registered_by_subject_id)
@@ -104,7 +118,7 @@ export function createPostgresGatewayRegistrationRepository(options: {
       }
     },
     async activate({ tenantId, runtimeId }) {
-      const result = await options.sql.query<Row>(
+      const result = await sql.query<Row>(
         `update genio_one_gateway_registrations
             set state = 'ACTIVE', activated_at = now(), row_revision = row_revision + 1
           where tenant_id = $1 and runtime_id = $2 and state = 'PROVISIONING'
@@ -115,7 +129,7 @@ export function createPostgresGatewayRegistrationRepository(options: {
       return registration(result.rows[0])
     },
     async retire({ tenantId, runtimeId }) {
-      const result = await options.sql.query<Row>(
+      const result = await sql.query<Row>(
         `update genio_one_gateway_registrations
             set state = 'RETIRED', retired_at = now(), row_revision = row_revision + 1
           where tenant_id = $1 and runtime_id = $2 and state <> 'RETIRED'

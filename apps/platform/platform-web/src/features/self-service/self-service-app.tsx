@@ -729,7 +729,7 @@ export function SelfServiceApp() {
                       return (
                       <TableRow
                         key={item.access_request_id}
-                        aria-label={t("View details")}
+                        aria-label={t("Open access request {{id}}", { id: item.access_request_id })}
                         className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                         onClick={() => setSelectedRequest(item)}
                         onKeyDown={(event) => {

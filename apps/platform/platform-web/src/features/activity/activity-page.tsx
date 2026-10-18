@@ -1167,7 +1167,7 @@ export function ActivityPage({
                 options: [...new Set(decisions.map((event) => event.outcome))].map((outcome) => ({ label: t(outcome), value: outcome })),
               }]}
               getRowId={(event) => event.audit_event_id}
-              getRowLabel={() => t("View details")}
+              getRowLabel={(event) => t("Open decision {{id}}", { id: event.correlation_id })}
               getRowTestId={(event) => `audit-decision-row-${event.audit_event_id}`}
               noResults={<DataEmpty icon={ShieldCheckIcon} title={t("No matching policy decisions")} description={t("Try another outcome or search term.")} />}
               onRowClick={(event) => void openAuditEvent(event)}

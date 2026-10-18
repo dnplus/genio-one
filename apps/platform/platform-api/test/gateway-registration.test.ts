@@ -201,3 +201,57 @@ test("failed identity provisioning leaves a retryable Gateway registration", asy
   await retryable.retire({ tenantId: "tenant-acme", actorSubjectId: "person-admin", runtimeId: "gateway-retry-1" })
   assert.deepEqual(revoked, [{ tenantId: "tenant-acme", runtimeId: "gateway-retry-1", clientId: "gateway-retry-1" }])
 })
+
+test("concurrent Gateway lifecycle requests cannot rotate a successful bootstrap", async () => {
+  for (const initialOperation of ["register", "provision"] as const) {
+    const modules = createInMemoryPlatformModules()
+    const repository = createInMemoryGatewayRegistrationRepository()
+    const input = { tenantId: "tenant-acme", actorSubjectId: "person-admin", runtimeId: "gateway-concurrent" }
+    const value = { correlation_id: "concurrent", runtime_id: input.runtimeId, display_name: "Concurrent", site_id: "taipei", region: "tw", labels: {} }
+    let entered!: () => void
+    let release!: () => void
+    const started = new Promise<void>((resolve) => { entered = resolve })
+    const blocked = new Promise<void>((resolve) => { release = resolve })
+    let provisions = 0
+    let revocations = 0
+    const lifecycle = createGatewayRegistrationLifecycle({
+      repository,
+      provisioner: {
+        async provision({ clientId }) {
+          provisions += 1
+          entered()
+          await blocked
+          return { issuer: "https://issuer.example.test", token_endpoint: "https://issuer.example.test/token", audience: "api", scope: "runtime", client_id: clientId, client_secret: `secret-${provisions}` }
+        },
+        async revoke() { revocations += 1 },
+      },
+      runtimeControl: modules.runtimeControl,
+      platformOrigin: "https://one.example.test",
+      defaultGatewayId: "genio-ai-mcp-gateway",
+      runtimeCommandVerificationKeys: { schema_version: 1, keys: [] },
+      policyReleaseRootKeys: { schema_version: 1, keys: [] },
+    })
+    if (initialOperation === "provision") {
+      await repository.create({ ...input, gatewayId: "genio-ai-mcp-gateway", value })
+    }
+    const first = initialOperation === "register" ? lifecycle.register({ ...input, value }) : lifecycle.provision(input)
+    await started
+    const concurrent = lifecycle.provision(input)
+    const retirement = lifecycle.retire(input)
+    const checks = Promise.all([
+      assert.rejects(concurrent, (error: unknown) => error instanceof Error && "statusCode" in error && error.statusCode === 409),
+      assert.rejects(retirement, (error: unknown) => error instanceof Error && "statusCode" in error && error.statusCode === 409),
+    ])
+    release()
+    const bootstrap = await first
+    await checks
+    assert.equal(provisions, 1)
+    assert.equal(revocations, 0)
+    const runtime = await modules.runtimeControl.getGatewayRuntime(input)
+    assert.equal(runtime?.report_public_key_pem, createPublicKey(createPrivateKey(bootstrap.report_signing.private_key_pem)).export({ type: "spki", format: "pem" }).toString())
+    assert.equal(runtime?.status, "ACTIVE")
+    await assert.rejects(lifecycle.provision(input), /GATEWAY_BOOTSTRAP_ALREADY_DELIVERED/)
+    await lifecycle.retire(input)
+    assert.equal(revocations, 1)
+  }
+})

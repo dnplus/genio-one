@@ -1,5 +1,6 @@
 import { generateKeyPairSync } from "node:crypto"
 
+import type { SqlTransaction } from "../../persistence/sql-adapter"
 import { PlatformApiError } from "../errors"
 import type { RuntimeControlStore } from "../runtime-control/contract"
 import type {
@@ -10,6 +11,10 @@ import type {
 } from "./contract"
 
 export interface GatewayRegistrationRepository {
+  withLifecycleLock<T>(
+    input: { tenantId: string; runtimeId: string },
+    work: (repository: GatewayRegistrationRepository, transaction: SqlTransaction | undefined) => Promise<T>,
+  ): Promise<T>
   list(input: { tenantId: string }): Promise<GatewayRegistration[]>
   get(input: { tenantId: string; runtimeId: string }): Promise<GatewayRegistration | null>
   create(input: {
@@ -69,7 +74,9 @@ export function createGatewayRegistrationLifecycle(options: {
   const platformOrigin = options.platformOrigin.replace(/\/$/, "")
 
   async function provision(
+    repository: GatewayRegistrationRepository,
     registration: GatewayRegistration,
+    transaction: SqlTransaction | undefined,
   ): Promise<GatewayBootstrapConfiguration> {
     if (registration.state !== "PROVISIONING") {
       throw new PlatformApiError("GATEWAY_BOOTSTRAP_ALREADY_DELIVERED", 409)
@@ -82,6 +89,7 @@ export function createGatewayRegistrationLifecycle(options: {
     const { publicKey, privateKey } = generateKeyPairSync("ed25519")
     const reportKeyId = `${registration.runtime_id}-report`
     await options.runtimeControl.registerGatewayRuntime({
+      transaction,
       tenantId: registration.tenant_id,
       runtimeId: registration.runtime_id,
       targetId: registration.gateway_id,
@@ -90,7 +98,7 @@ export function createGatewayRegistrationLifecycle(options: {
       reportPublicKeyPem: publicKey.export({ type: "spki", format: "pem" }).toString(),
       status: "ACTIVE",
     })
-    const active = await options.repository.activate({
+    const active = await repository.activate({
       tenantId: registration.tenant_id,
       runtimeId: registration.runtime_id,
     })
@@ -125,35 +133,44 @@ export function createGatewayRegistrationLifecycle(options: {
         gatewayId: normalizedValue.gateway_id ?? options.defaultGatewayId,
         value: normalizedValue,
       })
-      return provision(registration)
+      return options.repository.withLifecycleLock({ tenantId, runtimeId: registration.runtime_id }, async (repository, transaction) => {
+        const current = await repository.get({ tenantId, runtimeId: registration.runtime_id })
+        if (!current) throw new PlatformApiError("GATEWAY_NOT_FOUND", 404)
+        return provision(repository, current, transaction)
+      })
     },
     async provision({ tenantId, runtimeId }) {
-      const registration = await options.repository.get({ tenantId, runtimeId })
-      if (!registration) throw new PlatformApiError("GATEWAY_NOT_FOUND", 404)
-      return provision(registration)
+      return options.repository.withLifecycleLock({ tenantId, runtimeId }, async (repository, transaction) => {
+        const registration = await repository.get({ tenantId, runtimeId })
+        if (!registration) throw new PlatformApiError("GATEWAY_NOT_FOUND", 404)
+        return provision(repository, registration, transaction)
+      })
     },
     async retire({ tenantId, runtimeId }) {
-      const registration = await options.repository.get({ tenantId, runtimeId })
-      if (!registration) throw new PlatformApiError("GATEWAY_NOT_FOUND", 404)
-      if (registration.state === "RETIRED") return registration
-      await options.provisioner.revoke({
-        tenantId: registration.tenant_id,
-        runtimeId: registration.runtime_id,
-        clientId: registration.identity_client_id,
-      })
-      const runtime = await options.runtimeControl.getGatewayRuntime({ tenantId, runtimeId })
-      if (runtime) {
-        await options.runtimeControl.registerGatewayRuntime({
-          tenantId,
-          runtimeId,
-          targetId: runtime.target_id,
-          oidcClientId: runtime.oidc_client_id,
-          reportKeyId: runtime.report_key_id,
-          reportPublicKeyPem: runtime.report_public_key_pem,
-          status: "REVOKED",
+      return options.repository.withLifecycleLock({ tenantId, runtimeId }, async (repository, transaction) => {
+        const registration = await repository.get({ tenantId, runtimeId })
+        if (!registration) throw new PlatformApiError("GATEWAY_NOT_FOUND", 404)
+        if (registration.state === "RETIRED") return registration
+        await options.provisioner.revoke({
+          tenantId: registration.tenant_id,
+          runtimeId: registration.runtime_id,
+          clientId: registration.identity_client_id,
         })
-      }
-      return options.repository.retire({ tenantId, runtimeId })
+        const runtime = await options.runtimeControl.getGatewayRuntime({ tenantId, runtimeId, transaction })
+        if (runtime) {
+          await options.runtimeControl.registerGatewayRuntime({
+            transaction,
+            tenantId,
+            runtimeId,
+            targetId: runtime.target_id,
+            oidcClientId: runtime.oidc_client_id,
+            reportKeyId: runtime.report_key_id,
+            reportPublicKeyPem: runtime.report_public_key_pem,
+            status: "REVOKED",
+          })
+        }
+        return repository.retire({ tenantId, runtimeId })
+      })
     },
   }
 }

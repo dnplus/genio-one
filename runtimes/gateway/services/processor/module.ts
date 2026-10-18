@@ -1,5 +1,6 @@
 import { observeOperation } from "@genioone/telemetry/operation-observability"
 import { randomBytes } from "node:crypto"
+import { Worker } from "node:worker_threads"
 
 import type {
   DataProtectionDetectorMatch,
@@ -34,6 +35,92 @@ import {
 interface CompiledPattern {
   name: string
   expression: RegExp
+}
+
+const REGEX_PAYLOAD_TIMEOUT_MS = 250
+const MAX_REGEX_WORKERS = 4
+let activeRegexWorkers = 0
+const REGEX_WORKER_SOURCE = `
+const { parentPort } = require("node:worker_threads")
+parentPort.on("message", ({ value, source, flags }) => {
+  try {
+    const matches = Array.from(value.matchAll(new RegExp(source, flags)), match => ({
+      index: match.index, text: match[0],
+    }))
+    parentPort.postMessage({ matches })
+  } catch {
+    parentPort.postMessage({ error: true })
+  }
+})
+`
+
+interface RegexMatch {
+  index: number
+  text: string
+}
+
+class RegexInspectionBudget {
+  private deadline: number | undefined
+  private worker: Worker | undefined
+
+  async inspect(value: string, expression: RegExp): Promise<RegexMatch[]> {
+    this.deadline ??= Date.now() + REGEX_PAYLOAD_TIMEOUT_MS
+    const remaining = this.deadline - Date.now()
+    if (remaining < 1) throw new Error("REGEX_INSPECTION_TIMEOUT")
+    if (!this.worker) {
+      if (activeRegexWorkers >= MAX_REGEX_WORKERS) {
+        throw new Error("REGEX_INSPECTION_CAPACITY_EXCEEDED")
+      }
+      this.worker = new Worker(REGEX_WORKER_SOURCE, { eval: true })
+      activeRegexWorkers += 1
+    }
+    const worker = this.worker
+    return new Promise((resolve, reject) => {
+      const cleanup = () => {
+        clearTimeout(timer)
+        worker.off("message", onMessage)
+        worker.off("error", onError)
+        worker.off("exit", onExit)
+      }
+      const onError = () => {
+        cleanup()
+        reject(new Error("REGEX_INSPECTION_FAILED"))
+      }
+      const onExit = () => onError()
+      const onMessage = (result: { matches?: RegexMatch[]; error?: boolean }) => {
+        cleanup()
+        if (result.error || !result.matches) {
+          reject(new Error("REGEX_INSPECTION_FAILED"))
+        } else if (Date.now() >= this.deadline!) {
+          reject(new Error("REGEX_INSPECTION_TIMEOUT"))
+        } else {
+          resolve(result.matches)
+        }
+      }
+      const timer = setTimeout(() => {
+        cleanup()
+        reject(new Error("REGEX_INSPECTION_TIMEOUT"))
+      }, remaining)
+      worker.once("message", onMessage)
+      worker.once("error", onError)
+      worker.once("exit", onExit)
+      try {
+        worker.postMessage({ value, source: expression.source, flags: expression.flags })
+      } catch {
+        onError()
+      }
+    })
+  }
+
+  async close(): Promise<void> {
+    if (!this.worker) return
+    try {
+      await this.worker.terminate()
+    } finally {
+      activeRegexWorkers -= 1
+      this.worker = undefined
+    }
+  }
 }
 
 const TOKEN_PREFIX = "__GENIO_"
@@ -486,6 +573,10 @@ async function replaceAsync(
   pattern: RegExp,
   replacement: (match: string) => Promise<string>,
 ): Promise<{ value: string; count: number }> {
+  if (pattern.global) pattern.lastIndex = 0
+  if (!pattern.test(value)) return { value, count: 0 }
+  if (pattern.global) pattern.lastIndex = 0
+
   const matches = [...value.matchAll(pattern)]
   if (matches.length === 0) return { value, count: 0 }
   let result = ""
@@ -609,7 +700,13 @@ export class DataProcessor {
     const matches = new Set<string>()
     const detectorMatches: DataProtectionDetectorMatch[] = []
     const budget = this.options.policy.detector ? new PresidioInspectionBudget() : undefined
-    const transformed = await this.protectValue(context, value, matches, detectorMatches, budget)
+    const regexBudget = new RegexInspectionBudget()
+    let transformed: unknown
+    try {
+      transformed = await this.protectValue(context, value, matches, detectorMatches, budget, regexBudget)
+    } finally {
+      await regexBudget.close()
+    }
     if (this.options.policy.action === "BLOCK" && matches.size > 0) {
       return { disposition: "BLOCK", body, matches: [...matches], detectorMatches }
     }
@@ -776,14 +873,14 @@ export class DataProcessor {
     }))
   }
 
-  private regexDetections(value: string): ProtectionDetection[] {
+  private async regexDetections(value: string, regexBudget: RegexInspectionBudget): Promise<ProtectionDetection[]> {
     const detections: ProtectionDetection[] = []
     for (const [patternIndex, pattern] of this.patterns.entries()) {
-      for (const match of value.matchAll(pattern.expression)) {
-        const start = match.index ?? 0
+      for (const match of await regexBudget.inspect(value, pattern.expression)) {
+        const start = match.index
         detections.push({
           start,
-          end: start + match[0].length,
+          end: start + match.text.length,
           classification: pattern.name,
           source: "REGEX",
           patternIndex,
@@ -818,14 +915,15 @@ export class DataProcessor {
     matches: Set<string>,
     detectorMatches: DataProtectionDetectorMatch[],
     budget: PresidioInspectionBudget,
+    regexBudget: RegexInspectionBudget,
   ): Promise<string> {
     const presidio = await this.presidioDetections(context, value, budget)
     if (presidio.length === 0) {
-      return this.protectRegexValue(context, value, matches, detectorMatches)
+      return this.protectRegexValue(context, value, matches, detectorMatches, regexBudget)
     }
     const groups = overlappingProtectionDetectionGroups([
       ...presidio,
-      ...this.regexDetections(value),
+      ...await this.regexDetections(value, regexBudget),
     ])
     for (const group of groups) {
       this.recordDetections(group.detections, matches, detectorMatches)
@@ -850,15 +948,21 @@ export class DataProcessor {
     value: string,
     matches: Set<string>,
     detectorMatches: DataProtectionDetectorMatch[],
+    regexBudget: RegexInspectionBudget,
   ): Promise<string> {
     let current = value
     for (const pattern of this.patterns) {
-      const replaced = await replaceAsync(current, pattern.expression, async (match) => {
+      const found = await regexBudget.inspect(current, pattern.expression)
+      let output = ""
+      let offset = 0
+      for (const match of found) {
+        output += current.slice(offset, match.index)
         matches.add(pattern.name)
         detectorMatches.push({ classification: pattern.name })
-        return this.replacement(context, pattern.name, match)
-      })
-      current = replaced.value
+        output += await this.replacement(context, pattern.name, match.text)
+        offset = match.index + match.text.length
+      }
+      current = output + current.slice(offset)
     }
     return current
   }
@@ -869,28 +973,40 @@ export class DataProcessor {
     matches: Set<string>,
     detectorMatches: DataProtectionDetectorMatch[],
     budget: PresidioInspectionBudget | undefined,
+    regexBudget: RegexInspectionBudget,
   ): Promise<unknown> {
     if (typeof value === "string") {
       return budget
-        ? this.protectMixedValue(context, value, matches, detectorMatches, budget)
-        : this.protectRegexValue(context, value, matches, detectorMatches)
+        ? this.protectMixedValue(context, value, matches, detectorMatches, budget, regexBudget)
+        : this.protectRegexValue(context, value, matches, detectorMatches, regexBudget)
     }
     if (Array.isArray(value)) {
       const output: unknown[] = []
       for (const entry of value) {
-        output.push(await this.protectValue(context, entry, matches, detectorMatches, budget))
+        output.push(await this.protectValue(context, entry, matches, detectorMatches, budget, regexBudget))
       }
       return output
     }
     if (value && typeof value === "object") {
-      const entries: Array<[string, unknown]> = []
-      for (const [key, entry] of Object.entries(value)) {
-        entries.push([
-          key,
-          await this.protectValue(context, entry, matches, detectorMatches, budget),
-        ])
+      const output: Record<string, unknown> = {}
+      for (const key in value) {
+        if (Object.hasOwn(value, key)) {
+          const protectedValue = await this.protectValue(
+            context,
+            (value as Record<string, unknown>)[key],
+            matches,
+            detectorMatches,
+            budget,
+            regexBudget,
+          )
+          if (key === "__proto__") {
+            Object.defineProperty(output, key, { value: protectedValue, enumerable: true, writable: true, configurable: true })
+          } else {
+            output[key] = protectedValue
+          }
+        }
       }
-      return Object.fromEntries(entries)
+      return output
     }
     return value
   }
@@ -908,13 +1024,20 @@ export class DataProcessor {
       return Promise.all(value.map((entry) => this.restoreValue(context, entry)))
     }
     if (value && typeof value === "object") {
-      const entries = await Promise.all(
-        Object.entries(value).map(async ([key, entry]) => [
-          key,
-          await this.restoreValue(context, entry),
-        ] as const),
+      const keys = Object.keys(value)
+      const restored = await Promise.all(
+        keys.map((key) => this.restoreValue(context, (value as Record<string, unknown>)[key])),
       )
-      return Object.fromEntries(entries)
+      const output: Record<string, unknown> = {}
+      for (let i = 0; i < keys.length; i++) {
+        const key = keys[i]!
+        if (key === "__proto__") {
+          Object.defineProperty(output, key, { value: restored[i], enumerable: true, writable: true, configurable: true })
+        } else {
+          output[key] = restored[i]
+        }
+      }
+      return output
     }
     return value
   }

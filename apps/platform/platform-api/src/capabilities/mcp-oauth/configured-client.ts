@@ -7,15 +7,17 @@ export type ConfiguredOAuthClient = NonNullable<DownstreamIdentityProjection["oa
 export function configuredAuthorization(client: ConfiguredOAuthClient, state: string, redirectUri: string) {
   const verifier = randomBytes(32).toString("base64url")
   const url = new URL(client.authorization_endpoint)
-  url.search = new URLSearchParams({
-    response_type: "code",
-    client_id: client.client_id,
-    redirect_uri: redirectUri,
-    state,
-    code_challenge: createHash("sha256").update(verifier).digest("base64url"),
-    code_challenge_method: "S256",
-    ...(client.scopes.length ? { scope: client.scopes.join(" ") } : {}),
-  }).toString()
+  url.searchParams.set("response_type", "code")
+  url.searchParams.set("client_id", client.client_id)
+  url.searchParams.set("redirect_uri", redirectUri)
+  url.searchParams.set("state", state)
+  url.searchParams.set("code_challenge", createHash("sha256").update(verifier).digest("base64url"))
+  url.searchParams.set("code_challenge_method", "S256")
+  if (client.scopes.length) {
+    url.searchParams.set("scope", client.scopes.join(" "))
+  } else {
+    url.searchParams.delete("scope")
+  }
   return { url: url.toString(), verifier }
 }
 

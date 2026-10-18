@@ -11,6 +11,7 @@ import { Value } from "typebox/value"
 import type { ProcessingContext, ProcessorPolicyStep } from "./contract"
 import { createExternalProcessorHandler } from "./grpc"
 import { startProcessorHttpBridge } from "./http"
+import { DataProcessor } from "./module"
 import type { ProcessorPolicySnapshot } from "./policy-store"
 import type { TokenVault } from "./token-vault"
 import type { GatewayActivityIngest } from "../shared/gateway-activity"
@@ -216,6 +217,53 @@ async function postChunks(
       request.end()
     }, 5)
   })
+}
+
+async function getPath(port: number, path: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const request = httpRequest({ host: "127.0.0.1", port, method: "GET", path }, (response) => {
+      response.resume()
+      response.on("error", reject)
+      response.on("end", () => resolve(response.statusCode ?? 0))
+    })
+    request.on("error", reject)
+    request.end()
+  })
+}
+
+function regexRequestSteps(expression: string): ProcessorPolicyStep[] {
+  return [{
+    step_id: "request-regex",
+    hooks: {
+      request: {
+        action: "REDACT",
+        config: {
+          patterns: [{ name: "SECRET", expression }],
+          token_ttl_seconds: 600,
+        },
+      },
+    },
+  }]
+}
+
+function regexAttackBody(): Buffer {
+  return Buffer.from(JSON.stringify({ content: `${"a".repeat(40)}!` }))
+}
+
+async function startRegexHttpBridge(
+  steps: ProcessorPolicyStep[],
+): Promise<{ bridge: ReturnType<typeof startProcessorHttpBridge>; port: number }> {
+  const port = await unusedPort()
+  const bridge = startProcessorHttpBridge({
+    listen: `127.0.0.1:${port}`,
+    policySource: { async current() { return snapshot(steps) } },
+    tokenVault: new MemoryVault(),
+  })
+  await new Promise<void>((resolve, reject) => {
+    bridge.once("listening", resolve)
+    bridge.once("error", reject)
+  })
+  return { bridge, port }
 }
 
 function responseHeaders(contentType: string) {
@@ -884,6 +932,140 @@ test("HTTP processor bridge does not apply the remote safety cap to legacy redac
     const response = await postChunks(port, [body], httpHeaders())
     assert.equal(response.statusCode, 200)
     assert.match(response.body, /\[REDACTED:SECRET\]/)
+  } finally {
+    await new Promise<void>((resolve, reject) => bridge.close((error) => error ? reject(error) : resolve()))
+  }
+})
+
+test("HTTP processor bridge keeps normal requests responsive during hostile regex execution", { timeout: 25_000 }, async () => {
+  const { bridge, port } = await startRegexHttpBridge(regexRequestSteps("^(a+)+$"))
+  try {
+    const ordinary = Buffer.from(JSON.stringify({ content: "ordinary payload" }))
+    let hostileFinished = false
+    const hostileRequest = postChunks(port, [regexAttackBody()], httpHeaders()).then((response) => {
+      hostileFinished = true
+      return response
+    })
+    const normalStarted = Date.now()
+    const normalRequests = Promise.all([
+      postChunks(port, [ordinary], httpHeaders()),
+      postChunks(port, [ordinary], httpHeaders()),
+      postChunks(port, [ordinary], httpHeaders()),
+    ])
+    const normalResponses = await Promise.race([
+      normalRequests,
+      new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 1_000)),
+    ])
+    assert.ok(normalResponses, "ordinary traffic must finish within the regex payload budget")
+    assert.deepEqual(normalResponses.map((response) => response.statusCode), [200, 200, 200])
+    assert.equal(hostileFinished, false)
+    const normalLatencyMs = Date.now() - normalStarted
+    assert.ok(normalLatencyMs < 250, `ordinary HTTP requests took ${normalLatencyMs}ms`)
+    assert.equal((await hostileRequest).statusCode, 503)
+  } finally {
+    await new Promise<void>((resolve, reject) => bridge.close((error) => error ? reject(error) : resolve()))
+  }
+})
+
+test("HTTP processor bridge fails closed at worker capacity and recovers workers", { timeout: 25_000 }, async () => {
+  const { bridge, port } = await startRegexHttpBridge(regexRequestSteps("^(a+)+$"))
+  try {
+    const ordinary = Buffer.from(JSON.stringify({ content: "ordinary payload" }))
+    const hostile = Array.from({ length: 4 }, () =>
+      postChunks(port, [regexAttackBody()], httpHeaders()),
+    )
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    const controlStarted = Date.now()
+    assert.equal(await getPath(port, "/healthz"), 404)
+    assert.ok(Date.now() - controlStarted < 150)
+    const capacity = await postChunks(port, [ordinary], httpHeaders())
+    assert.equal(capacity.statusCode, 503)
+    assert.deepEqual(JSON.parse(capacity.body), { code: "PROCESSOR_REQUEST_REJECTED" })
+    assert.deepEqual((await Promise.all(hostile)).map((response) => response.statusCode), [503, 503, 503, 503])
+
+    const recovered = await postChunks(port, [ordinary], httpHeaders())
+    assert.equal(recovered.statusCode, 200)
+    assert.match(recovered.body, /ordinary payload/)
+
+    const stream = `data: ${JSON.stringify(`${"a".repeat(40)}!`)}\n\n`
+    const sse = await postChunks(port, [Buffer.from(stream)], httpHeaders(context.tenantId, {
+      "content-type": "text/event-stream",
+    }))
+    assert.equal(sse.statusCode, 503)
+    assert.deepEqual(JSON.parse(sse.body), { code: "PROCESSOR_REQUEST_REJECTED" })
+  } finally {
+    await new Promise<void>((resolve, reject) => bridge.close((error) => error ? reject(error) : resolve()))
+  }
+})
+
+test("HTTP processor bridge shares a bounded regex payload budget across JSON strings", async () => {
+  const port = await unusedPort()
+  const bridge = startProcessorHttpBridge({
+    listen: `127.0.0.1:${port}`,
+    policySource: {
+      async current() {
+        return snapshot([{
+          step_id: "request-tokenize",
+          hooks: {
+            request: {
+              action: "TOKENIZE",
+              config: {
+                patterns: [{ name: "SECRET", expression: "x" }],
+                token_ttl_seconds: 600,
+              },
+            },
+            response: {
+              action: "RESTORE",
+              config: {
+                patterns: [{ name: "SECRET", expression: "x" }],
+                token_ttl_seconds: 600,
+              },
+            },
+          },
+        }])
+      },
+    },
+    tokenVault: new MemoryVault(),
+    processorFactory(policy) {
+      return new DataProcessor({
+        policy,
+        tokenVault: {
+          async store() {
+            await new Promise((resolve) => setTimeout(resolve, 45))
+          },
+          async resolve() {
+            return null
+          },
+        },
+      })
+    },
+  })
+  await new Promise<void>((resolve, reject) => {
+    bridge.once("listening", resolve)
+    bridge.once("error", reject)
+  })
+  try {
+    const slowButValid = await postChunks(
+      port,
+      [Buffer.from(JSON.stringify({ content: ["x", "x", "x"] }))],
+      httpHeaders(),
+    )
+    assert.equal(slowButValid.statusCode, 200)
+
+    const sharedBudgetExceeded = await postChunks(
+      port,
+      [Buffer.from(JSON.stringify({ content: Array.from({ length: 7 }, () => "x") }))],
+      httpHeaders(),
+    )
+    assert.equal(sharedBudgetExceeded.statusCode, 503)
+    assert.deepEqual(JSON.parse(sharedBudgetExceeded.body), { code: "PROCESSOR_REQUEST_REJECTED" })
+
+    const recovered = await postChunks(
+      port,
+      [Buffer.from(JSON.stringify({ content: "x" }))],
+      httpHeaders(),
+    )
+    assert.equal(recovered.statusCode, 200)
   } finally {
     await new Promise<void>((resolve, reject) => bridge.close((error) => error ? reject(error) : resolve()))
   }

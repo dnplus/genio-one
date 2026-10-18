@@ -255,7 +255,7 @@ export function AccessPage({
                 <TableRow
                   key={request.access_request_id}
                   id={`access-request-${request.access_request_id}`}
-                  aria-label={t("View details")}
+                  aria-label={t("Open access request {{id}}", { id: request.access_request_id })}
                   className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                   data-testid={`access-request-row-${request.access_request_id}`}
                   onClick={() => setSelected(request)}

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict"
 import { generateKeyPairSync, sign } from "node:crypto"
+import { once } from "node:events"
+import { createServer } from "node:net"
 import { dirname, resolve } from "node:path"
 import test from "node:test"
 import { fileURLToPath } from "node:url"
@@ -14,6 +16,7 @@ import {
 } from "./contract"
 import { createExternalProcessorHandler, createExternalProcessorServer } from "./grpc"
 import { createProcessorChain, DataProcessor, SseLineBuffer } from "./module"
+import { startProcessorHttpBridge } from "./http"
 import { verifyProcessorPolicy, type ProcessorPolicySnapshot } from "./policy-store"
 import type { TokenVault } from "./token-vault"
 import type { GatewayActivityIngest } from "../shared/gateway-activity"
@@ -370,6 +373,75 @@ test("request protection and response restoration keep sensitive values session-
     /token vault mapping is unavailable/,
   )
 })
+
+const reconstructionPayloads = [
+  '{"messages":[{"content":"user@example.com","other":"unchanged"}],"count":2,"enabled":true,"empty":null}',
+  '{"__proto__":{"email":"user@example.com"},"constructor":{"prototype":{"email":"user@example.com"}},"nested":{"__proto__":"user@example.com","constructor":"user@example.com","prototype":[{"__proto__":{"email":"user@example.com"}}]}}',
+]
+
+for (const [index, payload] of reconstructionPayloads.entries()) {
+  test(`JSON protection preserves own payload keys for reconstruction case ${index}`, async () => {
+    const processor = new DataProcessor({
+      policy,
+      tokenVault: new MemoryVault(),
+      tokenFactory: () => "__GENIO_FIXED__",
+    })
+    const protectedBody = await processor.protectJson(context, Buffer.from(payload))
+    assert.equal(protectedBody.disposition, "CONTINUE")
+    assert.deepEqual(protectedBody.matches, ["EMAIL"])
+    assert.deepEqual(
+      JSON.parse(Buffer.from(protectedBody.body).toString()),
+      JSON.parse(payload.replaceAll("user@example.com", "__GENIO_FIXED__")),
+    )
+  })
+
+  test(`JSON restoration preserves own payload keys for reconstruction case ${index}`, async () => {
+    const vault = new MemoryVault()
+    await vault.store(context, "__GENIO_FIXED__", "user@example.com", 600)
+    const processor = new DataProcessor({ policy: { ...policy, action: "RESTORE" }, tokenVault: vault })
+    const restored = await processor.restoreJson(
+      context,
+      Buffer.from(payload.replaceAll("user@example.com", "__GENIO_FIXED__")),
+    )
+    assert.equal(restored.disposition, "CONTINUE")
+    assert.deepEqual(JSON.parse(Buffer.from(restored.body).toString()), JSON.parse(payload))
+  })
+}
+
+for (const direction of ["request", "response"] as const) {
+  test(`HTTP processor ${direction} preserves ordinary and special JSON keys`, async (t) => {
+    const reservation = createServer()
+    reservation.listen(0, "127.0.0.1")
+    await once(reservation, "listening")
+    const address = reservation.address()
+    assert.ok(address && typeof address !== "string")
+    await new Promise<void>((resolve, reject) => reservation.close((error) => error ? reject(error) : resolve()))
+    const vault = new MemoryVault()
+    await vault.store(context, "__GENIO_FIXED__", "user@example.com", 600)
+    const server = startProcessorHttpBridge({
+      listen: `127.0.0.1:${address.port}`,
+      ...externalProcessorOptions(vault),
+      processorFactory: (processorPolicy, tokenVault) => new DataProcessor({
+        policy: processorPolicy,
+        tokenVault,
+        tokenFactory: () => "__GENIO_FIXED__",
+      }),
+    })
+    t.after(() => new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve())))
+    await once(server, "listening")
+    const headers = Object.fromEntries(requestHeaderMessage().request_headers.headers.headers.map(({ key, value }) => [key, value]))
+    for (const payload of reconstructionPayloads) {
+      const tokenized = payload.replaceAll("user@example.com", "__GENIO_FIXED__")
+      const response: Response = await fetch(`http://127.0.0.1:${address.port}/v1/process/${direction}`, {
+        method: "POST",
+        headers,
+        body: direction === "request" ? payload : tokenized,
+      })
+      assert.equal(response.status, 200)
+      assert.deepEqual(await response.json(), JSON.parse(direction === "request" ? tokenized : payload))
+    }
+  })
+}
 
 test("default tokenization keeps the full semantic type with a short opaque handle", async () => {
   const vault = new MemoryVault()
@@ -1280,7 +1352,7 @@ test("ext_proc closes a stream when an SSE line exceeds the limit", async () => 
   assert.equal(responseBodies[0].response_body.response.body_mutation.body.byteLength, 0)
 })
 
-test("ext_proc waits for accounting and activity delivery before closing the stream", async () => {
+test("ext_proc waits for accounting and activity delivery before closing the stream", { timeout: 5_000 }, async () => {
   let releaseActivity!: () => void
   let releaseAccounting!: () => void
   const activityGate = new Promise<void>((resolve) => {
@@ -1290,21 +1362,27 @@ test("ext_proc waits for accounting and activity delivery before closing the str
     releaseAccounting = resolve
   })
   let started = 0
+  let markStarted!: () => void
+  const deliveriesStarted = new Promise<void>((resolve) => {
+    markStarted = resolve
+  })
   const finished = runStreamingCompletion({
     ...externalProcessorOptions(new MemoryVault()),
     onActivity: async () => {
       started += 1
+      if (started === 2) markStarted()
       await activityGate
     },
     onAccounting: async () => {
       started += 1
+      if (started === 2) markStarted()
       await accountingGate
     },
   }, [
     'data: {"choices":[],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}\n\ndata: [DONE]\n',
   ])
 
-  await new Promise((resolve) => setTimeout(resolve, 20))
+  await deliveriesStarted
   assert.equal(started, 2)
   let closed = false
   void finished.then(() => {
@@ -1923,4 +2001,22 @@ test("the processor exposes the Envoy ext_proc gRPC interface", () => {
     externalProcessorOptions(new MemoryVault()),
   )
   server.forceShutdown()
+})
+
+test("untrusted regex execution is bounded and isolated from concurrent requests", { timeout: 25_000 }, async () => {
+  for (const mode of ["regex", "mixed", "mixed-empty", "sse", "capacity", "budget"]) {
+    const child = Bun.spawn([
+      process.execPath,
+      fileURLToPath(new URL("./regex-isolation.fixture.ts", import.meta.url)),
+      mode,
+    ], { stdout: "pipe", stderr: "pipe" })
+    const timeout = setTimeout(() => child.kill(), 5_000)
+    try {
+      const [status, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()])
+      assert.equal(status, 0, `${mode} isolation scenario failed: ${stderr}`)
+    } finally {
+      clearTimeout(timeout)
+      child.kill()
+    }
+  }
 })

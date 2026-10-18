@@ -182,7 +182,7 @@ export function createPostgresRuntimeControlStore(
       runtimeIdentifier(input.reportKeyId, "RUNTIME_REPORT_KEY_ID_REQUIRED")
       runtimeKeyMaterial(input.reportPublicKeyPem, "RUNTIME_REPORT_KEY_REQUIRED")
       validateReportKey(input.reportPublicKeyPem)
-      return options.sql.transaction(async (transaction) => {
+      const work = async (transaction: SqlTransaction): Promise<RuntimeRegistration> => {
         await lockRuntimeTopology({ transaction, tenantId: input.tenantId })
         const current = await selectRuntimeRegistration(transaction, input.tenantId, input.runtimeId, true)
         if (current) {
@@ -239,13 +239,14 @@ export function createPostgresRuntimeControlStore(
         const unchanged = await selectRuntimeRegistration(transaction, input.tenantId, input.runtimeId, true)
         if (!unchanged) throw new PlatformApiError("RUNTIME_REGISTRATION_WRITE_RACE", 500)
         return mapRegistration(unchanged, now)
-      })
+      }
+      return input.transaction ? work(input.transaction) : options.sql.transaction(work)
     },
     async getGatewayRuntime(input) {
       if (input.runtimeKind !== undefined && input.runtimeKind !== "GATEWAY") return null
       runtimeIdentifier(input.tenantId, "TENANT_REQUIRED")
       runtimeIdentifier(input.runtimeId, "RUNTIME_ID_REQUIRED")
-      const row = await selectRuntimeRegistration(options.sql, input.tenantId, input.runtimeId)
+      const row = await selectRuntimeRegistration(input.transaction ?? options.sql, input.tenantId, input.runtimeId)
       return row ? mapRegistration(row, now) : null
     },
     async listGatewayRuntimes(input) {

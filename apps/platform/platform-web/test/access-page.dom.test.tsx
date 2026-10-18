@@ -116,7 +116,7 @@ test("Access keeps approved Request history separate from the active Entitlement
   expect(within(entitlementRow).getByRole("button", { name: "APPROVED" })).toBeTruthy()
 
   const requests = screen.getByTestId("access-requests")
-  const requestRow = within(requests).getByTestId("access-request-row-request-ai-user-model")
+  const requestRow = within(requests).getByRole("row", { name: "Open access request request-ai-user-model" })
   expect(within(requestRow).getByText("APPROVED")).toBeTruthy()
   expect(within(requestRow).getByText("AI Analyst")).toBeTruthy()
 

@@ -315,10 +315,10 @@ export function connectionHealthHostAllowed(endpoint: string): boolean {
     const url = new URL(endpoint)
     if (url.protocol !== "http:" && url.protocol !== "https:") return false
     if (url.username || url.password || url.search || url.hash) return false
-    const hostname = url.hostname.toLowerCase()
+    const hostname = url.hostname.replace(/^\[|\]$/g, "").toLowerCase()
     const configured = (process.env.GENIO_ONE_CONNECTION_HEALTH_ALLOWED_HOSTS ?? "")
       .split(",")
-      .map((value) => value.trim().toLowerCase())
+      .map((value) => value.trim().replace(/^\[|\]$/g, "").toLowerCase())
       .filter(Boolean)
     return ["127.0.0.1", "localhost", "::1", "[::1]"].includes(hostname) || configured.includes(hostname)
   } catch {
