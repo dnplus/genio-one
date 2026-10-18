@@ -100,7 +100,6 @@ export function RightPanel({
   onEnsureRuntime?: (tier: "headless" | "desktop") => void
   onImportArtifact?: (artifact: ArtifactRef) => void
   onBotInvocationDecision?: (requestId: string, decision: "APPROVE" | "DENY") => void | Promise<void>
-  /** UX P2: user-scoped Hands mock computer (Epic E). */
   handsComputer?: HandsComputerView | null
   onOpenHandsPreview?: () => void
   loginWall?: LoginWallView | null

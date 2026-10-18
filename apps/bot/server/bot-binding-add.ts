@@ -20,7 +20,6 @@ export interface CatalogCapabilityView {
   access?: string | null
   hub_status?: string | null
   connection_status?: string | null
-  /** Optional policy denial reason from catalog / One Policy */
   denial_reason?: string | null
   approval_policy_ref?: string | null
   skill_id?: string | null
@@ -29,9 +28,7 @@ export interface CatalogCapabilityView {
 export interface CatalogAddDecision {
   state: CatalogAddState
   connectionStatus: CatalogConnectionStatus
-  /** May persist an INSTALLED BotBinding projection */
   installBinding: boolean
-  /** May persist a PENDING binding while access request is open */
   pendingBinding: boolean
   /** Never true from catalog alone — calls still go through Gateway / One Policy */
   usableFromCatalogAlone: false
@@ -52,7 +49,6 @@ export function resolveConnectionStatus(cap: CatalogCapabilityView): CatalogConn
 }
 
 /**
- * Resolve Add UI / server action state for one published capability.
  * No entitlement / unknown access → DENIED (never default-available).
  */
 export function resolveCatalogAddState(cap: CatalogCapabilityView): CatalogAddDecision {

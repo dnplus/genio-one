@@ -2,6 +2,8 @@ import { createHash, randomUUID } from "node:crypto"
 
 import type { SqlAdapter, SqlTransaction } from "../../persistence/sql-adapter"
 import { PlatformApiError } from "../errors"
+import type { ModelEntitlement } from "../entitlements/contract"
+import { createPostgresModelEntitlementCatalog } from "../entitlements/postgres"
 import type { TenantConfiguration } from "../configuration/contract"
 import { accessGovernanceAuditEvent, type AccessGovernanceAuditWriter } from "./audit"
 import type { AccessNotification, AccessRequest, LegacyEntitlement, SubjectCatalog } from "./contract"
@@ -116,6 +118,15 @@ function entitlement(row: Row, now: number): LegacyEntitlement {
   }
 }
 
+function legacyEntitlement(value: ModelEntitlement, at: number): LegacyEntitlement {
+  return entitlement({
+    ...value,
+    valid_from: value.starts_at,
+    valid_until: value.expires_at,
+    revocation_reason: null,
+  }, at)
+}
+
 function effectiveEntitlement(value: LegacyEntitlement, at: number): boolean {
   return value.state === "ACTIVE" && value.valid_from <= at && (value.valid_until === null || value.valid_until > at)
 }
@@ -139,6 +150,12 @@ export function createPostgresAccessGovernanceStore(options: {
 }): AccessGovernanceStore {
   const now = options.now ?? (() => Math.floor(Date.now() / 1_000))
   const idFactory = options.idFactory ?? ((prefix) => `${prefix}-${randomUUID()}`)
+  const entitlements = createPostgresModelEntitlementCatalog({
+    sql: options.sql,
+    now,
+    idFactory,
+    releasePublisher: options.releasePublisher,
+  })
   const listEntitlements = async (query: string, parameters: readonly unknown[]) => {
     const result = await options.sql.query<Row>(query, parameters)
     return result.rows.map((row) => entitlement(row, now()))
@@ -471,19 +488,16 @@ export function createPostgresAccessGovernanceStore(options: {
           resourceId: value.resource_id,
           capabilityId: value.capability_id,
         })
-        const retried = await transaction.query<Row>(
-          `select ${ENTITLEMENT_COLUMNS}, grant_request_digest
-             from genio_one_model_entitlements
-            where tenant_id = $1 and grant_idempotency_key = $2
-            for update`,
-          [tenantId, idempotencyKey],
-        )
-        const priorRow = retried.rows[0]
-        if (priorRow) {
-          if (nullableText(priorRow, "grant_request_digest") !== requestDigest) {
-            throw new PlatformApiError("AUTO_GRANT_CORRELATION_REUSED", 409)
-          }
-          const prior = entitlement(priorRow, at)
+        const identity = { key: idempotencyKey, requestDigest }
+        const priorGrant = await entitlements.findIdempotentGrantInTransaction({ transaction, tenantId, identity })
+          .catch((error: unknown) => {
+            if (error instanceof PlatformApiError && error.code === "ENTITLEMENT_IDEMPOTENCY_KEY_REUSED") {
+              throw new PlatformApiError("AUTO_GRANT_CORRELATION_REUSED", 409)
+            }
+            throw error
+          })
+        if (priorGrant) {
+          const prior = legacyEntitlement(priorGrant, at)
           if (!effectiveEntitlement(prior, at)) {
             throw new PlatformApiError("AUTO_GRANT_RETRY_NOT_EFFECTIVE", 409)
           }
@@ -511,36 +525,19 @@ export function createPostgresAccessGovernanceStore(options: {
           await recordActivationAudit(existing.entitlement_id, "ALREADY_ENTITLED")
           return existing
         }
-        const inserted = await transaction.query<Row>(
-          `insert into genio_one_model_entitlements
-             (tenant_id, entitlement_id, subject_id, client_id, resource_id,
-              capability_id, public_model_id, state, starts_at, expires_at,
-              grant_idempotency_key, grant_request_digest)
-           values ($1,$2,$3,null,$4,$5,null,'ACTIVE',to_timestamp($6),null,$7,$8)
-           returning ${ENTITLEMENT_COLUMNS}`,
-          [
-            tenantId,
-            idFactory("entitlement"),
-            actor.subjectId,
-            value.resource_id,
-            value.capability_id,
-            at,
-            idempotencyKey,
-            requestDigest,
-          ],
-        )
-        const insertedRow = inserted.rows[0]
-        if (!insertedRow) throw new PlatformApiError("AUTO_GRANT_WRITE_FAILED", 500)
-        const created = entitlement(insertedRow, at)
-        if (!options.releasePublisher) {
-          throw new PlatformApiError("GATEWAY_RELEASE_PUBLISHER_REQUIRED", 500)
-        }
-        await options.releasePublisher.reconcileInTransaction({
+        const created = legacyEntitlement(await entitlements.grantInTransaction({
           transaction,
           tenantId,
-          gatewayId: text(targetRow, "gateway_id"),
+          identity,
           issuedAt: at,
-        })
+          gatewayId: text(targetRow, "gateway_id"),
+          value: {
+            subject_id: actor.subjectId,
+            resource_id: value.resource_id,
+            capability_id: value.capability_id,
+            starts_at: at,
+          },
+        }), at)
         await recordActivationAudit(created.entitlement_id, "GRANTED")
         return created
       })
@@ -578,40 +575,25 @@ export function createPostgresAccessGovernanceStore(options: {
         let created: LegacyEntitlement | null = null
         if ("APPROVE" in value.decision) {
           if (value.decision.APPROVE.valid_until <= at) throw new PlatformApiError("ENTITLEMENT_WINDOW_INVALID", 422)
-          const entitlementId = idFactory("entitlement")
-          const grant = await transaction.query<Row>(
-            `insert into genio_one_model_entitlements
-               (tenant_id, entitlement_id, subject_id, client_id, resource_id,
-                capability_id, public_model_id, state, starts_at, expires_at)
-             values ($1,$2,$3,null,$4,$5,null,'ACTIVE',to_timestamp($6),to_timestamp($7))
-             returning ${ENTITLEMENT_COLUMNS}`,
-            [tenantId, entitlementId, current.target_subject, current.resource_id, current.capability_id, at, value.decision.APPROVE.valid_until],
-          )
-          created = entitlement(grant.rows[0]!, at)
+          created = legacyEntitlement(await entitlements.grantInTransaction({
+            transaction,
+            tenantId,
+            issuedAt: at,
+            value: {
+              subject_id: current.target_subject,
+              resource_id: current.resource_id,
+              capability_id: current.capability_id,
+              starts_at: at,
+              expires_at: value.decision.APPROVE.valid_until,
+            },
+          }), at)
           await transaction.query(
             `update genio_one_access_requests set state = 'APPROVED', expires_at = to_timestamp($3),
                     resolved_at = to_timestamp($4), decided_by_subject_id = $5, entitlement_id = $6,
                     decision_correlation_id = $7
               where tenant_id = $1 and access_request_id = $2`,
-            [tenantId, requestId, value.decision.APPROVE.valid_until, at, actor.subjectId, entitlementId, value.correlation_id],
+            [tenantId, requestId, value.decision.APPROVE.valid_until, at, actor.subjectId, created.entitlement_id, value.correlation_id],
           )
-          const publication = await transaction.query<{ gateway_id: string }>(
-            `select gateway_id from genio_one_publications
-              where tenant_id = $1 and resource_id = $2 and publication_state = 'PUBLISHED'
-              order by endpoint_revision desc limit 1 for update`,
-            [tenantId, current.resource_id],
-          )
-          if (publication.rows[0]) {
-            if (!options.releasePublisher) {
-              throw new PlatformApiError("GATEWAY_RELEASE_PUBLISHER_REQUIRED", 500)
-            }
-            await options.releasePublisher.reconcileInTransaction({
-              transaction,
-              tenantId,
-              gatewayId: publication.rows[0].gateway_id,
-              issuedAt: at,
-            })
-          }
           await audit.recordInTransaction({
             transaction,
             tenantId,

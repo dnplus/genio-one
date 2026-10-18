@@ -209,7 +209,6 @@ function insertParameters(
   ]
 }
 
-/** PostgreSQL adapter for immutable, organization-scoped routing policies. */
 export function createPostgresModelRoutingPolicyStore(
   options: PostgresModelRoutingPolicyOptions,
 ): ModelRoutingPolicyStore {

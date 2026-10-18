@@ -567,7 +567,6 @@ function reviewJson(reviewerId: string, reviewedAt: number): string {
   return JSON.stringify({ reviewed_by: reviewerId, reviewed_at: reviewedAt })
 }
 
-/** PostgreSQL implementation of the two-transaction publication build. */
 export function createPostgresPublicationWorkflowStore(
   options: PostgresPublicationWorkflowStoreOptions,
 ): PublicationWorkflowStore {

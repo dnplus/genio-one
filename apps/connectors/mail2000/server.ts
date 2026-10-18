@@ -18,8 +18,9 @@ export function readMail2000Credential(header: string | null): Mail2000Credentia
   const separator = value.indexOf(":")
   if (separator < 1 || separator === value.length - 1 || value.length > 4609) return null
   const username = value.slice(0, separator)
-  if (/[\u0000\r\n]/.test(username)) return null
-  return { username, password: value.slice(separator + 1) }
+  const password = value.slice(separator + 1)
+  if (/[\u0000\r\n]/.test(username) || /[\u0000\r\n]/.test(password)) return null
+  return { username, password }
 }
 
 export function createMail2000Handler(options: Partial<Mail2000Imap> & { caldav?: Mail2000Dav; carddav?: Mail2000Dav; sendMail?: (credential: Mail2000Credential, args: OutgoingMail) => Promise<unknown> } = {}) {

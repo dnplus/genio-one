@@ -8,6 +8,18 @@ import { runMigrations } from "./persistence/migration-runner"
 
 const sourceUrl = process.env.GENIO_ONE_LITELLM_PRICE_CATALOG_URL?.trim() ||
   "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
+
+// Security: Enforce HTTPS scheme on the catalog URL to mitigate SSRF and plain-text HTTP risks
+let parsedSourceUrl: URL
+try {
+  parsedSourceUrl = new URL(sourceUrl)
+} catch {
+  throw new Error("GENIO_ONE_LITELLM_PRICE_CATALOG_URL must be a valid URL")
+}
+if (parsedSourceUrl.protocol !== "https:") {
+  throw new Error("GENIO_ONE_LITELLM_PRICE_CATALOG_URL must use the https: protocol")
+}
+
 const databaseUrl = process.env.GENIO_ONE_DATABASE_URL?.trim()
 if (!databaseUrl) throw new Error("GENIO_ONE_DATABASE_URL is required")
 

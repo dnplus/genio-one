@@ -458,6 +458,44 @@ test("remote response safety rejects declared and upstream SSE before output", a
   assert.equal(upstream.activity[0]?.upstream_attempted, true)
 })
 
+for (const action of ["BLOCK", "REDACT"] as const) {
+  for (const fragments of [["alice@example.com"], ["alice@", "example.com"], [..."alice@example.com"]]) {
+    test(`regex response ${action} denies declared and upstream SSE with ${fragments.length} events`, async () => {
+      const steps: ProcessorPolicyStep[] = [{
+        step_id: "response-dlp",
+        hooks: { response: { action, config: {
+          patterns: [{ name: "EMAIL", expression: "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}" }],
+          token_ttl_seconds: 600,
+        } } },
+      }]
+      const runtime = adapterRuntime(async () => {
+        throw new Error("regex DLP must not evaluate remote safety")
+      })
+      const declared = await run(steps, runtime, [
+        requestHeaders(),
+        { request_body: { body: Buffer.from('{"stream":true}'), end_of_stream: true } },
+      ])
+      assert.equal(declared.responses.some((response) => Boolean(response.request_body)), false)
+      assert.equal(immediateCode(declared.responses.at(-1)!), "SAFETY_RESPONSE_STREAM_UNSUPPORTED")
+      assert.equal(declared.activity[0]?.upstream_attempted, false)
+      const upstream = await run(steps, runtime, [
+        requestHeaders(),
+        { request_body: { body: Buffer.from('{"stream":false}'), end_of_stream: true } },
+        responseHeaders("text/event-stream"),
+        ...fragments.map((content, index) => ({ response_body: {
+          body: Buffer.from(`data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`),
+          end_of_stream: index === fragments.length - 1,
+        } })),
+      ])
+      assert.equal(upstream.responses.some((response) => Boolean(response.response_headers)), false)
+      assert.equal(upstream.responses.some((response) => Boolean(response.response_body)), false)
+      assert.equal(immediateCode(upstream.responses.at(-1)!), "SAFETY_RESPONSE_STREAM_UNSUPPORTED")
+      assert.equal(upstream.activity[0]?.upstream_attempted, true)
+      assert.equal(upstream.destroyed, undefined)
+    })
+  }
+}
+
 test("trusted safety receipt handoff preserves Chinese identifiers through gRPC metadata", async () => {
   const handoff: SafetyDecisionReceipt[] = [{
     adapter_id: "安全適配器",

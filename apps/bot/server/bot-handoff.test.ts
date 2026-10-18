@@ -60,7 +60,6 @@ describe("UX P1-a Bot↔Bot async handoff", () => {
     expect(ack.toBotId).toBe(darkness.id)
     expect(ack.events.some((e) => e.type === "handoff.sent")).toBe(true)
     expect(ack.events.some((e) => e.type === "handoff.acked")).toBe(true)
-    // Not processed in same create call
     expect(registry.getHandoff(owner, ack.handoffId)?.processed).toBe(false)
     expect(afterCreate - before).toBeLessThan(5_000)
 
@@ -69,14 +68,12 @@ describe("UX P1-a Bot↔Bot async handoff", () => {
     const bubbles = projectHandoffMessages(visibleAqua)
     expect(bubbles.some((b) => b.kind === "handoff" && b.text.includes("已確認送出"))).toBe(true)
 
-    // Mindless fan-out blocked
     expect(() => registry!.createHandoffs(owner, {
       fromBotId: aqua.id,
       toBotIds: [darkness.id, megumin.id],
       fact: "不應廣播",
     })).toThrow(HandoffFanOutError)
 
-    // Explicit fan-out allowed (one ack per target)
     const fan = registry.createHandoffs(owner, {
       fromBotId: aqua.id,
       toBotIds: [darkness.id, megumin.id],
@@ -87,7 +84,6 @@ describe("UX P1-a Bot↔Bot async handoff", () => {
     expect(fan).toHaveLength(2)
     expect(fan.every((item) => item.async && !item.processed)).toBe(true)
 
-    // Later process (separate call)
     const processed = registry.processHandoff(owner, ack.handoffId)
     expect(processed.processed).toBe(true)
     expect(processed.state).toBe("DELIVERED")

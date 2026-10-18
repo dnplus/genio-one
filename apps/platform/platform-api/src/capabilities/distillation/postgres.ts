@@ -395,13 +395,30 @@ export function createPostgresDistillationStore(options: {
     async listCandidates({ tenantId, ownerSubjectId, workspaceIds, limit, cursor }) {
       const pageLimit = distillationPageLimit(limit)
       const position = decodeDistillationCursor(cursor)
+      const pageBoundary = position
+        ? "and created_at <= $5 and (created_at < $5 or knowledge_id > $6)"
+        : ""
       const result = await options.sql.query<Row>(
-        `select ${CANDIDATE_COLUMNS} from genio_one_knowledge_candidates
-          where tenant_id = $1 and (owner_subject_id = $2 or workspace_id = any($3::text[]))
-            and ($4::bigint is null or created_at < $4 or (created_at = $4 and knowledge_id > $5))
+        `select * from (
+          (select ${CANDIDATE_COLUMNS} from genio_one_knowledge_candidates
+            where tenant_id = $1 and owner_subject_id = $2
+              ${pageBoundary}
+            order by created_at desc, knowledge_id asc
+            limit $4)
+          union
+          select workspace_candidates.*
+          from (select distinct unnest($3::text[]) as workspace_id) as workspaces
+          cross join lateral (
+            select ${CANDIDATE_COLUMNS} from genio_one_knowledge_candidates
+              where tenant_id = $1 and workspace_id = workspaces.workspace_id
+                ${pageBoundary}
+              order by created_at desc, knowledge_id asc
+              limit $4
+          ) as workspace_candidates
+        ) as candidates
           order by created_at desc, knowledge_id asc
-          limit $6`,
-        [tenantId, ownerSubjectId, workspaceIds, position?.created_at ?? null, position?.id ?? "", pageLimit + 1],
+          limit $4`,
+        [tenantId, ownerSubjectId, workspaceIds, pageLimit + 1, ...(position ? [position.created_at, position.id] : [])],
       )
       const { items, next_cursor } = toDistillationPage(result.rows.map(candidate), pageLimit, (row) => row.knowledge_id)
       return { candidates: items, next_cursor }

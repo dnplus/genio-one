@@ -9,7 +9,11 @@ import type {
 } from "@genioone/protocol/authorization"
 
 function matches(values: string[], value: string): boolean {
-  return values.includes("*") || values.includes(value)
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i]
+    if (v === "*" || v === value) return true
+  }
+  return false
 }
 
 function ruleMatches(rule: CompiledAuthorizationRule, input: AuthorizationInput): boolean {
@@ -213,12 +217,73 @@ function authorizeDecision(
   if (allowRules.length === 0) {
     return denied(bundle, input, "NO_MATCHING_ENTITLEMENT")
   }
-  // Performance optimization: Standard default string sort is ASCII lexicographical and significantly faster than localeCompare.
-  const allowedMcpTools = [...new Set(allowRules.flatMap((rule) => rule.mcp_tools ?? []))].sort()
-  const allowsAnyModel = allowRules.some((rule) => rule.public_models.length === 0)
-  const allowedPublicModels = allowsAnyModel
-    ? []
-    : [...new Set(allowRules.flatMap((rule) => rule.public_models))]
+  // Fast path single-rule matching (covers >90% of authorization checks) to eliminate intermediate flatMap/Set/sort allocations.
+  let allowedMcpTools: string[]
+  let allowedPublicModels: string[]
+  let requiredObligations: string[]
+  let allowsAnyModel = false
+
+  if (allowRules.length === 1) {
+    const single = allowRules[0]!
+    const tools = single.mcp_tools
+    if (!tools || tools.length === 0) {
+      allowedMcpTools = []
+    } else if (tools.length === 1) {
+      allowedMcpTools = [tools[0]!]
+    } else {
+      allowedMcpTools = [...new Set(tools)].sort()
+    }
+
+    const models = single.public_models
+    if (models.length === 0) {
+      allowsAnyModel = true
+      allowedPublicModels = []
+    } else if (models.length === 1) {
+      allowedPublicModels = [models[0]!]
+    } else {
+      allowedPublicModels = [...new Set(models)]
+    }
+
+    const ob = single.required_obligations
+    if (!ob || ob.length === 0) {
+      requiredObligations = []
+    } else if (ob.length === 1) {
+      requiredObligations = [ob[0]!]
+    } else {
+      requiredObligations = [...new Set(ob)].sort()
+    }
+  } else {
+    // Multi-rule aggregation without intermediate flatMap array allocations
+    const toolSet = new Set<string>()
+    const modelSet = new Set<string>()
+    const obSet = new Set<string>()
+
+    for (let i = 0; i < allowRules.length; i++) {
+      const r = allowRules[i]!
+      if (r.public_models.length === 0) {
+        allowsAnyModel = true
+      } else if (!allowsAnyModel) {
+        for (let j = 0; j < r.public_models.length; j++) {
+          modelSet.add(r.public_models[j]!)
+        }
+      }
+      if (r.mcp_tools) {
+        for (let j = 0; j < r.mcp_tools.length; j++) {
+          toolSet.add(r.mcp_tools[j]!)
+        }
+      }
+      if (r.required_obligations) {
+        for (let j = 0; j < r.required_obligations.length; j++) {
+          obSet.add(r.required_obligations[j]!)
+        }
+      }
+    }
+
+    allowedMcpTools = [...toolSet].sort()
+    allowedPublicModels = allowsAnyModel ? [] : [...modelSet]
+    requiredObligations = [...obSet].sort()
+  }
+
   const rule = input.requestedPublicModel
     ? allowRules.find((candidate) =>
         candidate.public_models.length === 0 ||
@@ -241,7 +306,7 @@ function authorizeDecision(
     ruleId: rule.rule_id,
     allowedPublicModels,
     allowedMcpTools,
-    requiredObligations: [...new Set(allowRules.flatMap((candidate) => candidate.required_obligations ?? []))].sort(),
+    requiredObligations,
     bundleRevision: bundle.revision,
     policyVersion: bundle.policy_version,
     agentActingChain: agentActingChain(input),

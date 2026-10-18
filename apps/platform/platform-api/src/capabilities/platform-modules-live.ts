@@ -128,7 +128,6 @@ export interface LivePlatformModuleGraphOptions
   }
   runtimeReportKeyId?: string
   runtimeReportPublicKeyPem?: string
-  /** Validity window for one immutable policy release. */
   gatewayReleaseTtlSeconds: number
   subjectAliases?: Readonly<Record<string, readonly string[]>>
   renderer?: GatewayProjectionRendererOptions

@@ -151,6 +151,7 @@ test("Tenant Administrator registers, provisions once, lists, and retires a Gate
 test("failed identity provisioning leaves a retryable Gateway registration", async () => {
   const modules = createInMemoryPlatformModules({ now: () => 100 })
   let fail = true
+  const revoked: unknown[] = []
   const store = createInMemoryGatewayRegistrationRepository({ now: () => 100 })
   const retryable = createGatewayRegistrationLifecycle({
     repository: store,
@@ -166,7 +167,7 @@ test("failed identity provisioning leaves a retryable Gateway registration", asy
           client_secret: "gateway-secret",
         }
       },
-      async revoke() {},
+      async revoke(input) { revoked.push(input) },
     },
     runtimeControl: modules.runtimeControl,
     platformOrigin: "https://one.example.test",
@@ -196,4 +197,6 @@ test("failed identity provisioning leaves a retryable Gateway registration", asy
     runtimeId: "gateway-retry-1",
   })
   assert.equal(bootstrap.registration.state, "ACTIVE")
+  await retryable.retire({ tenantId: "tenant-acme", actorSubjectId: "person-admin", runtimeId: "gateway-retry-1" })
+  assert.deepEqual(revoked, [{ tenantId: "tenant-acme", runtimeId: "gateway-retry-1", clientId: "gateway-retry-1" }])
 })

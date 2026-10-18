@@ -21,7 +21,6 @@ export const CODEX_SUBSCRIPTION_CAPABILITY_DEF: CodexCoreCapabilityDef = {
   description: "Use your own Codex subscription for this Bot",
 }
 
-/** Native Codex surface aligned with A-1 contract-reviewer fixture ids. */
 export const CODEX_CORE_CAPABILITY_DEFS: readonly CodexCoreCapabilityDef[] = [
   {
     id: "model.invoke",
@@ -88,6 +87,5 @@ export const GENIO_DESKTOP_ADAPTER_CAPABILITY_DEFS: readonly RuntimeCapabilityCa
   },
 ] as const
 
-/** Core four kinds that discover() must surface. */
 export const CODEX_CORE_KINDS = ["model", "shell", "code", "filesystem", "browser", "web_search", "mcp", "remote_hands"] as const
 export type CodexCoreKind = (typeof CODEX_CORE_KINDS)[number]

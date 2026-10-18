@@ -76,7 +76,6 @@ export interface PostgresSqlAdapterOptions {
   client?: Sql
 }
 
-/** A postgres.js-backed implementation of the capability SQL seam. */
 export class PostgresSqlAdapter implements SqlAdapter {
   private readonly client: Sql
 

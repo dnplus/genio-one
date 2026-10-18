@@ -3,8 +3,9 @@ const sensitiveQueryValue = /([?&](?:access_token|api_key|key|password|secret|to
 const bearerValue = /\bBearer\s+[^\s]+/gi
 const basicUrlIdentity = /(https?:\/\/)[^/@\s]+@/gi
 const controlCharacters = /[\u0000-\u001f\u007f]+/g
+const sensitiveField = /^(?:authorization|proxy[-_]?authorization|cookie|set[-_]?cookie|password|passwd|secret|client[-_]?secret|token|access[-_]?token|refresh[-_]?token|api[-_]?key)$/i
 
-// Applied to the stdout/stderr line only: that sink bypasses the analytics collector's redaction.
+// Redact before either sink, including the durable producer outbox.
 function safeText(value: string): string {
   return value
     .replace(basicUrlIdentity, "$1[REDACTED]@")
@@ -33,13 +34,17 @@ export function writeOperationalEvent(
   event: string,
   fields: Readonly<Record<string, unknown>> = {},
 ): void {
-  recordOperationalLog(component, level, event, fields)
-  const line = `${JSON.stringify({
+  const payload = JSON.parse(JSON.stringify({
     ...fields,
     component,
     event,
     level,
-  }, (_key, value) => typeof value === "string" ? safeText(value) : value)}\n`
+  }, (key, value) => sensitiveField.test(key) && value != null
+    ? "[REDACTED]"
+    : typeof value === "string" ? safeText(value) : value))
+  const { component: safeComponent, event: safeEvent, level: safeLevel, ...safeFields } = payload
+  recordOperationalLog(safeComponent, safeLevel, safeEvent, safeFields)
+  const line = `${JSON.stringify(payload)}\n`
   if (level === "ERROR") process.stderr.write(line)
   else process.stdout.write(line)
 }

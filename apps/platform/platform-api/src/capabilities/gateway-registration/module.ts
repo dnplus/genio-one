@@ -35,7 +35,7 @@ export interface GatewayIdentityProvisioner {
     client_id: string
     client_secret: string
   }>
-  revoke(input: { clientId: string }): Promise<void>
+  revoke(input: { tenantId: string; runtimeId: string; clientId: string }): Promise<void>
 }
 
 export interface GatewayRegistrationLifecycle {
@@ -136,7 +136,11 @@ export function createGatewayRegistrationLifecycle(options: {
       const registration = await options.repository.get({ tenantId, runtimeId })
       if (!registration) throw new PlatformApiError("GATEWAY_NOT_FOUND", 404)
       if (registration.state === "RETIRED") return registration
-      await options.provisioner.revoke({ clientId: registration.identity_client_id })
+      await options.provisioner.revoke({
+        tenantId: registration.tenant_id,
+        runtimeId: registration.runtime_id,
+        clientId: registration.identity_client_id,
+      })
       const runtime = await options.runtimeControl.getGatewayRuntime({ tenantId, runtimeId })
       if (runtime) {
         await options.runtimeControl.registerGatewayRuntime({

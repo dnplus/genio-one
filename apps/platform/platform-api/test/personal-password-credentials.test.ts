@@ -47,3 +47,12 @@ test("changing a connector site requires fresh personal credentials", async () =
   await service.save(owner, { username: "new-user", password: "new-password" })
   expect((await service.resolve(owner)).username).toBe("new-user")
 })
+
+test("passwords with control characters are rejected", async () => {
+  const service = createPersonalCredentials({ store: createMemoryPasswordCredentialStore(), codec: createMcpOAuthSecretCodec(Buffer.alloc(32, 6)), identity: { async canonicalSubjectId(input) { return input.subjectId } }, connections: {
+    async get() { return { connection_kind: "MCP", downstream_identity: { mode: "USER_PASSWORD" }, lifecycle: "ENABLED" } },
+  } as unknown as ResourceConnectionRegistry })
+  const owner = { tenantId: "tenant", resourceId: "resource", connectionId: "connection", subjectId: "person" }
+  await expect(service.save(owner, { username: "user", password: "pass\r\nHeader: injected" })).rejects.toThrow("PASSWORD_CREDENTIAL_INVALID")
+  await expect(service.save(owner, { username: "user", password: "pass\0null" })).rejects.toThrow("PASSWORD_CREDENTIAL_INVALID")
+})

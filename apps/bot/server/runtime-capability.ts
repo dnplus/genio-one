@@ -26,11 +26,9 @@ export const RUNTIME_CAPABILITY_KINDS = [
 
 export type RuntimeCapabilityKind = (typeof RUNTIME_CAPABILITY_KINDS)[number]
 
-/** Draft Runtime PEP actions (expose filter + exec + extension load). */
 export const RUNTIME_ACTIONS = ["expose", "invoke", "load_extension"] as const
 export type RuntimeAction = (typeof RUNTIME_ACTIONS)[number]
 
-/** Audit event kinds for Runtime PEP (schema only in A-1). */
 export const RUNTIME_AUDIT_KINDS = ["expose", "invoke", "denied"] as const
 export type RuntimeAuditKind = (typeof RUNTIME_AUDIT_KINDS)[number]
 
@@ -50,9 +48,7 @@ export const KNOWN_RESOURCE_IDS = [
 export interface RuntimeIdentity {
   /** Adapter / runtime product id, e.g. "codex", "e2b-desktop". */
   runtime_id: string
-  /** Optional adapter implementation label. */
   adapter?: string
-  /** Optional live session; capability catalog may omit. */
   session_id?: string | null
 }
 

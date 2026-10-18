@@ -65,7 +65,6 @@ export interface SaveGatewayPolicyReleaseInput {
 
 export interface GatewayPolicyReleaseStore {
   save(input: SaveGatewayPolicyReleaseInput): Promise<SavedGatewayPolicyRelease>
-  /** Join an existing publication/runtime transaction without opening another. */
   saveInTransaction(
     input: SaveGatewayPolicyReleaseInput & { transaction: SqlTransaction },
   ): Promise<SavedGatewayPolicyRelease>

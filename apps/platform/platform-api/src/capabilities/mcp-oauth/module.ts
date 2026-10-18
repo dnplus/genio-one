@@ -201,6 +201,8 @@ function bindingFromRecord(
 }
 
 export interface McpOAuthService {
+  readonly publicOrigin: URL
+  readonly managementUiOrigin: URL
   start(input: { tenantId: string; resourceId: string; connectionId: string; subjectId: string }): Promise<McpOAuthAuthorization>
   complete(input: { state: string; code?: string; iss?: string; error?: string }): Promise<string>
   status(input: { tenantId: string; resourceId: string; connectionId: string; subjectId: string }): Promise<McpOAuthBinding | null>
@@ -283,6 +285,8 @@ export function createMcpOAuthService(options: {
   }
 
   return {
+    publicOrigin,
+    managementUiOrigin,
     async start(input) {
       const connection = await options.connections.get({
         tenantId: input.tenantId,

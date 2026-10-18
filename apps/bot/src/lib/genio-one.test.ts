@@ -65,7 +65,6 @@ describe("Genio token storage", () => {
     expect(loadGenioToken()).toBe("legacy-session-token")
     expect(loadGenioRefreshToken()).toBe("legacy-session-refresh")
 
-    // After migration, it should be in localStorage and removed from sessionStorage
     expect(localStore.get("genioone.bot.access_token")).toBe("legacy-session-token")
     expect(localStore.get("genioone.bot.refresh_token")).toBe("legacy-session-refresh")
     expect(sessionStore.has("genioone.bot.access_token")).toBe(false)
@@ -78,7 +77,6 @@ describe("Genio token storage", () => {
     expect(loadGenioToken()).toBe("legacy-cookie-token")
     expect(loadGenioRefreshToken()).toBe("legacy-cookie-refresh")
 
-    // After migration, it should be in localStorage and cookie deleted (max-age=0)
     expect(localStore.get("genioone.bot.access_token")).toBe("legacy-cookie-token")
     expect(localStore.get("genioone.bot.refresh_token")).toBe("legacy-cookie-refresh")
     expect(cookieStr).not.toContain("genioone.bot.access_token")

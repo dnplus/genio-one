@@ -708,6 +708,29 @@ test("SSE restoration holds semantic tokens split into single-character deltas",
   assert.doesNotMatch(restored, /<EMAIL:|ABC12345/)
 })
 
+for (const action of ["BLOCK", "REDACT"] as const) {
+  for (const fragments of [["alice@example.com"], ["alice@", "example.com"], [..."alice@example.com"]]) {
+    test(`regex response ${action} rejects ${fragments.length} SSE events before output`, async () => {
+      const chain = createProcessorChain(
+        [{ step_id: "response-dlp", hooks: { response: { action, config: builtinConfig } } }],
+        new MemoryVault(),
+        bundleRevision,
+      )
+      const output: string[] = []
+      await assert.rejects(async () => {
+        for (const content of fragments) {
+          const result = await chain.restoreSseLine(context,
+            `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}`)
+          output.push(Buffer.from(result.body).toString("utf8"))
+        }
+      }, /PROCESSOR_REQUIRES_BUFFERED_STREAM/)
+      assert.deepEqual(output, [])
+      assert.equal(chain.requiresBufferedResponse?.("response"), true)
+      assert.equal(chain.requiresBufferedResponse?.("request"), false)
+    })
+  }
+}
+
 test("ordered process steps run request forward and response backward", async () => {
   const events: string[] = []
   const fakeProcessor = (action: string) => ({
@@ -741,7 +764,7 @@ test("ordered process steps run request forward and response backward", async ()
   const requestResult = await chain.protectJson(context, Buffer.from("{}"))
   const responseResult = await chain.restoreJson(context, Buffer.from("{}"))
   await chain.protectSseLine(context, "data: {}")
-  await chain.restoreSseLine(context, "data: {}")
+  await assert.rejects(chain.restoreSseLine(context, "data: {}"), /PROCESSOR_REQUIRES_BUFFERED_STREAM/)
 
   assert.deepEqual(events, [
     "json:REDACT",
@@ -750,8 +773,6 @@ test("ordered process steps run request forward and response backward", async ()
     "json:REDACT",
     "sse:REDACT",
     "sse:BLOCK",
-    "sse:BLOCK",
-    "sse:REDACT",
   ])
   assert.deepEqual(requestResult.executedSteps, [
     { stepId: "first", action: "REDACT" },

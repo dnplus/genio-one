@@ -38,7 +38,6 @@ export interface GatewayRoutingApplyProjection {
   eligible_connection_ids?: string[]
 }
 
-/** The Resource ownership fact needed by the runtime routing artifact. */
 export interface GatewayRoutingResourceOwnerRef {
   tenant_id: string
   resource_id: string

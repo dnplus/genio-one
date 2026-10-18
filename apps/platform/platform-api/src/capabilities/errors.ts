@@ -9,7 +9,6 @@ const PlatformApiViolationSchema = Type.Object({
   field: Type.Optional(ErrorText),
 }, { additionalProperties: false })
 
-/** Shared error envelope for every Management API capability. */
 export const PlatformApiErrorResponseSchema = Type.Object({
   code: ErrorText,
   message: ErrorText,

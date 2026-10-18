@@ -1,4 +1,4 @@
-import { LoaderCircleIcon, UsersIcon } from "lucide-react"
+import { LoaderCircleIcon, UsersIcon, XIcon } from "lucide-react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -148,7 +148,7 @@ function AccessGroupEditor({
         <Button disabled={busy || !displayName.trim()} onClick={() => void saveGroup()}>{busy ? <LoaderCircleIcon data-icon="inline-start" className="animate-spin" /> : null}{t("Save changes")}</Button>
         {group ? <>
           <Field><FieldLabel>{t("People")}</FieldLabel><FieldDescription>{t("Membership source")}</FieldDescription>
-            <div className="flex flex-wrap gap-2">{members.map((subjectId) => <Badge key={subjectId} variant="secondary" className="gap-1"><span>{subjectLabel(subjectId)}</span><Button disabled={busy} variant="ghost" size="icon-xs" aria-label={`${t("Remove")} ${subjectLabel(subjectId)}`} onClick={() => setMembers((values) => values.filter((value) => value !== subjectId))}>×</Button></Badge>)}</div>
+            <div className="flex flex-wrap gap-2">{members.map((subjectId) => <Badge key={subjectId} variant="secondary" className="gap-1"><span>{subjectLabel(subjectId)}</span><Button disabled={busy} variant="ghost" size="icon-xs" className="focus-visible:ring-1" aria-label={t("Remove {{name}}", { name: subjectLabel(subjectId) })} onClick={() => setMembers((values) => values.filter((value) => value !== subjectId))}><XIcon className="size-3" /></Button></Badge>)}</div>
             {!busy ? <SearchableSelect value="" options={people.filter((subject) => !members.includes(subject.subject_id)).map((subject) => ({ value: subject.subject_id, label: subjectLabel(subject.subject_id), description: subject.profile.email ?? undefined }))} onValueChange={(subjectId) => { if (subjectId) setMembers((values) => [...values, subjectId]) }} placeholder={t("Select a person")} searchPlaceholder={t("Search people")} emptyLabel={t("No results.")} /> : null}
           </Field>
           <Button disabled={busy} onClick={() => void saveMembers()}>{t("Save changes")}</Button>

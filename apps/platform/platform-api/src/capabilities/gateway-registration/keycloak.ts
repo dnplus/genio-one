@@ -50,6 +50,22 @@ export function createKeycloakGatewayIdentityProvisioner(options: {
     return values[0] ?? null
   }
 
+  function ownership(tenantId: string, runtimeId: string): Record<string, string> {
+    return {
+      "genioone.provisioner": "gateway-registration",
+      "genioone.tenant-id": tenantId,
+      "genioone.runtime-id": runtimeId,
+    }
+  }
+
+  function assertOwnership(existing: JsonRecord, tenantId: string, runtimeId: string, clientId: string): void {
+    const attributes = existing.attributes
+    if (existing.clientId !== clientId || !attributes || typeof attributes !== "object" || Array.isArray(attributes)
+      || Object.entries(ownership(tenantId, runtimeId)).some(([key, value]) => (attributes as JsonRecord)[key] !== value)) {
+      throw new Error(`Keycloak client ${clientId} ownership does not match Gateway Runtime`)
+    }
+  }
+
   async function ensureScope(token: string, internalClientId: string): Promise<void> {
     const scopeValues = records(await responseJson(await fetchImpl(
       `${origin}/admin/realms/${encodeURIComponent(realm)}/client-scopes`,
@@ -99,6 +115,7 @@ export function createKeycloakGatewayIdentityProvisioner(options: {
         fullScopeAllowed: false,
       }
       if (existing) {
+        assertOwnership(existing, tenantId, runtimeId, clientId)
         await responseJson(await fetchImpl(
           `${origin}/admin/realms/${encodeURIComponent(realm)}/clients/${encodeURIComponent(stringValue(existing.id, "Keycloak client id"))}`,
           {
@@ -111,10 +128,11 @@ export function createKeycloakGatewayIdentityProvisioner(options: {
         await responseJson(await fetchImpl(`${origin}/admin/realms/${encodeURIComponent(realm)}/clients`, {
           method: "POST",
           headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-          body: JSON.stringify(profile),
+          body: JSON.stringify({ ...profile, attributes: ownership(tenantId, runtimeId) }),
         }), "Keycloak Gateway Runtime client creation")
         existing = await client(token, clientId)
       }
+      if (existing) assertOwnership(existing, tenantId, runtimeId, clientId)
       const internalId = stringValue(existing?.id, "Keycloak Gateway Runtime client id")
       await ensureScope(token, internalId)
       await ensureMapper(token, internalId, {
@@ -161,10 +179,11 @@ export function createKeycloakGatewayIdentityProvisioner(options: {
         client_secret: stringValue(secret.value, "Keycloak Gateway Runtime secret"),
       }
     },
-    async revoke({ clientId }) {
+    async revoke({ tenantId, runtimeId, clientId }) {
       const token = await adminToken()
       const existing = await client(token, clientId)
       if (!existing) return
+      assertOwnership(existing, tenantId, runtimeId, clientId)
       await responseJson(await fetchImpl(
         `${origin}/admin/realms/${encodeURIComponent(realm)}/clients/${encodeURIComponent(stringValue(existing.id, "Keycloak client id"))}`,
         { method: "DELETE", headers: { authorization: `Bearer ${token}` } },

@@ -89,7 +89,6 @@ for (const event of fixture.audit_examples) {
 assert(fixture.policy_draft.deny.includes("browser.open"), "browser should be denied in draft")
 assert(fixture.policy_draft.unmanaged_extension_default === "deny", "unmanaged default deny")
 
-// Explicit Resource collision matrix
 for (const resourceId of KNOWN_RESOURCE_IDS) {
   assert(conflictsWithResourceId(resourceId), `expected collision flag for ${resourceId}`)
   assert(!isRuntimeTarget(resourceId), `resource id must not parse as runtime target: ${resourceId}`)

@@ -196,10 +196,23 @@ export const mcpOAuthHttp: FastifyPluginAsync<McpOAuthHttpOptions> = async (
       } catch {
         throw new PlatformApiError("MCP_OAUTH_CALLBACK_INVALID", 400)
       }
-      if (targetUrl.protocol !== "http:" && targetUrl.protocol !== "https:") {
+      if (
+        targetUrl.username ||
+        targetUrl.password ||
+        (targetUrl.protocol !== "http:" && targetUrl.protocol !== "https:")
+      ) {
         throw new PlatformApiError("MCP_OAUTH_CALLBACK_INVALID", 400)
       }
-      return reply.redirect(target, 303)
+      // Ensure redirect target is restricted to approved origins to prevent open redirect vulnerabilities
+      const allowedOrigins = [
+        options.service.managementUiOrigin?.origin,
+        options.service.publicOrigin?.origin,
+      ].filter((origin): origin is string => Boolean(origin))
+      if (allowedOrigins.length > 0 && !allowedOrigins.includes(targetUrl.origin)) {
+        throw new PlatformApiError("MCP_OAUTH_CALLBACK_INVALID", 400)
+      }
+      // Prevent browser and proxy caching of OAuth callback redirect responses
+      return reply.header("cache-control", "no-store").redirect(target, 303)
     },
   )
 }

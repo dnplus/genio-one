@@ -234,6 +234,7 @@ export function ChatMessageList({
                       className={`message-action-btn ${messageFeedbacks[message.id] === "positive" ? "active-positive" : ""}`}
                       title={botCopy("Like (positive feedback)", "讚 (正面反饋)")}
                       aria-label={botCopy("Like", "讚")}
+                      aria-pressed={messageFeedbacks[message.id] === "positive"}
                       onClick={() => onFeedback(message.id, "positive")}
                     >
                       <ThumbsUp />
@@ -243,6 +244,7 @@ export function ChatMessageList({
                       className={`message-action-btn ${messageFeedbacks[message.id] === "negative" ? "active-negative" : ""}`}
                       title={botCopy("Dislike (negative feedback)", "倒讚 (負面反饋)")}
                       aria-label={botCopy("Dislike", "倒讚")}
+                      aria-pressed={messageFeedbacks[message.id] === "negative"}
                       onClick={() => onFeedback(message.id, "negative")}
                     >
                       <ThumbsDown />

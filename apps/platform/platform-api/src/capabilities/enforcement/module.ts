@@ -82,7 +82,6 @@ export interface EnforcementChainRevisionStore {
   get(input: EnforcementChainRevisionKey): Promise<EnforcementChainRevision | null>
 }
 
-/** Read the currently editable/publishable revision for one Resource capability. */
 export interface EnforcementChainRevisionReader extends EnforcementChainRevisionStore {
   listInventory(input: { tenantId: string }): Promise<EnforcementChainInventoryItem[]>
   getLatest(input: {

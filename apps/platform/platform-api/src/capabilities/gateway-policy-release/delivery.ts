@@ -13,7 +13,6 @@ export interface GatewayPublicationDeliveryInput {
   issuedAt: number
 }
 
-/** One transaction-scoped publication delivery lane. */
 export interface GatewayPublicationDelivery {
   deliverInTransaction(input: GatewayPublicationDeliveryInput): Promise<void>
 }

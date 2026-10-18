@@ -117,7 +117,6 @@ describe("slice B BotSession HTTP + roster projection", () => {
     expect(aquaEntry.session.appServerThreadId).toBe("thread-aqua-1")
     expect(darkEntry.session.appServerThreadId).toBe("thread-dark-1")
 
-    // switch focus → viewed clears unread; other bot session untouched
     const loaded = await app.inject({ method: "GET", url: `/api/bots/${aquaId}/timeline`, headers })
     const missingVersion = await app.inject({ method: "POST", url: `/api/bots/${aquaId}/session/events`, headers, payload: { type: "viewed" } })
     expect(missingVersion.statusCode).toBe(409)

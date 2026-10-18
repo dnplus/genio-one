@@ -58,17 +58,21 @@ import { RealtimeVoiceModal } from "./RealtimeVoiceModal"
 import { botCopy, botDisplayName } from "../../lib/ui-copy"
 import { captureProductEvent } from "../../lib/posthog-analytics"
 
+// Pre-compiled regular expressions at module scope to prevent re-compilation on every user input or keystroke
+const OWNER_TOOL_PATTERN = /\b(?:read_self|update_self|create_bot|list_owned_skills|read_owned_skill|write_owned_skill|revert_owned_skill|delete_owned_skill|list_schedules|list_schedule_runs|create_schedule|update_schedule|delete_schedule|list_bots|send_to_bot)\b/i
+const ENGLISH_WORD = (words: string) => String.raw`(?<![A-Za-z0-9_-])(?:${words})(?![A-Za-z0-9_-])`
+const ENGLISH_TARGET = (words: string) => String.raw`(?<![A-Za-z0-9_])(?:[A-Za-z][A-Za-z0-9_]*-)*(?:${words})(?![A-Za-z0-9_-])`
+const WORKSPACE_ACTION_PATTERN = new RegExp(String.raw`(?:讀取|列出|修改|寫入|建立|刪除|使用|${ENGLISH_WORD("read|list|modify|write|create|delete|use")})\s*[^。！？\n]{0,48}(?:工作區|${ENGLISH_TARGET("workspace")})`, "i")
+const EXECUTION_ACTION_PATTERN = new RegExp(String.raw`(?:執行|運行|${ENGLISH_WORD("run|execute")})\s*[^。！？\n]{0,48}(?:指令|命令|${ENGLISH_TARGET("command|terminal|shell|script")})`, "i")
+const ARTIFACT_ACTION_PATTERN = new RegExp(String.raw`(?:建立|產生|輸出|寫入|儲存|${ENGLISH_WORD("create|generate|make|write|save")})\s*[^。！？\n]{0,48}(?:檔案|文件|簡報|${ENGLISH_TARGET("artifact|document|file")}|${ENGLISH_TARGET("presentation")}(?:\.html)?|[A-Za-z0-9_-]+\.html\b)`, "i")
+const NEGATION_CLAUSE_PATTERN = /^\s*(?:(?:請|please|也|並且|and)\s*)?(?:不要|別|不需|無需|do not|don't)/i
+const SKILL_MD_PATTERN = /\bSKILL\.md\b/i
+
 export function requiresHeadlessRuntime(text: string) {
-  const ownerTool = /\b(?:read_self|update_self|create_bot|list_owned_skills|read_owned_skill|write_owned_skill|revert_owned_skill|delete_owned_skill|list_schedules|list_schedule_runs|create_schedule|update_schedule|delete_schedule|list_bots|send_to_bot)\b/i
-  const englishWord = (words: string) => String.raw`(?<![A-Za-z0-9_-])(?:${words})(?![A-Za-z0-9_-])`
-  const englishTarget = (words: string) => String.raw`(?<![A-Za-z0-9_])(?:[A-Za-z][A-Za-z0-9_]*-)*(?:${words})(?![A-Za-z0-9_-])`
-  const workspaceAction = new RegExp(String.raw`(?:讀取|列出|修改|寫入|建立|刪除|使用|${englishWord("read|list|modify|write|create|delete|use")})\s*[^。！？\n]{0,48}(?:工作區|${englishTarget("workspace")})`, "i")
-  const executionAction = new RegExp(String.raw`(?:執行|運行|${englishWord("run|execute")})\s*[^。！？\n]{0,48}(?:指令|命令|${englishTarget("command|terminal|shell|script")})`, "i")
-  const artifactAction = new RegExp(String.raw`(?:建立|產生|輸出|寫入|儲存|${englishWord("create|generate|make|write|save")})\s*[^。！？\n]{0,48}(?:檔案|文件|簡報|${englishTarget("artifact|document|file")}|${englishTarget("presentation")}(?:\.html)?|[A-Za-z0-9_-]+\.html\b)`, "i")
   for (const clause of text.split(/[，,。！？\n；;]/)) {
-    if (/^\s*(?:(?:請|please|也|並且|and)\s*)?(?:不要|別|不需|無需|do not|don't)/i.test(clause)) continue
-    if (executionAction.test(clause) || workspaceAction.test(clause)) return true
-    if (artifactAction.test(clause) && !(ownerTool.test(clause) && /\bSKILL\.md\b/i.test(clause))) return true
+    if (NEGATION_CLAUSE_PATTERN.test(clause)) continue
+    if (EXECUTION_ACTION_PATTERN.test(clause) || WORKSPACE_ACTION_PATTERN.test(clause)) return true
+    if (ARTIFACT_ACTION_PATTERN.test(clause) && !(OWNER_TOOL_PATTERN.test(clause) && SKILL_MD_PATTERN.test(clause))) return true
   }
   return false
 }

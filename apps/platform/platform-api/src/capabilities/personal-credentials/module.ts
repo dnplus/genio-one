@@ -63,7 +63,7 @@ export function createPersonalCredentials(options: {
   return {
     async save(owner: CredentialOwner & { resourceId: string }, value: { username: string; password: string }) {
       const connection = await enabled(owner)
-      if (!value.username.trim() || value.username.includes(":") || /[\u0000\r\n]/.test(value.username) || !value.password || value.username.length > 512 || value.password.length > 4096) throw new PlatformApiError("PASSWORD_CREDENTIAL_INVALID", 422)
+      if (!value.username.trim() || value.username.includes(":") || /[\u0000\r\n]/.test(value.username) || /[\u0000\r\n]/.test(value.password) || !value.password || value.username.length > 512 || value.password.length > 4096) throw new PlatformApiError("PASSWORD_CREDENTIAL_INVALID", 422)
       await options.store.put(owner, options.codec.seal({ ...owner, endpoint: connection.endpoint, username: value.username.trim(), password: value.password }))
       return { status: "SAVED" as const }
     },

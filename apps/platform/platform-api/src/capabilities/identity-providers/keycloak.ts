@@ -52,7 +52,6 @@ export function createKeycloakIdentityProviderRegistry(options: {
   realm: string
   adminUsername: string
   adminPassword: string
-  /** Public Keycloak origin, used to render the upstream redirect URI. */
   issuerOrigin?: string
   fetch?: HttpFetch
 }): IdentityProviderRegistry {

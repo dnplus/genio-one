@@ -2,6 +2,7 @@ import { RuntimeCapabilityGroups } from "./runtime-capability-groups"
 import { DiscardPolicyDraft } from "./discard-policy-draft"
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { XIcon } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -132,7 +133,7 @@ function ReferenceField({
         const itemLabel = option?.label ?? value
         return <Badge key={value} variant="secondary" className="gap-1">
           {itemLabel}
-          {!disabled ? <Button type="button" variant="ghost" size="icon-xs" aria-label={`${t("Remove")} ${itemLabel} (${t(label)})`} onClick={() => onRemove(value)}>×</Button> : null}
+          {!disabled ? <Button type="button" variant="ghost" size="icon-xs" className="focus-visible:ring-1" aria-label={t("Remove {{item}} from {{label}}", { item: itemLabel, label: t(label) })} onClick={() => onRemove(value)}><XIcon className="size-3" /></Button> : null}
         </Badge>
       })}
     </div>

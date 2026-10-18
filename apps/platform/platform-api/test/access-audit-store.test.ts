@@ -350,7 +350,7 @@ function lifecycleRows(text: string, parameters: readonly unknown[]): Row[] {
       },
     }]
   }
-  if (text.includes("from genio_one_resources resource") && !text.includes("from genio_one_model_entitlements entitlement")) {
+  if (text.includes("from genio_one_resources resource") && !text.includes("from genio_one_model_entitlements entitlement") && !text.includes("insert into genio_one_model_entitlements")) {
     return [{ owner_organization_id: "org-uat-access" }]
   }
   if (text.includes("select entitlement_id from genio_one_model_entitlements")) return []
@@ -361,13 +361,17 @@ function lifecycleRows(text: string, parameters: readonly unknown[]): Row[] {
   }
   if (text.includes("insert into genio_one_model_entitlements")) {
     return [{
+      tenant_id: tenantId,
+      client_id: null,
+      public_model_id: null,
+      created_at: 100,
       entitlement_id: "entitlement-approved",
       subject_id: "person-anrita",
       resource_id: resource.resource_id,
       capability_id: "access.request",
       state: "ACTIVE",
-      valid_from: 100,
-      valid_until: 200,
+      starts_at: 100,
+      expires_at: 200,
       revocation_reason: null,
     }]
   }

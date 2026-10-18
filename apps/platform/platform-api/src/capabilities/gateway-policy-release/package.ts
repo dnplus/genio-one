@@ -25,7 +25,6 @@ import { canonicalGatewayPolicyReleaseBytes } from "./planner"
 import { isPolicyReleaseManifest } from "../../../../../../runtimes/gateway/services/shared/policy-release"
 import { compareUtf8 } from "@genioone/protocol/canonical"
 
-/** Versioned wire format consumed by a Gateway release controller. */
 export const GATEWAY_RELEASE_PACKAGE_SCHEMA_VERSION =
   "genio.one.gateway-release.v1" as const
 
@@ -646,7 +645,6 @@ export function buildGatewayReleasePackage(
   return { package: packageValue, reference }
 }
 
-/** Canonical digest input is exported for runtime-control and persistence tests. */
 export function gatewayReleasePackageDigest(
   value: Omit<GatewayReleasePackage, "package_digest">,
 ): string {

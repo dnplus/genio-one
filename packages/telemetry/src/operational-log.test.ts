@@ -1,16 +1,19 @@
 import { describe, expect, test } from "bun:test"
 
 import { operationalError, writeOperationalEvent } from "./operational-log"
+import { flushOtel } from "./otlp-observability"
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 
 describe("Gateway operational errors", () => {
   const message = `failed https://person:password@example.test/path?access_token=top-secret\nAuthorization: Bearer abc.def ${"x".repeat(3_000)}`
 
-  // OTel receives the full, raw message (no truncation): the collector redacts once, server side.
-  test("keeps the complete error for telemetry", () => {
+  // Error extraction remains lossless; event publication sanitizes both sinks.
+  test("keeps the complete error until publication", () => {
     expect(operationalError(new Error(message))).toEqual({ error_name: "Error", error_message: message })
   })
 
-  // stdout/stderr bypass the collector, so that line alone is redacted and log-injection safe.
   test("redacts the console line without truncating it", () => {
     const original = process.stderr.write
     let line = ""
@@ -18,6 +21,59 @@ describe("Gateway operational errors", () => {
     try { writeOperationalEvent("processor", "ERROR", "processor.failed", operationalError(new Error(message))) } finally { process.stderr.write = original }
     const written = JSON.parse(line)
     expect(written.error_message).toBe(`failed https://[REDACTED]@example.test/path?access_token=[REDACTED] Authorization: Bearer [REDACTED] ${"x".repeat(3_000)}`)
+  })
+
+  test("redacts nested credentials before the OTLP outbox sends them", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "operational-redaction-"))
+    const originalFetch = globalThis.fetch
+    const originalWrite = process.stdout.write
+    const originalOrigin = process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+    const originalSpool = process.env.GENIO_ONE_OTEL_SPOOL_DIR
+    process.env.OTEL_EXPORTER_OTLP_ENDPOINT = `http://operational-${Date.now()}.test`
+    process.env.GENIO_ONE_OTEL_SPOOL_DIR = directory
+    const sent: any[] = []
+    let line = ""
+    globalThis.fetch = (async (_input, init) => {
+      sent.push(JSON.parse(String(init?.body)))
+      return new Response("{}")
+    }) as typeof fetch
+    process.stdout.write = ((chunk: string) => { line += chunk; return true }) as typeof process.stdout.write
+    const markers = ["synthetic-bearer-canary", "synthetic-url-canary", "synthetic-query-canary", "synthetic-password-canary", "synthetic-api-canary"]
+    try {
+      const fields = {
+        tenant_id: "test-tenant", count: 42, enabled: true,
+        nested: [{ password: markers[3], apiKey: markers[4], status: "retrying" }],
+        error_message: `Bearer ${markers[0]} https://user:${markers[1]}@example.test/?token=${markers[2]}\nretry`,
+      }
+      writeOperationalEvent("processor", "INFO", "processor.retry", fields)
+      await flushOtel()
+      const record = sent.flatMap(payload => payload.resourceLogs ?? [])
+        .flatMap(resource => resource.scopeLogs).flatMap(scope => scope.logRecords)
+        .find(record => record.body.stringValue === "processor.retry")
+      expect(record).toBeDefined()
+      const exported = JSON.stringify(record)
+      for (const marker of markers) {
+        expect(exported.includes(marker)).toBe(false)
+        expect(line.includes(marker)).toBe(false)
+      }
+      const written = JSON.parse(line)
+      const attributes = Object.fromEntries(record.attributes.map((item: any) => [item.key, item.value.stringValue ?? Number(item.value.intValue)]))
+      expect(attributes.tenant_id).toBe("test-tenant")
+      expect(attributes.count).toBe(42)
+      expect(JSON.parse(attributes.enabled)).toBe(true)
+      expect(JSON.parse(attributes.nested)).toEqual(written.nested)
+      expect(written.nested).toEqual([{ password: "[REDACTED]", apiKey: "[REDACTED]", status: "retrying" }])
+      expect(attributes.error_message).toBe(written.error_message)
+      expect(fields.nested[0]!.password).toBe(markers[3])
+    } finally {
+      globalThis.fetch = originalFetch
+      process.stdout.write = originalWrite
+      if (originalOrigin === undefined) delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+      else process.env.OTEL_EXPORTER_OTLP_ENDPOINT = originalOrigin
+      if (originalSpool === undefined) delete process.env.GENIO_ONE_OTEL_SPOOL_DIR
+      else process.env.GENIO_ONE_OTEL_SPOOL_DIR = originalSpool
+      await rm(directory, { recursive: true, force: true })
+    }
   })
 })
 

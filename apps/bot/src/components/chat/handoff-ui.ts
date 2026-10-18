@@ -1,4 +1,3 @@
-/** UX P1-a helpers for handoff bubbles in the chat transcript (client-safe). */
 import type { ChatMessage } from "../../bots-storage"
 import type { BotHandoffAckDto, BotHandoffEventDto } from "../../lib/bot-api"
 import { splitMentionSegments, type BotMentionSpan } from "./composer-mentions"

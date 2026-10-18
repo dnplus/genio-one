@@ -25,7 +25,6 @@ const owner: GenioPrincipal = {
 const registry = new BotRegistry(":memory:")
 
 try {
-  // Pure helpers
   assert(resolveHandoffVisibility("fyi") === "silent", "FYI silent default")
   assert(resolveHandoffVisibility("task") === "visible", "task visible default")
   let threw = false
@@ -54,10 +53,8 @@ try {
   const aquaVisible = projectHandoffMessages(registry.listHandoffEvents(owner, aqua.id))
   assert(aquaVisible.some((m) => m.kind === "handoff" && m.text.includes("稍後處理")), "user-visible handoff bubble")
 
-  // Not delivered yet
   assert(registry.getHandoff(owner, ack.handoffId)?.processed === false, "not same-turn processed")
 
-  // No mindless fan-out
   let fanBlocked = false
   try {
     registry.createHandoffs(owner, {
@@ -70,7 +67,6 @@ try {
   }
   assert(fanBlocked, "mindless fan-out blocked")
 
-  // FYI silent on recipient
   const fyi = registry.createHandoff(owner, {
     fromBotId: aqua.id,
     toBotId: megumin.id,
@@ -84,7 +80,6 @@ try {
     "FYI stored when includeSilent",
   )
 
-  // Later process
   const done = registry.processHandoff(owner, ack.handoffId)
   assert(done.processed && done.state === "DELIVERED", "later process delivers")
   const darkEvents = registry.listHandoffEvents(owner, darkness.id, { includeSilent: true })

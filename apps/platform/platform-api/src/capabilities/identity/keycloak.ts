@@ -82,7 +82,6 @@ export function createKeycloakSubjectSessionControl(options: {
   }
 }
 
-/** Resolves the Keycloak user ids bound to a Subject. */
 export function externalSubjectIdsFor(
   bindings: ReadonlyArray<{ provider_id: string; external_subject_id: string; subject_id: string }>,
   subjectId: string,

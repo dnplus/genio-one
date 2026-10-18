@@ -1739,7 +1739,6 @@ end` : ""}
 
 export interface GatewayProjectorMemoryOptions
   extends GatewayProjectionRendererOptions {
-  /** Reads the server-created immutable Publication review snapshot. */
   source: GatewayProjectionSource
 }
 

@@ -43,7 +43,6 @@ export interface RuntimeExposePolicy {
   deny: string[]
 }
 
-/** A-1 contract-reviewer draft: shell/fs/web_search allow, browser deny. */
 export const DEFAULT_RUNTIME_EXPOSE_POLICY: RuntimeExposePolicy = {
   allow: ["shell.exec", "filesystem.read", "filesystem.write", "web_search.query"],
   deny: ["browser.open"],
@@ -88,11 +87,9 @@ export interface CapabilitySurfaceRow {
   }
   /** UX P0: human explanation — never PEP / HTTP / enum. */
   userMessage?: string
-  /** UX P0 denial category when not fully available. */
   denialKind?: "exposure" | "entitlement" | "connection" | "execution"
 }
 
-/** List-facing status vocabulary (UX P0). */
 export const HUMAN_STATUS_LABELS = ["可用", "需連線", "需申請", "無法使用", "審批中"] as const
 
 const FORBIDDEN_PRIMARY_TOKENS = [
@@ -110,6 +107,17 @@ const FORBIDDEN_PRIMARY_TOKENS = [
   "401",
   "409",
 ] as const
+
+// Performance optimization: Pre-compile regular expressions and partition tokens at module scope.
+const PRIMARY_NUMERIC_TOKENS = FORBIDDEN_PRIMARY_TOKENS
+  .filter((token) => /^\d{3}$/.test(token))
+  .map((token) => ({ token, regex: new RegExp(`\\b${token}\\b`) }))
+
+const PRIMARY_STRING_TOKENS = FORBIDDEN_PRIMARY_TOKENS
+  .filter((token) => !/^\d{3}$/.test(token))
+
+const HAS_ALPHA = /[a-zA-Z]/
+const HAS_DIGIT = /[0-9]/
 
 export function statusLabelFor(status: CapabilitySurfaceStatus): string {
   switch (status) {
@@ -131,15 +139,19 @@ export function statusLabelFor(status: CapabilitySurfaceStatus): string {
 
 export function assertHumanPrimaryCopy(...labels: string[]): void {
   for (const label of labels) {
-    for (const token of FORBIDDEN_PRIMARY_TOKENS) {
-      if (/^\d{3}$/.test(token)) {
-        if (new RegExp(`\\b${token}\\b`).test(label)) {
+    // Fast-path character set guards avoid redundant token checks
+    if (HAS_ALPHA.test(label)) {
+      for (const token of PRIMARY_STRING_TOKENS) {
+        if (label.includes(token)) {
           throw new Error(`PRIMARY_COPY_LEAKS_${token}`)
         }
-        continue
       }
-      if (label.includes(token)) {
-        throw new Error(`PRIMARY_COPY_LEAKS_${token}`)
+    }
+    if (HAS_DIGIT.test(label)) {
+      for (const item of PRIMARY_NUMERIC_TOKENS) {
+        if (item.regex.test(label)) {
+          throw new Error(`PRIMARY_COPY_LEAKS_${item.token}`)
+        }
       }
     }
   }

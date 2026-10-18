@@ -64,7 +64,6 @@ function clientId() {
 }
 
 /**
- * Resolve scopes for the bot OIDC client.
  * Never reuse self-service `browser-configuration.scopes` with `genio-one-bot`.
  */
 export function resolveBotOidcScopes(config?: Pick<BrowserConfiguration, "management_scopes">): string[] {
@@ -154,7 +153,6 @@ export function storeGenioTokens(accessToken: string, refreshToken?: string) {
   if (typeof localStorage !== "undefined") {
     localStorage.setItem(tokenKey, accessToken)
   }
-  // Clean up legacy cookies and sessionStorage
   removeCookie(tokenKey)
   try { sessionStorage.removeItem(tokenKey) } catch {}
   if (refreshToken) {

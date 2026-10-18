@@ -30,6 +30,8 @@ test("Mail2000 MCP forwards each caller credential to IMAP without including it 
   expect(users).toEqual(["alice", "bob"])
   expect(readMail2000Credential("Bearer platform-token")).toBeNull()
   expect(readMail2000Credential("Basic !!!")).toBeNull()
+  expect(readMail2000Credential(`Basic ${Buffer.from("alice:pass\r\nword").toString("base64")}`)).toBeNull()
+  expect(readMail2000Credential(`Basic ${Buffer.from("alice:pass\0word").toString("base64")}`)).toBeNull()
 })
 test("Mail2000 publishes structured CardDAV directory tools through MCP", async () => {
   const carddav = {

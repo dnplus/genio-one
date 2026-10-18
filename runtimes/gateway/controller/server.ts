@@ -40,6 +40,8 @@ import type { ConnectionCertificate } from "../../../apps/platform/platform-api/
 
 interface RuntimeConfiguration {
   platformOrigin: string
+  shutdownSignal?: AbortSignal
+  controlPlaneTimeoutMs?: number
   tenantId: string
   runtimeId: string
   gatewayId: string
@@ -207,6 +209,21 @@ function runtimePath(config: RuntimeConfiguration): string {
   return `/v1/tenants/${encodeURIComponent(config.tenantId)}/runtime-control/GATEWAY/${encodeURIComponent(config.runtimeId)}`
 }
 
+function controlPlaneFetch(
+  config: { shutdownSignal?: AbortSignal; controlPlaneTimeoutMs?: number },
+  url: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  return observedFetch("genio-one-gateway-runtime", url, {
+    ...init,
+    signal: AbortSignal.any([
+      AbortSignal.timeout(config.controlPlaneTimeoutMs ?? 30_000),
+      ...(config.shutdownSignal ? [config.shutdownSignal] : []),
+      ...(init.signal ? [init.signal] : []),
+    ]),
+  })
+}
+
 async function negotiate(
   config: RuntimeConfiguration,
   tokens: RuntimeTokenSource,
@@ -271,7 +288,7 @@ async function connectionHealthTargets(
   config: RuntimeConfiguration,
   tokens: RuntimeTokenSource,
 ): Promise<ConnectionHealthTarget[]> {
-  const response = await observedFetch("genio-one-gateway-runtime", `${config.platformOrigin}${runtimePath(config)}/connection-health-targets`, {
+  const response = await controlPlaneFetch(config, `${config.platformOrigin}${runtimePath(config)}/connection-health-targets`, {
     headers: await tokens.headers(),
   })
   if (!response.ok) throw new Error(`Gateway Runtime Connection health target poll failed (${response.status})`)
@@ -293,14 +310,17 @@ async function probeConnectionHealth(
   }
 }
 
-function connectionHealthHostAllowed(endpoint: string): boolean {
+export function connectionHealthHostAllowed(endpoint: string): boolean {
   try {
-    const hostname = new URL(endpoint).hostname.toLowerCase()
+    const url = new URL(endpoint)
+    if (url.protocol !== "http:" && url.protocol !== "https:") return false
+    if (url.username || url.password || url.search || url.hash) return false
+    const hostname = url.hostname.toLowerCase()
     const configured = (process.env.GENIO_ONE_CONNECTION_HEALTH_ALLOWED_HOSTS ?? "")
       .split(",")
       .map((value) => value.trim().toLowerCase())
       .filter(Boolean)
-    return ["127.0.0.1", "localhost", "::1"].includes(hostname) || configured.includes(hostname)
+    return ["127.0.0.1", "localhost", "::1", "[::1]"].includes(hostname) || configured.includes(hostname)
   } catch {
     return false
   }
@@ -315,7 +335,7 @@ async function observeConnectionHealthBatch(
   }>,
   observedAt: number,
 ): Promise<void> {
-  const response = await observedFetch("genio-one-gateway-runtime",
+  const response = await controlPlaneFetch(config,
     `${config.platformOrigin}${runtimePath(config)}/connection-health-observations`,
     {
       method: "POST",
@@ -355,14 +375,14 @@ async function refreshConnectionHealth(
   }
 }
 
-async function fetchRelease(
+export async function fetchRelease(
   config: RuntimeConfiguration,
   tokens: RuntimeTokenSource,
   command: GatewayRuntimeCommand,
 ): Promise<unknown> {
   const releaseId = encodeURIComponent(command.desired_release.release_id)
   const commandId = encodeURIComponent(command.command_id)
-  const response = await observedFetch("genio-one-gateway-runtime",
+  const response = await controlPlaneFetch(config,
     `${config.platformOrigin}${runtimePath(config)}/aggregate/releases/${releaseId}/package?command_id=${commandId}`,
     { headers: await tokens.headers() },
   )
@@ -372,11 +392,11 @@ async function fetchRelease(
   return response.json()
 }
 
-async function pollCommand(
+export async function pollCommand(
   config: RuntimeConfiguration,
   tokens: RuntimeTokenSource,
 ): Promise<GatewayRuntimeCommand | null> {
-  const response = await observedFetch("genio-one-gateway-runtime",
+  const response = await controlPlaneFetch(config,
     `${config.platformOrigin}${runtimePath(config)}/aggregate/commands/next`,
     { headers: await tokens.headers() },
   )
@@ -394,7 +414,7 @@ async function deliverReport(
   tokens: RuntimeTokenSource,
   report: unknown,
 ): Promise<void> {
-  const response = await observedFetch("genio-one-gateway-runtime",
+  const response = await controlPlaneFetch(config,
     `${config.platformOrigin}${runtimePath(config)}/aggregate/reports`,
     {
       method: "POST",
@@ -411,7 +431,7 @@ async function pollMcpDiscovery(
   config: RuntimeConfiguration,
   tokens: RuntimeTokenSource,
 ): Promise<McpDiscoveryOperation | null> {
-  const response = await observedFetch("genio-one-gateway-runtime",
+  const response = await controlPlaneFetch(config,
     `${config.platformOrigin}${runtimePath(config)}/operations/mcp-discovery/next`,
     { headers: await tokens.headers() },
   )
@@ -427,7 +447,7 @@ async function deliverMcpDiscovery(
   operationId: string,
   result: CompleteMcpDiscoveryInput,
 ): Promise<void> {
-  const response = await observedFetch("genio-one-gateway-runtime",
+  const response = await controlPlaneFetch(config,
     `${config.platformOrigin}${runtimePath(config)}/operations/mcp-discovery/${encodeURIComponent(operationId)}/result`,
     {
       method: "POST",
@@ -445,7 +465,7 @@ async function resolveMcpDiscoveryCredential(
   tokens: RuntimeTokenSource,
   operationId: string,
 ): Promise<string> {
-  const response = await observedFetch("genio-one-gateway-runtime",
+  const response = await controlPlaneFetch(config,
     `${config.platformOrigin}${runtimePath(config)}/operations/mcp-discovery/${encodeURIComponent(operationId)}/credential`,
     { headers: await tokens.headers() },
   )
@@ -596,7 +616,7 @@ async function waitForDependency(
   return false
 }
 
-function startObservationRelay(
+export function startObservationRelay(
   config: RuntimeConfiguration,
   tokens: RuntimeTokenSource,
   observationOutbox: ObservationOutbox,
@@ -661,8 +681,26 @@ function startObservationRelay(
       if (!Number.isFinite(contentLength) || contentLength > 262_144) {
         return new Response("Payload Too Large", { status: 413 })
       }
-      const body = await request.text()
-      if (Buffer.byteLength(body) > 262_144) return new Response("Payload Too Large", { status: 413 })
+      const reader = request.body?.getReader()
+      const chunks: Uint8Array[] = []
+      let bytes = 0
+      if (reader) {
+        try {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            bytes += value.byteLength
+            if (bytes > 262_144) {
+              void reader.cancel().catch(() => {})
+              return new Response("Payload Too Large", { status: 413 })
+            }
+            chunks.push(value)
+          }
+        } finally {
+          reader.releaseLock()
+        }
+      }
+      const body = new TextDecoder().decode(Buffer.concat(chunks, bytes))
       let observation: unknown
       try {
         observation = JSON.parse(body)
@@ -744,6 +782,7 @@ async function main(): Promise<void> {
   ) as VerificationKeyRing
   const identity = await runtimeIdentity(config)
   const shutdownController = new AbortController()
+  config.shutdownSignal = shutdownController.signal
   let stopping = false
   const shutdown = () => {
     if (stopping) return
@@ -760,7 +799,7 @@ async function main(): Promise<void> {
         processorReadinessOrigin: config.processorReadinessOrigin,
         telemetry: config.telemetry,
         async credentials(command, release) {
-          const response = await observedFetch("genio-one-gateway-runtime", `${config.platformOrigin}${runtimePath(config)}/aggregate/releases/${encodeURIComponent(release.release_id)}/credentials?command_id=${encodeURIComponent(command.command_id)}`, { headers: await tokens.headers(), signal: AbortSignal.timeout(30000) })
+          const response = await controlPlaneFetch(config, `${config.platformOrigin}${runtimePath(config)}/aggregate/releases/${encodeURIComponent(release.release_id)}/credentials?command_id=${encodeURIComponent(command.command_id)}`, { headers: await tokens.headers() })
           if (!response.ok) throw new Error("GATEWAY_CREDENTIAL_DOWNLOAD_FAILED")
           return response.json()
         },
@@ -919,4 +958,6 @@ async function main(): Promise<void> {
   await observationOutbox.stop()
 }
 
-await main()
+if (import.meta.main) {
+  await main()
+}

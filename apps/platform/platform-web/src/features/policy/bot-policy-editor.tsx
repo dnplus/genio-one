@@ -148,7 +148,7 @@ export function BotPolicyEditor({ tenantId, policy, canEdit, data, onPublished, 
         <Field><FieldLabel>{t("Additional people")}</FieldLabel>
           {rules.allowed_subject_ids.map((id) => <div className="flex items-center justify-between gap-3" key={id}>
             <span>{data.identity?.subjects.find((subject) => subject.subject_id === id)?.profile.display_name ?? t("Unresolved reference")}</span>
-            {editing ? <Button variant="ghost" onClick={() => { setRules((value) => ({ ...value, allowed_subject_ids: value.allowed_subject_ids.filter((item) => item !== id) })) }}>{t("Remove")}</Button> : null}
+            {editing ? <Button aria-label={t("Remove {{name}}", { name: subjectLabel(id) })} variant="ghost" onClick={() => { setRules((value) => ({ ...value, allowed_subject_ids: value.allowed_subject_ids.filter((item) => item !== id) })) }}>{t("Remove")}</Button> : null}
           </div>)}
           {editing ? <SearchableSelect value="" options={(data.identity?.subjects ?? []).filter((subject) => subject.kind === "PERSON" && !rules.allowed_subject_ids.includes(subject.subject_id)).map((subject) => ({ value: subject.subject_id, label: subject.profile.display_name ?? subject.profile.email ?? subject.subject_id, description: subject.profile.email ?? undefined }))} onValueChange={(id) => { if (id) { setRules((value) => ({ ...value, allowed_subject_ids: [...value.allowed_subject_ids, id] })) } }} placeholder={t("Select a person")} searchPlaceholder={t("Search people")} emptyLabel={t("No results.")} /> : null}
         </Field>

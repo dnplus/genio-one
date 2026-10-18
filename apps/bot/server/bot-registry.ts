@@ -150,7 +150,6 @@ export function toBotProfile(bot: BotRecord): BotProfile {
   }
 }
 
-/** Slice B: bot → app-server thread / memory pointer + unread/working projection. */
 export type BotWorkState = "idle" | "working" | "stopped"
 
 export interface BotSession {
@@ -1306,7 +1305,6 @@ export class BotRegistry {
     return this.getSession(botId)!
   }
 
-  /** Roster = BotProfile list + per-bot session projection (unread/working/thread). */
   listRoster(principal: GenioPrincipal): BotRosterEntry[] {
     return this.list(principal).map((bot) => ({
       bot,

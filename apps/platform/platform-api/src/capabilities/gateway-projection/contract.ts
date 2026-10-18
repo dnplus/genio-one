@@ -186,7 +186,6 @@ export interface GatewayProjectionSnapshot {
   connections: ConnectionRegistration[]
   provider_credential_profiles?: ProviderCredentialProfileRevision[]
   models: PublicModel[]
-  /** Frozen provider-model candidates for every public alias and Connection. */
   model_mappings: ConnectionModelMapping[]
 }
 
@@ -197,7 +196,6 @@ export interface GatewayProjectionSource {
   }): Promise<GatewayProjectionSnapshot | null>
 }
 
-/** Read-only access to an immutable, already-signed native projection. */
 export interface GatewayProjectionRepository {
   getProjection(input: {
     tenantId: string
@@ -205,7 +203,6 @@ export interface GatewayProjectionRepository {
   }): Promise<GatewayProjection | null>
 }
 
-/** A signer signs the canonical, digest-bearing projection envelope. */
 export interface GatewayProjectionSigner {
   readonly algorithm: "Ed25519"
   readonly keyId: string
@@ -222,7 +219,6 @@ export interface GatewayServiceReference {
   /** Defaults to Backend. */
   kind?: string
   namespace?: string
-  /** Optional host for an emitted Backend object. */
   host?: string
 }
 

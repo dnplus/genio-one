@@ -26,7 +26,15 @@ class FakeSql implements SqlAdapter, SqlTransaction {
   ): Promise<SqlQueryResult<Result>> {
     this.calls.push(text)
     this.parameters.push([...parameters])
-    const rows = this.rows(text) as Result[]
+    const rows = this.rows(text).map((row) => text.includes("as starts_at") ? {
+      tenant_id: "tenant-acme",
+      client_id: null,
+      public_model_id: null,
+      created_at: 100,
+      ...row,
+      starts_at: row.valid_from,
+      expires_at: row.valid_until,
+    } : row) as Result[]
     return { rows, rowCount: rows.length }
   }
 
@@ -460,10 +468,11 @@ test("access approval publishes the entitlement snapshot for the active Gateway"
     return []
   })
   const publications: Array<{ tenantId: string; gatewayId: string; issuedAt: number }> = []
+  let clock = 100
   const store = createPostgresAccessGovernanceStore({
     sql,
     audit,
-    now: () => 100,
+    now: () => clock++,
     idFactory: () => "entitlement-1",
     releasePublisher: {
       async reconcileInTransaction({ tenantId, gatewayId, issuedAt }) {
@@ -592,17 +601,6 @@ test("AUTO_GRANT activation verifies the Subject and published public capability
       assert.match(text, /for update/)
       return [{ subject_id: "person-user" }]
     }
-    if (text.includes("from genio_one_resources resource")) {
-      assert.match(text, /resource\.lifecycle = 'PUBLISHED'/)
-      assert.match(text, /resource\.kind <> 'EXTENSION'/)
-      assert.match(text, /resource\.builtin_service is distinct from 'DISCOVERY'/)
-      assert.match(
-        text,
-        /where publication\.tenant_id = resource\.tenant_id\s+and publication\.resource_id = resource\.resource_id\s+and publication\.publication_state = 'PUBLISHED'\s+and publication\.visibility = 'PUBLIC'\s+order by endpoint_revision desc\s+limit 1/,
-      )
-      assert.match(text, /jsonb_build_object\('capability_id', \$3::text\)/)
-      return [{ gateway_id: "gateway-ai" }]
-    }
     if (text.includes("insert into genio_one_model_entitlements")) {
       assert.match(text, /grant_idempotency_key, grant_request_digest/)
       return [{
@@ -616,6 +614,17 @@ test("AUTO_GRANT activation verifies the Subject and published public capability
         revocation_reason: null,
       }]
     }
+    if (text.includes("from genio_one_resources resource")) {
+      assert.match(text, /resource\.lifecycle = 'PUBLISHED'/)
+      assert.match(text, /resource\.kind <> 'EXTENSION'/)
+      assert.match(text, /resource\.builtin_service is distinct from 'DISCOVERY'/)
+      assert.match(
+        text,
+        /where publication\.tenant_id = resource\.tenant_id\s+and publication\.resource_id = resource\.resource_id\s+and publication\.publication_state = 'PUBLISHED'\s+and publication\.visibility = 'PUBLIC'\s+order by endpoint_revision desc\s+limit 1/,
+      )
+      assert.match(text, /jsonb_build_object\('capability_id', \$3::text\)/)
+      return [{ gateway_id: "gateway-ai" }]
+    }
     if (text.includes("grant_idempotency_key")) return []
     if (text.includes("state = 'ACTIVE'")) {
       assert.match(text, /starts_at <= to_timestamp\(\$5\)/)
@@ -626,9 +635,10 @@ test("AUTO_GRANT activation verifies the Subject and published public capability
   })
   const reconciliations: Array<{ tenantId: string; gatewayId: string; issuedAt: number }> = []
   const audits: Array<Record<string, unknown>> = []
+  let clock = 100
   const store = createPostgresAccessGovernanceStore({
     sql,
-    now: () => 100,
+    now: () => clock++,
     idFactory: () => "entitlement-auto-grant-1",
     releasePublisher: {
       async reconcileInTransaction({ tenantId, gatewayId, issuedAt }) {

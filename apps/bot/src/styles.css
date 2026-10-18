@@ -1470,7 +1470,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   overflow-y: auto;
 }
 
-/* Threads tab */
 .threads-panel {
   padding: 12px 2px;
   display: flex;
@@ -1618,7 +1617,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   color: #8c9995;
 }
 
-/* Desktop Offline card */
 .desktop-offline-card {
   margin-top: 14px;
   padding: 24px 16px;
@@ -2365,7 +2363,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .plugin-add-row .primary-button { flex-shrink: 0; }
 
 
-/* Slice D — Bot Designer */
 .designer-card .designer-wake { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .designer-card .designer-wake legend { font-size: 13px; font-weight: 600; color: #24302d; margin-bottom: 2px; }
 .designer-wake-hint { color: #78827f; font-size: 12px; line-height: 1.4; }
@@ -2379,7 +2376,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .model-route-option small { color: #78827f; font-size: 12px; line-height: 1.4; }
 .designer-error { margin: 0 28px 20px; color: #b42318; font-size: 13px; }
 
-/* E4: SN CSM 查／看 case panel + fixture banner */
 .designer-seed-row {
   display: flex;
   flex-wrap: wrap;
@@ -2504,7 +2500,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 }
 
 
-/* UX P0 Connect card */
 .connect-card {
   border: 1px solid #c9d6d1;
   border-radius: 12px;
@@ -2631,7 +2626,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 }
 
 
-/* UX P2 Hands preview + login wall */
 .hands-preview-panel {
   margin-top: 14px;
   padding: 12px;

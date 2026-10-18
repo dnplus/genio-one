@@ -70,7 +70,7 @@ export function RuntimeCapabilityGroups({ rules, scopeRuntimeIds, runtimeOptions
       const common = members.find((rule) => !exceptions.includes(rule.rule_id)) ?? members[0]!
       const commonMembers = members.filter((rule) => !exceptions.includes(rule.rule_id))
       return <section key={ids[0]} className="space-y-4 rounded-lg border p-4">
-        <div className="flex items-center justify-between"><h4 className="font-medium">{t("Capability group")} {groupIndex + 1}</h4><Button disabled={disabled} variant="ghost" onClick={() => { emit(rules.filter((rule) => !ids.includes(rule.rule_id))) }}>{t("Remove")}</Button></div>
+        <div className="flex items-center justify-between"><h4 className="font-medium">{t("Capability group")} {groupIndex + 1}</h4><Button aria-label={t("Remove capability group {{number}}", { number: groupIndex + 1 })} disabled={disabled} variant="ghost" onClick={() => { emit(rules.filter((rule) => !ids.includes(rule.rule_id))) }}>{t("Remove")}</Button></div>
         <p className="text-sm">{t("Runtime")}: {runtimeOptions.find((option) => option.value === common.target.runtime_id)?.label ?? common.target.runtime_id}{scopeRuntimeIds.length === 1 && common.target.runtime_id === scopeRuntimeIds[0] ? ` · ${t("Inherited from scope")}` : ""}</p>
         <Field><FieldLabel>{t("Capabilities")}</FieldLabel><div className="grid max-h-64 gap-2 overflow-y-auto rounded border p-3 sm:grid-cols-2">{capabilityOptions.map((option) => <label key={option.value} className="flex items-center gap-2 text-sm"><Checkbox disabled={disabled} checked={members.some((rule) => rule.target.capability_id === option.value)} onCheckedChange={(checked) => {
           if (checked === true) {

@@ -9,7 +9,6 @@ import type { BotSession, BotWorkState } from "./bot-registry"
 export type RosterSidebarStatus = "working" | "unread" | "needs-attention"
 
 export interface RosterSidebarProjection {
-  /** Machine-stable status key for CSS / data attributes / tests. */
   status: RosterSidebarStatus | null
   /** Human primary label — never raw workState / protocol tokens. */
   statusLabel: string | null

@@ -84,7 +84,6 @@ export function createMigration(input: MigrationDefinition): Migration {
   }
 }
 
-/** Load numbered SQL files in lexical migration order and reject duplicates. */
 export async function loadMigrations(
   directory = fileURLToPath(new URL("../../migrations", import.meta.url)),
 ): Promise<Migration[]> {

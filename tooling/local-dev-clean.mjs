@@ -38,7 +38,11 @@ function composeArgs(...args) {
 
 function runningPids(port) {
   const result = spawnSync("lsof", ["-tiTCP:" + port, "-sTCP:LISTEN", "-n", "-P"], { encoding: "utf8" })
-  if (result.status !== 0) return []
+  if (result.error || result.signal || (result.status !== 0 && result.status !== 1)
+    || (result.status === 1 && (result.stdout.trim() || result.stderr.trim()))) {
+    throw new Error(`lsof 無法確認 port ${port} 的服務狀態，拒絕清理：${result.error?.message || result.signal || result.stderr.trim() || `exit ${result.status}`}`)
+  }
+  if (result.status === 1) return []
   return [...new Set(result.stdout.trim().split(/\s+/).filter(Boolean))]
 }
 
@@ -77,11 +81,12 @@ async function clearValkey() {
 }
 
 async function clearClickHouse(envText) {
-  const running = captured("docker", [...composeArgs("ps", "-q", "clickhouse")], platformDir)
-  if (running.status !== 0 || !running.stdout.trim()) return false
   const user = readEnvValue(envText, "GENIO_ONE_CLICKHOUSE_USER", "genio_one")
   const password = readEnvValue(envText, "GENIO_ONE_CLICKHOUSE_PASSWORD", "genio-one-local")
   const database = readEnvValue(envText, "GENIO_ONE_CLICKHOUSE_DB", "genio_one_analytics")
+  if (!/^[A-Za-z0-9_]+$/.test(database)) throw new Error("ClickHouse database name is invalid")
+  const running = captured("docker", [...composeArgs("ps", "-q", "clickhouse")], platformDir)
+  if (running.status !== 0 || !running.stdout.trim()) return false
   const tables = captured("docker", [...composeArgs("exec", "-T", "clickhouse", "clickhouse-client", "--user", user, "--password", password, "--database", database, "--query", `select name from system.tables where database = '${database}' and is_temporary = 0 format TSVRaw`)], platformDir)
   if (tables.status !== 0) throw new Error(tables.stderr.trim() || "ClickHouse table inventory failed")
   for (const table of tables.stdout.split(/\r?\n/).map((value) => value.trim()).filter(Boolean)) {
@@ -133,4 +138,4 @@ export async function cleanLocalDev({ input = process.stdin, output = process.st
   return true
 }
 
-export { assertDevStopped, cleanPlan, confirmationPhrase, devServicePorts }
+export { assertDevStopped, clearClickHouse, cleanPlan, confirmationPhrase, devServicePorts }

@@ -99,7 +99,6 @@ describe("slice D Bot Designer HTTP create + read-back", () => {
     assertDesignerReadBack(draft, profile)
     expect(profile.visibility).toBe("PRIVATE")
 
-    // Conversation-ready: roster projects a BotSession (idle) without enabling routines
     const roster = await app.inject({
       method: "GET",
       url: "/api/bots/roster",

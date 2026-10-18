@@ -333,7 +333,6 @@ function projectionScopeKeys(
   )
 }
 
-/** Lock the exact model/entitlement input snapshot for one Gateway release. */
 export function createPostgresGatewayPolicyInputSource(): GatewayPolicyInputSource {
   return {
     async loadForGatewayInTransaction(input) {

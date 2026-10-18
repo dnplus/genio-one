@@ -99,6 +99,8 @@ test("Management UI request is claimed once by its Gateway Runtime group and rep
   })
   const app = Fastify({ logger: false })
   const oauth: McpOAuthService = {
+    publicOrigin: new URL("https://cp.test"),
+    managementUiOrigin: new URL("https://ui.test"),
     async start() { throw new Error("not used") },
     async complete() { throw new Error("not used") },
     async status() { return null },

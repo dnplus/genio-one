@@ -75,6 +75,9 @@ test("mcpOAuthHttp callback rejects invalid target URLs", async () => {
       " https://ui.example.com/callback",
       "https://ui.example.com/callback ",
       "https://",
+      "https://user:pass@ui.example.com/callback",
+      "https://user@ui.example.com/callback",
+      "http://user:pass@127.0.0.1:5173/management",
     ]) {
       target = invalidTarget
       const response = await app.inject({
@@ -91,11 +94,15 @@ test("mcpOAuthHttp callback rejects invalid target URLs", async () => {
   }
 })
 
-test("mcpOAuthHttp callback preserves HTTP and HTTPS return URLs and OAuth outcomes", async () => {
+test("mcpOAuthHttp callback preserves HTTP and HTTPS return URLs and OAuth outcomes for allowed origins", async () => {
   let target = ""
   const app = Fastify()
   await app.register(mcpOAuthHttp, {
-    service: { complete: async () => target } as any,
+    service: {
+      complete: async () => target,
+      managementUiOrigin: new URL("https://ui.example.com"),
+      publicOrigin: new URL("http://127.0.0.1:5173"),
+    } as any,
     passwords: {} as any,
     registrations: {} as any,
     authorizeRuntime: async () => {},
@@ -114,8 +121,18 @@ test("mcpOAuthHttp callback preserves HTTP and HTTPS return URLs and OAuth outco
 
         assert.equal(response.statusCode, 303, target)
         assert.equal(response.headers.location, target)
+        assert.equal(response.headers["cache-control"], "no-store")
       }
     }
+
+    // Verify rejection of unapproved external origin even if valid URL format
+    target = "https://attacker.example/management?view=connections&resource=resource-notion&mcp_oauth=connected"
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/mcp-oauth/callback?state=teststate",
+    })
+    assert.equal(response.statusCode, 400)
+    assert.equal(JSON.parse(response.body).code, "MCP_OAUTH_CALLBACK_INVALID")
   } finally {
     await app.close()
   }

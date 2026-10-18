@@ -1,4 +1,3 @@
-/** UX P1-b helpers for group turn bubbles in the chat transcript (client-safe). */
 import type { ChatMessage } from "../../bots-storage"
 
 export const GROUP_PASS_TOKEN = "(pass)"

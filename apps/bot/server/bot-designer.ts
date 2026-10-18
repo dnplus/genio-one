@@ -43,7 +43,6 @@ export function wakeLabel(wake: BotWakeMode): string {
   return WAKE_LABELS[wake]
 }
 
-/** Compose durable description from the four designer concepts. */
 export function composeDesignerDescription(fields: BotDesignerProfileFields): string {
   return [
     "## One job",

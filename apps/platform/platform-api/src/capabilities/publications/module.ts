@@ -107,7 +107,6 @@ export interface PublicationBuildClaim {
 export interface EnforcementChainReader extends EnforcementChainRevisionReader {}
 
 export interface AiResourcePublicationWorkflow {
-  /** Validate and snapshot a Resource for the platform review queue. */
   requestReview(input: {
     tenantId: string
     resourceId: string
@@ -131,7 +130,6 @@ export interface AiResourcePublicationWorkflow {
     resourceId: string
   }): Promise<GatewayProjectionSnapshot | null>
 
-  /** The compiler uses the same persisted snapshot source as the workflow. */
   readonly projectionSource: GatewayProjectionSource
 }
 

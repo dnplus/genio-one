@@ -340,3 +340,56 @@ test("PostgreSQL entitlement grant reuses only the same retry request", async ()
       error instanceof PlatformApiError && error.code === "ENTITLEMENT_IDEMPOTENCY_KEY_REUSED",
   )
 })
+
+test("PostgreSQL ordinary grant reconciles after its default start time across clock ticks", async () => {
+  let clock = 100
+  let issuedAt: number | undefined
+  const sql: SqlAdapter = {
+    async query<Row extends Record<string, unknown> = Record<string, unknown>>(
+      text: string,
+      parameters: readonly unknown[] = [],
+    ): Promise<SqlQueryResult<Row>> {
+      if (text.includes("insert into genio_one_model_entitlements")) {
+        return {
+          rows: [{
+            tenant_id: parameters[0],
+            entitlement_id: parameters[1],
+            subject_id: parameters[2],
+            client_id: parameters[3],
+            resource_id: parameters[4],
+            capability_id: parameters[5],
+            public_model_id: parameters[6],
+            state: "ACTIVE",
+            starts_at: parameters[7],
+            expires_at: parameters[8],
+            created_at: parameters[7],
+          } as unknown as Row],
+          rowCount: 1,
+        }
+      }
+      if (text.includes("from genio_one_publications")) {
+        return { rows: [{ gateway_id: "gateway-ai" } as unknown as Row], rowCount: 1 }
+      }
+      throw new Error(`Unexpected SQL query: ${text}`)
+    },
+    async transaction(work) {
+      return work(this)
+    },
+  }
+  const catalog = createPostgresModelEntitlementCatalog({
+    sql,
+    now: () => clock++,
+    releasePublisher: {
+      async reconcileInTransaction(input) {
+        issuedAt = input.issuedAt
+      },
+    },
+  })
+  const grant = await catalog.grant({
+    tenantId: "tenant-acme",
+    value: { subject_id: "person-1", resource_id: "resource-ai", capability_id: "model.invoke" },
+  })
+  assert.ok(issuedAt !== undefined && issuedAt >= grant.starts_at)
+  assert.equal(grant.starts_at, 100)
+  assert.equal(issuedAt, 101)
+})
