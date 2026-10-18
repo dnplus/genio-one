@@ -318,6 +318,74 @@ describe("authorize & intersectGrants", () => {
     delegationId: "delegation-1", delegationRevision: 2, delegationRevocationGeneration: 3,
   }
 
+  for (const principalTools of [undefined, []]) {
+    for (const mcpMethod of ["tools/call", "tools/list"]) {
+      test(`delegated ${mcpMethod} preserves ${principalTools === undefined ? "missing" : "empty"} principal tool grants`, () => {
+        const bundle = {
+          ...mockBundle,
+          rules: mockBundle.rules.map((rule) => rule.rule_id === "rule-1"
+            ? { ...rule, mcp_tools: principalTools }
+            : rule),
+        }
+        const result = authorize(bundle, {
+          ...delegatedInput,
+          requestProtocol: "MCP",
+          mcpMethod,
+          mcpTool: mcpMethod === "tools/call" ? "tool-2" : undefined,
+        })
+        expect(result.disposition).toBe(mcpMethod === "tools/call" ? "DENY" : "ALLOW")
+        expect(result.reason).toBe(mcpMethod === "tools/call" ? "NO_MATCHING_ENTITLEMENT" : "ALLOWED_BY_RULE")
+        expect(result.allowedMcpTools).toEqual([])
+      })
+    }
+  }
+
+  for (const emptyRuleId of ["rule-1", "rule-2"]) {
+    test(`delegated non-MCP decisions preserve empty tool grants for ${emptyRuleId}`, () => {
+      const bundle = {
+        ...mockBundle,
+        rules: mockBundle.rules.map((rule) => rule.rule_id === emptyRuleId
+          ? { ...rule, mcp_tools: [] }
+          : rule),
+      }
+      const result = authorize(bundle, delegatedInput)
+      expect(result.disposition).toBe("ALLOW")
+      expect(result.allowedMcpTools).toEqual([])
+      expect(result.allowedPublicModels).toEqual(["gpt-4"])
+    })
+  }
+
+  for (const length of [31, 32]) {
+    test(`delegated MCP tool intersection preserves grants at principal list length ${length}`, () => {
+      const principalTools = ["tool-2", ...Array.from({ length: length - 1 }, (_, index) => `principal-${index}`)]
+      const bundle = {
+        ...mockBundle,
+        rules: mockBundle.rules.map((rule) => rule.rule_id === "rule-1"
+          ? { ...rule, mcp_tools: principalTools }
+          : rule),
+      }
+      const input: AuthorizationInput = { ...delegatedInput, requestProtocol: "MCP", mcpMethod: "tools/call" }
+      const allowed = authorize(bundle, { ...input, mcpTool: "tool-2" })
+      expect(allowed.disposition).toBe("ALLOW")
+      expect(allowed.allowedMcpTools).toEqual(["tool-2"])
+      expectDenied(bundle, { ...input, mcpTool: "tool-3" }, "NO_MATCHING_ENTITLEMENT")
+    })
+  }
+
+  for (const wildcardSubjectIds of [["usr-agent"], ["usr-1"], ["usr-agent", "usr-1"]]) {
+    test(`delegated model wildcards remain unrestricted for ${wildcardSubjectIds.join(",")}`, () => {
+      const bundle = {
+        ...mockBundle,
+        rules: mockBundle.rules.map((rule) => wildcardSubjectIds.includes(rule.subject_ids[0]!)
+          ? { ...rule, public_models: [] }
+          : { ...rule, public_models: ["gpt-4"] }),
+      }
+      const result = authorize(bundle, { ...delegatedInput, requestedPublicModel: "gpt-4" })
+      expect(result.disposition).toBe("ALLOW")
+      expect(result.allowedPublicModels).toEqual(wildcardSubjectIds.length === 2 ? [] : ["gpt-4"])
+    })
+  }
+
   for (const principalSubjectId of [undefined, "unknown-principal"]) {
     test(`delegation denies ${principalSubjectId === undefined ? "missing" : "unentitled"} principal`, () => {
       expectDenied(mockBundle, { ...delegatedInput, principalSubjectId }, "NO_MATCHING_ENTITLEMENT")

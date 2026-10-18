@@ -88,6 +88,10 @@ function denied(
 function intersectGrants(left: readonly string[], right: readonly string[]): string[] {
   if (left.length === 0) return [...right]
   if (right.length === 0) return [...left]
+  return intersectExplicitGrants(left, right)
+}
+
+function intersectExplicitGrants(left: readonly string[], right: readonly string[]): string[] {
   if (right.length < 32) return left.filter((value) => right.includes(value))
   const rightSet = new Set(right)
   return left.filter((value) => rightSet.has(value))
@@ -167,11 +171,10 @@ function authorizeDecision(
       agentDecision.allowedPublicModels,
       principalDecision.allowedPublicModels,
     )
-    // Performance optimization: Use Set lookup for tool intersection when list is large.
-    const principalToolSet = principalDecision.allowedMcpTools.length >= 32 ? new Set(principalDecision.allowedMcpTools) : null
-    const allowedMcpTools = principalToolSet
-      ? agentDecision.allowedMcpTools.filter((value) => principalToolSet.has(value))
-      : agentDecision.allowedMcpTools.filter((value) => principalDecision.allowedMcpTools.includes(value))
+    const allowedMcpTools = intersectExplicitGrants(
+      agentDecision.allowedMcpTools,
+      principalDecision.allowedMcpTools,
+    )
     if (input.requestedPublicModel && allowedPublicModels.length === 0 &&
         agentDecision.allowedPublicModels.length > 0 && principalDecision.allowedPublicModels.length > 0) {
       return denied(bundle, input, "MODEL_NOT_ENTITLED")
