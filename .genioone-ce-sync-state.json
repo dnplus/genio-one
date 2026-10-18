@@ -9367,7 +9367,7 @@
       "mode": 420
     },
     "packages/policy/package.json": {
-      "sha256": "34bc00850730b1e57b23bca9dc3346139189e8744c0581558c75dfb66afb7fd6",
+      "sha256": "8b98ace1bef4bd85e464c5db953f95732beebe7c5c944954a9383e1b9a308ad5",
       "mode": 420
     },
     "packages/policy/src/authorize.test.ts": {
