@@ -117,7 +117,14 @@ export function IdentityProvidersCard({ tenantId }: { tenantId: string }) {
                   <span className="text-xs text-muted-foreground">{provider.alias} · {provider.kind}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setEditing(provider)}>{t("Edit")}</Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    aria-label={t("Edit {{name}}", { name: provider.display_name })}
+                    onClick={() => setEditing(provider)}
+                  >
+                    {t("Edit")}
+                  </Button>
                   <Button
                     variant="ghost"
                     size="icon-sm"

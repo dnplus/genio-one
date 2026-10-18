@@ -21,8 +21,8 @@ const googleProvider: IdentityProvider = {
 }
 
 const locales = [
-  { language: "en", copyLabel: "Copy Redirect URI", copyText: "Copy", copiedText: "Copied", errorText: "Could not copy Redirect URI. Try again or select and copy it manually." },
-  { language: "zh-TW", copyLabel: "複製重新導向 URI", copyText: "複製", copiedText: "已複製", errorText: "無法複製重新導向 URI。請重試，或選取 URI 後手動複製。" },
+  { language: "en", editLabel: "Edit Google Workspace", copyLabel: "Copy Redirect URI", copyText: "Copy", copiedText: "Copied", errorText: "Could not copy Redirect URI. Try again or select and copy it manually." },
+  { language: "zh-TW", editLabel: "編輯 Google Workspace", copyLabel: "複製重新導向 URI", copyText: "複製", copiedText: "已複製", errorText: "無法複製重新導向 URI。請重試，或選取 URI 後手動複製。" },
 ] as const
 
 function installEnvironment(providers: IdentityProvider[], writeText: (text: string) => Promise<void>) {
@@ -78,7 +78,9 @@ for (const locale of locales) {
     try {
       const i18n = await renderProviders(locale.language)
       expect(await screen.findByRole("button", { name: i18n.t("Remove {{name}}", { name: googleProvider.display_name }) })).toBeTruthy()
-      fireEvent.click(await screen.findByRole("button", { name: i18n.t("Edit") }))
+      const editButton = await screen.findByRole("button", { name: locale.editLabel })
+      expect(editButton).toBeTruthy()
+      fireEvent.click(editButton)
       const copyButton = await screen.findByRole("button", { name: locale.copyLabel })
       fireEvent.click(copyButton)
 
@@ -90,7 +92,7 @@ for (const locale of locales) {
       expect(environment.requests.filter((request) => request.method !== "GET")).toEqual([])
 
       fireEvent.click(screen.getByRole("button", { name: i18n.t("Cancel") }))
-      fireEvent.click(await screen.findByRole("button", { name: i18n.t("Edit") }))
+      fireEvent.click(await screen.findByRole("button", { name: i18n.t("Edit {{name}}", { name: googleProvider.display_name }) }))
       expect((await screen.findByRole("button", { name: locale.copyLabel })).textContent).toBe(locale.copyText)
     } finally {
       environment.restore()
@@ -108,7 +110,7 @@ for (const locale of locales) {
 
     try {
       const i18n = await renderProviders(locale.language)
-      fireEvent.click(await screen.findByRole("button", { name: i18n.t("Edit") }))
+      fireEvent.click(await screen.findByRole("button", { name: i18n.t("Edit {{name}}", { name: googleProvider.display_name }) }))
       const secretInput = await screen.findByLabelText(i18n.t("Replace client secret")) as HTMLInputElement
       fireEvent.change(secretInput, { target: { value: "pending-secret" } })
       fireEvent.click(screen.getByRole("switch", { name: i18n.t("Enabled") }))
@@ -190,10 +192,10 @@ test("closing and reopening an edit sheet ignores an earlier pending copy result
 
   try {
     const i18n = await renderProviders("en")
-    fireEvent.click(await screen.findByRole("button", { name: i18n.t("Edit") }))
+    fireEvent.click(await screen.findByRole("button", { name: i18n.t("Edit {{name}}", { name: googleProvider.display_name }) }))
     fireEvent.click(await screen.findByRole("button", { name: "Copy Redirect URI" }))
     fireEvent.click(screen.getByRole("button", { name: i18n.t("Cancel") }))
-    fireEvent.click(await screen.findByRole("button", { name: i18n.t("Edit") }))
+    fireEvent.click(await screen.findByRole("button", { name: i18n.t("Edit {{name}}", { name: googleProvider.display_name }) }))
     const copyButton = await screen.findByRole("button", { name: "Copy Redirect URI" })
     await act(async () => { resolveCopy() })
     expect(copyButton.textContent).toBe("Copy")
