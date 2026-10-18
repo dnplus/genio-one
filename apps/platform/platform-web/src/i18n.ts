@@ -6,6 +6,8 @@ const supportedLanguages = ["en", "zh-TW"] as const
 export type ConsoleLanguage = (typeof supportedLanguages)[number]
 
 const en: Record<string, string> = {
+  "Toggle membership for {{name}}": "Toggle membership for {{name}}",
+  "Select role for {{name}}": "Select role for {{name}}",
   "Allow use of a computer environment": "Allow use of a computer environment",
   "Computer environment enabled": "Computer environment enabled",
   "Computer environment disabled": "Computer environment disabled",
@@ -1546,6 +1548,8 @@ const en: Record<string, string> = {
 }
 
 const zhTW: Record<string, string> = {
+  "Toggle membership for {{name}}": "切換 {{name}} 的成員資格",
+  "Select role for {{name}}": "選擇 {{name}} 的角色",
   "Allow use of a computer environment": "允許使用電腦環境",
   "Computer environment enabled": "已允許使用電腦環境",
   "Computer environment disabled": "未允許使用電腦環境",

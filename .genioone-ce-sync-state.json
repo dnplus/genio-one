@@ -8439,7 +8439,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/features/identity/create-organization-sheet.tsx": {
-      "sha256": "eba41a9a247cb8bbb3deb08f32213784fbb8259d0fdae163b1ecf764d811bab3",
+      "sha256": "028192b6136e5fb8c7031ed99eed1b546fdda87d90feb293ecce871256fe3e07",
       "mode": 420
     },
     "apps/platform/platform-web/src/features/identity/identity-page.tsx": {
@@ -8451,7 +8451,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/features/identity/manage-organization-sheet.tsx": {
-      "sha256": "73f3bb6ab1e51e7aa1badffc0d5e78d6ea63c8248e47bce902083e7c44a9bfdb",
+      "sha256": "314441896e67fea2bdf3738549574bdd28ecc69d6ae36ef787523521496797cd",
       "mode": 420
     },
     "apps/platform/platform-web/src/features/identity/organization-page.tsx": {
@@ -8727,7 +8727,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/src/i18n.ts": {
-      "sha256": "a348fa98a4e89926ce7f11fd67361da9c32cd7ee49bcd03c056e1f0c59a5e173",
+      "sha256": "2a176244afa2fa0ca85523fa61c2c0faa7688990ffda11c3b35f57035a2e5e71",
       "mode": 420
     },
     "apps/platform/platform-web/src/i18n/admin-governance.ts": {
@@ -8915,7 +8915,7 @@
       "mode": 420
     },
     "apps/platform/platform-web/test/identity-access-scoping.dom.test.tsx": {
-      "sha256": "0fef71bd333a244650f6f5ca9e65348c2524d82013bff9aeafa39a960bc164c6",
+      "sha256": "d94586220e938459ae01fac83a9c8c5c4386e5fed7530b8f05f6c758acf8597b",
       "mode": 420
     },
     "apps/platform/platform-web/test/identity-agents.dom.test.tsx": {

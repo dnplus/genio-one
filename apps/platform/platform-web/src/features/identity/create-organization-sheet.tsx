@@ -104,7 +104,8 @@ export function CreateOrganizationSheet({
                     <Checkbox
                       checked={input.memberSubjectIds.includes(subject.subject_id)}
                       onCheckedChange={(checked) => toggleMember(subject.subject_id, checked === true)}
-                      aria-label={t("Member")}
+                      aria-label={t("Toggle membership for {{name}}", { name: subject.profile.display_name ?? subject.subject_id })}
+                      aria-labelledby=""
                     />
                     <span className="flex flex-col">
                       <span className="text-sm font-medium">{subject.profile.display_name ?? subject.subject_id}</span>

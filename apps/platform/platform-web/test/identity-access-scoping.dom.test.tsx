@@ -8,7 +8,9 @@ import { SheetWorkspaceRoot } from "@/components/ui/sheet"
 import type { IdentitySession, OverviewSnapshot } from "@/domain/contracts"
 import { AccessGroupsPanel } from "@/features/identity/access-groups-panel"
 import { OrganizationPage } from "@/features/identity/organization-page"
+import { CreateOrganizationSheet } from "@/features/identity/create-organization-sheet"
 import { ResourceCatalogPage } from "@/features/resources/resource-catalog-page"
+import productI18n from "@/i18n"
 
 const organizationIdentity: IdentitySession = {
   tenant_id: "tenant-acme",
@@ -63,10 +65,11 @@ function data(group = accessGroup("org-ai")) {
   } as OverviewSnapshot
 }
 
-async function withI18n(ui: React.ReactNode) {
+async function withI18n(ui: React.ReactNode, language = "en") {
   const i18n = createInstance()
-  await i18n.init({ lng: "en", resources: { en: { translation: {} } } })
+  await i18n.init({ lng: language, fallbackLng: "en", keySeparator: false, resources: productI18n.options.resources })
   render(<I18nextProvider i18n={i18n}><SheetWorkspaceRoot>{ui}</SheetWorkspaceRoot></I18nextProvider>)
+  return i18n
 }
 
 test("Kevin can manage only UAT Access even though Sales membership remains visible", async () => {
@@ -89,22 +92,41 @@ test("Kevin can manage only UAT Access even though Sales membership remains visi
   expect(screen.getByText("UAT Access")).toBeTruthy()
 })
 
-test("Tenant Administrator can manage every visible organization", async () => {
-  const tenantAdministrator: IdentitySession = {
-    ...organizationIdentity,
-    subject_id: "tenant-admin",
-    role: "TENANT_ADMINISTRATOR",
-    organization_ids: [],
-    administrator_organization_ids: [],
-  }
+for (const locale of [
+  { language: "en", membershipLabel: "Toggle membership for Fiona", roleLabel: "Select role for Fiona" },
+  { language: "zh-TW", membershipLabel: "切換 Fiona 的成員資格", roleLabel: "選擇 Fiona 的角色" },
+]) {
+  test("Tenant Administrator can manage every visible organization in " + locale.language, async () => {
+    const user = userEvent.setup()
+    const tenantAdministrator: IdentitySession = {
+      ...organizationIdentity,
+      subject_id: "tenant-admin",
+      role: "TENANT_ADMINISTRATOR",
+      organization_ids: [],
+      administrator_organization_ids: [],
+    }
 
-  await withI18n(<OrganizationPage tenantId="tenant-acme" identity={tenantAdministrator} data={{ ...data(), auditEvents: [], failures: [] } as OverviewSnapshot} onReload={async () => {}} />)
+    const i18n = await withI18n(<OrganizationPage tenantId="tenant-acme" identity={tenantAdministrator} data={{ ...data(), auditEvents: [], failures: [] } as OverviewSnapshot} onReload={async () => {}} />, locale.language)
 
-  expect(within(screen.getByRole("row", { name: /AI Platform/ })).getByRole("button", { name: "Manage" })).toBeTruthy()
-  expect(within(screen.getByRole("row", { name: /Security/ })).getByRole("button", { name: "Manage" })).toBeTruthy()
-  expect(screen.getByRole("button", { name: "Create Organization" })).toBeTruthy()
-  expect(screen.getByText("Administrators")).toBeTruthy()
-})
+    expect(within(screen.getByRole("row", { name: /AI Platform/ })).getByRole("button", { name: i18n.t("Manage") })).toBeTruthy()
+    expect(within(screen.getByRole("row", { name: /Security/ })).getByRole("button", { name: i18n.t("Manage") })).toBeTruthy()
+    expect(screen.getByRole("button", { name: i18n.t("Create Organization") })).toBeTruthy()
+    expect(screen.getByText(i18n.t("Administrators"))).toBeTruthy()
+
+    await user.click(within(screen.getByRole("row", { name: /AI Platform/ })).getByRole("button", { name: i18n.t("Manage") }))
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy())
+    expect(screen.getByRole("checkbox", { name: locale.membershipLabel })).toBeTruthy()
+    expect(screen.getByRole("combobox", { name: locale.roleLabel })).toBeTruthy()
+  })
+
+  test("Create Organization identifies each member in " + locale.language, async () => {
+    const user = userEvent.setup()
+    const i18n = await withI18n(<CreateOrganizationSheet tenantId="tenant-acme" identity={identityInventory} onCreated={async () => {}} />, locale.language)
+
+    await user.click(screen.getByRole("button", { name: i18n.t("Create Organization") }))
+    expect(await screen.findByRole("checkbox", { name: locale.membershipLabel })).toBeTruthy()
+  })
+}
 
 test("Organization-owned Access Group editor limits members and owner choices to canonical scope", async () => {
   const user = userEvent.setup()
