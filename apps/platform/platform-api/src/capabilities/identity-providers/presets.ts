@@ -1,7 +1,6 @@
 import type { IdentityProviderPreset } from "./contract"
 
 export interface IdentityProviderPresetDefinition {
-  /** The Keycloak identity provider type this preset creates. */
   providerId: "google" | "github" | "oidc"
   defaultAlias: string
   defaultDisplayName: string
