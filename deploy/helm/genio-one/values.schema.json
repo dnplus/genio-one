@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SingleWriterBotValues",
+  "type": "object",
+  "required": ["bot"],
+  "properties": {
+    "bot": {
+      "type": "object",
+      "required": ["replicas"],
+      "properties": {
+        "replicas": {
+          "description": "Use one Bot writer, or zero replicas for maintenance.",
+          "type": "integer",
+          "enum": [0, 1]
+        }
+      }
+    }
+  }
+}
