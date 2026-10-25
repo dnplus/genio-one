@@ -1,0 +1,21 @@
+✔ default Helm values render one Bot writer (42.377958ms)
+✔ CE Helm values render one Bot writer (106.551584ms)
+✔ Helm renders Bot replicas 0 (194.256459ms)
+✔ Helm renders Bot replicas 1 (123.958125ms)
+✔ Helm rejects Bot replicas 2 (33.825125ms)
+✔ Helm rejects Bot replicas -1 (33.394833ms)
+✔ Helm rejects Bot replicas 0.5 (33.91225ms)
+✔ Helm rejects Bot replicas true (33.979833ms)
+✔ Helm rejects Bot replicas null (34.422458ms)
+✔ Helm rejects Bot replicas "1" (34.236541ms)
+✔ Helm rejects multiple Bot writers even when Bot is disabled (34.069125ms)
+✔ Helm accepts a disabled Bot with one replica (131.811875ms)
+✔ Helm preserves unrelated values and permits two platform replicas (217.039083ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1088.422958

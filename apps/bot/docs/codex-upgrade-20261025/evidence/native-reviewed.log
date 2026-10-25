@@ -1,0 +1,89 @@
+bun test v1.4.2 (744846f84)
+
+tests/codex-native-compat.test.ts:
+(pass) native smoke peer fails a server request that reuses an outstanding client ID [0.39ms]
+257 | if (mode === "native") test("native smoke cleans its owned process when it fails before capturing the PID", async () => {
+258 |   const root = realpathSync(mkdtempSync(join(tmpdir(), "genio-codex-native-failure-")))
+259 |   const workspace = join(root, "workspace")
+260 |   mkdirSync(workspace)
+261 |   try {
+262 |     await expect(cycle(nativeBinary(), root, workspace, false, true)).rejects.toThrow("injected failure before PID capture")
+                                                                                    ^
+error: expect(received).toThrow(expected)
+
+Expected substring: "injected failure before PID capture"
+Received message: "Failed to listen at 127.0.0.1"
+
+      at <anonymous> (/Users/dnplus/Documents/Codex/2026-10-26/task-2/worktree/apps/bot/tests/codex-native-compat.test.ts:262:79)
+(fail) native smoke cleans its owned process when it fails before capturing the PID [2.21ms]
+package binary /Users/dnplus/Documents/Codex/2026-10-26/task-2/worktree/node_modules/.pnpm/@openai+codex@0.164.0-darwin-arm64/node_modules/@openai/codex/vendor/aarch64-apple-darwin/bin/codex: codex-cli 0.164.0
+106 |   return { child, rpc, exited, diagnostics: () => diagnostics }
+107 | }
+108 |
+109 | async function freePort() {
+110 |   const server = createServer()
+111 |   await bounded(new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve) }), "allocate port")
+                                                                                                    ^
+error: Failed to listen at 127.0.0.1
+ syscall: "listen",
+   errno: 1,
+ address: "127.0.0.1",
+    port: 0,
+    code: "EPERM"
+
+      at <anonymous> (node:net:2115:30)
+      at listenInCluster (node:net:2192:24)
+      at listen (node:net:2066:20)
+      at <anonymous> (/Users/dnplus/Documents/Codex/2026-10-26/task-2/worktree/apps/bot/tests/codex-native-compat.test.ts:111:95)
+      at new Promise (1:11)
+      at freePort (/Users/dnplus/Documents/Codex/2026-10-26/task-2/worktree/apps/bot/tests/codex-native-compat.test.ts:111:17)
+      at cycle (/Users/dnplus/Documents/Codex/2026-10-26/task-2/worktree/apps/bot/tests/codex-native-compat.test.ts:135:22)
+      at <anonymous> (/Users/dnplus/Documents/Codex/2026-10-26/task-2/worktree/apps/bot/tests/codex-native-compat.test.ts:287:11)
+(fail) package Codex native pair supports metadata, executor operations and workspace restart without credentials [35.74ms]
+
+ 1 pass
+ 2 fail
+ 6 expect() calls
+Ran 3 tests across 1 file. [50.00ms]
+bun test v1.4.2 (744846f84)
+
+tests/codex-native-compat.test.ts:
+(pass) native smoke peer fails a server request that reuses an outstanding client ID [0.38ms]
+(pass) native smoke cleans its owned process when it fails before capturing the PID [1842.26ms]
+package binary /Users/dnplus/Documents/Codex/2026-10-26/task-2/worktree/node_modules/.pnpm/@openai+codex@0.164.0-darwin-arm64/node_modules/@openai/codex/vendor/aarch64-apple-darwin/bin/codex: codex-cli 0.164.0
+native cycle initial: metadata, environment, files, output, exit 7, kill, error recovery and awaited shutdown passed (app stdin, standalone WS exec SIGTERM)
+native cycle restart: metadata, environment, files, output, exit 7, kill, error recovery and awaited shutdown passed (app stdin, standalone WS exec SIGTERM)
+(pass) package Codex native pair supports metadata, executor operations and workspace restart without credentials [496.68ms]
+
+ 3 pass
+ 0 fail
+ 65 expect() calls
+Ran 3 tests across 1 file. [2.35s]
+bun test v1.4.2 (744846f84)
+
+tests/codex-native-compat.test.ts:
+(pass) native smoke peer fails a server request that reuses an outstanding client ID [4.89ms]
+(pass) native smoke cleans its owned process when it fails before capturing the PID [280.91ms]
+package binary /Users/dnplus/Documents/Codex/2026-10-26/task-2/worktree/node_modules/.pnpm/@openai+codex@0.164.0-darwin-arm64/node_modules/@openai/codex/vendor/aarch64-apple-darwin/bin/codex: codex-cli 0.164.0
+native cycle initial: metadata, environment, files, output, exit 7, kill, error recovery and awaited shutdown passed (app stdin, standalone WS exec SIGTERM)
+native cycle restart: metadata, environment, files, output, exit 7, kill, error recovery and awaited shutdown passed (app stdin, standalone WS exec SIGTERM)
+(pass) package Codex native pair supports metadata, executor operations and workspace restart without credentials [512.17ms]
+
+ 3 pass
+ 0 fail
+ 65 expect() calls
+Ran 3 tests across 1 file. [836.00ms]
+bun test v1.4.2 (744846f84)
+
+tests/codex-native-compat.test.ts:
+(pass) native smoke peer fails a server request that reuses an outstanding client ID [0.43ms]
+(pass) native smoke cleans its owned process when it fails before capturing the PID [141.34ms]
+package binary /Users/dnplus/Documents/Codex/2026-10-26/task-2/worktree/node_modules/.pnpm/@openai+codex@0.164.0-darwin-arm64/node_modules/@openai/codex/vendor/aarch64-apple-darwin/bin/codex: codex-cli 0.164.0
+native cycle initial: metadata, environment, files, output, exit 7, kill, error recovery and awaited shutdown passed (app stdin, standalone WS exec SIGTERM)
+native cycle restart: metadata, environment, files, output, exit 7, kill, error recovery and awaited shutdown passed (app stdin, standalone WS exec SIGTERM)
+(pass) package Codex native pair supports metadata, executor operations and workspace restart without credentials [504.37ms]
+
+ 3 pass
+ 0 fail
+ 65 expect() calls
+Ran 3 tests across 1 file. [659.00ms]

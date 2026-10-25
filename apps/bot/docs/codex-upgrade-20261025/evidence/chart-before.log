@@ -1,0 +1,149 @@
+✔ default Helm values render one Bot writer (147.619708ms)
+✔ CE Helm values render one Bot writer (172.800583ms)
+✔ Helm renders Bot replicas 0 (95.351959ms)
+✔ Helm renders Bot replicas 1 (83.441166ms)
+✖ Helm rejects Bot replicas 2 (175.627875ms)
+✖ Helm rejects Bot replicas -1 (162.266333ms)
+✖ Helm rejects Bot replicas 0.5 (135.9105ms)
+✖ Helm rejects Bot replicas true (77.437042ms)
+✖ Helm rejects Bot replicas null (117.617417ms)
+✖ Helm rejects Bot replicas "1" (106.385166ms)
+✖ Helm rejects multiple Bot writers even when Bot is disabled (129.416584ms)
+✔ Helm accepts a disabled Bot with one replica (110.496875ms)
+✔ Helm preserves unrelated values and permits two platform replicas (103.695959ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 6
+ℹ fail 7
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1659.647917
+
+✖ failing tests:
+
+test at tooling/ce-helm-bot.test.mjs:59:3
+✖ Helm rejects Bot replicas 2 (175.627875ms)
+  AssertionError [ERR_ASSERTION]: invalid Bot replica count must fail Helm rendering
+      at TestContext.<anonymous> (file:///Users/dnplus/Documents/Codex/2026-10-26/task-2/worktree/tooling/ce-helm-bot.test.mjs:61:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1397:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:969:18)
+      at Test.postRun (node:internal/test_runner/test:1537:19)
+      at Test.run (node:internal/test_runner/test:1462:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tooling/ce-helm-bot.test.mjs:59:3
+✖ Helm rejects Bot replicas -1 (162.266333ms)
+  AssertionError [ERR_ASSERTION]: invalid Bot replica count must fail Helm rendering
+      at TestContext.<anonymous> (file:///Users/dnplus/Documents/Codex/2026-10-26/task-2/worktree/tooling/ce-helm-bot.test.mjs:61:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1397:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:969:18)
+      at Test.postRun (node:internal/test_runner/test:1537:19)
+      at Test.run (node:internal/test_runner/test:1462:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tooling/ce-helm-bot.test.mjs:59:3
+✖ Helm rejects Bot replicas 0.5 (135.9105ms)
+  AssertionError [ERR_ASSERTION]: invalid Bot replica count must fail Helm rendering
+      at TestContext.<anonymous> (file:///Users/dnplus/Documents/Codex/2026-10-26/task-2/worktree/tooling/ce-helm-bot.test.mjs:61:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1397:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:969:18)
+      at Test.postRun (node:internal/test_runner/test:1537:19)
+      at Test.run (node:internal/test_runner/test:1462:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tooling/ce-helm-bot.test.mjs:59:3
+✖ Helm rejects Bot replicas true (77.437042ms)
+  AssertionError [ERR_ASSERTION]: invalid Bot replica count must fail Helm rendering
+      at TestContext.<anonymous> (file:///Users/dnplus/Documents/Codex/2026-10-26/task-2/worktree/tooling/ce-helm-bot.test.mjs:61:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1397:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:969:18)
+      at Test.postRun (node:internal/test_runner/test:1537:19)
+      at Test.run (node:internal/test_runner/test:1462:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tooling/ce-helm-bot.test.mjs:59:3
+✖ Helm rejects Bot replicas null (117.617417ms)
+  AssertionError [ERR_ASSERTION]: invalid Bot replica count must fail Helm rendering
+      at TestContext.<anonymous> (file:///Users/dnplus/Documents/Codex/2026-10-26/task-2/worktree/tooling/ce-helm-bot.test.mjs:61:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1397:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:969:18)
+      at Test.postRun (node:internal/test_runner/test:1537:19)
+      at Test.run (node:internal/test_runner/test:1462:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tooling/ce-helm-bot.test.mjs:59:3
+✖ Helm rejects Bot replicas "1" (106.385166ms)
+  AssertionError [ERR_ASSERTION]: invalid Bot replica count must fail Helm rendering
+      at TestContext.<anonymous> (file:///Users/dnplus/Documents/Codex/2026-10-26/task-2/worktree/tooling/ce-helm-bot.test.mjs:61:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1397:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:969:18)
+      at Test.postRun (node:internal/test_runner/test:1537:19)
+      at Test.run (node:internal/test_runner/test:1462:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tooling/ce-helm-bot.test.mjs:68:1
+✖ Helm rejects multiple Bot writers even when Bot is disabled (129.416584ms)
+  AssertionError [ERR_ASSERTION]: disabled Bot must still reject multiple writers
+      at TestContext.<anonymous> (file:///Users/dnplus/Documents/Codex/2026-10-26/task-2/worktree/tooling/ce-helm-bot.test.mjs:70:10)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1397:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:969:18)
+      at Test.postRun (node:internal/test_runner/test:1537:19)
+      at Test.run (node:internal/test_runner/test:1462:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }

@@ -1,0 +1,55 @@
+pnpm verify exited 0.
+
+836 pass
+51 skip
+0 fail
+Ran 887 tests across 178 files. [130.01s]
+861 pass
+0 fail
+Ran 861 tests across 146 files. [5.96s]
+65 pass
+1 skip
+0 fail
+Ran 66 tests across 16 files. [770.00ms]
+9 pass
+0 fail
+Ran 9 tests across 1 file. [1023.00ms]
+8 pass
+0 fail
+Ran 8 tests across 1 file. [91.00ms]
+305 pass
+0 fail
+Ran 305 tests across 30 files. [10.18s]
+
+Build output excerpt:
+Bundled 2332 modules in 93ms
+
+  server.js  7.0 MB  (entry point)
+
+$ bun scripts/build-gateway-services.mjs
+$ bun run generate:codex-protocol && vite build && bun build server/index.ts --target=bun --outdir=dist/server
+$ codex app-server generate-ts --experimental --out server/generated
+vite v8.3.3 building client environment for production...
+transforming...
+✓ 2267 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/web/index.html                       0.45 kB │ gzip:   0.29 kB
+dist/web/assets/logo-02-O7-9g6U5.svg      6.57 kB │ gzip:   2.41 kB
+dist/web/assets/index-CJuidbsm.css       82.17 kB │ gzip:  15.61 kB
+dist/web/assets/index-u00aMqp1.js     1,113.66 kB │ gzip: 349.95 kB
+
+[plugin builtin:vite-reporter]
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 172ms
+Bundled 652 modules in 38ms
+
+  index.js  3.79 MB  (entry point)
+
+$ bun build controller/server.ts --target=bun --outfile=controller/dist/server.js && bun ../../apps/platform/scripts/build-gateway-services.mjs
+Bundled 958 modules in 33ms
+
+  server.js  1.70 MB  (entry point)

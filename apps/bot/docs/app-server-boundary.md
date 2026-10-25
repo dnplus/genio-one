@@ -125,5 +125,7 @@ generation through the Bot package script so it resolves the package-owned
 executable. The generated protocol comes from the same installed release.
 Run the package scripts `test:codex-native`, `test:codex-migration`, and
 `check:codex-protocol` for current upgrade checks.
+The [0.164.0 upgrade assessment](codex-upgrade-20261025.md) records the results
+and remaining release gates.
 The [0.153.4 upgrade comparison](codex-app-server-upgrade-20260908.md) remains
 historical verification of that release.

@@ -1,0 +1,12 @@
+✔ a fixture exit during a requested shutdown is not reported as a failure (74.360042ms)
+✔ a child exit cancels a pending health wait instead of consuming its timeout (509.650959ms)
+✔ local API and Bot health predicates reject the old development lanes (0.2885ms)
+✔ a healthy local service is reused only from this checkout and expected command (0.046333ms)
+ℹ tests 90
+ℹ suites 0
+ℹ pass 90
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3305.49
