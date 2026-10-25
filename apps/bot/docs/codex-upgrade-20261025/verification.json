@@ -1,0 +1,197 @@
+{
+  "schema_version": 1,
+  "date_utc": "2026-10-25",
+  "repository": "https://github.com/dnplus/genio-one",
+  "base_revision": "0f891046df8900d1881de92fff558a28092a9c2d",
+  "versions": {
+    "project_before": "0.162.0",
+    "project_after": "0.164.0",
+    "global_cli_observed": "0.163.0",
+    "bun": "1.4.2",
+    "node": "26.7.0",
+    "project_pnpm": "12.10.1",
+    "helm": "4.2.4",
+    "native_test_platform": "darwin-arm64"
+  },
+  "official_source_receipt": "upstream-release.json",
+  "checks": [
+    {
+      "command": "pnpm install --frozen-lockfile --ignore-scripts --store-dir ../pnpm-store",
+      "status": "VERIFIED",
+      "result": "exit 0; unrelated lockfile entries preserved"
+    },
+    {
+      "command": "pnpm verify",
+      "status": "VERIFIED_WITH_LIMITS",
+      "exit_code": 0,
+      "result": "project typechecks, default tests and all builds passed",
+      "suite_summaries": [
+        "836 pass",
+        "51 skip",
+        "0 fail",
+        "Ran 887 tests across 178 files. [130.01s]",
+        "861 pass",
+        "0 fail",
+        "Ran 861 tests across 146 files. [5.96s]",
+        "65 pass",
+        "1 skip",
+        "0 fail",
+        "Ran 66 tests across 16 files. [770.00ms]",
+        "9 pass",
+        "0 fail",
+        "Ran 9 tests across 1 file. [1023.00ms]",
+        "8 pass",
+        "0 fail",
+        "Ran 8 tests across 1 file. [91.00ms]",
+        "305 pass",
+        "0 fail",
+        "Ran 305 tests across 30 files. [10.18s]"
+      ],
+      "evidence": "evidence/project-verification-summary.txt"
+    },
+    {
+      "command": "GENIO_CONNECTOR_HTTP_TEST=1 bun test ./apps/connectors",
+      "status": "VERIFIED",
+      "passed": 66,
+      "failed": 0,
+      "skipped": 0,
+      "evidence": "evidence/connectors-http-enabled-summary.txt"
+    },
+    {
+      "command": "node --test tooling/*.test.mjs",
+      "status": "VERIFIED",
+      "passed": 90,
+      "failed": 0,
+      "skipped": 0,
+      "evidence": "evidence/tooling-tests-summary.log"
+    },
+    {
+      "command": "node --test tooling/ce-helm-bot.test.mjs",
+      "status": "VERIFIED",
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0,
+      "baseline": {
+        "passed": 6,
+        "failed": 7
+      },
+      "evidence": "evidence/chart-reviewed.log"
+    },
+    {
+      "command": "helm lint deploy/helm/genio-one with CE render fixture values",
+      "status": "VERIFIED",
+      "result": "1 chart linted, 0 failed",
+      "evidence": "evidence/chart-lint.log"
+    },
+    {
+      "command": "bun test tests/codex-native-compat.test.ts from apps/bot",
+      "status": "VERIFIED",
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "assertions": 65,
+      "evidence": "evidence/native-reviewed.log"
+    },
+    {
+      "command": "GENIO_CODEX_TEST_MODE=migration GENIO_CODEX_MIGRATION_BASELINE_BINARY=<retained 0.162.0 native executable> bun test tests/codex-native-compat.test.ts from apps/bot",
+      "status": "VERIFIED",
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "assertions": 17,
+      "scope": "old config bytes and effective on-request/read-only thread defaults",
+      "evidence": "evidence/native-migration-reviewed.log"
+    },
+    {
+      "command": "tsc --ignoreConfig --noEmit --strict --skipLibCheck --target ES2022 --module ESNext --moduleResolution Bundler --resolveJsonModule --esModuleInterop --types bun,node tests/codex-native-compat.test.ts from apps/bot",
+      "status": "VERIFIED",
+      "result": "exit 0",
+      "evidence": "evidence/harness-reviewed-typecheck.log"
+    },
+    {
+      "command": "bun scripts/check-codex-protocol.ts from apps/bot, twice sequentially",
+      "status": "VERIFIED",
+      "generated_files": 904,
+      "changed_generated_files": 24,
+      "new_generated_files": 16,
+      "evidence": [
+        "evidence/protocol-drift-first.log",
+        "evidence/protocol-drift-second.log"
+      ]
+    },
+    {
+      "command": "git diff --check",
+      "status": "VERIFIED",
+      "result": "exit 0"
+    }
+  ],
+  "remaining_gates": [
+    {
+      "status": "NOT_RUN",
+      "count": 51,
+      "target": "existing Platform live integration cases",
+      "reason": "required isolated PostgreSQL/Valkey or TypeSafe live configuration is absent; no skip guard was changed"
+    },
+    {
+      "status": "NOT_RUN",
+      "target": "saved Codex rollout and pending approval migration",
+      "reason": "config migration and metadata smoke do not prove recovery of an active or saved model turn"
+    },
+    {
+      "status": "NOT_RUN",
+      "target": "real Local Hands Endpoint binary integration",
+      "reason": "public checkout omits the private Rust Endpoint workspace; update and build the correct source before release"
+    },
+    {
+      "status": "NOT_RUN",
+      "target": "live E2B, Cloudflare and authenticated enterprise tool/audit acceptance",
+      "reason": "no deployment credentials, real model calls or provider environment were used"
+    },
+    {
+      "status": "LIMITED",
+      "target": "single-writer guarantee",
+      "reason": "Helm schema constrains this release configuration; manual scaling, another release/process and schema bypass are outside its enforcement"
+    }
+  ],
+  "resolved_attempts": [
+    "Restricted loopback fixture tests returned EPERM; approved socket-capable reruns passed.",
+    "First whole-project verify overlapped final frozen dependency installation and saw missing links; after installation, direct Platform typecheck and whole-project verify passed.",
+    "pnpm update pruned unrelated CE-excluded lock entries; only fresh Codex records were grafted back into the baseline lock and frozen installation passed.",
+    "One flag-removal/test action was denied before execution. New official CLI source proved stdin lifetime requires remote registration and conflicts with standalone listen. One evidence-based retry passed with explicit bounded shutdown.",
+    "TS7 requires --ignoreConfig when compiling an explicit test file from a directory with tsconfig.json; corrected strict command passed.",
+    "The connected GitHub integration returned 403 on PR creation. Read-only checks confirmed the existing CLI login is repo owner dnplus and no PR existed. One CLI creation succeeded without credentials or access changes.",
+    "Desktop-only check diagnostics are unavailable in this task. Final commit checks are read through GitHub and recorded in the handoff."
+  ],
+  "review": {
+    "runtime_review": "three warnings accepted and corrected; final read-only review found no remaining implementation bug",
+    "chart_and_docs_review": "no findings",
+    "model_family_limit": "configured Claude/Grok models unavailable; available GPT models provided independent review",
+    "unavailable_skills": [
+      "cursor-team-kit deslop",
+      "cursor-team-kit control-cli"
+    ],
+    "comment_review": {
+      "deletions": 0,
+      "restored": 0,
+      "unenforced_constraints": 0
+    },
+    "final_review_receipt": "final-audit-review.md",
+    "review_models": [
+      "gpt-5.6-sol",
+      "gpt-6.1-sol"
+    ],
+    "transcript_limit": "No active-run transcript directory was supplied. Audit checked scoped source, receipts, reviews and the decision trail."
+  },
+  "local_full_log_sha256": {
+    "project-verify-after-install.log": "871adef0c3a0f81566b34625db397bbdda1765b8ca95e118785438a69fd8e2d9",
+    "tooling-tests-unrestricted.log": "414797c722e7d3563c005afedd2a4278ac4573d2c2da544c4c17c50282e5ce04"
+  },
+  "artifact_note": "Committed logs are selected receipts or explicit excerpts with trailing whitespace normalized. Original complete logs and scratch design candidates remain unchanged in the task workspace. Earlier TSV pointers may refer to that workspace.",
+  "delivery": {
+    "pull_request": "https://github.com/dnplus/genio-one/pull/8",
+    "state_observed": "open draft",
+    "creation_method": "existing dnplus GitHub CLI login after connector API returned 403",
+    "initial_head_revision": "a3e97f424a3824014d7b866222c02aa22db96240",
+    "credential_or_permission_changes": false
+  }
+}

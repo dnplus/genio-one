@@ -1,0 +1,2 @@
+$ bun scripts/check-codex-protocol.ts
+Codex protocol matches package generator (904 files)

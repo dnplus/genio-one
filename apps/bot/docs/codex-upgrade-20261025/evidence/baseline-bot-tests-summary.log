@@ -1,0 +1,14 @@
+
+server/routes/bots-profile.test.ts:
+(pass) slice A BotProfile HTTP create + read-back > POST /api/bots then GET /api/bots/:botId returns live profile fields [26.98ms]
+
+shared/session-rejection.test.ts:
+(pass) only identity rejection invalidates login, not capability or runtime session failures [0.04ms]
+
+shared/legacy-history.test.ts:
+(pass) legacy discovery includes orphaned conversations and keeps repeated text and original positions [0.11ms]
+
+ 859 pass
+ 0 fail
+ 4775 expect() calls
+Ran 859 tests across 145 files. [5.97s]

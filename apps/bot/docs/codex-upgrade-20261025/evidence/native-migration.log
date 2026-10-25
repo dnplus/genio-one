@@ -1,0 +1,10 @@
+bun test v1.4.2 (744846f84)
+
+apps/bot/tests/codex-native-compat.test.ts:
+0.162 -> package upgrade preserved native config bytes and effective on-request/read-only thread defaults; saved rollout and pending approval migration remain untested
+(pass) 0.162 native config survives reopening with the upgraded package [432.10ms]
+
+ 1 pass
+ 0 fail
+ 14 expect() calls
+Ran 1 test across 1 file. [444.00ms]

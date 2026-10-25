@@ -16,11 +16,11 @@ import type {
   RuntimePolicyExecutableAction,
 } from "./runtime-policy-contract"
 import { runtimePolicyDecisionTarget } from "./runtime-policy-contract"
+import { CODEX_VERSION } from "../shared/codex-version"
 
 const PAIRING_MS = 5 * 60_000
 const LEASE_MS = 60 * 60_000
 const MAX_MESSAGE_BYTES = 8 * 1024 * 1024
-const EXECUTOR_VERSION = "0.162.0"
 
 type Pairing = { token: string; session: RuntimeSession; botId: string; expiresAt: number }
 type Lease = {
@@ -113,7 +113,7 @@ export class LocalHands {
     const token = randomBytes(32).toString("hex")
     const expiresAt = Date.now() + PAIRING_MS
     this.pairings.set(token, { token, session, botId, expiresAt })
-    return { token, expiresAt, executorVersion: EXECUTOR_VERSION }
+    return { token, expiresAt, executorVersion: CODEX_VERSION }
   }
 
   executorUrl(environmentId: string) {
@@ -152,7 +152,7 @@ export class LocalHands {
     const pairing = typeof value?.token === "string" ? this.pairings.get(value.token) : undefined
     if (!pairing || pairing.expiresAt <= Date.now()) throw new Error("LOCAL_HANDS_PAIRING_EXPIRED")
     this.pairings.delete(pairing.token)
-    if (value.version !== 1 || value.executorVersion !== EXECUTOR_VERSION || typeof value.cwd !== "string" || !value.cwd.startsWith("/") || value.cwd.length > 4096 || /[\0\r\n]/.test(value.cwd) || typeof value.hostname !== "string" || !value.hostname.trim() || value.hostname.length > 256) throw new Error("LOCAL_HANDS_HELLO_INVALID")
+    if (value.version !== 1 || value.executorVersion !== CODEX_VERSION || typeof value.cwd !== "string" || !value.cwd.startsWith("/") || value.cwd.length > 4096 || /[\0\r\n]/.test(value.cwd) || typeof value.hostname !== "string" || !value.hostname.trim() || value.hostname.length > 256) throw new Error("LOCAL_HANDS_HELLO_INVALID")
     const { session, botId } = pairing
     if (this.context.runtimeBroker.get(session.id) !== session || session.selectedBotId !== botId || this.context.botRegistry.timeline.activeTurns(botId).length) throw new Error("LOCAL_HANDS_SESSION_CHANGED")
     await assertCapability(this.context.capabilityGate, session.principal, PERSONAL_BOT_COMPUTER_USE, session.accessToken)

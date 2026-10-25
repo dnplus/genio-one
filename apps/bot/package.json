@@ -25,7 +25,10 @@
     "check": "bun run typecheck && bun run test && bun run build",
     "start": "bun dist/server/index.js",
     "generate:codex-protocol": "codex app-server generate-ts --experimental --out server/generated",
-    "test:voice-ui": "playwright test --config tests/voice-input/playwright.config.ts"
+    "test:voice-ui": "playwright test --config tests/voice-input/playwright.config.ts",
+    "test:codex-native": "bun test tests/codex-native-compat.test.ts",
+    "check:codex-protocol": "bun scripts/check-codex-protocol.ts",
+    "test:codex-migration": "GENIO_CODEX_TEST_MODE=migration bun test tests/codex-native-compat.test.ts"
   },
   "dependencies": {
     "@e2b/desktop": "2.4.0",
@@ -44,7 +47,7 @@
     "ws": "^8.22.0"
   },
   "devDependencies": {
-    "@openai/codex": "0.162.0",
+    "@openai/codex": "0.164.0",
     "@playwright/test": "1.64.0",
     "@types/bun": "1.4.2",
     "@types/node": "26.6.4",

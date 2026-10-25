@@ -1,0 +1,12 @@
+bun test v1.4.2 (744846f84)
+
+apps/bot/tests/codex-native-compat.test.ts:
+package binary /Users/dnplus/Documents/Codex/2026-10-26/task-2/worktree/node_modules/.pnpm/@openai+codex@0.164.0-darwin-arm64/node_modules/@openai/codex/vendor/aarch64-apple-darwin/bin/codex: codex-cli 0.164.0
+native cycle initial: metadata, environment, files, output, exit 7, kill, error recovery and awaited shutdown passed (app stdin, standalone WS exec SIGTERM)
+native cycle restart: metadata, environment, files, output, exit 7, kill, error recovery and awaited shutdown passed (app stdin, standalone WS exec SIGTERM)
+(pass) package Codex native pair supports metadata, executor operations and workspace restart without credentials [666.62ms]
+
+ 1 pass
+ 0 fail
+ 45 expect() calls
+Ran 1 test across 1 file. [710.00ms]

@@ -15,6 +15,7 @@ analytics:
   collectorReplicas: 1
 
 bot:
+  # One writer only. Use 0 for maintenance; the values schema rejects other counts.
   replicas: 1
   modelGatewayBaseUrl: "http://genio-one-aigw-internal:1975/v1"
   modelGatewayModels:

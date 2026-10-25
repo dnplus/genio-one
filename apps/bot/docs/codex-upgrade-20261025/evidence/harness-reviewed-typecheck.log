@@ -1,0 +1,2 @@
+error TS5112: tsconfig.json is present but will not be loaded if files are specified on commandline. Use '--ignoreConfig' to skip this error.
+PASS exit 0 from apps/bot: ./node_modules/.bin/tsc --ignoreConfig --noEmit --strict --skipLibCheck --target ES2022 --module ESNext --moduleResolution Bundler --resolveJsonModule --esModuleInterop --types bun,node tests/codex-native-compat.test.ts

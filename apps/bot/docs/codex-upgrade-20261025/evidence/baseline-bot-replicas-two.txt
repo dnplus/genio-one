@@ -1,0 +1,17 @@
+Excerpt from the captured pre-change Helm render. Full output remains in the task workspace.
+
+# Source: genio-one/templates/bot.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: codex-upgrade-genio-one-bot
+  labels:
+    app.kubernetes.io/name: genio-one
+    app.kubernetes.io/instance: codex-upgrade
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: genio-one
+    helm.sh/chart: genio-one-0.1.0
+    app.kubernetes.io/component: bot
+spec:
+  serviceName: codex-upgrade-genio-one-bot
+  replicas: 2

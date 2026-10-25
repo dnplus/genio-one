@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
+import upstream from "../codex-upstream.json"
+
 import { executorMethodCapability, LocalHands } from "./local-hands"
 
 class FakeSocket {
@@ -148,6 +150,25 @@ describe("local hands runtime policy", () => {
     expect(calls[1]).toMatchObject({ capabilityId: "remote_hands.use", action: "use", handsPlacement: { mode: "enforce", localEndpoint: true } })
     expect(reports[1]).toMatchObject({ capabilityId: "remote_hands.use", action: "use", outcome: "COMPLETED", reasonCode: "REMOTE_HANDS_ENDPOINT_ACCEPTED" })
     await hands.close()
+  })
+
+  test("advertises the upstream release, accepts it and rejects mixed executor versions before lease attachment", async () => {
+    const { hands, session } = fixture()
+    try {
+      const mismatched = await hands.pair(session as never, "bot-dylan")
+      expect(mismatched.executorVersion).toBe(upstream.cliVersion)
+      await expect(hands.accept(new FakeSocket() as never, {
+        token: mismatched.token, version: 1, executorVersion: "0.162.0",
+        cwd: "/workspace", hostname: "developer-mac",
+      }, 5181)).rejects.toThrow("LOCAL_HANDS_HELLO_INVALID")
+      expect(session.leases.headless).toBeUndefined()
+      const matched = await hands.pair(session as never, "bot-dylan")
+      await hands.accept(new FakeSocket() as never, {
+        token: matched.token, version: 1, executorVersion: upstream.cliVersion,
+        cwd: "/workspace", hostname: "developer-mac",
+      }, 5181)
+      expect(session.leases.headless).toBeDefined()
+    } finally { await hands.close() }
   })
 
   test("an ON_PREM placement permits the existing Local Endpoint without naming an E2B provider", async () => {

@@ -156,6 +156,7 @@ runtimeReport:
 
 bot:
   enabled: true
+  # One writer only. Use 0 for maintenance; the values schema rejects other counts.
   replicas: 1
   service:
     type: ClusterIP

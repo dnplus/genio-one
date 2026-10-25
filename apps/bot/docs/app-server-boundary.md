@@ -1,7 +1,7 @@
 # Codex app-server ownership boundary
 
-Genio Bot pins Codex CLI/app-server `0.162.0` to upstream tag `rust-v0.162.0` and commit
-`c1382380de69521303b416720a52f42d51af6248`. The executable and the generated
+Genio Bot pins Codex CLI/app-server `0.164.0` to upstream tag `rust-v0.164.0` and commit
+`6aaac694803004a63c6f393d153c96d22521a6b9`. The executable and the generated
 TypeScript protocol must move together.
 
 ## Owned by Codex app-server
@@ -120,10 +120,12 @@ walking skeleton is sealed.
 ## Current runtime verification
 
 The Docker runtime, E2B exec-server default, local development dependency,
-Local Hands executor, and upstream manifest are pinned to 0.162.0. Run protocol
+Local Hands executor, and upstream manifest are pinned to 0.164.0. Run protocol
 generation through the Bot package script so it resolves the package-owned
 executable. The generated protocol comes from the same installed release.
-Current upgrade checks are recorded in
-[`codex-upgrade.json`](../../../internal/validation/oss-refresh-followup-20261009/codex-upgrade.json).
+Run the package scripts `test:codex-native`, `test:codex-migration`, and
+`check:codex-protocol` for current upgrade checks.
+The [0.164.0 upgrade assessment](codex-upgrade-20261025.md) records the results
+and remaining release gates.
 The [0.153.4 upgrade comparison](codex-app-server-upgrade-20260908.md) remains
 historical verification of that release.
