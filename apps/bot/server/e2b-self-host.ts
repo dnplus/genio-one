@@ -1,13 +1,7 @@
 import type { ConnectionOpts } from "@e2b/desktop"
-import botPackage from "../package.json" with { type: "json" }
+import { CODEX_VERSION } from "../shared/codex-version"
 
-const configuredPackageVersion = botPackage.devDependencies?.["@openai/codex"]
-
-if (typeof configuredPackageVersion !== "string" || !/^\d+\.\d+\.\d+$/.test(configuredPackageVersion)) {
-  throw new Error("GENIO_BOT_CODEX_PACKAGE_VERSION_INVALID")
-}
-
-export const DEFAULT_CODEX_VERSION = configuredPackageVersion
+export const DEFAULT_CODEX_VERSION = CODEX_VERSION
 
 export interface SelfHostedE2BConfiguration {
   connection: ConnectionOpts

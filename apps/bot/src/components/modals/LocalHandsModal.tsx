@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { CODEX_VERSION } from "../../../shared/codex-version"
 import type { RuntimeDetails } from "../../lib/codex-client"
 
 function shellQuote(value: string) { return `'${value.replaceAll("'", "'\\''")}'` }
@@ -49,7 +50,7 @@ export function LocalHandsModal({ botId, token, runtime, onClose }: { botId: str
         <button type="button" className="secondary-button" disabled={busy} onClick={() => void act(true)}>{endpoint.execReady ? "停止本機連線" : "清除連線，重新配對"}</button>
       </> : <>
         <div className="setup-col-info"><label>本機工作資料夾<input autoFocus value={folder} onChange={(event) => setFolder(event.target.value)} placeholder="例如 /Users/你的帳號/Projects/my-work" /></label></div>
-        <p>在要連接的電腦安裝 Genio Endpoint CLI 後，執行以下指令，再貼上配對碼。macOS／Linux 的 Codex CLI 版本需為 0.162.0。</p>
+        <p>在要連接的電腦安裝 Genio Endpoint CLI 後，執行以下指令，再貼上配對碼。macOS／Linux 的 Codex CLI 版本需為 {CODEX_VERSION}。</p>
         <button type="button" className="primary-button" disabled={busy || !folder.trim().startsWith("/") || /[\0\r\n]/.test(folder)} onClick={() => void act(false)}>{busy ? "取得配對碼中…" : pairing ? "重新產生配對碼" : "產生一次性配對碼"}</button>
         {pairing && <>
           <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", userSelect: "text" }}>{command}</pre>
